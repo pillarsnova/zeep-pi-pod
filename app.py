@@ -173,7 +173,10 @@ GPIO_PINS = {
     "red_light_leg": int(os.getenv("GPIO_RED_LIGHT_LEG", "25")),
 }
 DOOR_PULSE_SECONDS = float(os.getenv("DOOR_PULSE_SECONDS", "0.7"))
-AROMA_STEAM_PULSE_SECONDS = float(os.getenv("AROMA_STEAM_PULSE_SECONDS", "1.0"))
+# Aroma and steam are momentary outputs. Keep the relay HIGH for the requested
+# five-second actuation window, then always return it LOW in ``finally``.
+# Deployments may still override the duration explicitly when hardware differs.
+AROMA_STEAM_PULSE_SECONDS = float(os.getenv("AROMA_STEAM_PULSE_SECONDS", "5.0"))
 PULSE_OUTPUTS = {"aroma1", "aroma2", "aroma3", "aroma4", "steam"}
 # Minimum idle time between pulses on the same output (relay wear / spam guard).
 PULSE_COOLDOWN_SECONDS = float(os.getenv("PULSE_COOLDOWN_SECONDS", "1.0"))

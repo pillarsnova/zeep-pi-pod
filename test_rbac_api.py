@@ -4,13 +4,14 @@ The test uses temporary storage and never starts hardware reader threads.
 """
 from __future__ import annotations
 
+import asyncio
 import copy
 import threading
 import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 from fastapi.testclient import TestClient
 
@@ -45,6 +46,25 @@ class RbacApiTests(unittest.TestCase):
         # and commands shown behind the Admin-only Control Debug overlay.
         self.assertEqual(client.get("/control-debug").status_code, 200)
         self.assertEqual(client.get("/api/state").status_code, 401)
+
+    def test_aroma_and_steam_outputs_use_a_five_second_pulse(self) -> None:
+        """A tap must hold the real dispenser output HIGH for five seconds."""
+        self.assertEqual(pod_app.AROMA_STEAM_PULSE_SECONDS, 5.0)
+        pod_app.pulse_last_end["aroma1"] = 0.0
+        sleep = AsyncMock()
+        with (
+            patch.object(pod_app.gpio, "require_ready") as require_ready,
+            patch.object(pod_app.gpio, "set") as gpio_set,
+            patch.object(pod_app.asyncio, "sleep", new=sleep),
+        ):
+            asyncio.run(pod_app.accessory_pulse("aroma1"))
+
+        require_ready.assert_called_once_with()
+        sleep.assert_awaited_once_with(5.0)
+        self.assertEqual(
+            gpio_set.call_args_list,
+            [call("aroma1", True), call("aroma1", False)],
+        )
 
     def test_user_and_admin_login_have_separate_stable_urls(self) -> None:
         client = TestClient(pod_app.app)

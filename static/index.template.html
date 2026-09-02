@@ -2154,7 +2154,7 @@ function buildOutputs(){
     const btn = document.createElement('button'); btn.className = 'btn';
     if (pulseOutputs.has(k)){
       btn.onclick = ()=>runOutputAction(k, btn, true);
-      btn.textContent = 'OFF'; sub.textContent = 'กดเพื่อพ่น 1 วินาที';
+      btn.textContent = 'OFF'; sub.textContent = 'กดเพื่อพ่น 5 วินาที';
     } else {
       btn.onclick = ()=>runOutputAction(k, btn, false);
       btn.textContent = 'OFF'; sub.textContent = 'GPIO LOW';
@@ -2206,7 +2206,7 @@ function updateOutputs(gpio={}){
     }
     if (pulseOutputs.has(k)){
       // ปุ่มพ่นแสดง OFF ปกติ → ON ระหว่างพ่น → กลับ OFF เอง
-      sub.textContent = on ? 'กำลังพ่น…' : 'กดเพื่อพ่น 1 วินาที';
+      sub.textContent = on ? 'กำลังพ่น…' : 'กดเพื่อพ่น 5 วินาที';
       // While busy, the pressed button owns its own state — don't fight it.
       if (!btn.classList.contains('busy')){
         btn.textContent = on ? 'ON' : 'OFF';
@@ -2962,7 +2962,7 @@ function renderDebugAromaReference(labels={}){
   });
 }
 
-// Pulse commands take about one second on the Pi. Keep the control aligned
+// Aroma/steam pulse commands take five seconds on the Pi. Keep the control aligned
 // with the real lifecycle instead of showing a generic button flash: SENT is
 // pending, GPIO HIGH is actively dispensing, then the API result is retained
 // briefly as ACK or ERROR before returning to the ready state.

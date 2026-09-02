@@ -781,7 +781,7 @@
     Increment the query value when deploying a new theme so the ZEEP browser does not
     reuse a cached stylesheet.
   -->
-  <link rel="stylesheet" href="/static/theme-modern.css?v=20260828-141" />
+  <link rel="stylesheet" href="/static/theme-modern.css?v=20260902-150" />
 </head>
 <body>
 <!-- Shared line-icon library: every interactive view reuses the same 24 px
@@ -997,16 +997,6 @@
           <div class="dash-profile-fact" id="dashProfileBlood"><span>กรุ๊ปเลือด</span><strong>—</strong></div>
         </div>
       </section>
-      <details class="progressive-profile-card" id="progressiveProfileCard" data-user-panel>
-        <summary>
-          <span class="progressive-profile-icon" aria-hidden="true">◎</span>
-          <span><b>รู้จักคุณมากขึ้น</b><small id="progressiveProfileSummary">ข้อมูลเสริมแบบค่อยเป็นค่อยไป</small></span>
-          <em id="progressiveProfilePercent">0%</em>
-        </summary>
-        <div class="progressive-profile-body" id="progressiveProfileBody">
-          <div class="mini">กำลังอ่านข้อมูล Profile…</div>
-        </div>
-      </details>
       <div class="dashboard-zone-grid">
         <section class="dashboard-zone dashboard-health-zone" aria-label="สุขภาพผู้ใช้งาน">
           <div class="dashboard-zone-head"><div><span class="dashboard-zone-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M3 12h4l2-4 4 9 2-5h6"/><path d="M12 21C5 17 3 13 3 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 9 2.5c0 3.5-2 7.5-9 11.5Z"/></svg></span>สุขภาพผู้ใช้งาน</div><span>BIO SIGNAL</span></div>
@@ -1935,7 +1925,7 @@
       </div>
       <details class="stage-guide">
         <summary>ความหมายของ Sleep Stages</summary>
-        <div class="stage-guide-grid" id="sleepStageGuideGrid">
+        <div class="stage-guide-grid">
           <div><b>W</b><strong>ตื่น</strong><span>ช่วงที่ระบบประเมินว่ายังตื่นหรือกลับเข้าสู่สถานะตื่น</span></div>
           <div><b>N1</b><strong>หลับตื้น / เคลิ้มหลับ</strong><span>เริ่มเข้าสู่การนอน ร่างกายผ่อนคลาย และปลุกให้ตื่นได้ง่าย</span></div>
           <div><b>N2</b><strong>หลับสนิทขึ้น / หลับตื้นต่อเนื่อง</strong><span>หัวใจและการหายใจช้าลง ร่างกายเข้าสู่การนอนที่ต่อเนื่องขึ้น</span></div>
@@ -2237,8 +2227,6 @@ let sessionState = {active:false, username:null, gender:null, age:null, session_
 let selectedGender = null;
 let loginBaselines = {};
 let genderAdjustments = {};
-let progressiveProfileData = null;
-let progressiveManualQuestion = false;
 const bcgWave = {samples:[], lastPacketCount:null, maxSamples:300};
 const BCG_STATUS_TH = {
   0:'อยู่บนเตียง · On bed', 1:'ลุกออกจากเตียง · Off bed', 2:'กำลังขยับ · Moving',
@@ -2291,106 +2279,6 @@ function healthReferenceInline(rec={}){
   const ref=rec.health_reference||{};
   return `${genderTh(ref.gender||rec.gender)} · ${displayAge({...rec,health_reference:ref})} · ส่วนสูง ${healthReferenceValue(ref.height_cm,' ซม.')} · น้ำหนัก ${healthReferenceValue(ref.weight_kg,' กก.')} · กรุ๊ปเลือด ${ref.blood_group||'—'}`;
 }
-
-function progressiveQuestionInput(question){
-  if(question.type==='select'){
-    return `<select id="progressiveProfileAnswer" aria-label="${question.title}"><option value="">เลือกคำตอบ</option>${(question.options||[]).map(option=>`<option value="${option.value}">${option.label}</option>`).join('')}</select>`;
-  }
-  if(question.type==='time'){
-    return `<input id="progressiveProfileAnswer" type="time" aria-label="${question.title}">`;
-  }
-  if(question.type==='integer'){
-    return `<input id="progressiveProfileAnswer" type="number" inputmode="numeric" min="${question.minimum}" max="${question.maximum}" placeholder="${question.minimum}–${question.maximum} ${question.suffix||''}" aria-label="${question.title}">`;
-  }
-  return '';
-}
-
-function renderProgressiveProfile(profile){
-  progressiveProfileData=profile||null;
-  const root=document.getElementById('progressiveProfileCard');
-  const body=document.getElementById('progressiveProfileBody');
-  if(!root||!body)return;
-  if(currentPrincipal?.role!=='user')return;
-  const progress=profile?.progress||{answered:0,total:0,percent:0};
-  document.getElementById('progressiveProfilePercent').textContent=`${progress.percent||0}%`;
-  document.getElementById('progressiveProfileSummary').textContent=`ตอบแล้ว ${progress.answered||0}/${progress.total||0} ข้อที่พร้อมถาม · ครั้งละ 1 ข้อ`;
-  const consent=profile?.consent?.status||'pending';
-  if(consent==='pending'){
-    root.open=false;
-    body.innerHTML=`<div class="progressive-profile-copy"><b>ให้ ZEEP เรียนรู้ความชอบและไลฟ์สไตล์ของคุณหรือไม่?</b><span>คำตอบเป็นทางเลือก ใช้ทำคำแนะนำและวิเคราะห์พัฒนาระบบ ไม่ใช้วินิจฉัย ไม่เปลี่ยน Sleep Stage และไม่สั่งอุปกรณ์อัตโนมัติ</span></div><div class="progressive-profile-actions"><button class="btn primary" onclick="setProgressiveProfileConsent(true,this)">เริ่มทีละข้อ</button><button class="btn" onclick="deferProgressiveProfile(null,this)">ไว้ภายหลัง</button></div><div class="progressive-profile-privacy">เก็บใน Profile ของบัญชีนี้บนระบบตู้ · ข้าม แก้ไข หรือลบได้ · คำถามข้อมูลละเอียดจะมี “ไม่ต้องการระบุ”</div>`;
-    return;
-  }
-  if(consent==='declined'){
-    root.open=false;
-    body.innerHTML=`<div class="progressive-profile-copy"><b>ไม่ได้ใช้ข้อมูลไลฟ์สไตล์เพิ่มเติม</b><span>การใช้งาน ZEEP และการวัด Sensor ยังทำงานได้ตามปกติ</span></div><div class="progressive-profile-actions"><button class="btn" onclick="setProgressiveProfileConsent(true,this)">เปิดใช้งานภายหลัง</button></div>`;
-    return;
-  }
-  const question=profile.prompt||(progressiveManualQuestion?profile.available_question:null);
-  if(question){
-    root.open=true;
-    body.innerHTML=`<div class="progressive-profile-copy"><b>${question.title}</b><span>${question.help||''}</span>${question.sensitive?'<i class="progressive-profile-sensitive">ข้อมูลส่วนบุคคลที่เลือกข้ามได้</i>':''}</div><div class="progressive-profile-field">${progressiveQuestionInput(question)}<button class="btn primary" onclick="saveProgressiveProfileAnswer('${question.id}',this)">บันทึก</button></div><div class="progressive-profile-actions"><button class="btn" onclick="deferProgressiveProfile('${question.id}',this)">ถามใหม่ภายหลัง</button><button class="btn" onclick="withdrawProgressiveProfile(this)">จัดการความยินยอม</button></div><div class="progressive-profile-privacy">ถามเพียงครั้งละ 1 ข้อ · หลังตอบ ระบบพักคำถามอัตโนมัติ 24 ชั่วโมง</div>`;
-    return;
-  }
-  const completed=(progress.total||0)>0&&(progress.answered||0)>=(progress.total||0);
-  const next=profile.available_question;
-  const nextTime=profile.next_prompt_after_utc?fmtDateTh(profile.next_prompt_after_utc):'';
-  body.innerHTML=`<div class="progressive-profile-copy"><b>${completed?'ข้อมูลที่พร้อมถามในช่วงนี้ครบแล้ว':'วันนี้พอแล้ว ขอบคุณครับ'}</b><span>${nextTime?`ระบบจะถามเพิ่มอย่างสุภาพหลัง ${nextTime}`:'เมื่อมีคำถามที่เหมาะกับจำนวน Session ระบบจะแสดงครั้งละหนึ่งข้อ'}</span></div><div class="progressive-profile-actions">${next?'<button class="btn" onclick="showProgressiveProfileQuestion()">เติมข้อมูลต่อเอง</button>':''}<button class="btn" onclick="withdrawProgressiveProfile(this)">จัดการความยินยอม</button></div><div class="progressive-profile-privacy">ข้อมูลนี้เป็นบริบทประกอบคำแนะนำเท่านั้น · ไม่ใช่ข้อมูลวินิจฉัย</div>`;
-}
-
-async function loadProgressiveProfile(){
-  const root=document.getElementById('progressiveProfileCard');
-  if(!root||currentPrincipal?.role!=='user')return;
-  try{
-    const response=await fetch('/api/profile/progressive',{cache:'no-store'});
-    if(!response.ok)throw new Error(`HTTP ${response.status}`);
-    const result=await response.json();
-    renderProgressiveProfile(result.profile);
-  }catch{
-    document.getElementById('progressiveProfileBody').innerHTML='<div class="mini">ยังโหลดข้อมูลเสริมไม่ได้ · การใช้งานหลักไม่กระทบ</div>';
-  }
-}
-
-async function setProgressiveProfileConsent(granted,btn){
-  const result=await withBusy(btn,()=>post('/api/profile/progressive/consent',{granted}));
-  if(!result)return;
-  progressiveManualQuestion=false;
-  renderProgressiveProfile(result.profile);
-  if(granted){document.getElementById('progressiveProfileCard').open=true;toast('เปิด Profile แบบค่อยเป็นค่อยไปแล้ว','ok');}
-}
-
-async function saveProgressiveProfileAnswer(questionId,btn){
-  const input=document.getElementById('progressiveProfileAnswer');
-  if(!input||input.value===''){toast('เลือกหรือกรอกคำตอบก่อนบันทึก','warning');return;}
-  const value=input.type==='number'?Number(input.value):input.value;
-  const result=await withBusy(btn,()=>post('/api/profile/progressive/answer',{question_id:questionId,value}));
-  if(!result)return;
-  progressiveManualQuestion=false;
-  renderProgressiveProfile(result.profile);
-  document.getElementById('progressiveProfileCard').open=false;
-  toast('บันทึกแล้ว · วันนี้จะไม่ถามเพิ่มอัตโนมัติ','ok');
-}
-
-async function deferProgressiveProfile(questionId,btn){
-  const result=await withBusy(btn,()=>post('/api/profile/progressive/defer',{question_id:questionId||null}));
-  if(!result)return;
-  progressiveManualQuestion=false;
-  renderProgressiveProfile(result.profile);
-  document.getElementById('progressiveProfileCard').open=false;
-  toast('เลื่อนคำถามออกไป 7 วันแล้ว','ok');
-}
-
-function showProgressiveProfileQuestion(){
-  progressiveManualQuestion=true;
-  renderProgressiveProfile(progressiveProfileData);
-}
-
-async function withdrawProgressiveProfile(btn){
-  const accepted=await confirmAction({title:'จัดการข้อมูลไลฟ์สไตล์',message:'หยุดใช้และลบคำตอบไลฟ์สไตล์ทั้งหมดหรือไม่? ข้อมูลตัวตนพื้นฐานและ Session ที่บันทึกแล้วจะไม่ถูกลบ',confirmText:'หยุดใช้และลบคำตอบ',tone:'warning',icon:'!'});
-  if(!accepted)return;
-  await setProgressiveProfileConsent(false,btn);
-  toast('ลบคำตอบเสริมและหยุดใช้งานแล้ว','ok');
-}
-
 function renderSystemHealth(sys={}){
   const h=sys.health||{},wifi=document.getElementById('wifiPill'),ip=document.getElementById('ipPill');
   const dbm=Number(h.wifi_dbm),connected=!!h.wifi_connected&&Number.isFinite(dbm);
@@ -2420,26 +2308,17 @@ function renderLoginBaseline(){
 
 /* ---- sleep state (est.): internal telemetry, rule-based v0, pre-G2 ---- */
 const SLEEP_TH = {
-  wake: {code:'W',label:'ตื่น',title:'ตื่น',meaning:'ช่วงที่ระบบประเมินว่ายังตื่นหรือกลับเข้าสู่สถานะตื่น',cls:'wake'},
-  n1: {code:'N1',label:'หลับตื้น',title:'หลับตื้น / เคลิ้มหลับ',meaning:'เริ่มเข้าสู่การนอน ร่างกายผ่อนคลาย และปลุกให้ตื่นได้ง่าย',cls:'nrem'},
-  n2: {code:'N2',label:'หลับสนิทขึ้น',title:'หลับสนิทขึ้น / หลับตื้นต่อเนื่อง',meaning:'หัวใจและการหายใจช้าลง ร่างกายเข้าสู่การนอนที่ต่อเนื่องขึ้น',cls:'nrem'},
-  n3: {code:'N3',label:'หลับลึก',title:'หลับลึก / ร่างกายซ่อมแซมส่วนที่สึกหรอ',meaning:'ระยะที่หลับลึกที่สุดและสัมพันธ์กับกระบวนการฟื้นฟูร่างกาย',cls:'deep'},
-  rem: {code:'REM',label:'หลับฝัน',title:'หลับฝัน / สมองจัดระเบียบความจำ',meaning:'สมองทำงานมากขึ้น มักเกิดความฝัน และเกี่ยวข้องกับความจำและอารมณ์',cls:'rem'},
+  wake:       {code:'W',    label:'ตื่น',        cls:'wake'},
+  n1:         {code:'N1',   label:'หลับตื้น',   cls:'nrem'},
+  n2:         {code:'N2',   label:'หลับสนิทขึ้น',cls:'nrem'},
+  n3:         {code:'N3',   label:'หลับลึก',    cls:'deep'},
+  rem:        {code:'REM',  label:'ฝัน',         cls:'rem'},
   // ``nrem`` is kept only for rendering old history. The live estimator never
   // emits a generic NREM because ZEEP's current ontology is W/N1/N2/N3/REM.
-  nrem: {code:'NREM',label:'หลับ · ข้อมูลเดิม',title:'หลับ · ข้อมูลเดิม',meaning:'ข้อมูลจากระบบรุ่นเดิมซึ่งยังไม่ได้แยก N1/N2/N3',cls:'nrem'},
-  off_bed: {code:'OFF',label:'ไม่มีผู้ใช้งานบนเตียง',title:'ไม่มีผู้ใช้งานบนเตียง',meaning:'หยุดประเมิน Sleep Stage จนกว่าจะยืนยันผู้ใช้งานและ HR/RR อีกครั้ง',cls:'off'},
-  no_data: {code:'WAIT',label:'รอ HR / RR',title:'รอ HR / RR',meaning:'ยังไม่มีหลักฐานเพียงพอสำหรับจัดประเภทการนอน',cls:'na'},
+  nrem:       {code:'NREM', label:'หลับ · ข้อมูลเดิม',cls:'nrem'},
+  off_bed:    {code:'OFF',  label:'ไม่มีผู้ใช้งานบนเตียง',cls:'off'},
+  no_data:    {code:'WAIT', label:'รอ HR / RR', cls:'na'},
 };
-function renderSleepStageGuide(){
-  const root=document.getElementById('sleepStageGuideGrid');
-  if(!root)return;
-  root.innerHTML=['wake','n1','n2','n3','rem'].map(key=>{
-    const stage=SLEEP_TH[key];
-    return `<div><b>${stage.code}</b><strong>${stage.title}</strong><span>${stage.meaning}</span></div>`;
-  }).join('');
-}
-renderSleepStageGuide();
 function renderSleepState(sl={},session={},bcg={}){
   const box = document.getElementById('sleepState');
   const classificationActive=sl.classification_active===true;
@@ -2451,7 +2330,7 @@ function renderSleepState(sl={},session={},bcg={}){
   const stateKey=offBed?'off_bed':(!recording||!classificationActive?'no_data':sl.state);
   const meta = SLEEP_TH[stateKey] || SLEEP_TH.no_data;
   box.className = `sleep-state ${meta.cls}`;
-  document.getElementById('sleepStateText').textContent = `${meta.code} · ${meta.title}`;
+  document.getElementById('sleepStateText').textContent = `${meta.code} · ${meta.label}`;
   const confidenceTh = {low:'ต่ำ',medium:'ปานกลาง',high:'สูง'};
   const clock=sl.sensor_frame_clock||{},confirmation=sl.confirmation||{},evidence=sl.evidence||{};
   const evidenceCandidate=evidence.candidate||sl.probability_winner||sl.raw_candidate;
@@ -2465,7 +2344,7 @@ function renderSleepState(sl={},session={},bcg={}){
     : sl.evidence_active
       ? `หลักฐาน ${(evidenceCandidate||'--').toUpperCase()} · กำลังยืนยัน ${confirmProgress}`
       : 'ยังไม่จัดประเภทการนอน';
-  document.getElementById('sleepStateMeta').textContent = `${meta.meaning} · ${sl.reason || 'กำลังรอข้อมูล'} · ${progress}${next} · ${classificationNote} · ${sl.version || 'v1'}`;
+  document.getElementById('sleepStateMeta').textContent = `${sl.reason || 'กำลังรอข้อมูล'} · ${progress}${next} · ${classificationNote} · ${sl.version || 'v1'}`;
   const probs = sl.evidence_probabilities || sl.probabilities || {}, order=['wake','n1','n2','n3','rem'];
   document.getElementById('sleepProbabilities').innerHTML = order.map(k=>{
     const pct = Math.round((probs[k]||0)*100);
@@ -2897,16 +2776,16 @@ function renderSimpleDashboard(state={},environment={},bcg={},session={}){
   const classificationActive=active&&recording&&personOnBed&&vitalPairValid&&sleep.classification_active===true;
   const sleepStateKey=!active||!personOnBed?'off_bed':classificationActive?sleep.state:'no_data';
   const sleepMeta=SLEEP_TH[sleepStateKey]||SLEEP_TH.no_data;
-  document.getElementById('dashSleep').textContent=`${sleepMeta.code} · ${sleepMeta.label}`;
+  document.getElementById('dashSleep').textContent=sleepMeta.label;
   const confidence=({high:'สูง',medium:'ปานกลาง',low:'ต่ำ'})[sleep.confidence]||'ไม่ระบุ';
   const sleepSource=sleep.classification_source==='personal'?'Baseline ส่วนบุคคล':'Baseline อายุและเพศ';
   const evidenceCandidate=sleep.evidence?.candidate||sleep.probability_winner||sleep.raw_candidate;
   const confirmation=sleep.confirmation||{};
   document.getElementById('dashSleepNote').textContent=classificationActive
-    ? `${sleepMeta.title} · ${sleepMeta.meaning} · ยืนยันแล้ว · หลักฐาน ${(evidenceCandidate||'--').toUpperCase()} · ${sleepSource} · มั่นใจ ${confidence}`
+    ? `${sleepMeta.code} ยืนยันแล้ว · หลักฐาน ${(evidenceCandidate||'--').toUpperCase()} · ${sleepSource} · มั่นใจ ${confidence}`
     : sleep.evidence_active
       ? `หลักฐาน ${(evidenceCandidate||'--').toUpperCase()} · กำลังยืนยัน ${confirmation.candidate_epochs||0}/${confirmation.required_epochs||2} epoch`
-      : `${sleepMeta.meaning} · ${sleep.reason||vitalFallbackNote} · ยังไม่จัดประเภทการนอน`;
+      : `${sleepMeta.code} · ${sleep.reason||vitalFallbackNote} · ยังไม่จัดประเภทการนอน`;
   renderAdminSleepBaseline(sleep,session);
   const devices=environment.devices||{};
   setDashboardSensor('dashSensorTemp','dashTemp',environment.temperature_c,'°C',devices.sht3x_dis,1);
@@ -2926,7 +2805,13 @@ function renderAdminSleepBaseline(sleep={},session={}){
   const progressEl=document.getElementById('dashSleepBaselineProgress');
   const policyEl=document.getElementById('dashSleepBaselinePolicy');
   if(!grid||!sourceEl||!progressEl)return;
-  const stages=['wake','n1','n2','n3','rem'].map(key=>({key,...SLEEP_TH[key]}));
+  const stages=[
+    {key:'wake',code:'W',label:'ตื่น'},
+    {key:'n1',code:'N1',label:'หลับตื้น'},
+    {key:'n2',code:'N2',label:'หลับสนิทขึ้น'},
+    {key:'n3',code:'N3',label:'หลับลึก'},
+    {key:'rem',code:'REM',label:'ฝัน'},
+  ];
   const baseline=sleep.baseline||sleep.age_baseline||{};
   const probabilities=sleep.evidence_probabilities||sleep.probabilities||{};
   const probabilityValue=key=>{
@@ -2955,7 +2840,7 @@ function renderAdminSleepBaseline(sleep={},session={}){
       const isCurrent=stage.key===currentStage;
       const isEvidence=stage.key===evidenceStage;
       return `<article class="admin-sleep-stage stage-${stage.key}${isCurrent?' current':''}${isEvidence?' evidence':''}" data-stage="${stage.key}">
-        <div class="admin-sleep-stage-head"><span><b>${stage.code}</b><small>${stage.title}</small></span><em aria-label="หลักฐาน ${stage.title} ${formatProbability(probability)} เปอร์เซ็นต์">${isCurrent?'ยืนยัน · ':isEvidence?'หลักฐาน · ':''}${formatProbability(probability)}%</em></div>
+        <div class="admin-sleep-stage-head"><span><b>${stage.code}</b><small>${stage.label}</small></span><em aria-label="หลักฐาน ${stage.label} ${formatProbability(probability)} เปอร์เซ็นต์">${isCurrent?'ยืนยัน · ':isEvidence?'หลักฐาน · ':''}${formatProbability(probability)}%</em></div>
         <div class="admin-sleep-stage-ranges"><span><small>HR</small><b>${formatRange(range.hr)}</b><em>BPM</em></span><span><small>RR</small><b>${formatRange(range.rr)}</b><em>ครั้ง/นาที</em></span></div>
         <div class="mini">Baseline fit ${Number.isFinite(Number(proximity.weighted_percent))?Number(proximity.weighted_percent).toFixed(1)+'%':'--'} · ΔHR ${Number(proximity.hr?.distance_to_range)||0} · ΔRR ${Number(proximity.rr?.distance_to_range)||0}</div>
       </article>`;
@@ -5254,7 +5139,7 @@ async function loadPublicStatus(){
 function startAuthenticatedApp(){
   if(authenticatedAppStarted)return;
   authenticatedAppStarted=true;serverReachable=true;
-  loadTracks();loadUsers();fetchBcgTrend();connectWS();loadProgressiveProfile();
+  loadTracks();loadUsers();fetchBcgTrend();connectWS();
 }
 
 async function bootstrapAuth(){
@@ -5450,11 +5335,11 @@ function statBlock(label, st, unit){
 }
 
 const REPORT_STAGE_META={
-  wake:{...SLEEP_TH.wake,color:'#f6b94a'},
-  n1:{...SLEEP_TH.n1,color:'#56d7eb'},
-  n2:{...SLEEP_TH.n2,color:'#5f8ff2'},
-  n3:{...SLEEP_TH.n3,color:'#9a82ef'},
-  rem:{...SLEEP_TH.rem,color:'#ea79b8'},
+  wake:{label:'W · ตื่น',color:'#f6b94a'},
+  n1:{label:'N1 · หลับตื้น',color:'#56d7eb'},
+  n2:{label:'N2 · หลับสนิทขึ้น',color:'#5f8ff2'},
+  n3:{label:'N3 · หลับลึก',color:'#9a82ef'},
+  rem:{label:'REM · หลับฝัน',color:'#ea79b8'},
 };
 const TERMINAL_OCCUPANCY_META={
   no_user_on_bed:{label:'ไม่มีผู้ใช้งานบนเตียง',code:'OFF',color:'#7cc7d8'},
@@ -5473,7 +5358,7 @@ function renderSessionOverview(report){
   if(cursor<100)segments.push(`#1a2d3a ${cursor}% 100%`);
   const stageRows=stages.map(stage=>{
     const meta=REPORT_STAGE_META[stage.state];
-    return `<div class="stage-legend-row" style="--stage-color:${meta.color}" title="${meta.meaning}"><i></i><span>${meta.code} · ${meta.title}</span><strong>${stage.pct_scored||0}%</strong><span>${fmtDur(stage.duration_s)}</span></div>`;
+    return `<div class="stage-legend-row" style="--stage-color:${meta.color}"><i></i><span>${meta.label}</span><strong>${stage.pct_scored||0}%</strong><span>${fmtDur(stage.duration_s)}</span></div>`;
   }).join('');
   const findingIcon={critical:'!',poor:'↓',fair:'–',good:'✓',excellent:'★',unavailable:'?'};
   const allFindings=Array.isArray(report.findings)?report.findings:[];
@@ -5524,7 +5409,7 @@ function renderReport(rec){
   const slc = su.sleep_state_counts || {};
   const slTotal = Object.values(slc).reduce((a,b)=>a+b, 0);
   const slTxt = slTotal
-    ? Object.entries(slc).map(([k,v])=>`${SLEEP_TH[k]?`${SLEEP_TH[k].code} · ${SLEEP_TH[k].title}`:k} ${Math.round(v*100/slTotal)}%`).join(' · ')
+    ? Object.entries(slc).map(([k,v])=>`${(SLEEP_TH[k]?.label || k)} ${Math.round(v*100/slTotal)}%`).join(' · ')
     : null;
   const hasChart = (rec.samples || []).length > 1;
   const confidenceTh={low:'ต่ำ',medium:'ปานกลาง',high:'สูง'};
@@ -5570,10 +5455,7 @@ function renderReport(rec){
         : 'ไม่มี Timeline Sensor';
       return `<div class="sleep-period terminal-occupancy-period classification-gap-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)} · ไม่ประเมิน Stage</div></div><div class="stage">${period.label||'WAIT · ไม่มีข้อมูลสถานะ'}</div><div>${coverageText}<div class="mini">ไม่นับ W/N1/N2/N3/REM และคะแนน</div></div><div class="reason"><div class="sleep-period-env">${sensorTiles}</div><div class="sleep-period-note">${period.reason||'หลักฐานไม่พอสำหรับยืนยัน Sleep State'}</div></div></div>`;
     }
-    const stageMeta=SLEEP_TH[period.state];
-    const stageDisplay=stageMeta?`${stageMeta.code} · ${stageMeta.title}`:period.state.toUpperCase();
-    const stageMeaning=stageMeta?.meaning?`<div class="mini">${stageMeta.meaning}</div>`:'';
-    return `<div class="sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)} · ${epoch}</div></div><div class="stage">${stageDisplay}${stageMeaning}</div><div>มั่นใจ ${confidenceTh[period.confidence]||'ไม่ระบุ'}<div class="mini">P ${Math.round((prob[period.state]||0)*100)}%</div></div><div class="reason"><div class="sleep-period-env">${sensorTiles}</div><div class="sleep-period-note">${sleepReasonExplanation(period.reason)}</div></div></div>`;
+    return `<div class="sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)} · ${epoch}</div></div><div class="stage">${SLEEP_TH[period.state]?.label||period.state.toUpperCase()}</div><div>มั่นใจ ${confidenceTh[period.confidence]||'ไม่ระบุ'}<div class="mini">P ${Math.round((prob[period.state]||0)*100)}%</div></div><div class="reason"><div class="sleep-period-env">${sensorTiles}</div><div class="sleep-period-note">${sleepReasonExplanation(period.reason)}</div></div></div>`;
   }).join('');
   const terminalOccupancy=(rec.terminal_occupancy_timeline||[]).map(period=>{
     const meta=TERMINAL_OCCUPANCY_META[period.state]||{label:period.label||period.state,code:'—'};

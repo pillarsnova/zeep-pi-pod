@@ -13669,3 +13669,137 @@ body.control-focus-mode .wrap {
     height: 20px;
   }
 }
+
+/* Tablet legibility · 2026-09-02 -------------------------------------------
+ * Brief: the deck reads too small on an iPad, and the iPad is the target
+ * screen. Two cards per row over three rows gives the copy room to sit on a
+ * 12/14/16 scale, so the deck is taller than one viewport and the Control view
+ * scrolls — in fullscreen too, which has its own viewport lock. Appended last
+ * and scoped to the Control view: deleting this block restores the previous
+ * deck exactly. */
+body[data-view="control"] {
+  height: auto;
+  min-height: 100dvh;
+  max-height: none;
+  overflow: visible;
+}
+
+/* Fullscreen locks the viewport at a higher specificity, so releasing the
+ * view above is not enough — the third row would stay unreachable. */
+body[data-view="control"].control-focus-mode {
+  height: auto;
+  min-height: 100dvh;
+  max-height: none;
+  overflow: visible;
+}
+
+body[data-view="control"] .device-zone-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: auto;
+  gap: 10px;
+}
+
+/* Cards keep a floor and grow with the larger copy instead of clipping it. */
+body[data-view="control"] .device-zone,
+body[data-view="control"] .device-zone.wide {
+  height: auto;
+  min-height: 280px;
+  max-height: none;
+  overflow: visible;
+  padding: 12px 13px;
+}
+
+/* A two-column card is wider than the deck this rail was sized for. The scene
+ * is a status cue, so the extra width goes to the control side. */
+body[data-view="control"] .device-zone {
+  --zeep-control-rail-w: min(68%, 320px);
+}
+
+/* 16 · card heading — 14 · commands and readings — 12 · captions and status.
+ * Scene overlays keep their drawn size: they already pin it with !important
+ * because they sit inside a fixed SVG box. */
+body[data-view="control"] .device-zone-title {
+  font-size: 16px !important;
+}
+
+body[data-view="control"] .device-zone,
+body[data-view="control"] .device-zone :is(b, button, select, .action-toggle) {
+  font-size: 14px !important;
+}
+
+body[data-view="control"] .device-zone small,
+body[data-view="control"] .device-zone-status {
+  font-size: 12px !important;
+}
+
+/* Button captions pin themselves at 9px with !important, so the 12px caption
+ * step has to be restated at the same weight. */
+body[data-view="control"] .device-zone :is(
+  .door-action-copy > small.control-button-caption,
+  .aircon-control-stack .control-button-caption,
+  .bed-position-grid .control-button-caption,
+  .pod-environment-actions .control-button-caption,
+  .comfort-profile-grid .control-button-caption,
+  .stream-control small
+) {
+  font-size: 12px !important;
+  line-height: 14px !important;
+}
+
+/* Header copy is operational information: at 16px the title was squeezing the
+ * live state down to an ellipsis ("Airc..."). Let the state keep its width. */
+body[data-view="control"] .device-zone-status {
+  flex: 0 0 auto;
+  min-width: max-content;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* The scene caption was a single 8px line; at 12px it needs two or three. */
+body[data-view="control"] .device-zone .control-scene-caption {
+  height: auto;
+  max-height: 54px;
+  line-height: 17px;
+  white-space: normal;
+}
+
+/* Audio stacks four rows in the rail where the other cards stack two, so its
+ * row heights were tuned to a 9px track title and now clip the 12/14 scale. */
+body[data-view="control"] .audio-zone .stream-player,
+body[data-view="control"] .device-zone .audio-control-panel .stream-player {
+  grid-template-rows: 46px 40px minmax(48px, 1fr) 34px !important;
+}
+
+body[data-view="control"] .audio-zone .stream-now-playing {
+  height: 46px;
+  min-height: 46px;
+  max-height: 46px;
+}
+
+body[data-view="control"] .audio-zone .stream-track-copy > span {
+  font-size: 12px;
+  line-height: 14px;
+}
+
+body[data-view="control"] .audio-zone .stream-track-copy b {
+  margin-top: 0;
+  line-height: 18px;
+}
+
+/* The volume readout sat in a 31px column, which clips "100%" at 14px. */
+body[data-view="control"] .audio-zone .stream-queue-row {
+  grid-template-columns: minmax(0, 1.25fr) minmax(48px, .75fr) 42px;
+}
+
+/* Track names are long and the selector shares its row with the volume slider,
+ * so it keeps the caption step rather than the command step. */
+body[data-view="control"] .audio-zone .stream-queue-row select {
+  font-size: 12px !important;
+}
+
+/* The fan-speed command shares its row with two others, so its state text is
+ * the one label the 14px step cannot fit. */
+body[data-view="control"] .aircon-control-stack .fan-level-control .toggle-state-copy b {
+  font-size: 12px !important;
+}

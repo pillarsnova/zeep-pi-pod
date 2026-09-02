@@ -2801,6 +2801,7 @@ function renderSimpleDashboard(state={},environment={},bcg={},session={}){
   const sleepStateKey=!active||!personOnBed?'off_bed':classificationActive?sleep.state:'no_data';
   const sleepMeta=SLEEP_TH[sleepStateKey]||SLEEP_TH.no_data;
   document.getElementById('dashSleep').textContent=sleepMeta.label;
+  document.getElementById('dashSleep').title=sleepMeta.meaning||sleepMeta.title||'';
   const confidence=({high:'สูง',medium:'ปานกลาง',low:'ต่ำ'})[sleep.confidence]||'ไม่ระบุ';
   const sleepSource=sleep.classification_source==='personal'?'Baseline ส่วนบุคคล':'Baseline อายุและเพศ';
   const evidenceCandidate=sleep.evidence?.candidate||sleep.probability_winner||sleep.raw_candidate;

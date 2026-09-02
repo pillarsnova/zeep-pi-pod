@@ -1,0 +1,128 @@
+import json
+from pathlib import Path
+import sqlite3
+import tempfile
+import unittest
+
+from rescore_session_reports import rescore
+from sleep_stage_annotations import (
+    apply_annotations,
+    build_annotation,
+    load_annotations,
+)
+
+
+class SleepStageAnnotationTests(unittest.TestCase):
+    def setUp(self):
+        self.annotation = build_annotation(
+            state="wake",
+            start_time="2026-08-26T02:06:28+00:00",
+            end_time="2026-08-26T02:06:58+00:00",
+            source="user_reported_ground_truth",
+            reason="ผู้ใช้งานยืนยันว่าตื่นแล้ว",
+            created_at_utc="2026-08-27T00:00:00+00:00",
+        )
+        self.annotations = load_annotations([{"value": json.dumps(self.annotation)}])
+
+    def test_period_boundaries_match_six_five_second_rounds(self):
+        timestamps = [
+            "2026-08-26T02:06:28.650000+00:00",
+            "2026-08-26T02:06:33.650000+00:00",
+            "2026-08-26T02:06:38.650000+00:00",
+            "2026-08-26T02:06:43.650000+00:00",
+            "2026-08-26T02:06:48.650000+00:00",
+            "2026-08-26T02:06:53.650000+00:00",
+            "2026-08-26T02:06:58.650000+00:00",
+        ]
+        matched = []
+        for timestamp in timestamps:
+            _, annotation = apply_annotations(
+                {"state": "n1"}, timestamp, self.annotations,
+            )
+            matched.append(annotation is not None)
+        self.assertEqual(matched, [False, True, True, True, True, True, True])
+
+    def test_overlay_keeps_original_decision_for_audit(self):
+        updated, _ = apply_annotations(
+            {"state": "n1", "probabilities": {"n1": 0.68}, "confidence": "low"},
+            "2026-08-26T02:06:53.650000+00:00",
+            self.annotations,
+        )
+        self.assertEqual(updated["state"], "wake")
+        self.assertEqual(updated["probabilities"]["wake"], 1.0)
+        self.assertEqual(updated["stage_annotation"]["original_state"], "n1")
+        self.assertFalse(updated["stage_annotation"]["aasm_psg_equivalent"])
+        self.assertNotIn("ยืนยันย้อนหลัง", updated["reason"])
+
+    def test_superseded_annotation_is_not_applied(self):
+        superseded = {**self.annotation, "status": "superseded"}
+        annotations = load_annotations([{"value": json.dumps(superseded)}])
+        updated, annotation = apply_annotations(
+            {"state": "n1"},
+            "2026-08-26T02:06:53.650000+00:00",
+            annotations,
+        )
+        self.assertEqual(updated["state"], "n1")
+        self.assertIsNone(annotation)
+
+    def test_rescore_uses_annotation_without_rewriting_raw_stage(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            data_dir = Path(temporary)
+            connection = sqlite3.connect(data_dir / "sessions.db")
+            connection.executescript("""
+                CREATE TABLE sessions (
+                    session_id TEXT PRIMARY KEY, user TEXT, username_key TEXT,
+                    start_time TEXT, end_time TEXT, duration REAL, gender TEXT
+                );
+                CREATE TABLE events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT,
+                    timestamp TEXT, type TEXT, value TEXT
+                );
+                CREATE TABLE timeline (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT,
+                    timestamp TEXT, temperature REAL, humidity REAL, co2 REAL,
+                    lux REAL, sound REAL, heart_rate REAL,
+                    respiration_rate REAL, bed_status TEXT
+                );
+            """)
+            connection.execute(
+                "INSERT INTO sessions VALUES (?,?,?,?,?,?,?)",
+                ("s1", "akkewach", "akkewach@example.com",
+                 "2026-08-26T02:00:00+00:00", "2026-08-26T02:07:00+00:00", 420, None),
+            )
+            for timestamp in ("02:06:33", "02:06:38", "02:06:43",
+                              "02:06:48", "02:06:53", "02:06:58"):
+                connection.execute(
+                    "INSERT INTO events(session_id,timestamp,type,value) VALUES (?,?,?,?)",
+                    ("s1", f"2026-08-26T{timestamp}+00:00", "sleep_stage",
+                     json.dumps({"state": "n1", "metrics": {}})),
+                )
+            connection.execute(
+                "INSERT INTO events(session_id,timestamp,type,value) VALUES (?,?,?,?)",
+                ("s1", "2026-08-26T02:07:00+00:00", "final_summary",
+                 json.dumps({"sleep_state_counts": {"n1": 6}, "night_summary": {}})),
+            )
+            connection.execute(
+                "INSERT INTO events(session_id,timestamp,type,value) VALUES (?,?,?,?)",
+                ("s1", self.annotation["created_at_utc"], "sleep_stage_annotation",
+                 json.dumps(self.annotation)),
+            )
+            connection.commit()
+            before = connection.execute(
+                "SELECT value FROM events WHERE type='sleep_stage' ORDER BY id"
+            ).fetchall()
+            connection.close()
+
+            result = rescore(data_dir, ["s1"], requested_mode=None, apply=True)
+            self.assertEqual(result["sessions"][0]["counts"]["wake"], 6)
+            self.assertEqual(result["sessions"][0]["annotated_rounds"], 6)
+            connection = sqlite3.connect(data_dir / "sessions.db")
+            after = connection.execute(
+                "SELECT value FROM events WHERE type='sleep_stage' ORDER BY id"
+            ).fetchall()
+            connection.close()
+            self.assertEqual(before, after)
+
+
+if __name__ == "__main__":
+    unittest.main()

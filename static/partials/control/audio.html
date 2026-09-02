@@ -1,0 +1,43 @@
+<section class="device-zone audio-zone" data-controller="PI 5 CORE">
+          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon device-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 14v-2a8 8 0 0 1 16 0v2M4 14h3v6H5q-1 0-1-1Zm16 0h-3v6h2q1 0 1-1Z"/></svg></span>เสียงใน ZEEP</div><span class="device-zone-status" id="unifiedAudioStatus">Audio · --</span></div>
+          <div class="zone-sensor-grid single-sensor-grid" aria-label="ระดับเสียงภายใน ZEEP">
+            <div class="zone-sensor" id="zoneSensorSound"><span title="ระดับเสียงปัจจุบัน"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-volume-on"/></svg></span><b id="unifiedSound">--</b><small>ระดับเสียง · dBA</small></div>
+          </div>
+          <div class="audio-control-panel" aria-label="ภาพเสียงภายใน ZEEP และเครื่องเล่นเสียงบรรยากาศ">
+            <div id="audioPodMap" class="audio-pod-map unified-pod-device-map" role="img" aria-label="ระบบเสียงภายใน ZEEP พร้อมเล่น">
+              <svg viewBox="0 0 260 168" aria-hidden="true" focusable="false">
+                <defs><linearGradient id="audioPodShellGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#17364a"/><stop offset=".58" stop-color="#0b2032"/><stop offset="1" stop-color="#061321"/></linearGradient><linearGradient id="audioPodInnerGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#071a2b"/><stop offset="1" stop-color="#020a13"/></linearGradient></defs>
+                <path class="pod-door-view-shell audio-pod-shell" fill="url(#audioPodShellGradient)" d="M20 144Q14 129 23 93Q34 43 86 24Q123 10 178 16Q219 20 238 57Q250 80 244 144Z"/>
+                <path class="pod-door-view-opening audio-pod-inner" fill="url(#audioPodInnerGradient)" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124Z"/>
+                <path class="pod-door-view-aperture" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124"/><path class="pod-door-view-floor" d="M25 144Q112 126 244 144"/>
+                <g class="pod-audio-speakers"><g><circle cx="78" cy="65" r="9"/><circle cx="78" cy="65" r="3"/></g><g><circle cx="193" cy="65" r="9"/><circle cx="193" cy="65" r="3"/></g></g>
+                <g class="pod-audio-waves"><path d="M91 69Q134 45 180 69"/><path d="M96 78Q135 58 175 78"/><path d="M104 87Q135 73 167 87"/></g>
+                <g class="pod-door-view-bed audio-pod-bed"><path class="pod-door-view-bed-base" d="M43 124H222L239 144H25Z"/><path class="pod-door-view-mattress" d="M49 110H207Q214 110 216 118L219 131H46V118Q46 112 49 110Z"/><path class="pod-door-view-headboard" d="M180 78Q197 66 213 81L216 111H180Z"/><path class="pod-door-view-pillow" d="M179 102Q194 85 210 97L212 110H184Z"/><path class="pod-door-view-seams" d="M106 111v20m55-20v20"/></g>
+              </svg>
+              <span><b>เสียง ZEEP</b><small id="audioPodState">พร้อมเล่น</small></span>
+            </div>
+            <small class="control-scene-caption">เลือกเสียงและโหมดเล่นเพื่อผ่อนคลาย</small>
+            <div class="stream-player" aria-label="เครื่องเล่นเสียงบรรยากาศ">
+              <div class="stream-now-playing">
+                <div id="unifiedAlbumArt" class="stream-cover" data-tone="0" aria-hidden="true"><span>♪</span><i></i><div class="stream-equalizer"><i></i><i></i><i></i><i></i></div></div>
+                <div class="stream-track-copy" aria-live="polite"><span id="unifiedPlayerMode">เลือกเสียง</span><b id="unifiedTrackTitle">กำลังโหลดเสียง</b><small id="unifiedTrackHint">ไฟล์ในเครื่อง</small></div>
+                <svg class="stream-ambient-wave" viewBox="0 0 300 90" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 48c18 0 18-25 36-25s18 42 36 42 18-51 36-51 18 39 36 39 18-29 36-29 18 41 36 41 18-35 36-35 18 18 48 18"/><path d="M0 58c24 0 24-17 48-17s24 28 48 28 24-35 48-35 24 23 48 23 24-18 48-18 24 19 60 19"/><path d="M0 70h300"/></svg>
+              </div>
+              <div class="stream-queue-row">
+                <span aria-hidden="true">≡</span>
+                <select id="unifiedTrackSelect" aria-label="เลือกเสียงบรรยากาศ" onchange="unifiedSelectTrack(this.value,this)"><option value="">กำลังโหลด…</option></select>
+                <span class="stream-volume-icon" aria-hidden="true">◖</span>
+                <input id="unifiedVolume" type="range" min="0" max="100" value="75" aria-label="ระดับเสียง" oninput="setVolume(this.value)">
+                <b id="unifiedVolumeText">75%</b>
+              </div>
+              <div class="stream-controls" aria-label="ควบคุมการเล่นเพลง">
+                <button id="unifiedAudioPrev" class="stream-control ui-transport-button" onclick="unifiedStepTrack(-1,this)" aria-label="เพลงก่อนหน้า" title="เพลงก่อนหน้า"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-previous"/></svg><small>ก่อนหน้า</small></button>
+                <button id="unifiedAudioBtn" class="stream-control stream-play ui-transport-button" onclick="unifiedAudioToggle(this)" aria-label="เล่นเสียงใน ZEEP" title="เล่นเสียงใน ZEEP"><svg id="unifiedAudioPlayIcon" class="ui-icon" aria-hidden="true"><use href="#ui-icon-play"/></svg><small id="unifiedAudioPlayLabel">เล่น</small></button>
+                <button id="unifiedAudioNext" class="stream-control ui-transport-button" onclick="unifiedStepTrack(1,this)" aria-label="เพลงถัดไป" title="เพลงถัดไป"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-next"/></svg><small>ถัดไป</small></button>
+              </div>
+              <div class="stream-mode-row" role="group" aria-label="รูปแบบการเล่นเพลง">
+                <button id="unifiedAudioModeToggle" class="stream-mode-toggle" data-mode="queue" type="button" onclick="toggleUnifiedAudioMode(this)" aria-pressed="false" aria-label="โหมดคิวเพลง กดเพื่อเปลี่ยนเป็นเล่นซ้ำ" title="สลับระหว่างเล่นซ้ำและคิวเพลง"><span class="stream-mode-option" data-mode-option="repeat_one"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-repeat-one"/></svg><small>เล่นซ้ำ</small></span><i class="stream-mode-switch" aria-hidden="true"><i></i></i><span class="stream-mode-option active" data-mode-option="queue"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-queue"/></svg><small>คิวเพลง</small></span></button>
+              </div>
+            </div>
+          </div>
+        </section>

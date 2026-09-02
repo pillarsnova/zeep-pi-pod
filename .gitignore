@@ -1,0 +1,25 @@
+__pycache__/
+.venv/
+logs/
+music/
+test-results/
+data/
+backup/
+# ad-hoc device-side backups/deploy staging — keep out of the repo (มีสำเนาในก้อน backup ประจำวันแล้ว)
+*.backup-*
+*.bak-*
+*.bak
+*.before-*
+*.rejected-*
+backups/
+.*-deploy*/
+.pending-calibration/
+.login-fix-*/
+.lgd-nfy0
+pending-*/
+
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local

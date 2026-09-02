@@ -1,0 +1,33 @@
+<section class="device-zone door-zone priority-safety" data-controller="PI 5 CORE">
+          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon device-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 20V4h16v16M8 6l8 1.5v11L8 17Z"/><path d="M2 12h4m-2-2-2 2 2 2m18-2h-4m2-2 2 2-2 2"/></svg></span>ประตู</div><span class="device-zone-status" id="unifiedDoorStatus">GPIO · --</span></div>
+          <div class="door-control-stage">
+            <div id="podDoorMap" class="pod-door-map" role="img" aria-label="ประตู ZEEP ตำแหน่งยังไม่ได้รับการยืนยัน">
+              <svg viewBox="0 0 260 168" aria-hidden="true" focusable="false">
+                <defs><linearGradient id="doorPodShellGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#273b42"/><stop offset=".58" stop-color="#141f28"/><stop offset="1" stop-color="#090e15"/></linearGradient><linearGradient id="doorPodInnerGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#121a22"/><stop offset="1" stop-color="#03070b"/></linearGradient></defs>
+                <path class="pod-door-view-shell" fill="url(#doorPodShellGradient)" d="M20 144Q14 129 23 93Q34 43 86 24Q123 10 178 16Q219 20 238 57Q250 80 244 144Z"/>
+                <path class="pod-door-view-opening" fill="url(#doorPodInnerGradient)" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124Z"/>
+                <path class="pod-door-view-aperture" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124"/>
+                <path class="pod-door-view-floor" d="M25 144Q112 126 244 144"/>
+                <g class="pod-door-view-bed">
+                  <path class="pod-door-view-bed-base" d="M43 124H222L239 144H25Z"/><path class="pod-door-view-mattress" d="M49 110H207Q214 110 216 118L219 131H46V118Q46 112 49 110Z"/><path class="pod-door-view-headboard" d="M180 78Q197 66 213 81L216 111H180Z"/><path class="pod-door-view-pillow" d="M179 102Q194 85 210 97L212 110H184Z"/><path class="pod-door-view-seams" d="M106 111v20m55-20v20"/>
+                </g>
+                <g class="door-slide-panel">
+                  <path class="door-shared-panel" d="M47 125Q40 109 53 77Q64 50 91 41L118 36V126Z"/>
+                  <path class="door-panel-window" d="M59 106Q53 94 63 71Q72 51 94 45L108 42V108Z"/>
+                </g>
+                <!-- One clear direction arrow follows the latest open/close
+                     command; the former second arrow above the door is removed. -->
+                <path class="door-direction" d="M94 69h83m-14-12 15 12-15 12"/>
+              </svg>
+              <span><b>ประตู ZEEP</b><small id="podDoorState">พร้อมสั่งงาน</small></span>
+            </div>
+            <small class="control-scene-caption">เลื่อนเปิด–ปิดทางเข้า ZEEP</small>
+            <div class="door-action-grid">
+              <button id="unifiedDoorOpenBtn" class="door-action-button door-open-action" onclick="doorAction('open',this)" aria-label="สั่งประตูเลื่อนเปิดทางเข้า" title="สั่งประตูเลื่อนเปิดทางเข้า"><span class="door-action-icon" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M6 5h13v22H6z"/><path d="M11 9h12v18H11z"/><path d="M23 16h6m-3-3 3 3-3 3"/></svg></span><span class="door-action-copy"><b>เปิด</b><small class="control-button-caption">เลื่อนเปิดทางเข้า</small></span></button>
+              <button id="unifiedDoorCloseBtn" class="door-action-button door-close-action" onclick="doorAction('close',this)" aria-label="สั่งประตูเลื่อนปิดทางเข้า" title="สั่งประตูเลื่อนปิดทางเข้า"><span class="door-action-icon" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M13 5h13v22H13z"/><path d="M9 9h12v18H9z"/><path d="M9 16H3m3-3-3 3 3 3"/></svg></span><span class="door-action-copy"><b>ปิด</b><small class="control-button-caption">เลื่อนปิดทางเข้า</small></span></button>
+            </div>
+          </div>
+          <div class="zone-sensor-grid single-sensor-grid door-safety-grid" aria-label="ข้อมูลความปลอดภัยก่อนควบคุมประตู">
+            <div class="zone-sensor door-safety-sensor"><span aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-alert"/></svg></span><b>ตรวจทางเดินและผู้ใช้งานก่อนปิดประตู</b><small>SAFETY CHECK</small></div>
+          </div>
+        </section>

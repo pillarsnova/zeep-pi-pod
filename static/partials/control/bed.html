@@ -1,0 +1,46 @@
+<section class="device-zone wide bed-zone priority-health" data-controller="ESP32 BED">
+          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon device-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M3 18h18M5 18v3m14-3v3M5 16V9m0 5h14v4M7 11h4q2 0 2 3H7Z"/></svg></span>เตียงและผู้ใช้งาน</div><span class="device-zone-status" id="unifiedBedStatus">ESP32 Bed · --</span></div>
+          <div class="zone-sensor-grid bed-sensor-grid" aria-label="ค่าตรวจวัดผู้ใช้งานบนเตียง">
+            <div class="zone-sensor" id="zoneSensorHeart"><span title="ชีพจร"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-heart"/></svg></span><b id="unifiedHeartRate">--</b><small>ชีพจร · bpm</small></div>
+            <div class="zone-sensor" id="zoneSensorRespiration"><span title="อัตราหายใจ"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-lungs"/></svg></span><b id="unifiedRespiration">--</b><small>หายใจ/นาที</small></div>
+            <div class="zone-sensor" id="zoneSensorBed"><span title="สถานะบนเตียง"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-bed-flat"/></svg></span><b id="unifiedBedPresence">--</b><small>สถานะเตียง</small></div>
+          </div>
+          <div class="bed-motion-panel">
+            <div id="bedPodMap" class="bed-pod-scene unified-pod-device-map" role="img" aria-label="เตียงภายใน ZEEP พร้อมใช้งาน">
+              <svg viewBox="0 0 260 168" aria-hidden="true" focusable="false">
+                <defs><linearGradient id="bedPodShellGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#18354a"/><stop offset=".58" stop-color="#0b2032"/><stop offset="1" stop-color="#061321"/></linearGradient><linearGradient id="bedPodInnerGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#071a2b"/><stop offset="1" stop-color="#020a13"/></linearGradient></defs>
+                <path class="pod-door-view-shell" fill="url(#bedPodShellGradient)" d="M20 144Q14 129 23 93Q34 43 86 24Q123 10 178 16Q219 20 238 57Q250 80 244 144Z"/>
+                <path class="pod-door-view-opening" fill="url(#bedPodInnerGradient)" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124Z"/>
+                <path class="pod-door-view-aperture" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124"/><path class="pod-door-view-floor" d="M25 144Q112 126 244 144"/>
+                <g class="pod-door-view-bed">
+                  <path class="pod-door-view-bed-base" d="M43 130H222L239 144H25Z"/>
+                  <g id="bedSceneFoot" class="bed-device-region bed-device-foot bed-tilt-segment"><path class="bed-segment-surface" d="M47 111h59v19H47Z"/><path class="bed-device-arrow" d="M75 103V82m-6 7 6-7 6 7"/></g>
+                  <path class="bed-segment-surface bed-device-middle" d="M106 111h55v19h-55Z"/>
+                  <g id="bedSceneHead" class="bed-device-region bed-device-head bed-tilt-segment"><path class="bed-segment-surface" d="M161 111h54v19h-54Z"/><path class="pod-door-view-headboard" d="M181 79Q197 68 212 82L215 110H181Z"/><path class="pod-door-view-pillow" d="M179 102Q194 85 210 97L212 110H184Z"/><path class="bed-device-arrow" d="M195 73V52m-6 7 6-7 6 7"/></g>
+                  <path class="pod-door-view-seams" d="M106 111v20m55-20v20"/>
+                </g>
+              </svg>
+              <span><b>เตียง ZEEP</b><small id="bedPodSceneState">พร้อมใช้งาน</small></span>
+            </div>
+            <small class="control-scene-caption">ปรับหัว–ปลายเตียงเพื่อความสบาย</small>
+            <div class="bed-control-grid bed-position-grid" aria-label="ปรับระดับเตียง">
+              <button class="bed-control-btn bed-action bed-foot-up" data-bed-command="foot_up" onclick="bedCommand('foot_up',this)" aria-label="ยกปลายเตียงขึ้น" title="ยกปลายเตียงขึ้น"><svg class="bed-command-symbol" viewBox="0 0 68 44" aria-hidden="true" focusable="false"><path class="bed-symbol-frame" d="M7 35h54M11 35v5m46-5v5"/><path class="bed-symbol-surface bed-symbol-active-segment" d="M10 17l21 15h27"/><path class="bed-symbol-headboard" d="M58 20v12"/><path class="bed-symbol-arrow" d="M17 24V7m-6 7 6-7 6 7"/></svg><span class="sr-only">ยกปลายเตียงขึ้น</span><small class="control-button-caption">ปลายขึ้น</small></button>
+              <button class="bed-control-btn bed-action bed-foot-down" data-bed-command="foot_down" onclick="bedCommand('foot_down',this)" aria-label="ลดปลายเตียงลง" title="ลดปลายเตียงลง"><svg class="bed-command-symbol" viewBox="0 0 68 44" aria-hidden="true" focusable="false"><path class="bed-symbol-frame" d="M7 35h54M11 35v5m46-5v5"/><path class="bed-symbol-surface bed-symbol-active-segment" d="M10 17l21 15h27"/><path class="bed-symbol-headboard" d="M58 20v12"/><path class="bed-symbol-arrow" d="M17 7v17m-6-7 6 7 6-7"/></svg><span class="sr-only">ลดปลายเตียงลง</span><small class="control-button-caption">ปลายลง</small></button>
+              <button id="bedMotionMap" class="bed-control-btn bed-action bed-motion-map bed-normal-button" data-bed-command="flat" onclick="bedCommand('flat',this)" aria-label="ปรับเตียงปกติ" title="ปรับเตียงปกติ">
+                <svg viewBox="0 0 120 74" aria-hidden="true" focusable="false">
+                  <!-- มุมมองเดียวกับภาพ ZEEP: ปลายเตียงอยู่ซ้ายและหัวเตียงอยู่ขวา -->
+                  <g transform="translate(120 0) scale(-1 1)">
+                    <path class="bed-frame" d="M8 58h104M14 58v9M106 58v9"/>
+                    <g id="bedMapHead" class="bed-motion-region"><path d="M14 53L24 26Q27 21 33 25L58 50Z"/><path d="M20 24q8-9 16 0"/></g>
+                    <g id="bedMapFoot" class="bed-motion-region"><path d="M57 50h48q7 0 7 8H57z"/><path d="M88 47h18"/></g>
+                  </g>
+                </svg>
+                <span id="bedMotionArrow" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-bed-flat"/></svg></span>
+                <b id="unifiedBedCommand" class="sr-only">เตียงปกติ</b>
+                <small class="control-button-caption">เตียงราบ</small>
+              </button>
+              <button class="bed-control-btn bed-action bed-head-up" data-bed-command="head_up" onclick="bedCommand('head_up',this)" aria-label="ยกหัวเตียงขึ้น" title="ยกหัวเตียงขึ้น"><svg class="bed-command-symbol" viewBox="0 0 68 44" aria-hidden="true" focusable="false"><path class="bed-symbol-frame" d="M7 35h54M11 35v5m46-5v5"/><path class="bed-symbol-surface bed-symbol-active-segment" d="M10 32h25l23-15"/><path class="bed-symbol-headboard" d="M58 17v15"/><path class="bed-symbol-arrow" d="M51 24V7m-6 7 6-7 6 7"/></svg><span class="sr-only">ยกหัวเตียงขึ้น</span><small class="control-button-caption">หัวขึ้น</small></button>
+              <button class="bed-control-btn bed-action bed-head-down" data-bed-command="head_down" onclick="bedCommand('head_down',this)" aria-label="ลดหัวเตียงลง" title="ลดหัวเตียงลง"><svg class="bed-command-symbol" viewBox="0 0 68 44" aria-hidden="true" focusable="false"><path class="bed-symbol-frame" d="M7 35h54M11 35v5m46-5v5"/><path class="bed-symbol-surface bed-symbol-active-segment" d="M10 32h25l23-15"/><path class="bed-symbol-headboard" d="M58 17v15"/><path class="bed-symbol-arrow" d="M51 7v17m-6-7 6 7 6-7"/></svg><span class="sr-only">ลดหัวเตียงลง</span><small class="control-button-caption">หัวลง</small></button>
+            </div>
+          </div>
+        </section>

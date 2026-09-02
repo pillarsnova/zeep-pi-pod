@@ -1,0 +1,42 @@
+<section class="device-zone wide air-zone" data-controller="ESP32 AIRCON">
+          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon device-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9.5 5.5 12 8l2.5-2.5M9.5 18.5 12 16l2.5 2.5"/></svg></span>อากาศและอุณหภูมิ</div><span class="device-zone-status" id="unifiedAirconStatus">Aircon · Offline</span></div>
+          <div class="zone-sensor-grid air-sensor-grid" aria-label="ค่าตรวจวัดอากาศภายใน ZEEP">
+            <div class="zone-sensor" id="zoneSensorTemp"><span title="อุณหภูมิ"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-thermometer"/></svg></span><b id="unifiedTemp">--</b><small>อุณหภูมิ · °C</small></div>
+            <div class="zone-sensor quality-unknown" id="zoneSensorAirQuality"><span title="สภาพอากาศ"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-air-quality"/></svg></span><b id="unifiedAirQuality">รอข้อมูล</b><small id="unifiedAirQualityDetail">Air Sensor 0/3</small></div>
+          </div>
+          <div class="aircon-comfort-panel" aria-label="ควบคุมเครื่องปรับอากาศและอุณหภูมิ">
+            <div id="airconComfortMap" class="aircon-comfort-map" role="img" aria-label="เครื่องปรับอากาศปิดอยู่">
+              <svg viewBox="0 0 260 168" aria-hidden="true" focusable="false">
+                <defs>
+                  <linearGradient id="airDoorPodShellGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#18354a"/><stop offset=".58" stop-color="#0b2032"/><stop offset="1" stop-color="#061321"/></linearGradient>
+                  <linearGradient id="airDoorPodInnerGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#071a2b"/><stop offset="1" stop-color="#020a13"/></linearGradient>
+                </defs>
+                <path class="pod-door-view-shell" fill="url(#airDoorPodShellGradient)" d="M20 144Q14 129 23 93Q34 43 86 24Q123 10 178 16Q219 20 238 57Q250 80 244 144Z"/>
+                <path class="pod-door-view-opening" fill="url(#airDoorPodInnerGradient)" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124Z"/>
+                <path class="pod-door-view-aperture" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124"/>
+                <path class="pod-door-view-floor" d="M25 144Q112 126 244 144"/>
+                <g class="pod-door-view-static-lamp"><path d="M109 40h35l-5 9h-25Z"/><path d="m110 53-5 6m22-6v8m17-8 5 6"/></g>
+                <g class="aircon-unit pod-head-end-aircon"><rect x="168" y="49" width="40" height="17" rx="5"/><path d="M173 60h30m-23-6h17"/></g>
+                <g class="cool-air-flow pod-flow-head-to-foot"><path d="M166 70c-18 0-20 12-37 12s-20 13-36 13-19 10-33 10"/><path d="M167 78c-16 0-20 11-34 11s-18 12-33 12-17 8-29 8"/><path d="m72 101-12 4 9 8"/></g>
+                <g class="fresh-air-spark"><path d="M148 64v10m-5-5h10m-29 14v8m-4-4h8"/></g>
+                <g class="pod-door-view-bed air-pod-bed">
+                  <path class="pod-door-view-bed-base" d="M43 124H222L239 144H25Z"/>
+                  <path class="pod-door-view-mattress" d="M49 110H207Q214 110 216 118L219 131H46V118Q46 112 49 110Z"/>
+                  <path class="pod-door-view-headboard" d="M180 78Q197 66 213 81L216 111H180Z"/>
+                  <path class="pod-door-view-pillow" d="M179 102Q194 85 210 97L212 110H184Z"/>
+                  <path class="pod-door-view-seams" d="M106 111v20m55-20v20"/>
+                </g>
+              </svg>
+              <span><b>แอร์ ZEEP</b><small id="airconComfortCaption">แอร์ปิดอยู่</small></span>
+            </div>
+            <small class="control-scene-caption">ทำความเย็นและกระจายลมทั่ว ZEEP</small>
+            <div class="aircon-control-stack">
+              <div class="aircon-power-pair" role="group" aria-label="เปิดหรือปิดเครื่องปรับอากาศ">
+                <button id="unifiedAirconPowerBtn" class="smart-switch action-toggle visual-power-toggle stateful-content aircon-action aircon-power-toggle state-unknown" data-control-label="เปิดหรือปิดแอร์" data-aircon-command="on" onclick="unifiedAirconPowerToggle(this)" aria-pressed="false" aria-label="เปิดเครื่องปรับอากาศ" title="เปิดเครื่องปรับอากาศ"><span class="toggle-status-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-power"/></svg></span><span class="toggle-state-copy"><b data-action-label>เปิด</b><small data-state-label>ยังไม่ทราบ</small></span><small class="control-button-caption">แอร์</small></button>
+              </div>
+              <button id="unifiedSwingBtn" class="smart-switch action-toggle visual-power-toggle stateful-content aircon-action state-unknown" data-control-label="สวิงพัดลม" data-aircon-command="swing_on" onclick="unifiedSwingToggle(this)" aria-label="เปิดสวิงพัดลม" title="เปิดสวิงพัดลม"><span class="toggle-status-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-swing"/></svg></span><span class="toggle-state-copy"><b data-action-label>เปิด</b><small data-state-label>ยังไม่ทราบ</small></span><small class="control-button-caption">สวิง</small></button>
+              <button id="unifiedFanLevelBtn" class="smart-switch action-toggle visual-power-toggle stateful-content aircon-action fan-level-control state-unknown" data-control-label="แรงลม" data-aircon-command="fan" onclick="unifiedFanLevelCycle(this)" aria-label="ปรับแรงลมแอร์" title="กดเพื่อปรับแรงลมแอร์"><span class="toggle-status-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-fan"/></svg></span><span class="toggle-state-copy"><b data-action-label>ปรับแรงลม</b><small data-state-label>กดเพื่อปรับ</small></span><small class="control-button-caption">แรงลม</small></button>
+              <div class="temperature-quick-control"><div class="temperature-quick-copy"><b>อุณหภูมิ</b><small>15–25°C</small></div><div class="device-inline temperature-auto-control" id="unifiedAirconTempControl" data-state="ready"><select id="unifiedAirconTemp" aria-label="เลือกอุณหภูมิภายใน ZEEP ระหว่าง 15 ถึง 25 องศา และปรับทันที" onchange="applyUnifiedAirconTemperature(this)"><option value="15" selected>15°C</option><option value="16">16°C</option><option value="17">17°C</option><option value="18">18°C</option><option value="19">19°C</option><option value="20">20°C</option><option value="21">21°C</option><option value="22">22°C</option><option value="23">23°C</option><option value="24">24°C</option><option value="25">25°C</option></select><span class="temperature-auto-state" id="unifiedAirconTempState" aria-live="polite"></span></div></div>
+            </div>
+          </div>
+        </section>

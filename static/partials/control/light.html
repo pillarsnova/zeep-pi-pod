@@ -1,0 +1,79 @@
+<section class="device-zone light-zone" data-controller="PI 5 CORE">
+          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon pod-light-zone-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M3 20V11a9 9 0 0 1 18 0v9M8 8h8M9 11l-2 4m5-4v5m3-5 2 4"/></svg></span>แสงภายใน ZEEP</div><span class="device-zone-status" id="unifiedLightStatus">GPIO · --</span></div>
+          <div class="zone-sensor-grid single-sensor-grid" aria-label="ค่าความสว่างภายใน ZEEP">
+            <div class="zone-sensor" id="zoneSensorLight"><span title="ความสว่างปัจจุบัน"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-light"/></svg></span><b id="unifiedLight">--</b><small>ความสว่าง · lux</small></div>
+          </div>
+          <div class="pod-environment-control-panel" aria-label="ควบคุมแอร์ ไฟเพดาน และแสงแดงบริเวณเตียง">
+            <div id="podRoomLightMap" class="pod-room-light-map pod-environment-map" role="img" aria-label="ภาพรวม ZEEP รอสถานะอุปกรณ์">
+              <svg viewBox="0 0 260 168" aria-hidden="true" focusable="false">
+                <defs>
+                  <linearGradient id="podRoomShellGradient" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stop-color="#18354a"/><stop offset=".58" stop-color="#0b2032"/><stop offset="1" stop-color="#061321"/>
+                  </linearGradient>
+                  <linearGradient id="podRoomInnerGradient" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stop-color="#071a2b"/><stop offset="1" stop-color="#020a13"/>
+                  </linearGradient>
+                  <linearGradient id="podRoomLightBeam" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="#fff7c2" stop-opacity=".64"/><stop offset="1" stop-color="#ffd66d" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <path class="pod-room-shell pod-door-view-shell" d="M20 144Q14 129 23 93Q34 43 86 24Q123 10 178 16Q219 20 238 57Q250 80 244 144Z"/>
+                <path class="pod-room-inner pod-door-view-opening" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124Z"/>
+                <path class="pod-room-seam pod-door-view-aperture" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124"/>
+                <path class="pod-door-view-floor" d="M25 144Q112 126 244 144"/>
+                <g class="pod-room-lamp">
+                  <path class="pod-room-beam" d="M111 49h31l12 34h-55Z"/>
+                  <path class="pod-room-fixture" d="M109 40h35l-5 9h-25Z"/>
+                  <path class="pod-room-rays" d="m110 53-5 6m22-6v8m17-8 5 6"/>
+                </g>
+                <g class="pod-star-field">
+                  <path d="M64 57v8m-4-4h8M87 45v6m-3-3h6M158 45v7m-3.5-3.5h7M188 75v7m-3.5-3.5h7"/>
+                  <circle cx="54" cy="81" r="1.7"/><circle cx="76" cy="91" r="1.2"/>
+                  <circle cx="98" cy="64" r="1.4"/><circle cx="151" cy="67" r="1.2"/>
+                  <circle cx="177" cy="55" r="1.5"/><circle cx="204" cy="91" r="1.3"/>
+                </g>
+                <g class="pod-scene-aircon pod-head-end-aircon"><rect x="168" y="49" width="40" height="17" rx="5"/><path d="M173 60h30m-23-6h17"/></g>
+                <g class="pod-scene-airflow pod-flow-head-to-foot"><path d="M166 70c-18 0-20 12-37 12s-20 13-36 13-19 10-33 10"/><path d="M167 78c-16 0-20 11-34 11s-18 12-33 12-17 8-29 8"/><path d="m72 101-12 4 9 8"/></g>
+                <g class="pod-scene-bed pod-door-view-bed">
+                  <path class="pod-bed-frame pod-door-view-bed-base" d="M43 124H222L239 144H25Z"/>
+                  <path class="pod-bed-base pod-door-view-mattress" d="M49 110H207Q214 110 216 118L219 131H46V118Q46 112 49 110Z"/>
+                  <path class="pod-door-view-headboard" d="M180 78Q197 66 213 81L216 111H180Z"/>
+                  <g id="redMapFace" class="red-bed-region pod-bed-head-zone"><path d="M181 79Q197 68 212 82L215 110H181Z"/></g>
+                  <g id="redMapBody" class="red-bed-region pod-bed-middle-zone"><path d="M106 111h55v19h-55Z"/></g>
+                  <g id="redMapLeg" class="red-bed-region pod-bed-foot-zone"><path d="M47 111h59v19H47Z"/></g>
+                  <path class="pod-bed-pillow pod-door-view-pillow" d="M179 102Q194 85 210 97L212 110H184Z"/>
+                  <path class="pod-bed-divider pod-door-view-seams" d="M106 111v20m55-20v20"/>
+                </g>
+              </svg>
+              <span><b>แสง ZEEP</b><small id="podSceneCaption">แอร์ · ไฟเพดาน · เตียง 3 ส่วน</small></span>
+            </div>
+            <small class="control-scene-caption">เลือกแสงเพดาน ดาว และแสงแดง</small>
+            <div class="pod-environment-actions">
+              <div class="pod-light-switches">
+              <button id="unifiedRoomLightBtn" class="smart-switch action-toggle visual-power-toggle stateful-content pod-room-light-toggle" data-control-label="ไฟเพดานภายใน ZEEP" onclick="runOutputAction('led',this,false)" aria-label="เปิดไฟเพดานภายใน ZEEP" title="เปิดไฟเพดานภายใน ZEEP">
+                <span class="toggle-status-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M7 7h10l-2 4H9Zm5-4v4M8 14l-3 4m7-4v6m4-6 3 4"/></svg></span>
+                <span class="toggle-state-copy"><b data-action-label>เปิดไฟ</b><small data-state-label>ปิดอยู่</small></span>
+                <small class="control-button-caption">ไฟเพดาน</small>
+              </button>
+              <button id="unifiedStarLightBtn" class="smart-switch action-toggle visual-power-toggle stateful-content pod-star-light-toggle" data-control-label="ไฟดาวบนท้องฟ้า" onclick="runOutputAction('star_light',this,false)" aria-label="เปิดไฟดาวบนท้องฟ้า" title="เปิดไฟดาวบนท้องฟ้า">
+                <span class="toggle-status-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-star"/></svg></span>
+                <span class="toggle-state-copy"><b data-action-label>เปิดไฟดาว</b><small data-state-label>ปิดอยู่</small></span>
+                <small class="control-button-caption">ไฟดาว</small>
+              </button>
+              </div>
+              <div class="red-zone-grid" aria-label="ควบคุมแสงแดงตามตำแหน่งเตียง">
+              <!-- Keep touch labels short on the 8.5-inch tablet; the complete
+                   physical position remains in aria-label/title for clarity. -->
+              <button id="unifiedRedFaceBtn" class="red-zone-button stateful-content" data-control-label="แสงแดงหัวเตียง" onclick="redLightAction('red_light_face',this)" aria-label="เปิดแสงแดงหัวเตียง" title="เปิดแสงแดงหัวเตียง">
+                <span class="red-zone-icon red-bed-zone-icon red-head-zone-icon" aria-hidden="true"><svg viewBox="0 0 56 34"><path class="active-segment" d="M37 12h12q4 0 4 4v10H37Z"/><path class="red-bed-outline" d="M7 12h42q4 0 4 4v10H3V16q0-4 4-4Zm-4 14h50M6 27v3m44-3v3"/><path class="red-bed-divider" d="M20 13v12m17-12v12"/><path class="red-bed-pillow" d="M40 15h8q2 0 2 2v4H40Z"/></svg></span><span><b>บน</b><small data-state-label>ปิดอยู่</small></span><small class="control-button-caption">หัวเตียง</small>
+              </button>
+              <button id="unifiedRedBodyBtn" class="red-zone-button stateful-content" data-control-label="แสงแดงกลางเตียง" onclick="redLightAction('red_light_body',this)" aria-label="เปิดแสงแดงกลางเตียง" title="เปิดแสงแดงกลางเตียง">
+                <span class="red-zone-icon red-bed-zone-icon red-middle-zone-icon" aria-hidden="true"><svg viewBox="0 0 56 34"><path class="active-segment" d="M20 12h17v14H20Z"/><path class="red-bed-outline" d="M7 12h42q4 0 4 4v10H3V16q0-4 4-4Zm-4 14h50M6 27v3m44-3v3"/><path class="red-bed-divider" d="M20 13v12m17-12v12"/><path class="red-bed-pillow" d="M40 15h8q2 0 2 2v4H40Z"/></svg></span><span><b>กลาง</b><small data-state-label>ปิดอยู่</small></span><small class="control-button-caption">กลางเตียง</small>
+              </button>
+              <button id="unifiedRedLegBtn" class="red-zone-button stateful-content" data-control-label="แสงแดงปลายเตียง" onclick="redLightAction('red_light_leg',this)" aria-label="เปิดแสงแดงปลายเตียง" title="เปิดแสงแดงปลายเตียง">
+                <span class="red-zone-icon red-bed-zone-icon red-foot-zone-icon" aria-hidden="true"><svg viewBox="0 0 56 34"><path class="active-segment" d="M3 16q0-4 4-4h13v14H3Z"/><path class="red-bed-outline" d="M7 12h42q4 0 4 4v10H3V16q0-4 4-4Zm-4 14h50M6 27v3m44-3v3"/><path class="red-bed-divider" d="M20 13v12m17-12v12"/><path class="red-bed-pillow" d="M40 15h8q2 0 2 2v4H40Z"/></svg></span><span><b>ปลาย</b><small data-state-label>ปิดอยู่</small></span><small class="control-button-caption">ปลายเตียง</small>
+              </button>
+              </div>
+            </div>
+          </div>
+        </section>

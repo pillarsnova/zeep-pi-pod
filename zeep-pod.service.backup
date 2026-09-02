@@ -1,0 +1,19 @@
+[Unit]
+Description=ZEEP Sleep Research Platform
+After=network.target
+
+[Service]
+Type=simple
+User=pod1
+WorkingDirectory=/home/pod1/pi5
+EnvironmentFile=-/home/pod1/pi5/.env
+ExecStart=/home/pod1/pi5/.venv/bin/python /home/pod1/pi5/app.py
+Restart=on-failure
+RestartSec=3
+NotifyAccess=main
+WatchdogSec=15s
+TimeoutStopSec=45
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

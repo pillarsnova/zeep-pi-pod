@@ -1,0 +1,41 @@
+<section class="device-zone aroma-zone" data-controller="PI 5 CORE">
+          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon device-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M7 20c-2-4 2-6 0-10m5 10c-2-4 2-6 0-10m5 10c-2-4 2-6 0-10M5 6c2-3 4-3 6 0m2 0c2-3 4-3 6 0"/></svg></span>กลิ่นและไอน้ำ</div><span class="device-zone-status">PI5 · Pulse</span></div>
+          <div class="zone-sensor-grid comfort-output-grid humidity-comfort-grid" aria-label="ความชื้นและสถานะระบบกระจายกลิ่นและไอน้ำ">
+            <div class="zone-sensor humidity-evaluation-sensor humidity-unknown" id="zoneSensorHumidity">
+              <span title="ความชื้นสัมพัทธ์"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-droplet"/></svg></span>
+              <b id="unifiedHumidity">--</b>
+              <small id="unifiedHumidityLevel">รอข้อมูล</small>
+              <div class="humidity-level-scale" aria-label="ระดับความชื้น 5 สถานะ">
+                <i data-level="excellent" title="ยอดเยี่ยม · 40–60%RH">●</i>
+                <i data-level="good" title="ดี · 35–65%RH">●</i>
+                <i data-level="fair" title="พอใช้ · 30–70%RH">●</i>
+                <i data-level="poor" title="แย่ · 20–80%RH">●</i>
+                <i data-level="critical" title="วิกฤต · นอกช่วง 20–80%RH">●</i>
+              </div>
+            </div>
+            <div class="zone-sensor comfort-output-sensor"><span aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-air"/></svg></span><b id="unifiedComfortStatus">พร้อมใช้ · 5 รายการ</b><small>Pulse Output · 1 วินาที</small></div>
+          </div>
+          <div class="comfort-control-panel" aria-label="ระบบกระจายกลิ่นและไอน้ำภายใน ZEEP">
+            <div id="comfortDeliveryMap" class="comfort-delivery-map" role="img" aria-label="ระบบกลิ่นและไอน้ำพร้อมใช้งาน">
+              <svg viewBox="0 0 260 168" aria-hidden="true" focusable="false">
+                <defs><linearGradient id="comfortPodShellGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#29334a"/><stop offset=".58" stop-color="#161d31"/><stop offset="1" stop-color="#090d1b"/></linearGradient><linearGradient id="comfortPodInnerGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#11172a"/><stop offset="1" stop-color="#040713"/></linearGradient></defs>
+                <path class="pod-door-view-shell comfort-pod-shell" fill="url(#comfortPodShellGradient)" d="M20 144Q14 129 23 93Q34 43 86 24Q123 10 178 16Q219 20 238 57Q250 80 244 144Z"/>
+                <path class="pod-door-view-opening comfort-pod-inner" fill="url(#comfortPodInnerGradient)" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124Z"/>
+                <path class="pod-door-view-aperture" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124"/><path class="pod-door-view-floor" d="M25 144Q112 126 244 144"/>
+                <g class="pod-door-view-bed comfort-bed"><path class="pod-door-view-bed-base" d="M43 124H222L239 144H25Z"/><path class="pod-door-view-mattress" d="M49 110H207Q214 110 216 118L219 131H46V118Q46 112 49 110Z"/><path class="pod-door-view-headboard" d="M180 78Q197 66 213 81L216 111H180Z"/><path class="pod-door-view-pillow" d="M179 102Q194 85 210 97L212 110H184Z"/><path class="pod-door-view-seams" d="M106 111v20m55-20v20"/></g>
+                <!-- เครื่องพ่นติดตั้งใต้ปลายเตียงซ้าย และพ่นเฉียงขึ้นไปทางหัวเตียงขวา -->
+                <g class="comfort-mist-flow pod-flow-foot-to-head"><path d="M82 130C105 122 118 108 139 101S171 82 196 71"/><path d="M80 136C106 130 124 118 145 111S174 94 192 83"/><path d="m184 74 12-3-5 11"/></g>
+                <g class="comfort-diffuser pod-foot-end-diffuser"><rect x="54" y="128" width="29" height="15" rx="5"/><path d="M60 138h16m-11-5h9"/><circle cx="83" cy="132" r="2.4"/></g>
+              </svg>
+              <span><b>กลิ่น ZEEP</b><small id="comfortDeliveryState">พร้อมใช้งาน</small></span>
+            </div>
+            <small class="control-scene-caption">พ่นกลิ่นหรือไอน้ำจากปลายเตียง</small>
+            <div class="comfort-profile-grid" aria-label="โปรไฟล์กลิ่นและไอน้ำ">
+            <button id="unifiedAroma1Btn" class="comfort-profile-btn comfort-lavender" onclick="runOutputAction('aroma1',this,true)" aria-label="สั่งพ่นลาเวนเดอร์สำหรับบรรยากาศก่อนนอนและการผ่อนคลาย" title="ลาเวนเดอร์ · ก่อนนอน · ผ่อนคลาย"><span class="comfort-profile-icon" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path d="M16 28V15m0 6-6-5m6 1 6-5"/><path d="M16 7c-4-5-9 1-5 5-5-1-6 6 0 7 1 5 8 4 7 0 5 4 10-1 7-5 4-2 1-8-4-6 1-4-4-8-7-4Z"/></svg></span><span class="comfort-action-mark" aria-hidden="true"></span><span class="sr-only"><b id="unifiedAroma1Label">ลาเวนเดอร์</b><small data-command-state>พร้อมพ่น · ก่อนนอน · ผ่อนคลาย</small></span><small class="control-button-caption">ลาเวนเดอร์</small></button>
+            <button id="unifiedAroma2Btn" class="comfort-profile-btn comfort-eucalyptus" onclick="runOutputAction('aroma2',this,true)" aria-label="สั่งพ่นยูคาลิปตัสเพื่อความเย็นสดชื่นและความรู้สึกหายใจโล่ง" title="ยูคาลิปตัส · เย็นสดชื่น · รู้สึกหายใจโล่ง"><span class="comfort-profile-icon" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path d="M7 25c8-1 15-8 18-19-10 1-18 7-18 19Z"/><path d="M9 23c4-5 8-8 14-13M13 18l-1-6m5 2 6 1"/><path d="M22 23c3-2 5-2 7 0m-8 4c3-2 5-2 8 0"/></svg></span><span class="comfort-action-mark" aria-hidden="true"></span><span class="sr-only"><b id="unifiedAroma2Label">ยูคาลิปตัส</b><small data-command-state>พร้อมพ่น · เย็นสดชื่น · รู้สึกหายใจโล่ง</small></span><small class="control-button-caption">ยูคาลิปตัส</small></button>
+            <button id="unifiedAroma3Btn" class="comfort-profile-btn comfort-orange" onclick="runOutputAction('aroma3',this,true)" aria-label="สั่งพ่นกลิ่นส้มสำหรับบรรยากาศผ่อนคลายและสดชื่น" title="ส้ม · ผ่อนคลาย · สดชื่น"><span class="comfort-profile-icon" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><circle cx="16" cy="17" r="10"/><circle cx="16" cy="17" r="3"/><path d="M16 7v7m0 6v7M6 17h7m6 0h7M9 10l5 5m4 4 5 5m0-14-5 5m-4 4-5 5M16 7c1-4 5-5 8-3-1 4-4 6-8 3Z"/></svg></span><span class="comfort-action-mark" aria-hidden="true"></span><span class="sr-only"><b id="unifiedAroma3Label">ส้ม</b><small data-command-state>พร้อมพ่น · ผ่อนคลาย · สดชื่น</small></span><small class="control-button-caption">ส้ม</small></button>
+            <button id="unifiedAroma4Btn" class="comfort-profile-btn comfort-oxygen" onclick="runOutputAction('aroma4',this,true)" aria-label="สั่งพ่นกลิ่นอากาศสดชื่น ซึ่งเป็นโทนกลิ่นและไม่ใช่การจ่ายออกซิเจน" title="อากาศสดชื่น · กลิ่นสะอาด · ไม่ใช่ O₂"><span class="comfort-profile-icon" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path d="M5 14h14c4 0 4-6 0-6-2 0-3 1-4 3M4 19h20c4 0 4 6 0 6-2 0-3-1-4-3M7 24h8"/><path d="M25 4v6m-3-3h6"/></svg></span><span class="comfort-action-mark" aria-hidden="true"></span><span class="sr-only"><b id="unifiedAroma4Label">อากาศสดชื่น</b><small data-command-state>พร้อมพ่น · กลิ่นสะอาด · ไม่ใช่ O₂</small></span><small class="control-button-caption">อากาศสดชื่น</small></button>
+            <button id="unifiedSteamBtn" class="comfort-profile-btn steam-profile comfort-steam" onclick="runOutputAction('steam',this,true)" aria-label="สั่งไอน้ำเพิ่มความชื้นจากน้ำปลอดเชื้อตามข้อกำหนดของอุปกรณ์" title="ไอน้ำ · เพิ่มความชื้น · Sterile Water ตาม IFU"><span class="comfort-profile-icon" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path d="M9 26c-3-5 3-6 0-11S12 9 10 5m7 21c-3-5 3-6 0-11s3-6 1-10m7 21c-3-5 3-6 0-11"/><path d="M4 28h24"/></svg></span><span class="comfort-action-mark" aria-hidden="true"></span><span class="sr-only"><b>ไอน้ำ</b><small data-command-state>พร้อมพ่น · เพิ่มความชื้น · Sterile Water</small></span><small class="control-button-caption">ไอน้ำ</small></button>
+            </div>
+          </div>
+        </section>

@@ -1,7 +1,6 @@
 __pycache__/
 .venv/
 logs/
-music/
 test-results/
 data/
 backup/

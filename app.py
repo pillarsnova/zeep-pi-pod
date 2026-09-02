@@ -644,10 +644,11 @@ CONTROLHUB2_ACK_TIMEOUT_SECONDS = float(
 BED_MOVE_SECONDS = max(0.5, float(os.getenv("BED_MOVE_SECONDS", "2")))
 
 # Requested SPH0645 display transform for the current field trial.
-# dBA_est = abs(sound_dbfs) + adjustment, with the adjustment fixed at -2 dB
-# in calibration.json. Raw dBFS remains untouched for audit/recalibration.
+# magnitude = round(abs(sound_dbfs), 1)
+# dBA_est = magnitude * (1 - error_percent / 100), with error_percent = 3%.
+# Raw dBFS remains untouched for audit/recalibration.
 # This is an estimated display value, not a traceable SPL calibration.
-# Priority: SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB env > calibration.json > -2.0.
+# Priority: SOUND_DBFS_ERROR_PERCENT env > calibration.json > 3.0.
 CALIBRATION_PATH = BASE_DIR / "calibration.json"
 
 
@@ -664,17 +665,17 @@ def _load_calibration() -> Dict[str, Any]:
 
 
 CALIBRATION = _load_calibration()
-_ENV_SOUND_ADJUSTMENT = os.getenv("SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB")
-if _ENV_SOUND_ADJUSTMENT is not None:
-    SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB = float(_ENV_SOUND_ADJUSTMENT)
+_ENV_SOUND_ERROR_PERCENT = os.getenv("SOUND_DBFS_ERROR_PERCENT")
+if _ENV_SOUND_ERROR_PERCENT is not None:
+    SOUND_DBFS_ERROR_PERCENT = float(_ENV_SOUND_ERROR_PERCENT)
     SOUND_TRANSFORM_SOURCE = "env"
-elif "sound_dbfs_magnitude_adjustment_db" in CALIBRATION:
-    SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB = float(
-        CALIBRATION["sound_dbfs_magnitude_adjustment_db"]
+elif "sound_dbfs_error_percent" in CALIBRATION:
+    SOUND_DBFS_ERROR_PERCENT = float(
+        CALIBRATION["sound_dbfs_error_percent"]
     )
     SOUND_TRANSFORM_SOURCE = "calibration.json"
 else:
-    SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB = -2.0
+    SOUND_DBFS_ERROR_PERCENT = 3.0
     SOUND_TRANSFORM_SOURCE = "default"
 
 # SHT3x-DIS currently uses raw pass-through (0.0 percentage-point bias).
@@ -693,10 +694,11 @@ else:
 if not math.isfinite(HUMIDITY_RH_BIAS) or not -20.0 <= HUMIDITY_RH_BIAS <= 20.0:
     raise RuntimeError("HUMIDITY_RH_BIAS must be finite and between -20 and +20 %RH")
 
-# Admin calibration is deliberately additive and applied only after a raw
-# value has passed the sensor's physical-range validation.  Raw hub payloads
-# and byte-exact BCG frames are never rewritten, which keeps every adjustment
-# auditable and reversible.  SGP40 VOC Index and LSM-800-T HR/RR stay read-only:
+# Admin calibration is additive for ordinary sensors. SPH0645 is the explicit
+# exception: its configurable parameter is a percentage reduction applied by
+# normalize_esp32_sensor(). Raw hub payloads and byte-exact BCG frames are never
+# rewritten, which keeps every adjustment auditable and reversible. SGP40 VOC
+# Index and LSM-800-T HR/RR stay read-only:
 # the former owns an adaptive baseline and the latter feeds sleep physiology,
 # so an arbitrary UI offset would invalidate their algorithms.
 SENSOR_CALIBRATION_LOCK = threading.RLock()
@@ -722,12 +724,13 @@ SENSOR_CALIBRATION_SPECS: Dict[str, Dict[str, Any]] = {
     "sound_dba_est": {
         "device": "SPH0645", "device_key": "sph0645",
         "label": "ระดับเสียงโดยประมาณ", "unit": "dBA est.",
-        "config_key": "sound_dbfs_magnitude_adjustment_db",
-        "default": -2.0, "bias_min": -30.0, "bias_max": 30.0,
+        "config_key": "sound_dbfs_error_percent",
+        "default": 3.0, "bias_min": 0.0, "bias_max": 30.0,
         "value_min": 0.0, "value_max": 120.0, "step": 0.1,
-        "raw_field": "sound_dbfs", "bias_label": "ABS(dBFS) ADJUSTMENT",
+        "raw_field": "sound_dbfs", "bias_label": "ERROR REDUCTION",
+        "parameter_unit": "%",
         "raw_unit": "dBFS",
-        "formula": "abs(raw dBFS) + adjustment",
+        "formula": "round(abs(raw dBFS), 1) × (1 - error_percent / 100)",
     },
     "co2_ppm": {
         "device": "MH-Z19C", "device_key": "mhz19c",
@@ -761,7 +764,7 @@ def _load_sensor_biases() -> tuple[Dict[str, float], Dict[str, str]]:
     sources: Dict[str, str] = {}
     for metric, spec in SENSOR_CALIBRATION_SPECS.items():
         if metric == "sound_dba_est":
-            value = SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB
+            value = SOUND_DBFS_ERROR_PERCENT
             source = SOUND_TRANSFORM_SOURCE
         elif metric == "humidity_rh":
             value, source = HUMIDITY_RH_BIAS, HUMIDITY_BIAS_SOURCE
@@ -812,7 +815,7 @@ def _persist_calibration(data: Dict[str, Any]) -> None:
 def update_sensor_bias(metric: str, bias: float, *, operator: str,
                        reference_value: Optional[float] = None) -> Dict[str, Any]:
     """Validate, persist and activate one Admin calibration adjustment."""
-    global SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB, SOUND_TRANSFORM_SOURCE
+    global SOUND_DBFS_ERROR_PERCENT, SOUND_TRANSFORM_SOURCE
     global HUMIDITY_RH_BIAS, HUMIDITY_BIAS_SOURCE
     spec = SENSOR_CALIBRATION_SPECS.get(metric)
     if spec is None:
@@ -835,6 +838,7 @@ def update_sensor_bias(metric: str, bias: float, *, operator: str,
             "reference_value": reference,
             "unit": spec["unit"],
             "raw_unit": spec.get("raw_unit", spec["unit"]),
+            "parameter_unit": spec.get("parameter_unit", spec["unit"]),
         }
         updated["sensor_bias_metadata"] = metadata
         _persist_calibration(updated)
@@ -843,7 +847,7 @@ def update_sensor_bias(metric: str, bias: float, *, operator: str,
         SENSOR_BIASES[metric] = rounded
         SENSOR_BIAS_SOURCES[metric] = "calibration.json"
         if metric == "sound_dba_est":
-            SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB = rounded
+            SOUND_DBFS_ERROR_PERCENT = rounded
             SOUND_TRANSFORM_SOURCE = "calibration.json"
         elif metric == "humidity_rh":
             HUMIDITY_RH_BIAS = rounded
@@ -857,7 +861,7 @@ def update_sensor_bias(metric: str, bias: float, *, operator: str,
         environment_calibration["humidity_bias_source"] = HUMIDITY_BIAS_SOURCE
         if metric == "sound_dba_est":
             sound_transform = state["system"]["sound_transform"]
-            sound_transform["adjustment_db"] = SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB
+            sound_transform["error_percent"] = SOUND_DBFS_ERROR_PERCENT
             sound_transform["source"] = SOUND_TRANSFORM_SOURCE
     return {
         "metric": metric, "bias": rounded, "source": "calibration.json",
@@ -1147,8 +1151,8 @@ state: Dict[str, Any] = {
         "session_vital_start_packets": SESSION_VITAL_START_PACKETS,
         "player": None,  # filled in once the audio backend is chosen
         "sound_transform": {
-            "formula": "abs(sound_dbfs) + adjustment_db",
-            "adjustment_db": SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB,
+            "formula": "round(abs(sound_dbfs), 1) * (1 - error_percent / 100)",
+            "error_percent": SOUND_DBFS_ERROR_PERCENT,
             "source": SOUND_TRANSFORM_SOURCE,
             "calibrated_at": CALIBRATION.get("calibrated_at"),
             "method": CALIBRATION.get("method"),
@@ -3775,8 +3779,8 @@ def build_environment_snapshot(esp32: Dict[str, Any], hub2: Dict[str, Any],
     # Raw → Bias → Calibrated without modifying serial/MQTT payloads.
     raw_values = dict(values)
     for metric in SENSOR_CALIBRATION_SPECS:
-        # SPH0645 is already converted from dBFS in normalize_esp32_sensor().
-        # Applying its offset here again would double-calibrate the microphone.
+        # SPH0645 is already transformed from dBFS in normalize_esp32_sensor().
+        # Applying the generic additive path here would corrupt the estimate.
         if metric == "sound_dba_est":
             continue
         values[metric] = _apply_sensor_bias(metric, values.get(metric))
@@ -4061,23 +4065,21 @@ def normalize_esp32_sensor(obj: Dict[str, Any]) -> Dict[str, Any]:
         value = _first_numeric(obj, keys)
         if value is not None:
             out[target] = value
-    # Preserve raw dBFS and apply the field-requested magnitude transform.
+    # Preserve raw dBFS and apply the field-requested percentage transform.
     # Estimates from 0-120 are displayed as dBA est. An estimate below zero
     # is left invalid so hold_last_valid_sound() can keep the prior valid
     # display value; estimates above 120 are capped for the user display.
     sound_dbfs = out.get("sound_dbfs")
     if isinstance(sound_dbfs, (int, float)) and not isinstance(sound_dbfs, bool):
-        unbounded = (
-            abs(float(sound_dbfs)) + SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB
-        )
+        magnitude = round(abs(float(sound_dbfs)), 1)
+        unbounded = magnitude * (1.0 - SOUND_DBFS_ERROR_PERCENT / 100.0)
         if math.isfinite(unbounded):
             unbounded = round(unbounded, 2)
             out["sound_dba_est_unbounded"] = unbounded
             out["sound_dba_est"] = round(min(SOUND_DBA_DISPLAY_MAX, unbounded), 2)
             out["sound_value_limited"] = unbounded > SOUND_DBA_DISPLAY_MAX
-            out["sound_display_adjustment_db"] = (
-                SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB
-            )
+            out["sound_dbfs_magnitude"] = magnitude
+            out["sound_error_percent"] = SOUND_DBFS_ERROR_PERCENT
     return out
 
 
@@ -6888,7 +6890,7 @@ class SensorBiasCommand(BaseModel):
 
 
 def sensor_calibration_inspector_snapshot() -> Dict[str, Any]:
-    """Build the Admin-only Raw → Bias → Calibrated comparison table."""
+    """Build the Admin-only Raw → Parameter → Output comparison table."""
     snap = snapshot()
     sensor = snap.get("sensor") or {}
     environment = sensor.get("environment") or {}
@@ -6916,6 +6918,7 @@ def sensor_calibration_inspector_snapshot() -> Dict[str, Any]:
             "raw": raw_value,
             "bias": sensor_bias_value(metric),
             "bias_label": spec.get("bias_label", "additive bias"),
+            "parameter_unit": spec.get("parameter_unit", spec["unit"]),
             "formula": spec.get("formula", "clamp(raw + bias)"),
             "calibrated": environment.get(metric),
             "editable": True,
@@ -6976,7 +6979,10 @@ def sensor_calibration_inspector_snapshot() -> Dict[str, Any]:
         "calibration_file": str(CALIBRATION_PATH),
         "formula": {
             "default": "calibrated = clamp(raw + bias)",
-            "sound_dba_est": "estimate = clamp(abs(raw dBFS) + adjustment)",
+            "sound_dba_est": (
+                "estimate = clamp(round(abs(raw dBFS), 1) * "
+                "(1 - error_percent / 100))"
+            ),
         },
     }
 
@@ -8623,8 +8629,8 @@ def sleep_policy_admin():
         },
         "humidity_bias_percentage_points": HUMIDITY_RH_BIAS,
         "sound_display_transform": {
-            "formula": "abs(sound_dbfs) + adjustment_db",
-            "adjustment_db": SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB,
+            "formula": "round(abs(sound_dbfs), 1) * (1 - error_percent / 100)",
+            "error_percent": SOUND_DBFS_ERROR_PERCENT,
         },
         "sensor_biases": dict(SENSOR_BIASES),
     }

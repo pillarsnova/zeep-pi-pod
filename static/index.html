@@ -1906,7 +1906,7 @@
       <div class="calibration-formula"><span>RAW</span><i>→</i><span>TRANSFORM / BIAS</span><i>→</i><strong>OUTPUT</strong><small>ค่าดิบไม่ถูกแก้ไข · ค่าใหม่มีผลกับ Packet ถัดไป · บันทึกลง calibration.json</small></div>
       <div class="calibration-session-note" id="calibrationSessionNote">กำลังตรวจสถานะ Session…</div>
       <div class="calibration-device-grid" id="calibrationInspector"><div class="mini">กำลังโหลด Sensor calibration…</div></div>
-      <div class="calibration-legend"><span><i class="live"></i>LIVE</span><span><i class="stale"></i>STALE / HELD</span><span><i class="locked"></i>ALGORITHM LOCKED</span><small>Reference: Sensor ทั่วไปใช้ Reference − Raw · SPH0645 ใช้ Reference − abs(Raw dBFS)</small></div>
+      <div class="calibration-legend"><span><i class="live"></i>LIVE</span><span><i class="stale"></i>STALE / HELD</span><span><i class="locked"></i>ALGORITHM LOCKED</span><small>Reference: Sensor ทั่วไปใช้ Reference − Raw · SPH0645 คำนวณ Error % จากค่าดิบที่ปัดเป็น 1 ตำแหน่ง</small></div>
       <div class="raw-subhead"><div><strong>LSM-800-T · Byte-exact Raw Frames</strong><span>66 bytes · 25 BCG samples · HR/RR firmware bytes</span></div><button class="btn compact ui-label-button" onclick="fetchRawPackets(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-refresh"/></svg><span>Raw BCG</span></button></div>
       <div class="mini">แสดงแต่ละ Serial frame ตามที่ได้รับจริง พร้อม Raw HEX และคำวิเคราะห์ โดยไม่มีการนำค่าปรับไปแก้ byte ต้นฉบับ</div>
       <div class="raw-table" id="rawPackets"><div class="mini">กำลังรอ packet…</div></div>
@@ -4635,8 +4635,10 @@ function calibrationReferenceChanged(metric,input){
   const channel=(calibrationInspectorState?.channels||[]).find(item=>item.metric===metric);
   const raw=Number(channel?.raw),reference=Number(input.value);
   if(!Number.isFinite(raw)||!Number.isFinite(reference))return;
-  const base=metric==='sound_dba_est'?Math.abs(raw):raw;
-  const suggested=reference-base;
+  const isSoundEstimate=metric==='sound_dba_est';
+  const base=isSoundEstimate?Math.round(Math.abs(raw)*10)/10:raw;
+  if(isSoundEstimate&&base===0)return;
+  const suggested=isSoundEstimate?(1-reference/base)*100:reference-base;
   calibrationBiasDraft[metric]=String(Math.round(suggested*1000)/1000);
   const biasInput=document.querySelector(`input[data-calibration-bias="${metric}"]`);
   if(biasInput)biasInput.value=calibrationBiasDraft[metric];
@@ -4668,13 +4670,13 @@ function renderCalibrationInspector(data,{force=false}={}){
     const channelHtml=channels.map(channel=>{
       const metric=channel.metric,step=Number(channel.step)||0.1;
       const raw=calibrationNumber(channel.raw,step),bias=calibrationNumber(channel.bias,step),output=calibrationNumber(channel.calibrated,step);
-      const unit=channel.unit||'',rawUnit=channel.raw_unit||unit;
+      const unit=channel.unit||'',rawUnit=channel.raw_unit||unit,parameterUnit=channel.parameter_unit||unit;
       const isSoundEstimate=metric==='sound_dba_est';
       const outputLabel=isSoundEstimate?'ESTIMATE':'CALIBRATED';
-      const adjustmentLabel=isSoundEstimate?'NEW ADJUSTMENT':'NEW BIAS';
+      const parameterLabel=isSoundEstimate?'ERROR REDUCTION':'NEW BIAS';
       const values=`<div class="calibration-values">
         <div class="calibration-value"><span>RAW</span><b>${raw}</b><small>${rawUnit}</small></div>
-        <div class="calibration-value"><span>${channel.bias_label||'BIAS'}</span><b>${channel.editable?(Number(channel.bias)>=0?'+':'')+bias:'LOCK'}</b><small>${channel.bias_source||'algorithm'}</small></div>
+        <div class="calibration-value"><span>${channel.bias_label||'BIAS'}</span><b>${channel.editable?(isSoundEstimate?'':Number(channel.bias)>=0?'+':'')+bias:'LOCK'}</b><small>${channel.editable?parameterUnit:channel.bias_source||'algorithm'}</small></div>
         <div class="calibration-value output"><span>${outputLabel}</span><b>${output}</b><small>${unit}</small></div>
       </div>`;
       if(!channel.editable){
@@ -4685,7 +4687,7 @@ function renderCalibrationInspector(data,{force=false}={}){
       return `<section class="calibration-channel"><div class="calibration-channel-title"><b>${channel.label}</b><span>${metric}</span></div>${values}
         <div class="calibration-tools">
           <div class="calibration-input"><label>REFERENCE · ${unit}</label><input type="number" inputmode="decimal" step="${step}" value="${referenceDraft}" placeholder="Meter" oninput="calibrationReferenceChanged('${metric}',this)"></div>
-          <div class="calibration-input"><label>${adjustmentLabel} · ${channel.bias_min}…${channel.bias_max}</label><input type="number" inputmode="decimal" data-calibration-bias="${metric}" min="${channel.bias_min}" max="${channel.bias_max}" step="${step}" value="${biasDraft}" oninput="calibrationBiasChanged('${metric}',this)"></div>
+          <div class="calibration-input"><label>${parameterLabel} · ${channel.bias_min}…${channel.bias_max}</label><input type="number" inputmode="decimal" data-calibration-bias="${metric}" min="${channel.bias_min}" max="${channel.bias_max}" step="${step}" value="${biasDraft}" oninput="calibrationBiasChanged('${metric}',this)"></div>
           <button class="calibration-apply" onclick="applyCalibrationBias('${metric}',this)">APPLY</button>
         </div></section>`;
     }).join('');
@@ -4710,15 +4712,16 @@ async function applyCalibrationBias(metric,btn){
   const rawReference=calibrationReferenceDraft[metric];
   const reference=rawReference===''||rawReference==null?null:Number(rawReference);
   if(!channel?.editable){toast('Sensor channel นี้เป็น Algorithm locked','error');return;}
-  const adjustmentName=metric==='sound_dba_est'?'Adjustment':'Bias';
-  if(!Number.isFinite(bias)||bias<Number(channel.bias_min)||bias>Number(channel.bias_max)){toast(`${adjustmentName} ต้องอยู่ระหว่าง ${channel.bias_min} ถึง ${channel.bias_max}`,'error');return;}
+  const parameterName=metric==='sound_dba_est'?'Error reduction (%)':'Bias';
+  const parameterPrefix=metric==='sound_dba_est'?'':bias>=0?'+':'';
+  if(!Number.isFinite(bias)||bias<Number(channel.bias_min)||bias>Number(channel.bias_max)){toast(`${parameterName} ต้องอยู่ระหว่าง ${channel.bias_min} ถึง ${channel.bias_max}`,'error');return;}
   if(reference!==null&&!Number.isFinite(reference)){toast('ค่า Reference ไม่ถูกต้อง','error');return;}
   return withBusy(btn,async()=>{
     const result=await post('/api/admin/calibration/bias',{metric,bias,reference_value:reference});
     if(!result)return null;
     delete calibrationBiasDraft[metric];delete calibrationReferenceDraft[metric];
     renderCalibrationInspector(result.calibration,{force:true});
-    toast(`${channel.device} · ${channel.label}: บันทึก ${adjustmentName} ${bias>=0?'+':''}${bias} แล้ว`,'ok',3000);
+    toast(`${channel.device} · ${channel.label}: บันทึก ${parameterName} ${parameterPrefix}${bias} แล้ว`,'ok',3000);
     return result;
   });
 }
@@ -5679,7 +5682,7 @@ function render(s, source='ws'){
       : 'คงค่าล่าสุด เนื่องจากไม่ได้รับค่าที่เป็นตัวเลขจาก sensor'
     : e.sound_value_limited
       ? `ค่าก่อนจำกัดช่วง ${e.sound_dba_est_unbounded ?? 'N/A'} dBA est. · ค่าสูงสุดที่แสดง 120`
-      : 'ค่าประเมินจาก SPH0645 · abs(raw dBFS) − 2';
+      : 'ค่าประเมินจาก SPH0645 · ปัด abs(raw dBFS) เป็น 1 ตำแหน่ง แล้วหัก 3%';
   const soundQuality=document.getElementById('soundQuality');
   soundQuality.textContent=espFallback
     ? `⚠ SPH0645 · ใช้ค่าล่าสุด (${espAgeText})`

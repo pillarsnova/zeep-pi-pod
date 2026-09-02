@@ -1,21 +1,23 @@
 {
-  "sound_dbfs_magnitude_adjustment_db": -2.0,
-  "calibrated_at": "2026-09-02T22:56:36+07:00",
-  "method": "requested display transform: abs(raw sound_dbfs) - 2 dB; raw dBFS unchanged; not a traceable SPL calibration",
+  "sound_dbfs_error_percent": 3.0,
+  "calibrated_at": "2026-09-02T23:25:29+07:00",
+  "method": "requested display transform: round(abs(raw sound_dbfs), 1), then reduce by 3 percent; raw dBFS unchanged; not a traceable SPL calibration",
   "operator": "super",
   "reference_meter": "CEM DT-8852",
   "reference_dba_range": "30-130 dBA",
   "previous_legacy_sound_dba_offset": 61.65,
-  "last_adjustment_db": -2.0,
+  "previous_fixed_adjustment_db": -2.0,
   "rejected_adjustment_db": -11.0,
   "observed_valid_pair_sensor_minus_meter_db": 2.5,
-  "status": "abs_dbfs_minus_2_estimate_pending_reference_retest",
+  "status": "abs_dbfs_minus_3_percent_estimate_pending_reference_retest",
   "sensor_bias_metadata": {
     "sound_dba_est": {
       "operator": "super",
       "reference_value": null,
       "unit": "dBA est.",
-      "updated_at": "2026-09-02T15:56:36+00:00"
+      "raw_unit": "dBFS",
+      "parameter_unit": "%",
+      "updated_at": "2026-09-02T16:25:29+00:00"
     },
     "humidity_rh": {
       "operator": "super",

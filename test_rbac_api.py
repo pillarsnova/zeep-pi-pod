@@ -518,7 +518,11 @@ class RbacApiTests(unittest.TestCase):
         )
         self.assertEqual(sound["raw_unit"], "dBFS")
         self.assertEqual(sound["unit"], "dBA est.")
-        self.assertEqual(sound["formula"], "abs(raw dBFS) + adjustment")
+        self.assertEqual(sound["parameter_unit"], "%")
+        self.assertEqual(
+            sound["formula"],
+            "round(abs(raw dBFS), 1) × (1 - error_percent / 100)",
+        )
 
         previous_biases = dict(pod_app.SENSOR_BIASES)
         previous_sources = dict(pod_app.SENSOR_BIAS_SOURCES)

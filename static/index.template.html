@@ -2051,13 +2051,14 @@ function renderLoginBaseline(){
     order.map(k=>`<div class="base-row"><b>${k==='wake'?'W · ตื่น':k.toUpperCase()}</b><span>${base[k].hr[0]+adj.hr_offset}–${base[k].hr[1]+adj.hr_offset}</span><span>${base[k].rr[0]+adj.rr_offset}–${base[k].rr[1]+adj.rr_offset}</span></div>`).join('');
 }
 
-/* ---- sleep state (est.): internal telemetry, rule-based v0, pre-G2 ---- */
+/* Canonical five-state presentation. Keep title/meaning in sync with
+   sleep_system_policy.py; label stays compact for the live Dashboard tile. */
 const SLEEP_TH = {
-  wake:       {code:'W',    label:'ตื่น',        cls:'wake'},
-  n1:         {code:'N1',   label:'หลับตื้น',   cls:'nrem'},
-  n2:         {code:'N2',   label:'หลับสนิทขึ้น',cls:'nrem'},
-  n3:         {code:'N3',   label:'หลับลึก',    cls:'deep'},
-  rem:        {code:'REM',  label:'ฝัน',         cls:'rem'},
+  wake:       {code:'W',   title:'ตื่น',meaning:'ช่วงที่ระบบประเมินว่ายังตื่นหรือกลับเข้าสู่สถานะตื่น',label:'ตื่น',cls:'wake'},
+  n1:         {code:'N1',  title:'หลับตื้น / เคลิ้มหลับ',meaning:'เริ่มเข้าสู่การนอน ร่างกายผ่อนคลาย และปลุกให้ตื่นได้ง่าย',label:'หลับตื้น',cls:'nrem'},
+  n2:         {code:'N2',  title:'หลับสนิทขึ้น / หลับตื้นต่อเนื่อง',meaning:'หัวใจและการหายใจช้าลง ร่างกายเข้าสู่การนอนที่ต่อเนื่องขึ้น',label:'หลับสนิทขึ้น',cls:'nrem'},
+  n3:         {code:'N3',  title:'หลับลึก / ร่างกายซ่อมแซมส่วนที่สึกหรอ',meaning:'ระยะที่หลับลึกที่สุดและสัมพันธ์กับกระบวนการฟื้นฟูร่างกาย',label:'หลับลึก',cls:'deep'},
+  rem:        {code:'REM', title:'หลับฝัน / สมองจัดระเบียบความจำ',meaning:'สมองทำงานมากขึ้น มักเกิดความฝัน และเกี่ยวข้องกับความจำและอารมณ์',label:'หลับฝัน',cls:'rem'},
   // ``nrem`` is kept only for rendering old history. The live estimator never
   // emits a generic NREM because ZEEP's current ontology is W/N1/N2/N3/REM.
   nrem:       {code:'NREM', label:'หลับ · ข้อมูลเดิม',cls:'nrem'},

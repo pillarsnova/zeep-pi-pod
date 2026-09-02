@@ -18,7 +18,13 @@ import sleep_session_report as report
 import sleep_system_policy as policy
 
 
-ROOT = Path(__file__).resolve().parent.parent
+PI5_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = PI5_ROOT.parent
+DOCS_ROOT = (
+    PROJECT_ROOT / "docs"
+    if (PROJECT_ROOT / "docs" / "zeep-sleep-system-current.md").exists()
+    else PI5_ROOT / "docs"
+)
 
 
 class SleepSystemPolicyConsistencyTests(unittest.TestCase):
@@ -188,7 +194,7 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
             "n3": ("N3", "หลับลึก / ร่างกายซ่อมแซมส่วนที่สึกหรอ", "ระยะที่หลับลึกที่สุดและสัมพันธ์กับกระบวนการฟื้นฟูร่างกาย"),
             "rem": ("REM", "หลับฝัน / สมองจัดระเบียบความจำ", "สมองทำงานมากขึ้น มักเกิดความฝัน และเกี่ยวข้องกับความจำและอารมณ์"),
         }
-        ui = (ROOT / "pi5" / "static" / "index.html").read_text(encoding="utf-8")
+        ui = (PI5_ROOT / "static" / "index.html").read_text(encoding="utf-8")
         snapshot = policy.sleep_policy_snapshot()
         for state, (code, title, meaning) in expected.items():
             self.assertEqual(snapshot["stage_presentation"][state], {
@@ -216,7 +222,7 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
             "sound", "recovery_readiness")
         self.assertEqual(
             nap_sound["mode"], "nap_recovery")
-        ui = (ROOT / "pi5" / "static" / "index.html").read_text(encoding="utf-8")
+        ui = (PI5_ROOT / "static" / "index.html").read_text(encoding="utf-8")
         self.assertIn("พอใช้ขึ้นไปถือว่าผ่านขั้นต่ำ", ui)
         self.assertIn("metric.score<2", ui)
         self.assertNotIn("metric.score<4", ui)
@@ -233,7 +239,7 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
             policy.REST_MODE_PROTOCOLS["nap_recovery"]["recommended_range_seconds"],
             [25 * 60, 35 * 60],
         )
-        ui = (ROOT / "pi5" / "static" / "index.html").read_text(encoding="utf-8")
+        ui = (PI5_ROOT / "static" / "index.html").read_text(encoding="utf-8")
         self.assertIn("Nap &amp; Refresh · ประมาณ 30 นาที", ui)
         self.assertIn("Overnight Recovery · พักค้างคืน", ui)
         self.assertNotIn('option value="auto"', ui)
@@ -243,7 +249,7 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertNotIn('option value="physical_comfort"', ui)
 
     def test_user_and_admin_ui_describe_guarded_rem_transitions(self):
-        ui = (ROOT / "pi5" / "static" / "index.html").read_text(encoding="utf-8")
+        ui = (PI5_ROOT / "static" / "index.html").read_text(encoding="utf-8")
         self.assertIn("หลักฐาน 30 วิแยกจากสถานะยืนยัน 60 วิ", ui)
         self.assertIn("REM ชนะต่อเนื่อง 2 epoch/60 วินาที", ui)
         self.assertIn("N1 → REM", ui)
@@ -251,8 +257,8 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertNotIn("REM ต่อเนื่อง 5 รอบ", ui)
 
     def test_ui_and_document_do_not_render_a_stage_when_gate_is_inactive(self):
-        ui = (ROOT / "pi5" / "static" / "index.html").read_text(encoding="utf-8")
-        doc = (ROOT / "docs" / "zeep-sleep-system-current.md").read_text(
+        ui = (PI5_ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        doc = (DOCS_ROOT / "zeep-sleep-system-current.md").read_text(
             encoding="utf-8"
         )
         self.assertIn("sl.classification_active===true", ui)
@@ -260,8 +266,8 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertIn("probability ทั้ง 5 เป็นศูนย์", doc)
 
     def test_dashboard_uses_server_emitted_state_and_documents_smoothing(self):
-        ui = (ROOT / "pi5" / "static" / "index.html").read_text(encoding="utf-8")
-        doc = (ROOT / "docs" / "zeep-sleep-system-current.md").read_text(
+        ui = (PI5_ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        doc = (DOCS_ROOT / "zeep-sleep-system-current.md").read_text(
             encoding="utf-8"
         )
         self.assertIn("stage.key===sleep.state", ui)
@@ -270,8 +276,8 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertIn("EMA `alpha=0.20`", doc)
 
     def test_user_history_is_bound_to_authenticated_account_without_chooser(self):
-        ui = (ROOT / "pi5" / "static" / "index.html").read_text(encoding="utf-8")
-        css = (ROOT / "pi5" / "static" / "theme-modern.css").read_text(encoding="utf-8")
+        ui = (PI5_ROOT / "static" / "index.html").read_text(encoding="utf-8")
+        css = (PI5_ROOT / "static" / "theme-modern.css").read_text(encoding="utf-8")
         self.assertIn("currentPrincipal?.role==='user'", ui)
         self.assertIn("currentPrincipal.account_key||currentPrincipal.email", ui)
         self.assertIn("history-self-context", ui)
@@ -307,12 +313,12 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertTrue(users[0]["has_active_session"])
         self.assertEqual(users[1]["history_order_utc"], "2026-08-28T10:00:00+00:00")
 
-        ui = (ROOT / "pi5" / "static" / "index.html").read_text(encoding="utf-8")
+        ui = (PI5_ROOT / "static" / "index.html").read_text(encoding="utf-8")
         self.assertIn("sortHistoryUsersNewestFirst(d.users)", ui)
         self.assertIn("sessionState.account_key||sessionState.email", ui)
 
     def test_canonical_document_tracks_all_current_policy_versions(self):
-        doc = (ROOT / "docs" / "zeep-sleep-system-current.md").read_text(encoding="utf-8")
+        doc = (DOCS_ROOT / "zeep-sleep-system-current.md").read_text(encoding="utf-8")
         for version in policy.sleep_policy_snapshot()["versions"].values():
             self.assertIn(version, doc)
         self.assertIn("N3 → REM", doc)

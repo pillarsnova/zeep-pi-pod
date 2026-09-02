@@ -200,7 +200,7 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertIn("sleepMeta.meaning", ui)
         self.assertNotIn("rem:        {code:'REM',  label:'ฝัน'", ui)
 
-    def test_environment_context_uses_fair_floor_and_four_mode_profiles(self):
+    def test_environment_context_uses_fair_floor_and_two_pilot_profiles(self):
         manifest = policy.sleep_policy_snapshot()["environment_context"]
         self.assertEqual(
             manifest["version"], policy.ENVIRONMENT_CONTEXT_POLICY_VERSION)
@@ -212,30 +212,33 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
             self.assertEqual(view["mode"], mode)
             self.assertEqual(len(view["criteria"]), 7)
         sleep_sound = policy.environment_criterion("sound", "sleep")
-        readiness_sound = policy.environment_criterion(
+        nap_sound = policy.environment_criterion(
             "sound", "recovery_readiness")
-        self.assertNotEqual(
-            sleep_sound["selected_bands"], readiness_sound["selected_bands"])
+        self.assertEqual(
+            nap_sound["mode"], "nap_recovery")
         ui = (ROOT / "pi5" / "static" / "index.html").read_text(encoding="utf-8")
         self.assertIn("พอใช้ขึ้นไปถือว่าผ่านขั้นต่ำ", ui)
         self.assertIn("metric.score<2", ui)
         self.assertNotIn("metric.score<4", ui)
         self.assertIn("environment.assessment||assessDashboardAtmosphere", ui)
 
-    def test_policy_and_ui_expose_exactly_four_canonical_rest_modes(self):
+    def test_policy_and_ui_expose_exactly_two_canonical_pilot_modes(self):
         self.assertEqual(set(policy.REST_SESSION_GROUPS), {
-            "sleep", "nap_recovery", "relax_meditation", "recovery_readiness",
+            "sleep", "nap_recovery",
         })
         self.assertEqual(set(policy.REST_MODE_PROTOCOLS), set(policy.REST_SESSION_GROUPS))
         self.assertEqual(
             policy.REST_MODE_PROTOCOLS["sleep"]["minimum_seconds"], 5 * 3600)
         self.assertEqual(
             policy.REST_MODE_PROTOCOLS["nap_recovery"]["recommended_range_seconds"],
-            [30 * 60, 90 * 60],
+            [25 * 60, 35 * 60],
         )
         ui = (ROOT / "pi5" / "static" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("ZEEP Smart Mode · วิเคราะห์ตามการพักจริง", ui)
-        self.assertIn('option value="recovery_readiness"', ui)
+        self.assertIn("Nap &amp; Refresh · ประมาณ 30 นาที", ui)
+        self.assertIn("Overnight Recovery · พักค้างคืน", ui)
+        self.assertNotIn('option value="auto"', ui)
+        self.assertNotIn('option value="recovery_readiness"', ui)
+        self.assertNotIn('option value="relax_meditation"', ui)
         self.assertNotIn('option value="performance_prep"', ui)
         self.assertNotIn('option value="physical_comfort"', ui)
 

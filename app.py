@@ -7066,7 +7066,7 @@ class LoginCommand(BaseModel):
     height_cm: Optional[float] = None
     weight_kg: Optional[float] = None
     blood_group: Optional[str] = None
-    rest_mode: str = "auto"
+    rest_mode: str = "nap_recovery"
     # One-time proof returned only after this Pi actually failed to reach ZEEP.
     # This closes the old unauthenticated local-login bypass.
     offline_ticket: str
@@ -7079,7 +7079,7 @@ class AuthLoginCommand(BaseModel):
     # ส่งมาเฉพาะรอบที่สอง หลัง /api/auth/login ตอบ 422 age_group_required
     # (บัญชี ZEEP ที่ยังไม่ได้ตั้งวันเกิด → คำนวณ Baseline จากอายุไม่ได้)
     age_group: Optional[str] = None
-    rest_mode: str = "auto"
+    rest_mode: str = "nap_recovery"
 
 
 class AdminLoginCommand(BaseModel):
@@ -7633,7 +7633,7 @@ def _start_pod_session(
     owner: Principal,
     auth: Optional[Dict[str, Any]] = None,
     health_reference: Optional[Dict[str, Any]] = None,
-    rest_mode: str = "auto",
+    rest_mode: str = "nap_recovery",
 ) -> Dict[str, Any]:
     """ตรวจค่า, อัปเดต profile ในตู้ แล้วเปิด session ใหม่ (สถานะ "รอขึ้นเตียง").
 

@@ -781,7 +781,7 @@
     Increment the query value when deploying a new theme so the ZEEP browser does not
     reuse a cached stylesheet.
   -->
-  <link rel="stylesheet" href="/static/theme-modern.css?v=20260903-151" />
+  <link rel="stylesheet" href="/static/theme-modern.css?v=20260903-152" />
 </head>
 <body>
 <!-- Shared line-icon library: every interactive view reuses the same 24 px
@@ -886,16 +886,25 @@
     </div>
 
     <div id="loginRestModeBlock">
-      <div class="muted">รูปแบบการพักครั้งนี้</div>
+      <div class="pilot-welcome"><b>ยินดีต้อนรับสู่การทดสอบใช้งาน ZEEP</b><span>เลือกการทดสอบ 1 รูปแบบก่อนเริ่ม</span></div>
+      <div class="muted">รูปแบบการทดสอบ</div>
       <select id="loginRestMode" onchange="renderRestModeHint()">
-        <option value="auto">ZEEP Smart Mode · วิเคราะห์ตามการพักจริง</option>
-        <option value="sleep">นอนหลับ · อย่างน้อย 5 ชม.</option>
-        <option value="nap_recovery">งีบพักผ่อน · 30–90 นาที</option>
-        <option value="relax_meditation">ผ่อนคลายและสมาธิ</option>
-        <option value="recovery_readiness">ฟื้นฟูและเตรียมพร้อม</option>
+        <option value="nap_recovery">Nap &amp; Refresh · ประมาณ 30 นาที</option>
+        <option value="sleep">Overnight Recovery · พักค้างคืน</option>
       </select>
-      <div class="mini" id="loginRestModeHint">ระบบดูว่าหลับจริงหรือพักขณะตื่น แล้วเลือกเกณฑ์ที่เหมาะสม</div>
-      <div class="mini">เป้าหมายมีผลต่อรายงานและคะแนนเท่านั้น · ไม่เปลี่ยนผล W/N1/N2/N3/REM</div>
+      <div class="mini" id="loginRestModeHint">พักระหว่างวัน จะหลับ พักสายตา หรือทำสมาธิก็ได้</div>
+      <details class="pilot-steps">
+        <summary>ขั้นตอนก่อน–หลังการทดสอบ</summary>
+        <ol>
+          <li>ดาวน์โหลดแอป ZEEP เพื่อเชื่อมต่อระบบและดูผลหลังใช้งาน</li>
+          <li>จัดการภารกิจส่วนตัวให้เรียบร้อย; Overnight Recovery เปลี่ยนเป็นชุดที่ทีมจัดเตรียม</li>
+          <li>ทำแบบประเมินก่อนใช้และรับคำแนะนำจากทีมงาน</li>
+          <li>พักอย่างเป็นธรรมชาติและงดใช้โทรศัพท์ระหว่างทดสอบ</li>
+          <li>ทำแบบประเมินหลังใช้และรีวิวประสบการณ์เบื้องต้น</li>
+        </ol>
+        <p>ข้อมูล Sensor และความคิดเห็นของผู้ทดสอบใช้เพื่อพัฒนา ZEEP และจะแสดงผลผ่านแอป ZEEP</p>
+      </details>
+      <div class="mini">รูปแบบมีผลต่อรายงานและคะแนนเท่านั้น · ไม่แก้ผล W/N1/N2/N3/REM</div>
     </div>
 
     <div id="loginError" class="login-safety danger login-off" role="alert"></div>
@@ -5031,13 +5040,10 @@ function renderRestModeHint(){
   const select=document.getElementById('loginRestMode'),hint=document.getElementById('loginRestModeHint');
   if(!select||!hint)return;
   const descriptions={
-    auto:'วิเคราะห์หลังจบว่าเป็นการงีบ การนอนหลัก หรือการพักขณะตื่น · ไม่เดาเป้าหมายสมาธิหรือเตรียมพร้อมแทนผู้ใช้',
-    sleep:'การนอนหลักอย่างน้อย 5 ชม. · คะแนนเต็มด้านเวลายึดเป้าหมายสุขภาพผู้ใหญ่ 7 ชม.',
-    nap_recovery:'งีบ 30–90 นาที · ประเมินว่าหลับจริง หลับไว และพักได้ต่อเนื่องเพียงใด',
-    relax_meditation:'พักขณะตื่น 10–30 นาที · ดูความนิ่งของ HR/RR การขยับ และความผ่อนคลาย',
-    recovery_readiness:'พักขณะตื่นไม่เกิน 30 นาที · ลดความตึงก่อน แล้วจบในสภาวะพร้อมทำกิจกรรม',
+    sleep:'พักค้างคืนอย่างน้อย 5 ชม. · คะแนนเวลาสำหรับผู้ใหญ่เต็มที่ 7 ชม. · ประเมินความต่อเนื่องและรูปแบบการนอน',
+    nap_recovery:'พักระหว่างวันประมาณ 30 นาที · จะหลับ พักสายตา หรือทำสมาธิก็ได้ · ไม่บังคับ N3 หรือ REM',
   };
-  hint.textContent=descriptions[select.value]||descriptions.auto;
+  hint.textContent=descriptions[select.value]||descriptions.nap_recovery;
 }
 function toggleLoginMode(){
   if(loginAudience==='user'&&offlineTicket)setLoginMode(loginMode === 'zeep' ? 'local' : 'zeep');
@@ -5350,7 +5356,7 @@ function renderSleepQuality(q, ended){
     .filter(Boolean).map(([label,value])=>`<div><span>${label}</span><b>${value}</b></div>`).join('');
   return `<section class="sleep-quality-card quality-${sleepQualityTone(q)}" style="--quality-score:${q.score}">
     <div class="sleep-quality-ring"><strong>${q.score}</strong><small>/100</small></div>
-    <div class="sleep-quality-copy"><span class="sleep-quality-eyebrow">${scoreTitle} · ZEEP WELLNESS · SENSOR</span><h3>${q.level}</h3><p>จากข้อมูล Sensor: ${q.insight || ''}</p><div class="sleep-quality-metrics">${metrics}</div><small>${q.score_basis || ''} · ${q.disclaimer || 'ประเมินจาก BCG/Sensor ไม่ใช่ผลวินิจฉัยจาก PSG'}</small></div>
+    <div class="sleep-quality-copy"><span class="sleep-quality-eyebrow">${scoreTitle} · ZEEP WELLNESS · SENSOR</span><h3>${q.level}</h3><p>จากข้อมูล Sensor: ${q.insight || ''}</p><div class="sleep-quality-metrics">${metrics}</div><small>${q.outcome_interpretation?`${q.outcome_interpretation} · `:''}${q.score_basis || ''} · ${q.disclaimer || 'ประเมินจาก BCG/Sensor ไม่ใช่ผลวินิจฉัยจาก PSG'}</small></div>
   </section>`;
 }
 
@@ -5453,7 +5459,7 @@ function renderSessionOverview(report){
   ].join('');
   const environmentAssessment=report.environment_assessment||{};
   const restMode=report.rest_mode||{},restModeGroup=restMode.group||restMode.resolved||'sleep';
-  const disturbanceTitle=restModeGroup==='sleep'?'สิ่งที่อาจรบกวนการนอน':restModeGroup==='nap_recovery'?'สิ่งที่อาจรบกวนการงีบ':'ปัจจัยที่อาจรบกวนการพักครั้งนี้';
+  const disturbanceTitle=restModeGroup==='sleep'?'สิ่งที่อาจรบกวนการนอน':'สิ่งที่อาจรบกวนการพัก';
   const environmentStatus=`คาดหวังพอใช้ขึ้นไป · ${environmentAssessment.mode_label||restMode.label||'ตาม Mode'} · ${environmentAssessment.context_only===false?'':'ไม่กำหนด Sleep State'}`;
   const metrics=[
     ['◷','Sensor ประเมินว่าหลับ',fmtDur(sleep.estimated_sleep_s)],

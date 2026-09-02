@@ -44,19 +44,15 @@ REST_MODE_LABELS = {
     "auto": "ZEEP Smart Mode · วิเคราะห์ตามการพักจริง",
     "sleep": REST_SESSION_GROUPS["sleep"]["label"],
     "nap_recovery": REST_SESSION_GROUPS["nap_recovery"]["label"],
-    "relax_meditation": REST_SESSION_GROUPS["relax_meditation"]["label"],
-    "recovery_readiness": REST_SESSION_GROUPS["recovery_readiness"]["label"],
-    "general_rest": "พักผ่อนทั่วไป",
-    "short_nap": "งีบสั้น",
-    "cycle_nap": "งีบหนึ่งรอบ / พักต่อเนื่อง",
+    "general_rest": "Nap & Refresh · พักขณะตื่น",
+    "short_nap": "Nap & Refresh · พบการหลับ",
+    "cycle_nap": "Nap & Refresh · พักต่อเนื่อง",
     "shift_rest": "พักจากการเข้าเวร",
     "jet_lag": "พักเพื่อปรับ Jet lag",
     "overnight": "นอนค้างคืน",
 }
 REST_MODE_ALIASES = {
     **REST_MODE_LEGACY_ALIASES,
-    "meditation": "relax_meditation",
-    "relax": "relax_meditation",
     "nap": "nap_recovery",
     "nap_rest": "nap_recovery",
     "power_nap": "short_nap",
@@ -74,8 +70,7 @@ _SLEEP_MODE_GROUPS = {
     "overnight": "sleep",
 }
 _AWAKE_REST_MODES = {
-    "general_rest", "nap_recovery", "relax_meditation",
-    "recovery_readiness",
+    "general_rest", "nap_recovery",
 }
 
 def _number(value: Any) -> Optional[float]:
@@ -152,11 +147,8 @@ def _resolve_rest_mode(
         resolved = "overnight"
         reason = "ผู้ใช้เลือกการนอนหลัก; ระยะเวลาที่บันทึกใช้ตรวจขั้นต่ำ 5 ชั่วโมงแยกต่างหาก"
     elif requested_mode == "nap_recovery" and sleep_detected:
-        if sleep_s <= 60 * 60:
-            resolved = "short_nap"
-        else:
-            resolved = "cycle_nap"
-        reason = "ผู้ใช้เลือกงีบพักผ่อน; รูปแบบย่อยใช้คำนวณคะแนนจากเวลาหลับจริง"
+        resolved = "short_nap"
+        reason = "ผู้ใช้เลือก Nap & Refresh; การหลับเป็นผลที่อาจเกิดขึ้น ไม่ใช่ข้อบังคับของโหมด"
     elif requested_mode == "sleep":
         resolved = "overnight"
         reason = "ผู้ใช้เลือกการนอน แต่ยังไม่พบ Sleep State"
@@ -180,7 +172,7 @@ def _resolve_rest_mode(
     elif requested_mode == "auto":
         group = _SLEEP_MODE_GROUPS.get(resolved, resolved if resolved in _AWAKE_REST_MODES else "general_rest")
     else:
-        group = _SLEEP_MODE_GROUPS.get(resolved, "relax_meditation")
+        group = _SLEEP_MODE_GROUPS.get(resolved, "nap_recovery")
     group_policy = REST_SESSION_GROUPS.get(group, {
         "label": "พักผ่อนทั่วไป", "score_title": "คะแนนการพัก",
         "description": "พักใน ZEEP ตามข้อมูลที่บันทึกได้",
@@ -193,6 +185,7 @@ def _resolve_rest_mode(
         "resolved_label": REST_MODE_LABELS[resolved],
         "score_title": group_policy["score_title"],
         "description": group_policy["description"],
+        "sleep_required": bool(group_policy.get("sleep_required", False)),
         "sleep_detected": sleep_detected,
         "reason": reason,
         "protocol": dict(REST_MODE_PROTOCOLS[group]) if group in REST_MODE_PROTOCOLS else None,
@@ -282,9 +275,7 @@ def _settling(values: list[float], *, scale: float) -> Optional[float]:
 def _awake_rest_duration_profile(group: str) -> tuple[float, float, float, float]:
     """Minutes: full-credit low/high and permissive outer low/high."""
     return {
-        "nap_recovery": (30.0, 90.0, 10.0, 120.0),
-        "relax_meditation": (10.0, 30.0, 3.0, 45.0),
-        "recovery_readiness": (10.0, 30.0, 3.0, 45.0),
+        "nap_recovery": (25.0, 35.0, 10.0, 60.0),
         "general_rest": (10.0, 60.0, 3.0, 120.0),
     }.get(group, (10.0, 60.0, 3.0, 120.0))
 
@@ -334,11 +325,10 @@ def _build_awake_rest_quality(
     settling = _average(settling_parts)
     if regularity is None:
         physiology_factor = 0.0
-    elif group == "recovery_readiness":
-        # Readiness values stable regulation; it does not force HR to fall.
-        physiology_factor = 0.85 * regularity + 0.15 * (settling if settling is not None else 0.5)
     else:
-        physiology_factor = 0.7 * regularity + 0.3 * (settling if settling is not None else 0.5)
+        # Nap & Refresh accepts quiet wakefulness. Stable HR/RR matters more
+        # than forcing heart rate to fall, which meditation does not guarantee.
+        physiology_factor = 0.85 * regularity + 0.15 * (settling if settling is not None else 0.5)
     physiology_points = round(30.0 * physiology_factor, 1)
 
     bed_labels = [str(row.get("bed") or "") for row in rows if row.get("bed")]
@@ -361,10 +351,7 @@ def _build_awake_rest_quality(
         "hum": (40.0, 60.0, 25.0, 80.0),
         "co2": (350.0, 1000.0, 250.0, 1800.0),
         "dba": (0.0, 40.0, 0.0, 65.0),
-        "lux": {
-            "recovery_readiness": (0.0, 80.0, 0.0, 250.0),
-            "relax_meditation": (0.0, 10.0, 0.0, 60.0),
-        }.get(group, (0.0, 5.0, 0.0, 50.0)),
+        "lux": (0.0, 10.0, 0.0, 60.0),
     }
     environment_averages: Dict[str, float] = {}
     for key, band in environment_bands.items():
@@ -473,9 +460,10 @@ def _build_awake_rest_quality(
             "data_coverage": "ความครบของข้อมูล",
         },
         "score_unrounded": earned,
-        "score_basis": "เวลาเป้าหมาย 20 + HR/RR 30 + ความนิ่ง 20 + สภาพแวดล้อม 20 + ข้อมูล 10",
+        "score_basis": "เวลาพัก 20 + การตอบสนอง HR/RR 30 + ความต่อเนื่อง 20 + สภาพแวดล้อม 20 + ข้อมูล 10",
         "version": SLEEP_QUALITY_VERSION,
-        "disclaimer": "คะแนน ZEEP Wellness ไม่ใช่การวินิจฉัย การรักษา หรือผล AASM/PSG",
+        "outcome_interpretation": "Nap & Refresh ไม่บังคับให้หลับหรือมี N3/REM; ความสดชื่นจริงใช้คำตอบหลัง Session ประกอบ",
+        "disclaimer": "คะแนน ZEEP Wellness จาก Sensor ไม่ใช่การวินิจฉัย การรักษา หรือผล AASM/PSG",
     }
 
 
@@ -892,13 +880,20 @@ def build_sleep_quality(
     }
     component_max = dict(SLEEP_QUALITY_COMPONENT_MAX_POINTS)
     component_order = list(component_points)
-    component_labels = {
+    nap_mode = mode.get("group") == "nap_recovery"
+    component_labels = ({
+        "sleep_opportunity": "เวลาและการเข้าสู่การพัก",
+        "sleep_stability": "ความต่อเนื่องของการพัก",
+        "restorative_architecture": "รูปแบบการพักที่ตรวจพบ",
+        "cycle_expression": "การตอบสนองระหว่างพัก",
+        "data_coverage": "ความครบของข้อมูล",
+    } if nap_mode else {
         "sleep_opportunity": "หลับไวและเวลาพัก",
         "sleep_stability": "หลับดีและต่อเนื่อง",
         "restorative_architecture": "หลับลึกและฟื้นฟู",
-        "cycle_expression": "รอบการนอนและความพร้อม",
+        "cycle_expression": "รอบการนอนที่ตรวจพบ",
         "data_coverage": "ความครบของข้อมูล",
-    }
+    })
     earned_points = round(sum(component_points.values()), 1)
     score = 0 if estimated_sleep_s <= 0 else max(0, min(100, int(round(earned_points))))
 
@@ -911,7 +906,20 @@ def build_sleep_quality(
     else:
         level, level_key = "ควรปรับปรุง", "low"
 
-    if latency["available"] and latency["points"] < 3.0:
+    if nap_mode:
+        if latency["available"] and latency["points"] < 3.0:
+            insight = "ใช้เวลานานกว่าจะเข้าสู่การพัก ควรปรับช่วงเตรียมตัวและสภาพแวดล้อม"
+        elif duration_points < 10.5:
+            insight = "เวลาที่ Sensor ประเมินว่าพักยังต่ำกว่าเป้าหมาย Nap & Refresh"
+        elif stability_points < 21.0:
+            insight = "การพักยังไม่ต่อเนื่องเมื่อเทียบกับเวลาที่บันทึก"
+        elif architecture["total"] < 18.0:
+            insight = "รูปแบบการพักที่ตรวจพบยังกระจุกตัวและควรอ่านร่วมกับความรู้สึกหลังพัก"
+        elif cycle_points < 9.0:
+            insight = "การตอบสนองระหว่างพักยังไม่เด่นชัดจากข้อมูล Sensor"
+        else:
+            insight = "เวลา ความต่อเนื่อง และการตอบสนองระหว่างพักโดยรวมอยู่ในเกณฑ์ดี"
+    elif latency["available"] and latency["points"] < 3.0:
         insight = "ใช้เวลาหลับนาน ควรปรับช่วงเตรียมตัวและสภาพแวดล้อมก่อนพัก"
     elif duration_points < 10.5:
         insight = f"เวลาหลับยังต่ำกว่าเป้าหมายของ{mode['label']}"
@@ -979,9 +987,18 @@ def build_sleep_quality(
         "component_order": component_order,
         "component_labels": component_labels,
         "score_unrounded": earned_points,
-        "score_basis": "หลับไว/เวลาพัก 20 + หลับต่อเนื่อง 30 + ฟื้นฟู 30 + รอบการนอน 15 + ข้อมูล 5",
+        "score_basis": (
+            "เวลา/การเข้าสู่การพัก 20 + ความต่อเนื่อง 30 + รูปแบบการพัก 30 + การตอบสนอง 15 + ข้อมูล 5"
+            if nap_mode else
+            "หลับไว/เวลาพัก 20 + หลับต่อเนื่อง 30 + ฟื้นฟู 30 + รอบการนอน 15 + ข้อมูล 5"
+        ),
         "version": SLEEP_QUALITY_VERSION,
-        "disclaimer": "คะแนน ZEEP Wellness จาก BCG/Sensor; รอบและความพร้อมเป็น proxy ไม่ใช่ PSG หรือผลวินิจฉัย",
+        "outcome_interpretation": (
+            "Nap & Refresh ไม่บังคับ N3/REM; ความสดชื่นจริงใช้คำตอบหลัง Session ประกอบ"
+            if nap_mode else
+            "ความสดชื่นหลังตื่นต้องใช้คำตอบหลัง Session ประกอบ"
+        ),
+        "disclaimer": "คะแนน ZEEP Wellness จาก BCG/Sensor ไม่ใช่ PSG หรือผลวินิจฉัย",
     }
 
 

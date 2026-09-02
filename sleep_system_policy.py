@@ -20,8 +20,8 @@ ZEEP_SLEEP_BASELINE_VERSION = "zeep-sleep-state-baseline-v1.5"
 ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.10-rem-wake-soremp-guard"
 SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
 SLEEP_HISTORY_BACKFILL_VERSION = "zeep-sleep-history-reclass-v13-rem-wake-soremp-guard"
-SESSION_REPORT_VERSION = "zeep-session-report-v9.2-timeline-air-data"
-SLEEP_QUALITY_VERSION = "zeep-rest-quality-v6.0-four-rest-modes"
+SESSION_REPORT_VERSION = "zeep-session-report-v9.3-two-pilot-modes"
+SLEEP_QUALITY_VERSION = "zeep-rest-quality-v7.0-two-pilot-modes"
 ENVIRONMENT_CONTEXT_POLICY_VERSION = "zeep-environment-context-v2.0-mode-aware-fair-floor"
 TERMINAL_WAKE_POLICY_VERSION = "zeep-terminal-wake-boundary-v1.0"
 SLEEP_CLASSIFICATION_GAP_VERSION = "zeep-sleep-classification-gap-v1.0"
@@ -140,33 +140,25 @@ REST_MODE_DURATION_TARGETS_S = {
     "overnight": 7 * 3600,
 }
 
-# Broad Session goals shown to the user.  Detailed sleep sub-modes remain
-# available internally for backward compatibility and duration scoring.
-# Non-sleep goals are wellness experiences, not treatment or diagnosis modes.
+# The Pilot exposes exactly two Session goals. Detailed sub-modes remain
+# internal for historical replay and duration scoring; they must not reappear
+# as extra choices in the user flow.
 REST_SESSION_GROUPS = {
     "sleep": {
-        "label": "นอนหลับ",
-        "score_title": "คุณภาพการนอน",
-        "description": "การนอนหลักอย่างน้อย 5 ชั่วโมง; เป้าหมายคะแนนผู้ใหญ่ 7 ชั่วโมง",
+        "label": "Overnight Recovery",
+        "score_title": "คะแนน Overnight Recovery",
+        "description": "พักค้างคืนอย่างน้อย 5 ชั่วโมง; คะแนนเวลาสำหรับผู้ใหญ่เต็มที่ 7 ชั่วโมง",
+        "sleep_required": True,
     },
     "nap_recovery": {
-        "label": "งีบพักผ่อน",
-        "score_title": "คะแนนการงีบ",
-        "description": "งีบ 30–90 นาทีเพื่อพักระหว่างวัน โดยไม่บังคับให้ต้องถึง N3 หรือ REM",
-    },
-    "relax_meditation": {
-        "label": "ผ่อนคลายและสมาธิ",
-        "score_title": "คะแนนความผ่อนคลาย",
-        "description": "พักขณะตื่นไม่เกิน 30 นาที เพื่อลดความตึงและทำให้ HR/RR สม่ำเสมอขึ้น",
-    },
-    "recovery_readiness": {
-        "label": "ฟื้นฟูและเตรียมพร้อม",
-        "score_title": "คะแนนความพร้อม",
-        "description": "พักขณะตื่นไม่เกิน 30 นาที: ลดความตึงก่อน แล้วจบด้วยสภาวะพร้อมทำกิจกรรม",
+        "label": "Nap & Refresh",
+        "score_title": "คะแนน Nap & Refresh",
+        "description": "พักระหว่างวันประมาณ 30 นาที จะหลับ พักสายตา หรือทำสมาธิก็ได้",
+        "sleep_required": False,
     },
 }
 
-# Four user-facing protocols are the only canonical Session goals.  The phase
+# Two user-facing protocols are the only canonical Session goals.  The phase
 # plan is metadata for UI, reports and test design; it does not permit Sleep
 # State to drive actuators.  Environment changes remain clock/user controlled.
 REST_MODE_PROTOCOLS = {
@@ -183,52 +175,32 @@ REST_MODE_PROTOCOLS = {
         ],
     },
     "nap_recovery": {
-        "session_character": "nap",
-        "minimum_seconds": 30 * 60,
-        "maximum_seconds": 90 * 60,
-        "recommended_range_seconds": [30 * 60, 90 * 60],
+        "session_character": "rest_or_nap",
+        "minimum_seconds": None,
+        "maximum_seconds": 45 * 60,
+        "recommended_range_seconds": [25 * 60, 35 * 60],
         "full_credit_target_seconds": 30 * 60,
-        "phases": ["settle", "nap", "gentle_wake"],
+        "phases": ["settle", "rest_or_nap", "gentle_close"],
         "primary_outcomes": [
-            "sleep_onset", "sleep_efficiency", "hr_rr_settling",
-            "post_rest_alertness",
-        ],
-    },
-    "relax_meditation": {
-        "session_character": "awake_rest",
-        "minimum_seconds": None,
-        "maximum_seconds": 30 * 60,
-        "recommended_range_seconds": [10 * 60, 30 * 60],
-        "full_credit_target_seconds": 10 * 60,
-        "phases": ["arrive", "guided_calm", "close"],
-        "primary_outcomes": [
-            "hr_rr_regularity", "physiological_settling", "stillness",
-            "self_reported_calm",
-        ],
-    },
-    "recovery_readiness": {
-        "session_character": "awake_rest",
-        "minimum_seconds": None,
-        "maximum_seconds": 30 * 60,
-        "recommended_range_seconds": [10 * 60, 30 * 60],
-        "full_credit_target_seconds": 10 * 60,
-        "phases": ["reset", "stabilise", "activate"],
-        "primary_outcomes": [
-            "hr_rr_regularity", "physiological_stability", "comfort",
-            "self_reported_readiness",
+            "rest_continuity", "hr_rr_settling", "stillness",
+            "sleep_observed_optional", "post_rest_refresh_self_report",
         ],
     },
 }
 
 # Historical values are normalised on read.  Raw records are not rewritten,
-# preserving auditability while every new report exposes one of four goals.
+# preserving auditability while every new report exposes one of two goals.
 REST_MODE_LEGACY_ALIASES = {
-    "performance_prep": "recovery_readiness",
-    "physical_comfort": "recovery_readiness",
-    "performance": "recovery_readiness",
-    "prepare": "recovery_readiness",
-    "comfort": "recovery_readiness",
-    "recovery": "recovery_readiness",
+    "relax_meditation": "nap_recovery",
+    "recovery_readiness": "nap_recovery",
+    "performance_prep": "nap_recovery",
+    "physical_comfort": "nap_recovery",
+    "performance": "nap_recovery",
+    "prepare": "nap_recovery",
+    "comfort": "nap_recovery",
+    "recovery": "nap_recovery",
+    "meditation": "nap_recovery",
+    "relax": "nap_recovery",
 }
 
 # Environment is an explanatory context layer, not Sleep-Stage evidence.  A
@@ -349,15 +321,13 @@ _ENVIRONMENT_MODE_ALIASES = {
     "auto": "sleep", "overnight": "sleep", "sleep": "sleep",
     "short_nap": "nap_recovery", "cycle_nap": "nap_recovery",
     "shift_rest": "nap_recovery", "jet_lag": "nap_recovery",
-    "nap_recovery": "nap_recovery", "general_rest": "relax_meditation",
-    "relax_meditation": "relax_meditation",
-    "recovery_readiness": "recovery_readiness",
+    "nap_recovery": "nap_recovery", "general_rest": "nap_recovery",
     **REST_MODE_LEGACY_ALIASES,
 }
 
 
 def environment_mode_group(value: Any) -> str:
-    """Map historical/sub-mode names to one of the four environment profiles."""
+    """Map historical/sub-mode names to one of the two Pilot profiles."""
     mode = str(value or "auto").strip().lower()
     mode = REST_MODE_LEGACY_ALIASES.get(mode, mode)
     return _ENVIRONMENT_MODE_ALIASES.get(mode, "sleep")

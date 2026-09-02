@@ -33,8 +33,8 @@
 | Semi-Markov transition | `zeep-semimarkov-30s-v1.10-rem-wake-soremp-guard` |
 | G2 ontology | `g2-aasm-5class-v1.0` |
 | Historical replay | `zeep-sleep-history-reclass-v13-rem-wake-soremp-guard` |
-| Sleep / Rest quality | `zeep-rest-quality-v6.0-four-rest-modes` |
-| Session report | `zeep-session-report-v9.1-mode-aware-environment` |
+| Sleep / Rest quality | `zeep-rest-quality-v7.0-two-pilot-modes` |
+| Session report | `zeep-session-report-v9.3-two-pilot-modes` |
 | Environment context | `zeep-environment-context-v2.0-mode-aware-fair-floor` |
 | Terminal Wake boundary | `zeep-terminal-wake-boundary-v1.0` |
 | Classification gap display | `zeep-sleep-classification-gap-v1.0` |
@@ -283,7 +283,7 @@ stateDiagram-v2
 physiology evidence ก่อนเสมอ การอนุญาต graph นี้ไม่ได้หมายความว่า BCG เทียบเท่า PSG
 ซึ่งยังต้องใช้ EEG/EOG/chin EMG จริง
 
-## 4. Sleep / Rest Quality v6.0
+## 4. Sleep / Rest Quality v7.0
 
 ### 4.1 สมการภาพรวม
 
@@ -297,12 +297,14 @@ Score ตามเป้าหมายที่เลือกแทน กา�
 |---|---:|---|
 | หลับไวและเวลาพัก | 20 | Duration 15 + latency 5 |
 | หลับดีและต่อเนื่อง | 30 | Efficiency 20 + Wake continuity 10 − BCG disturbance proxy สูงสุด 5 |
-| หลับลึกและฟื้นฟู | 30 | Overnight: N2 10 + N3 12 + REM 8; Rest Mode สั้นใช้ broad balance |
-| รอบการนอนและความพร้อม | 15 | NREM→REM proxy เทียบจำนวนรอบที่คาด; งีบสั้นไม่บังคับ REM |
+| หลับลึกและฟื้นฟู | 30 | แสดงชื่อนี้เฉพาะ Overnight: N2 10 + N3 12 + REM 8 |
+| รอบการนอนที่ตรวจพบ | 15 | Overnight ใช้ NREM→REM proxy เทียบจำนวนรอบที่คาด |
 | ความครบของข้อมูล | 5 | `scored seconds / wall-clock duration` |
 
-ข้อจำกัดคำอธิบาย: “ตื่นสดชื่น” ในคะแนนหมายถึง readiness/cycle proxy เท่านั้น
-ผล subjective จริงต้องเก็บ morning report เพิ่ม และห้ามกล่าวว่าเป็นผลการวินิจฉัย
+เมื่อ Nap & Refresh มีช่วงหลับ ระบบใช้สูตรเดิมแต่เปลี่ยนชื่อองค์ประกอบเป็น
+`เวลาและการเข้าสู่การพัก / ความต่อเนื่องของการพัก / รูปแบบการพักที่ตรวจพบ /
+การตอบสนองระหว่างพัก / ความครบของข้อมูล` และไม่บังคับ N3 หรือ REM ส่วนความสดชื่น
+จริงต้องใช้แบบประเมินหลัง Session ประกอบ ห้ามอนุมานจาก Sensor เพียงอย่างเดียว
 
 ### 4.2 Rest Mode และ Duration target
 
@@ -321,19 +323,19 @@ Auto mode resolve จากเวลาที่มี Sleep State จริง:
 คำว่า 7 ชั่วโมงในระบบหมายถึง AASM/SRS adult overnight recommendation threshold
 ไม่ใช่ “ZEEP target 7.5 ชั่วโมง” และไม่ใช้ลงโทษการงีบหรือการพักจากเข้าเวร
 
-### 4.3 เป้าหมายการพักแบบกว้าง
+### 4.3 รูปแบบการทดสอบ Pilot
 
-ระบบมี **4 เป้าหมายจริง**; `auto` เป็น resolver ไม่ใช่โหมดที่ห้า
+หน้าเริ่ม Session แสดง **2 รูปแบบเท่านั้น** ส่วนชื่อเก่าและ `auto` คงอยู่เฉพาะ
+compatibility สำหรับอ่านประวัติและ replay โดยไม่แก้ Raw record เดิม
 
 | เป้าหมายผู้ใช้ | ช่วงเวลา | ลักษณะการประเมิน |
 |---|---|---|
-| นอนหลับ | ขั้นต่ำโหมด 5 ชม.; duration score เต็มที่ 7 ชม. | Sleep Quality จาก W/N1/N2/N3/REM, continuity และ coverage |
-| งีบพักผ่อน | 30–90 นาที | หากหลับใช้ nap/cycle score; ไม่บังคับ N3/REM ในงีบสั้น |
-| ผ่อนคลายและสมาธิ | แนะนำ 10–30 นาที; สูงสุด 30 นาที | เวลาเป้าหมาย, ความนิ่ง/แนวโน้ม HR-RR, Bed Status และสภาพแวดล้อม |
-| ฟื้นฟูและเตรียมพร้อม | แนะนำ 10–30 นาที; สูงสุด 30 นาที | HR/RR stability + stillness/comfort; ไม่บังคับให้ชีพจรต้องลด |
+| Nap & Refresh | ประมาณ 30 นาที; ช่วงแนะนำระบบ 25–35 นาที | อนุญาตทั้งหลับ พักสายตา และสมาธิ; ไม่บังคับ N3/REM หากไม่หลับใช้ Rest Goal Score จาก HR/RR, ความต่อเนื่อง, สภาพแวดล้อมและ coverage |
+| Overnight Recovery | ขั้นต่ำโหมด 5 ชม.; duration score เต็มที่ 7 ชม. | Sleep Quality จาก W/N1/N2/N3/REM, continuity, architecture, cycle proxy และ coverage |
 
-ค่าเก่า `performance_prep` และ `physical_comfort` map เป็น
-`recovery_readiness` ตอนอ่าน/สร้างรายงานโดยไม่แก้ Raw record เดิม ทุกผลมี
+ค่าเก่า `relax_meditation`, `recovery_readiness`, `performance_prep` และ
+`physical_comfort` map เป็น `nap_recovery` ตอนอ่าน/สร้างรายงานโดยไม่แก้ Raw
+record เดิม ทุกผลมี
 `protocol_status` เพื่อแยกเวลาที่แนะนำ, สั้นเกิน และเกินขอบเขตออกจากคะแนน
 สรีรวิทยา
 

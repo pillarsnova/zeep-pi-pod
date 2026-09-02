@@ -23,3 +23,5 @@ pending-*/
 .env.test.local
 .env.production.local
 .env.local
+
+.DS_Store

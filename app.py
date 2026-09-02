@@ -58,6 +58,8 @@ from access_control import (
 )
 from backup import DailyBackup
 from bcg_storage import BCGStorage
+from brainwave_audio import public_presets as brainwave_public_presets
+from brainwave_audio import render_preview as render_brainwave_preview
 from database import DatabaseManager
 from api_v1 import create_api_v1_router
 from maintenance_registry import maintenance_contract_snapshot
@@ -339,6 +341,7 @@ if not 5 <= AIRCON_POWER_ON_DEFAULT_TEMP_C <= 32:
 # ZEEP accounts use normalized email as the canonical data key; mutable
 # username/displayName values are presentation metadata only.
 DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR / "data")))
+BRAINWAVE_PREVIEW_DIR = DATA_DIR / "brainwave_audio"
 PROFILES_PATH = DATA_DIR / "profiles.json"
 SESSIONS_PATH = DATA_DIR / "sessions.jsonl"
 LABELS_PATH = DATA_DIR / "output_labels.json"
@@ -7046,6 +7049,13 @@ class TrackCommand(BaseModel):
     user_initiated: bool = False
 
 
+class BrainwavePreviewCommand(BaseModel):
+    preset_id: str
+    duration_seconds: int = 30
+    volume: int = 35
+    confirm_occupied: bool = False
+
+
 class LoginCommand(BaseModel):
     username: str
     gender: Optional[str] = None
@@ -9107,6 +9117,76 @@ def user_delete(username: str):
 
 
 # ---------- music ----------
+@app.get("/api/admin/brainwave/presets", dependencies=[Depends(require_admin)])
+def brainwave_presets():
+    """Versioned Sound Lab catalog; frequency labels are design parameters."""
+    catalog = brainwave_public_presets()
+    with session_lock:
+        occupied = _active_session is not None
+    return {**catalog, "occupied": occupied, "player": player.backend}
+
+
+@app.post("/api/admin/brainwave/preview")
+def brainwave_preview(
+    cmd: BrainwavePreviewCommand,
+    principal: Principal = Depends(require_admin),
+):
+    """Render locally and play through the Pi speaker, never the tablet.
+
+    An active occupant requires an explicit confirmation from the Admin UI.
+    This keeps an experimental stimulus from entering a Session by accident.
+    """
+    _require_safety_allows("ทดสอบเสียง Brainwave")
+    with session_lock:
+        occupied = _active_session is not None
+    if occupied and not cmd.confirm_occupied:
+        raise HTTPException(
+            409,
+            {
+                "code": "occupied_confirmation_required",
+                "message": "มีผู้ใช้งานอยู่ใน ZEEP ต้องยืนยันก่อนเล่นเสียงทดสอบ",
+            },
+        )
+    volume = max(0, min(60, int(cmd.volume)))
+    if volume != int(cmd.volume):
+        raise HTTPException(422, "Sound Lab จำกัดระดับ Digital Volume ที่ 0–60%")
+    try:
+        rendered = render_brainwave_preview(
+            cmd.preset_id, cmd.duration_seconds, BRAINWAVE_PREVIEW_DIR
+        )
+    except ValueError as exc:
+        if str(exc) == "unknown_preset":
+            raise HTTPException(404, "ไม่พบ Brainwave preset") from exc
+        raise HTTPException(422, "ระยะ Preview ต้องอยู่ในช่วง 10–90 วินาที") from exc
+
+    with music_command_lock:
+        try:
+            player.set_volume(volume)
+            player.play(rendered["path"], loop=False, queue=False)
+        except Exception as exc:
+            raise HTTPException(500, str(exc)) from exc
+    detail = {
+        "action": "brainwave_preview",
+        "preset_id": cmd.preset_id,
+        "version": rendered["version"],
+        "duration_seconds": rendered["duration_seconds"],
+        "volume": volume,
+        "confirmed_while_occupied": bool(occupied),
+    }
+    note_session_activity("music", detail)
+    log_event(
+        "brainwave_audio", "preview_play",
+        operator=principal.username, **detail,
+    )
+    return {
+        "ok": True,
+        "render": {key: value for key, value in rendered.items() if key != "path"},
+        "volume": volume,
+        "occupied": occupied,
+        "state": snapshot()["music"],
+    }
+
+
 @app.get("/api/music", dependencies=[Depends(require_pod_operator)])
 async def music_list():
     exts = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".aac"}

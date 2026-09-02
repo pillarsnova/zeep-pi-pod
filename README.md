@@ -29,6 +29,7 @@ pi5/
 │                            # Offline maintenance; dry-run/guard/audit ตาม registry
 ├── TESTING.md               # กลุ่ม Regression/Safety และ Definition of done
 ├── generate_brainwaves.py  # สร้างเสียง brainwave 5 แบบ (Python stdlib ล้วน)
+├── brainwave_audio.py      # Admin Sound Lab: render Preview แบบ versioned ไปยังลำโพง Pi
 ├── run.sh / run.bat        # bootstrap คำสั่งเดียว: venv + deps + เสียง + รัน
 ├── requirements.txt        # fastapi · uvicorn · pyserial · gpiozero
 ├── REMOTE-ACCESS.md        # แผนเปิดใช้ผ่าน URL (Tailscale / Cloudflare Tunnel)
@@ -49,6 +50,7 @@ pi5/
 |---|---|
 | `GPIOManager` | คุมขา GPIO ทั้ง 12 (door×2, ไฟเพดาน, ไฟดาว, aroma×4, steam, แสงแดง×3) · **ไม่มี mock** — เชื่อมต่อไม่ได้ = ปุ่มถูกปิด คำสั่งตอบ `503` พร้อมสาเหตุ |
 | `AudioPlayer` | เล่นเสียง: `mpv` (บน Pi, ครบทุกฟีเจอร์) → `afplay` (macOS) → `ffplay` (เครื่องอื่น) |
+| Brainwave Sound Lab | Admin-only A/B preview แบบ speaker-compatible AM · สร้างใน `data/brainwave_audio/` · มี consent guard ขณะตู้มีผู้ใช้งาน; ดู `docs/brainwave-sound-lab-v1.md` |
 | `esp32_reader` (thread) | อ่าน JSON ทีละบรรทัดจาก USB serial → temperature / humidity / lux / sound |
 | `bcg_reader` (thread) | แกะ frame 66-byte ของ LSM-800-T → waveform / HR / RR / bed status · แยก "ช่วงเงียบปกติ" ออกจาก "หลุดจริง" |
 | `session_sampler` (thread) | เก็บ snapshot สิ่งแวดล้อม + ชีวสัญญาณทุก 10 วินาทีระหว่างมี Recording Session |

@@ -781,7 +781,7 @@
     Increment the query value when deploying a new theme so the ZEEP browser does not
     reuse a cached stylesheet.
   -->
-  <link rel="stylesheet" href="/static/theme-modern.css?v=20260902-150" />
+  <link rel="stylesheet" href="/static/theme-modern.css?v=20260903-151" />
 </head>
 <body>
 <!-- Shared line-icon library: every interactive view reuses the same 24 px
@@ -1432,6 +1432,20 @@
             <div class="debug-device-head"><div><span><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-audio"/></svg></span><b>Pi 5 · Audio</b></div><code>MPV IPC</code></div>
             <div class="debug-audio-row"><select id="debugTrackSelect" aria-label="ไฟล์เสียงสำหรับทดสอบ"><option value="">กำลังโหลด…</option></select><button class="ui-label-button" onclick="debugPlayTrack(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-play"/></svg><span>PLAY</span></button><button class="ui-label-button" onclick="debugSend(this,'Pi Audio','pause','/api/music/pause')"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-pause"/></svg><span>PAUSE / RESUME</span></button><button class="danger ui-label-button" onclick="debugSend(this,'Pi Audio','stop','/api/music/stop')"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-stop"/></svg><span>STOP</span></button></div>
             <div class="debug-inline-command"><div><b>Volume</b><small>0–100%</small></div><select id="debugVolume"><option>0</option><option>25</option><option>50</option><option selected>75</option><option>100</option></select><button class="ui-label-button" onclick="debugVolumeCommand(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-volume-on"/></svg><span>SET VOLUME</span></button></div>
+            <div class="brainwave-lab" aria-labelledby="brainwaveLabTitle">
+              <div class="brainwave-lab-head">
+                <div><span>EXPERIMENTAL WELLNESS AUDIO</span><b id="brainwaveLabTitle">Brainwave Sound Lab</b><small id="brainwaveLabVersion">กำลังโหลด Preset…</small></div>
+                <strong>ลำโพง ZEEP</strong>
+              </div>
+              <div class="brainwave-lab-grid">
+                <label><span>รูปแบบเสียง</span><select id="brainwavePreset" onchange="renderBrainwavePreset()" aria-label="Brainwave Sound Lab preset"><option value="">กำลังโหลด…</option></select></label>
+                <label><span>ระยะทดสอบ</span><select id="brainwaveDuration" aria-label="ระยะเวลาทดสอบ Brainwave"><option value="15">15 วินาที</option><option value="30" selected>30 วินาที</option><option value="60">60 วินาที</option><option value="90">90 วินาที</option></select></label>
+                <label><span>Digital Volume</span><select id="brainwaveVolume" aria-label="ระดับเสียงดิจิทัล Brainwave"><option value="20">20%</option><option value="35" selected>35%</option><option value="50">50%</option><option value="60">60%</option></select></label>
+                <button id="brainwavePreviewBtn" class="ui-label-button" onclick="playBrainwavePreview(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-play"/></svg><span>สร้างและเล่น</span></button>
+              </div>
+              <div class="brainwave-preset-summary"><b id="brainwavePresetName">—</b><span id="brainwavePresetPurpose">เลือก Preset เพื่อดูรายละเอียด</span><code id="brainwavePresetPhases">—</code></div>
+              <p>เสียงออกจาก Pi 5 ไปยังลำโพงจริง · Volume ในระบบไม่ใช่ค่า dBA · ตรวจระดับเสียง ณ หมอนด้วย CEM meter ก่อนทดสอบกับผู้ใช้งาน</p>
+            </div>
           </section>
         </div>
 
@@ -4195,6 +4209,63 @@ function debugVolumeCommand(btn){
   return debugSend(btn,'Pi Audio',`volume ${volume}`,'/api/music/volume',{volume});
 }
 
+let brainwaveCatalog=null;
+
+async function loadBrainwaveLab(){
+  if(currentPrincipal?.role!=='admin')return;
+  const select=document.getElementById('brainwavePreset');
+  if(!select)return;
+  try{
+    const response=await fetch('/api/admin/brainwave/presets',{cache:'no-store'});
+    if(!response.ok)throw new Error(`HTTP ${response.status}`);
+    brainwaveCatalog=await response.json();
+    select.replaceChildren();
+    brainwaveCatalog.presets.forEach(preset=>{
+      const option=document.createElement('option');
+      option.value=preset.id;option.textContent=preset.name;
+      select.appendChild(option);
+    });
+    select.disabled=!brainwaveCatalog.presets.length;
+    document.getElementById('brainwavePreviewBtn').disabled=!brainwaveCatalog.presets.length||!brainwaveCatalog.player;
+    document.getElementById('brainwaveLabVersion').textContent=`${brainwaveCatalog.version} · ${brainwaveCatalog.output.format}`;
+    renderBrainwavePreset();
+  }catch(error){
+    select.innerHTML='<option value="">โหลด Preset ไม่สำเร็จ</option>';select.disabled=true;
+    document.getElementById('brainwavePreviewBtn').disabled=true;
+    document.getElementById('brainwaveLabVersion').textContent=error instanceof Error?error.message:'โหลดข้อมูลไม่สำเร็จ';
+  }
+}
+
+function renderBrainwavePreset(){
+  const id=document.getElementById('brainwavePreset')?.value;
+  const preset=brainwaveCatalog?.presets?.find(item=>item.id===id);
+  if(!preset)return;
+  document.getElementById('brainwavePresetName').textContent=`${preset.name} · ${preset.evidence}`;
+  document.getElementById('brainwavePresetPurpose').textContent=preset.purpose;
+  document.getElementById('brainwavePresetPhases').textContent=preset.phases
+    .map(phase=>phase.modulation_hz>0?`${phase.name}: ${phase.carrier_hz} Hz / ${phase.modulation_hz} Hz AM`:`${phase.name}: ${phase.carrier_hz} Hz / no AM`)
+    .join(' → ');
+}
+
+async function playBrainwavePreview(btn){
+  const presetId=document.getElementById('brainwavePreset')?.value;
+  if(!presetId){toast('กรุณาเลือก Brainwave preset','error');return;}
+  const occupied=!!current.session?.active;
+  if(occupied&&!await confirmAction({
+    title:'มีผู้ใช้งานอยู่ใน ZEEP',
+    message:'เสียงนี้เป็น Experimental Wellness Audio และจะเล่นออกลำโพงจริง กรุณายืนยันว่าได้รับอนุญาตจากผู้ใช้งานแล้ว',
+    confirmText:'ได้รับอนุญาต · เล่นเสียง',tone:'warning',icon:'♫'
+  }))return;
+  const duration=Number(document.getElementById('brainwaveDuration')?.value||30);
+  const volume=Number(document.getElementById('brainwaveVolume')?.value||35);
+  const result=await debugSend(
+    btn,'Pi Audio',`brainwave ${presetId} · ${duration}s · ${volume}%`,
+    '/api/admin/brainwave/preview',
+    {preset_id:presetId,duration_seconds:duration,volume,confirm_occupied:occupied}
+  );
+  if(result?.state)current.music={...(current.music||{}),...result.state};
+}
+
 function setDebugControllerState(id,status,label,detail=''){
   const node=document.getElementById(id);if(!node)return;
   node.dataset.status=status;
@@ -5147,7 +5218,7 @@ async function loadPublicStatus(){
 function startAuthenticatedApp(){
   if(authenticatedAppStarted)return;
   authenticatedAppStarted=true;serverReachable=true;
-  loadTracks();loadUsers();fetchBcgTrend();connectWS();
+  loadTracks();loadBrainwaveLab();loadUsers();fetchBcgTrend();connectWS();
 }
 
 async function bootstrapAuth(){

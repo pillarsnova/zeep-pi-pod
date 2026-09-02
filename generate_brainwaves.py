@@ -13,7 +13,8 @@
 ผ่อนคลาย (alpha) · ฝนพรำ (noise ambience)
 
 Claims boundary (ZEEP wellness-not-medical): เพลงตั้งชื่อตามบริบทการใช้และ
-ความถี่ modulation — ไม่เคลมผลการนอนหรือผลทางสรีรวิทยา (docs/sound-engine.md)
+ความถี่ modulation — ไม่เคลมผลการนอนหรือผลทางสรีรวิทยา
+(docs/brainwave-sound-lab-v1.md)
 และระดับเสียงกลางคืนเป้าหมาย ≤ 35 dB(A) — Python stdlib ล้วน รันบน Pi ได้เลย
 """
 import argparse

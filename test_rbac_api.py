@@ -98,6 +98,80 @@ class RbacApiTests(unittest.TestCase):
         self.assertEqual(client.post("/api/safety/disarm").status_code, 403)
         self.assertEqual(client.post("/api/safety/disarm", headers=csrf(client)).status_code, 200)
 
+    def test_brainwave_sound_lab_is_admin_only_and_plays_on_pi(self) -> None:
+        anonymous = TestClient(pod_app.app)
+        self.assertEqual(
+            anonymous.get("/api/admin/brainwave/presets").status_code, 401
+        )
+        self.assertEqual(
+            anonymous.post(
+                "/api/admin/brainwave/preview",
+                json={"preset_id": "control-pink"},
+            ).status_code,
+            401,
+        )
+
+        admin = TestClient(pod_app.app)
+        login = admin.post(
+            "/api/admin/auth/login",
+            json={"identifier": "test-admin", "password": "test-admin-password"},
+        )
+        self.assertEqual(login.status_code, 200)
+        catalog = admin.get("/api/admin/brainwave/presets")
+        self.assertEqual(catalog.status_code, 200)
+        self.assertIn(
+            "control-pink", [item["id"] for item in catalog.json()["presets"]]
+        )
+
+        rendered = {
+            "path": Path("/tmp/zeep-test-brainwave.wav"),
+            "file": "zeep-test-brainwave.wav",
+            "preset_id": "control-pink",
+            "version": "zeep-speaker-sound-lab-v1.0",
+            "duration_seconds": 30,
+            "sample_rate_hz": 24000,
+            "channels": 2,
+            "peak": 0.2,
+            "rms": 0.08,
+            "pcm_sha256": "0" * 64,
+        }
+        with (
+            patch.object(pod_app, "render_brainwave_preview", return_value=rendered),
+            patch.object(pod_app.player, "set_volume") as set_volume,
+            patch.object(pod_app.player, "play") as play,
+        ):
+            response = admin.post(
+                "/api/admin/brainwave/preview",
+                headers=csrf(admin),
+                json={
+                    "preset_id": "control-pink",
+                    "duration_seconds": 30,
+                    "volume": 35,
+                },
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        set_volume.assert_called_once_with(35)
+        play.assert_called_once_with(rendered["path"], loop=False, queue=False)
+        self.assertNotIn("path", response.json()["render"])
+
+    def test_brainwave_preview_requires_consent_confirmation_when_occupied(self) -> None:
+        admin = TestClient(pod_app.app)
+        admin.post(
+            "/api/admin/auth/login",
+            json={"identifier": "test-admin", "password": "test-admin-password"},
+        )
+        occupied = {"record": {"session_id": "occupied-sound-lab-test"}}
+        with patch.object(pod_app, "_active_session", occupied):
+            response = admin.post(
+                "/api/admin/brainwave/preview",
+                headers=csrf(admin),
+                json={"preset_id": "relax-alpha", "duration_seconds": 30},
+            )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.json()["detail"]["code"], "occupied_confirmation_required"
+        )
+
     def test_versioned_api_contracts_are_admin_scoped_and_enveloped(self) -> None:
         anonymous = TestClient(pod_app.app)
         health = anonymous.get("/api/v1/public/health")

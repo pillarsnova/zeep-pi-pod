@@ -1,5 +1,11 @@
 # SPH0645 ↔ CEM DT-8852 field comparison — 2026-08-26
 
+> **Document status: historical evidence / superseded for runtime.** ตั้งแต่
+> 2026-09-02 ระบบใช้ Field Trial display transform
+> `dBA_est = abs(sound_dbfs) - 2`. สูตร offset และค่าที่บันทึกด้านล่างเป็น
+> ลำดับเหตุการณ์เดิมสำหรับ Audit เท่านั้น ไม่ใช่ Runtime configuration ปัจจุบัน
+> และค่าปัจจุบันยังไม่ใช่ traceable SPL calibration.
+
 ## Decision
 
 Do **not** derive a gain/slope or replace the current production offset from

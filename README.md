@@ -197,27 +197,33 @@ lux: `lux|light|illuminance` · sound: `sound_dbfs` เท่านั้น
 ถ้า ESP32 เงียบเกิน `ESP32_STALE_SECONDS` (ค่าเริ่มต้น 5 วิ) ทั้งที่พอร์ตยังเปิดอยู่
 จอจะแสดงเป็น stale/disconnected แทนการโชว์ค่าเก่าค้างเหมือนเป็นค่าจริง
 
-## การ calibrate เสียง
+## การแสดงค่าเสียง SPH0645
 
-`dBA_est = sound_dbfs + offset` — offset เป็นค่าประจำเครื่อง ควรเก็บใน
+`dBA_est = abs(sound_dbfs) + adjustment` — รุ่นปัจจุบันใช้ adjustment `-2.0 dB`
+ตามข้อกำหนด Field Trial และเก็บใน
 `calibration.json` ข้าง `app.py`:
 
 ```json
-{"sound_dba_offset": 76.7, "calibrated_at": "2026-07-30",
- "method": "one-point vs CEM DT-8852", "operator": "..."}
+{"sound_dbfs_magnitude_adjustment_db": -2.0,
+ "calibrated_at": "2026-09-02T22:56:36+07:00",
+ "method": "abs(raw sound_dbfs) - 2 dB", "operator": "super"}
 ```
 
-ลำดับความสำคัญ: env `SOUND_DBA_OFFSET` > `calibration.json` > ค่าเริ่มต้น 76.7
-ค่าที่ใช้จริง + ที่มา ดูได้ใน `/api/state → system.sound_calibration`
-**นี่คือค่าประมาณ ไม่ใช่การวัดด้วยเครื่อง SPL Class-1/2**
+ลำดับความสำคัญ: env `SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB` >
+`calibration.json` > ค่าเริ่มต้น `-2.0` ค่าที่ใช้จริงและที่มาดูได้ใน
+`/api/state → system.sound_transform`
 
-หน้าจอผู้ใช้แสดงค่าตามจริงตั้งแต่ `0–120 dBA` และไม่แสดงค่า dBFS ติดลบ
-ถ้าค่า dBA ที่คำนวณได้ต่ำกว่า 0 ระบบจะคงค่าที่ valid ก่อนหน้า; ถ้าเกิน 120
+**นี่คือค่าประเมินสำหรับ Field Trial ไม่ใช่ค่า SPL/dBA ที่สอบเทียบแบบ
+traceable ด้วยเครื่อง Class 1/2** ค่า `sound_dbfs` ดิบยังคงถูกเก็บโดยไม่แก้ไข
+เพื่อใช้ตรวจสอบและสอบเทียบใหม่
+
+หน้าจอผู้ใช้แสดงค่าประเมินช่วง `0–120 dBA est.` และไม่แสดงค่า dBFS ติดลบ
+ถ้าค่าประเมินที่คำนวณได้ต่ำกว่า 0 ระบบจะคงค่าที่ valid ก่อนหน้า; ถ้าเกิน 120
 จะแสดง 120 พร้อมคำเตือน โดย API เก็บ `sound_dba_est_unbounded` ไว้วิเคราะห์
 การจำกัดช่วงแสดงผลไม่ใช่การสอบเทียบและไม่ทำให้ค่าที่วัดแม่นยำขึ้น
 
 ค่าที่เผยแพร่ไปทุกหน้าจอในรอบวิเคราะห์ 10 วินาทีเป็น **energy average
-(Leq)** ของตัวอย่าง dBA ที่เข้ามาในรอบนั้น ไม่ใช่ค่าตัวอย่างสุดท้ายและไม่ใช่
+(Leq)** ของตัวอย่าง dBA est. ที่เข้ามาในรอบนั้น ไม่ใช่ค่าตัวอย่างสุดท้ายและไม่ใช่
 ค่าเฉลี่ยเลขคณิตของเดซิเบล ค่า raw/latest และสรุป `min/max/span/sample_count`
 อยู่ใน Admin `/api/state → system.sound_analysis` เพื่อ Debug เท่านั้น
 
@@ -326,7 +332,7 @@ modulation** — **ไม่เคลมผลการนอนหรือผ�
 ## Session รายบุคคล (profiles & history)
 
 ผู้ทดสอบ login ที่หน้าจอด้วย username + เพศ (ชาย/หญิง/อื่น ๆ/ไม่ระบุ) — ระหว่าง
-session ระบบเก็บ Temperature/Humidity/Lux/dBA/HR/RR/bed status/sleep state ทุก
+session ระบบเก็บ Temperature/Humidity/Lux/dBA est./HR/RR/bed status/sleep state ทุก
 `SESSION_SAMPLE_SECONDS` (ค่าเริ่มต้น 10 วิ), `SESSION_SAMPLE_LIMIT` (ค่าเริ่มต้น
 12,000 จุด ≈ 33 ชั่วโมง 20 นาที; Session เดิม 5 วิยังคงอ่านตาม cadence เดิม) และนับจำนวนคำสั่ง door/pulse/music
 กด "ออกจากระบบ" → บันทึกลงเครื่อง + แสดงรายงานอ่านง่าย · ถ้า server ถูกปิด

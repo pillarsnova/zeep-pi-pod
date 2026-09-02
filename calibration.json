@@ -1,21 +1,27 @@
 {
-  "sound_dba_offset": 61.65,
-  "calibrated_at": "2026-08-28T23:36:47+07:00",
-  "method": "manual field correction -1.0 dBA from deployed offset 62.65; raw dBFS unchanged; synchronized CEM DT-8852 A/SLOW retest still recommended",
+  "sound_dbfs_magnitude_adjustment_db": -2.0,
+  "calibrated_at": "2026-09-02T22:56:36+07:00",
+  "method": "requested display transform: abs(raw sound_dbfs) - 2 dB; raw dBFS unchanged; not a traceable SPL calibration",
   "operator": "super",
   "reference_meter": "CEM DT-8852",
   "reference_dba_range": "30-130 dBA",
-  "previous_sound_dba_offset": 62.65,
-  "last_adjustment_db": -1.0,
+  "previous_legacy_sound_dba_offset": 61.65,
+  "last_adjustment_db": -2.0,
   "rejected_adjustment_db": -11.0,
   "observed_valid_pair_sensor_minus_meter_db": 2.5,
-  "status": "manual_minus_1db_requested_pending_reference_retest",
+  "status": "abs_dbfs_minus_2_estimate_pending_reference_retest",
   "sensor_bias_metadata": {
     "sound_dba_est": {
       "operator": "super",
       "reference_value": null,
       "unit": "dBA est.",
-      "updated_at": "2026-08-28T16:36:47.902759+00:00"
+      "updated_at": "2026-09-02T15:56:36+00:00"
+    },
+    "humidity_rh": {
+      "operator": "super",
+      "reference_value": null,
+      "unit": "%RH",
+      "updated_at": "2026-09-02T15:39:45.729377+00:00"
     }
   },
   "photo_audit": {
@@ -57,9 +63,9 @@
     "under_range_pair_count": 2,
     "decision": "reject the two UNDER readings and apply only the conservative -2.5 dB correction from the single in-range pair; synchronized A/SLOW LO 30-80 retest is still required"
   },
-  "humidity_rh_bias": -1.5,
+  "humidity_rh_bias": 0.0,
   "humidity_bias_unit": "percentage_points",
-  "humidity_calibrated_at": "2026-08-26T07:48:55+07:00",
-  "humidity_method": "manual field comparison correction; raw SHT3x-DIS minus 1.5 %RH",
-  "humidity_status": "provisional_field_bias"
+  "humidity_calibrated_at": "2026-09-02T22:39:45+07:00",
+  "humidity_method": "raw SHT3x-DIS pass-through; additive bias disabled",
+  "humidity_status": "raw_pass_through"
 }

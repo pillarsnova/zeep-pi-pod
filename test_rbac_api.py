@@ -512,6 +512,13 @@ class RbacApiTests(unittest.TestCase):
             {"SHT3x-DIS", "OPT3001", "SPH0645", "MH-Z19C",
              "PMS7003", "SGP40", "LSM-800-T"},
         )
+        sound = next(
+            channel for channel in inspector.json()["channels"]
+            if channel["metric"] == "sound_dba_est"
+        )
+        self.assertEqual(sound["raw_unit"], "dBFS")
+        self.assertEqual(sound["unit"], "dBA est.")
+        self.assertEqual(sound["formula"], "abs(raw dBFS) + adjustment")
 
         previous_biases = dict(pod_app.SENSOR_BIASES)
         previous_sources = dict(pod_app.SENSOR_BIAS_SOURCES)

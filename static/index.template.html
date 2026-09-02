@@ -1016,7 +1016,7 @@
             <div class="dash-sensor" id="dashSensorCo2"><div class="dash-metric-head"><span class="dash-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 18h11a4 4 0 0 0 .5-8A6 6 0 0 0 6 8.5 4.8 4.8 0 0 0 6 18Z"/><circle cx="9" cy="13" r="1"/><circle cx="13" cy="12" r="1"/><circle cx="16" cy="14" r="1"/></svg></span><span>CO₂</span></div><b id="dashCo2">-- ppm</b></div>
             <div class="dash-sensor" id="dashSensorPm"><div class="dash-metric-head"><span class="dash-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="7" cy="8" r="2"/><circle cx="15" cy="6" r="1.5"/><circle cx="18" cy="13" r="2"/><circle cx="9" cy="16" r="2.5"/><circle cx="14" cy="18" r="1"/></svg></span><span>PM2.5</span></div><b id="dashPm">-- µg/m³</b></div>
             <div class="dash-sensor" id="dashSensorVoc"><div class="dash-metric-head"><span class="dash-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8c4-4 8 4 12 0 2-2 3-2 4-2M4 13c4-4 8 4 12 0 2-2 3-2 4-2M4 18c4-4 8 4 12 0 2-2 3-2 4-2"/></svg></span><span>VOC Index</span></div><b id="dashVoc">--</b></div>
-            <div class="dash-sensor" id="dashSensorSound"><div class="dash-metric-head"><span class="dash-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 14h4l5 4V6L8 10H4Z"/><path d="M16 9c2 2 2 4 0 6m3-9c4 4 4 8 0 12"/></svg></span><span>เสียง</span></div><b id="dashSound">-- dBA</b></div>
+            <div class="dash-sensor" id="dashSensorSound"><div class="dash-metric-head"><span class="dash-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 14h4l5 4V6L8 10H4Z"/><path d="M16 9c2 2 2 4 0 6m3-9c4 4 4 8 0 12"/></svg></span><span>เสียง</span></div><b id="dashSound">-- dBA est.</b></div>
             <div class="dash-sensor dash-atmosphere atmosphere-unknown" id="dashAtmosphereCard" aria-label="ภาพรวมภายใน ZEEP รอข้อมูล">
               <div class="dash-metric-head"><span class="dash-metric-icon dash-atmosphere-icon" id="dashAtmosphereIcon" aria-hidden="true">?</span><span>ภาพรวม</span></div>
               <b id="dashAtmosphereLevel">รอข้อมูล</b>
@@ -1247,7 +1247,7 @@
           <div class="sensor-device-grid">
             <article class="sensor-device offline" data-tone="teal" id="sensorSht"><div class="sensor-device-head"><div class="sensor-model"><div class="sensor-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v10"/><circle cx="12" cy="17" r="4"/><path d="M8 6a4 4 0 0 1 8 0v7.5"/></svg></div><div><b>SHT3x-DIS</b><span>Temperature · Humidity</span></div></div><div class="sensor-live" id="shtStatus">รอข้อมูล</div></div><div class="sensor-values"><div class="sensor-reading"><div class="label">อุณหภูมิ</div><div class="reading"><span id="temperature">--</span><small>°C</small></div></div><div class="sensor-reading"><div class="label">ความชื้น</div><div class="reading"><span id="humidity">--</span><small>%RH</small></div></div></div><div class="sensor-footer"><div class="sensor-assessment" id="shtAssessment"><strong>รอข้อมูล</strong><span>18–27°C · 40–60%RH</span></div><div class="sensor-meter"><i id="shtMeter"></i></div></div></article>
             <article class="sensor-device offline" data-tone="amber" id="sensorOpt"><div class="sensor-device-head"><div class="sensor-model"><div class="sensor-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/></svg></div><div><b>OPT3001</b><span>Ambient Light</span></div></div><div class="sensor-live" id="optStatus">รอข้อมูล</div></div><div class="sensor-values single"><div class="sensor-reading"><div class="label">ความสว่าง</div><div class="reading"><span id="lux">--</span><small>lux</small></div></div></div><div class="sensor-note">Photopic illuminance · ไม่ใช่ mEDI</div><div class="sensor-footer"><div class="sensor-assessment" id="optAssessment"><strong>รอข้อมูล</strong><span>โหมดนอน ≤5 lux</span></div><div class="sensor-meter"><i id="optMeter"></i></div></div></article>
-            <article class="sensor-device offline" data-tone="violet" id="sensorSph"><div class="sensor-device-head"><div class="sensor-model"><div class="sensor-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg></div><div><b>SPH0645</b><span>Digital MEMS Microphone</span></div></div><div class="sensor-live" id="sphStatus">รอข้อมูล</div></div><div class="sensor-values single"><div class="sensor-reading"><div class="label">เสียงโดยประมาณ</div><div class="reading"><span id="sound">--</span><small>dBA est.</small></div></div></div><div id="soundQuality" class="sensor-note">รอข้อมูล calibration</div><div class="sensor-footer"><div class="sensor-assessment" id="sphAssessment"><strong>รอข้อมูล</strong><span>เป้าหมายระบบ ≤35 dBA</span></div><div class="sensor-meter"><i id="sphMeter"></i></div></div></article>
+            <article class="sensor-device offline" data-tone="violet" id="sensorSph"><div class="sensor-device-head"><div class="sensor-model"><div class="sensor-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg></div><div><b>SPH0645</b><span>Digital MEMS Microphone</span></div></div><div class="sensor-live" id="sphStatus">รอข้อมูล</div></div><div class="sensor-values single"><div class="sensor-reading"><div class="label">เสียงโดยประมาณ</div><div class="reading"><span id="sound">--</span><small>dBA est.</small></div></div></div><div id="soundQuality" class="sensor-note">รอข้อมูล transform</div><div class="sensor-footer"><div class="sensor-assessment" id="sphAssessment"><strong>รอข้อมูล</strong><span>เป้าหมายระบบ ≤35 dBA est.</span></div><div class="sensor-meter"><i id="sphMeter"></i></div></div></article>
           </div>
         </section>
         <section class="sensor-group" aria-labelledby="airGroupTitle">
@@ -1386,7 +1386,7 @@
         <div class="control-metric"><div class="control-metric-head"><span class="control-metric-icon">CO₂</span>อากาศ</div><b class="control-metric-value" id="quickCo2">-- ppm</b><small id="quickCo2Note">MH-Z19C</small></div>
         <div class="control-metric"><div class="control-metric-head"><span class="control-metric-icon">PM</span>ฝุ่น PM2.5</div><b class="control-metric-value" id="quickPm25">-- µg/m³</b><small id="quickPm25Note">PMS7003</small></div>
         <div class="control-metric"><div class="control-metric-head"><span class="control-metric-icon">VOC</span>สารระเหย</div><b class="control-metric-value" id="quickVoc">--</b><small id="quickVocNote">SGP40 · baseline 100</small></div>
-        <div class="control-metric"><div class="control-metric-head"><span class="control-metric-icon">dB</span>เสียง</div><b class="control-metric-value" id="quickSound">-- dBA</b><small id="quickSoundNote">SPH0645</small></div>
+        <div class="control-metric"><div class="control-metric-head"><span class="control-metric-icon">dB</span>เสียง</div><b class="control-metric-value" id="quickSound">-- dBA est.</b><small id="quickSoundNote">SPH0645</small></div>
       </div>
 
       <section class="smart-response" id="smartResponsePanel" aria-label="Smart Sleep Response" aria-live="polite">
@@ -1617,20 +1617,20 @@
       <div class="mini" id="sensorErr" style="display:none;color:var(--bad)"></div>
       <div class="section-title" style="margin-top:16px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Event Log</div>
       <div id="eventLog" class="event-list"><div class="event-row"><span>--:--</span><span>ยังไม่มีเหตุการณ์</span></div></div>
-      <div class="mini">log เต็มอยู่ที่ logs/events.jsonl · ดูผ่าน API: /api/logs · ค่าเสียง dBA เป็น one-point calibrated estimate จาก dBFS ของไมค์ ESP32 — ไม่ใช่ค่าจากเครื่องวัด Class-1/2</div>
+      <div class="mini">log เต็มอยู่ที่ logs/events.jsonl · ดูผ่าน API: /api/logs · ค่าเสียงเป็น Field Trial estimate จาก dBFS ของไมค์ ESP32 — ไม่ใช่ค่าจากเครื่องวัด Class 1/2</div>
     </div>
 
     <div class="card raw-monitor" id="rawMonitorCard" data-pages="monitor">
       <div class="raw-toolbar">
-        <div><div class="section-title" style="margin:0">Sensor Calibration · Packet Inspector</div><div class="mini">ตรวจค่าจริงทุก Sensor และปรับ Bias จากเครื่องอ้างอิง</div></div>
+        <div><div class="section-title" style="margin:0">Sensor Calibration · Packet Inspector</div><div class="mini">ตรวจ Raw และค่าที่ระบบแสดง พร้อมปรับค่าจากเครื่องอ้างอิงเฉพาะช่องที่อนุญาต</div></div>
         <button class="btn ui-label-button" onclick="refreshPacketInspector(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-refresh"/></svg><span>Refresh all</span></button>
       </div>
-      <div class="calibration-formula"><span>RAW</span><i>＋</i><span>BIAS</span><i>＝</i><strong>CALIBRATED</strong><small>ค่าดิบไม่ถูกแก้ไข · ค่าใหม่มีผลกับ Packet ถัดไป · บันทึกลง calibration.json</small></div>
+      <div class="calibration-formula"><span>RAW</span><i>→</i><span>TRANSFORM / BIAS</span><i>→</i><strong>OUTPUT</strong><small>ค่าดิบไม่ถูกแก้ไข · ค่าใหม่มีผลกับ Packet ถัดไป · บันทึกลง calibration.json</small></div>
       <div class="calibration-session-note" id="calibrationSessionNote">กำลังตรวจสถานะ Session…</div>
       <div class="calibration-device-grid" id="calibrationInspector"><div class="mini">กำลังโหลด Sensor calibration…</div></div>
-      <div class="calibration-legend"><span><i class="live"></i>LIVE</span><span><i class="stale"></i>STALE / HELD</span><span><i class="locked"></i>ALGORITHM LOCKED</span><small>ช่อง Reference ใช้คำนวณ Bias แนะนำ: Reference − Raw</small></div>
+      <div class="calibration-legend"><span><i class="live"></i>LIVE</span><span><i class="stale"></i>STALE / HELD</span><span><i class="locked"></i>ALGORITHM LOCKED</span><small>Reference: Sensor ทั่วไปใช้ Reference − Raw · SPH0645 ใช้ Reference − abs(Raw dBFS)</small></div>
       <div class="raw-subhead"><div><strong>LSM-800-T · Byte-exact Raw Frames</strong><span>66 bytes · 25 BCG samples · HR/RR firmware bytes</span></div><button class="btn compact ui-label-button" onclick="fetchRawPackets(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-refresh"/></svg><span>Raw BCG</span></button></div>
-      <div class="mini">แสดงแต่ละ Serial frame ตามที่ได้รับจริง พร้อม Raw HEX และคำวิเคราะห์ โดยไม่มีการนำ Bias ไปแก้ byte ต้นฉบับ</div>
+      <div class="mini">แสดงแต่ละ Serial frame ตามที่ได้รับจริง พร้อม Raw HEX และคำวิเคราะห์ โดยไม่มีการนำค่าปรับไปแก้ byte ต้นฉบับ</div>
       <div class="raw-table" id="rawPackets"><div class="mini">กำลังรอ packet…</div></div>
     </div>
 
@@ -2082,7 +2082,7 @@ function renderSleepState(sl={},session={},bcg={}){
     env.humidity_rh!=null?`💧 ${env.humidity_rh}%RH`:null,
     env.co2_ppm!=null?`☁ CO₂ ${env.co2_ppm} ppm`:null,
     env.lux!=null?`☀ ${env.lux} lux`:null,
-    env.sound_dba!=null?`🔊 ${env.sound_dba} dBA`:null,
+    env.sound_dba!=null?`🔊 ${env.sound_dba} dBA est.`:null,
     env.pm2_5_ug_m3!=null?`🌫 PM2.5 ${env.pm2_5_ug_m3} µg/m³`:null,
   ].filter(Boolean);
   const quality=q.total_buckets?`คุณภาพข้อมูล BCG ${q.valid_buckets}/${q.total_buckets} ช่วง (${q.valid_percent}%) · clipping เฉลี่ย ${q.average_clip_percent ?? 0}%`:'';
@@ -2254,7 +2254,7 @@ function renderControlCenter(environment={},aircon={},bed={},safety={},gpio={},s
   setQuickMetric('quickCo2','quickCo2Note',environment.co2_ppm,'ppm',devices.mhz19c,0);
   setQuickMetric('quickPm25','quickPm25Note',environment.pm2_5_ug_m3,'µg/m³',devices.pms7003,1);
   setQuickMetric('quickVoc','quickVocNote',environment.voc_index,'',devices.sgp40,0);
-  setQuickMetric('quickSound','quickSoundNote',environment.sound_dba_est,'dBA',devices.sph0645,1);
+  setQuickMetric('quickSound','quickSoundNote',environment.sound_dba_est,'dBA est.',devices.sph0645,1);
 
   const health=document.getElementById('quickEnvironmentStatus');
   const live=Number(environment.live_count)||0,total=Number(environment.total_count)||6;
@@ -2370,7 +2370,7 @@ const dashboardAtmosphereCriteria=Object.freeze([
   {id:'temperature',name:'อุณหภูมิ',deviceKey:'sht3x_dis',source:'SHT3x-DIS',unit:'°C',digits:1,target:'18–27°C',principle:'ประเมิน Thermal comfort จากอุณหภูมิจริงใน ZEEP',bands:'ยอดเยี่ยม 18–27 · ดี 17–28 · พอใช้ 16–29 · แย่ 13–32 · วิกฤตนอกช่วง',read:e=>e.temperature_c,score:v=>dashboardRangeScore(v,[[18,27],[17,28],[16,29],[13,32]]),control:'เครื่องปรับอากาศ',action:v=>v>27?'ลดอุณหภูมิที่เลือกหรือเปิดแอร์':v<18?'เพิ่มอุณหภูมิที่เลือกหรือลดความเย็น':'รักษาอุณหภูมิปัจจุบัน'},
   {id:'humidity',name:'ความชื้น',deviceKey:'sht3x_dis',source:'SHT3x-DIS',unit:'%RH',digits:1,target:'40–60%RH',principle:'ป้องกันอากาศแห้งเกินไปหรือความชื้นสะสมและการควบแน่น',bands:'ยอดเยี่ยม 40–60 · ดี 35–65 · พอใช้ 30–70 · แย่ 20–80 · วิกฤตนอกช่วง',read:e=>e.humidity_rh,score:v=>dashboardRangeScore(v,[[40,60],[35,65],[30,70],[20,80]]),control:'ไอน้ำ · ระบบระบายอากาศ',action:v=>v>60?'ปิดไอน้ำและเร่งระบายอากาศ':v<40?'เปิดไอน้ำเป็นช่วงและติดตามค่า':'รักษาความชื้นปัจจุบัน'},
   {id:'light',name:'ความสว่าง',deviceKey:'opt3001',source:'OPT3001',unit:'lux',digits:1,target:'≤5 lux',principle:'ประเมินแสงรบกวนในโหมดเตรียมนอนและขณะนอน',bands:'ยอดเยี่ยม ≤5 · ดี ≤10 · พอใช้ ≤30 · แย่ ≤100 · วิกฤต >100 lux',read:e=>e.lux,score:v=>dashboardUpperScore(v,[5,10,30,100]),control:'ไฟเพดาน · แสงแดง · ประตู',action:v=>v>5?'ลดหรือปิดไฟ ตรวจแสงรั่วและตำแหน่งประตู':'รักษาระดับแสงปัจจุบัน'},
-  {id:'sound',name:'เสียง',deviceKey:'sph0645',source:'SPH0645',unit:'dBA',digits:1,target:'<40 dBA',principle:'ประเมินเสียงพื้นหลังจากเพลง พัดลม คอมเพรสเซอร์ และโครงสร้าง',bands:'ยอดเยี่ยม <40 · ดี 40–45 · พอใช้ >45–50 · แย่ >50–60 · วิกฤต >60 dBA',read:e=>e.sound_dba_est,score:v=>v<40?4:v<=45?3:v<=50?2:v<=60?1:0,control:'เสียงบรรยากาศ · พัดลม · คอมเพรสเซอร์',action:v=>v>=40?'ลดเสียงเพลงและตรวจพัดลม คอมเพรสเซอร์ หรือการสั่น':'รักษาระดับเสียงปัจจุบัน'},
+  {id:'sound',name:'เสียง',deviceKey:'sph0645',source:'SPH0645',unit:'dBA est.',digits:1,target:'<40 dBA est.',principle:'ประเมินเสียงพื้นหลังจากค่า SPH0645 ที่แปลงด้วยสูตร Field Trial',bands:'ยอดเยี่ยม <40 · ดี 40–45 · พอใช้ >45–50 · แย่ >50–60 · วิกฤต >60 dBA est.',read:e=>e.sound_dba_est,score:v=>v<40?4:v<=45?3:v<=50?2:v<=60?1:0,control:'เสียงบรรยากาศ · พัดลม · คอมเพรสเซอร์',action:v=>v>=40?'ลดเสียงเพลงและตรวจพัดลม คอมเพรสเซอร์ หรือการสั่น':'รักษาระดับเสียงปัจจุบัน'},
   {id:'co2',name:'CO₂',deviceKey:'mhz19c',source:'MH-Z19C',unit:'ppm',digits:0,target:'≤800 ppm',principle:'ใช้ CO₂ เป็นตัวชี้การระบายอากาศ ไม่ใช่ค่าปริมาณออกซิเจน',bands:'ยอดเยี่ยม ≤800 · ดี ≤1,000 · พอใช้ ≤1,150 · แย่ <1,300 · วิกฤต ≥1,300 ppm',read:e=>e.co2_ppm,score:v=>v<=800?4:v<=1000?3:v<=1150?2:v<1300?1:0,control:'พัดลมลมเข้า · พัดลมลมออก',action:v=>v>800?'เพิ่มการเติมและระบายอากาศ พร้อมตรวจ Filter อุดตัน':'รักษาการหมุนเวียนอากาศปัจจุบัน'},
   {id:'pm25',name:'PM2.5',deviceKey:'pms7003',source:'PMS7003',unit:'µg/m³',digits:1,target:'≤15 µg/m³',principle:'ตรวจประสิทธิภาพการกรองฝุ่นละเอียดและการรั่วของอากาศ',bands:'ยอดเยี่ยม ≤15 · ดี ≤25 · พอใช้ ≤37.5 · แย่ ≤50 · วิกฤต >50 µg/m³',read:e=>e.pm2_5_ug_m3,score:v=>dashboardUpperScore(v,[15,25,37.5,50]),control:'Pre-Filter · HEPA · ซีลประตู',action:v=>v>15?'ตรวจหรือเปลี่ยน Pre/HEPA Filter และตรวจรอยรั่ว':'รักษาระบบกรองอากาศปัจจุบัน'},
   {id:'voc',name:'VOC Index',deviceKey:'sgp40',source:'SGP40',unit:'',digits:0,target:'≤120',principle:'เทียบสารระเหยกับ Adaptive baseline ของ SGP40 ซึ่งปรับตัวใกล้ 100',bands:'ยอดเยี่ยม ≤120 · ดี ≤150 · พอใช้ ≤200 · แย่ ≤300 · วิกฤต >300',read:e=>e.voc_index,score:v=>dashboardUpperScore(v,[120,150,200,300]),control:'กลิ่น · พัดลมระบาย · Carbon Filter',action:v=>v>120?'หยุดแหล่งกลิ่นหรือสารระเหย เร่งระบาย และตรวจ Carbon Filter':'รักษาการระบายอากาศปัจจุบัน'},
@@ -2516,7 +2516,7 @@ function renderSimpleDashboard(state={},environment={},bcg={},session={}){
   setDashboardSensor('dashSensorCo2','dashCo2',environment.co2_ppm,'ppm',devices.mhz19c,0);
   setDashboardSensor('dashSensorPm','dashPm',environment.pm2_5_ug_m3,'µg/m³',devices.pms7003,1);
   setDashboardSensor('dashSensorVoc','dashVoc',environment.voc_index,'',devices.sgp40,0);
-  setDashboardSensor('dashSensorSound','dashSound',environment.sound_dba_est,'dBA',devices.sph0645,1);
+  setDashboardSensor('dashSensorSound','dashSound',environment.sound_dba_est,'dBA est.',devices.sph0645,1);
   renderDashboardAtmosphere(environment,devices);
   document.getElementById('dashSensorSummary').textContent=`Sensor ${environment.live_count||0}/${environment.total_count||6} · ${environment.status||'offline'}`;
 }
@@ -4120,7 +4120,7 @@ function sensorNumber(source, paths){
 const sensorUi={
   sht3x_dis:{card:'sensorSht',status:'shtStatus',icon:'T',value:e=>`${fmt(e.temperature_c,1)}°C · ${fmt(e.humidity_rh,1)}%RH`},
   opt3001:{card:'sensorOpt',status:'optStatus',icon:'☼',value:e=>`${fmt(e.lux,0)} lux`},
-  sph0645:{card:'sensorSph',status:'sphStatus',icon:'≈',value:e=>`${fmt(e.sound_dba_est,1)} dBA`},
+  sph0645:{card:'sensorSph',status:'sphStatus',icon:'≈',value:e=>`${fmt(e.sound_dba_est,1)} dBA est.`},
   mhz19c:{card:'sensorCo2',status:'co2Status',icon:'CO₂',value:e=>`${fmt(e.co2_ppm,0)} ppm`},
   pms7003:{card:'sensorPms',status:'pmsStatus',icon:'••',value:e=>`PM1.0 ${fmt(e.pm1_0_ug_m3,0)} · PM2.5 ${fmt(e.pm2_5_ug_m3,0)} · PM10 ${fmt(e.pm10_ug_m3,0)} µg/m³`},
   sgp40:{card:'sensorSgp',status:'sgpStatus',icon:'VOC',value:e=>`Index ${fmt(e.voc_index,0)} · SRAW ${fmt(e.sgp40_raw,0)}`},
@@ -4148,7 +4148,7 @@ function renderSensorAssessments(e){
   const t=e.temperature_c,h=e.humidity_rh,l=e.lux,s=e.sound_dba_est,c=e.co2_ppm,p=e.pm2_5_ug_m3,v=e.voc_index;
   renderAssessment('shtAssessment','shtMeter',t==null||h==null?{label:'รอข้อมูล',detail:'18–27°C · 40–60%RH',pct:0}:{label:t>29||h>65?'นอก Comfort band':t<18||h<40||t>27||h>60?'ควรติดตาม':'ยอดเยี่ยม',detail:`${fmt(t,1)}°C · ${fmt(h,1)}%RH`,level:t>29||h>65?'bad':t<18||h<40||t>27||h>60?'warn':'good',pct:(t-10)/30*100});
   renderAssessment('optAssessment','optMeter',l==null?{label:'รอข้อมูล',detail:'โหมดนอน ≤5 lux',pct:0}:{label:l<=5?'มืดเหมาะกับโหมดนอน':l<=20?'แสงสลัว':'สว่าง',detail:`${fmt(l,1)} lux`,level:l<=5?'good':l<=20?'warn':'bad',pct:l/50*100});
-  renderAssessment('sphAssessment','sphMeter',s==null?{label:'รอข้อมูล',detail:'เป้าหมายระบบ ≤35 dBA',pct:0}:{label:s<=35?'อยู่ในเป้าหมาย':s<=45?'สูงกว่าเป้าหมาย':'เสียงสูง',detail:`${fmt(s,1)} dBA est.`,level:s<=35?'good':s<=45?'warn':'bad',pct:s/80*100});
+  renderAssessment('sphAssessment','sphMeter',s==null?{label:'รอข้อมูล',detail:'เป้าหมายระบบ ≤35 dBA est.',pct:0}:{label:s<=35?'อยู่ในเป้าหมาย':s<=45?'สูงกว่าเป้าหมาย':'เสียงสูง',detail:`${fmt(s,1)} dBA est.`,level:s<=35?'good':s<=45?'warn':'bad',pct:s/80*100});
   renderAssessment('co2Assessment','co2Meter',c==null?{label:'รอข้อมูล',detail:'เตือน 1,000 ppm',pct:0}:{label:c<800?'การระบายอากาศดี':c<1000?'ควรติดตาม':c<1300?'ควร Boost ลม':'ถึง Critical band',detail:`${fmt(c,0)} ppm`,level:c<800?'good':c<1000?'warn':'bad',pct:(c-400)/900*100});
   renderAssessment('pmsAssessment','pmsMeter',p==null?{label:'รอข้อมูล',detail:'อ้างอิง PM2.5',pct:0}:{label:p<=15?'ฝุ่นต่ำ':p<=35?'ควรติดตาม':'ฝุ่นสูง',detail:`PM2.5 ${fmt(p,0)} µg/m³`,level:p<=15?'good':p<=35?'warn':'bad',pct:p/75*100});
   renderAssessment('sgpAssessment','sgpMeter',v==null?{label:'รอข้อมูล',detail:'เทียบ Adaptive baseline',pct:0}:{label:v<80?'ต่ำกว่า Baseline':v<=150?'ใกล้ Baseline':'VOC เพิ่มขึ้น',detail:`VOC Index ${fmt(v,0)}`,level:v<=150?'good':'warn',pct:v/300*100});
@@ -4357,7 +4357,8 @@ function calibrationReferenceChanged(metric,input){
   const channel=(calibrationInspectorState?.channels||[]).find(item=>item.metric===metric);
   const raw=Number(channel?.raw),reference=Number(input.value);
   if(!Number.isFinite(raw)||!Number.isFinite(reference))return;
-  const suggested=reference-raw;
+  const base=metric==='sound_dba_est'?Math.abs(raw):raw;
+  const suggested=reference-base;
   calibrationBiasDraft[metric]=String(Math.round(suggested*1000)/1000);
   const biasInput=document.querySelector(`input[data-calibration-bias="${metric}"]`);
   if(biasInput)biasInput.value=calibrationBiasDraft[metric];
@@ -4374,8 +4375,8 @@ function renderCalibrationInspector(data,{force=false}={}){
   if(sessionNote){
     sessionNote.className=`calibration-session-note${data.session_active?' active':''}`;
     sessionNote.textContent=data.session_active
-      ? '⚠ มี Session ทำงานอยู่ · Bias ใหม่มีผลกับ Packet หลังจากกด Apply เท่านั้น และไม่แก้ข้อมูลย้อนหลัง'
-      : '✓ ZEEP ว่าง · พร้อมเทียบเครื่องอ้างอิงและปรับ Bias';
+      ? '⚠ มี Session ทำงานอยู่ · ค่าปรับใหม่มีผลกับ Packet หลังจากกด Apply เท่านั้น และไม่แก้ข้อมูลย้อนหลัง'
+      : '✓ ZEEP ว่าง · พร้อมเทียบเครื่องอ้างอิงและปรับค่าที่อนุญาต';
   }
   const grouped=new Map();
   (data.channels||[]).forEach(channel=>{
@@ -4389,11 +4390,14 @@ function renderCalibrationInspector(data,{force=false}={}){
     const channelHtml=channels.map(channel=>{
       const metric=channel.metric,step=Number(channel.step)||0.1;
       const raw=calibrationNumber(channel.raw,step),bias=calibrationNumber(channel.bias,step),output=calibrationNumber(channel.calibrated,step);
-      const unit=channel.unit||'';
+      const unit=channel.unit||'',rawUnit=channel.raw_unit||unit;
+      const isSoundEstimate=metric==='sound_dba_est';
+      const outputLabel=isSoundEstimate?'ESTIMATE':'CALIBRATED';
+      const adjustmentLabel=isSoundEstimate?'NEW ADJUSTMENT':'NEW BIAS';
       const values=`<div class="calibration-values">
-        <div class="calibration-value"><span>RAW</span><b>${raw}</b><small>${unit}</small></div>
+        <div class="calibration-value"><span>RAW</span><b>${raw}</b><small>${rawUnit}</small></div>
         <div class="calibration-value"><span>${channel.bias_label||'BIAS'}</span><b>${channel.editable?(Number(channel.bias)>=0?'+':'')+bias:'LOCK'}</b><small>${channel.bias_source||'algorithm'}</small></div>
-        <div class="calibration-value output"><span>CALIBRATED</span><b>${output}</b><small>${unit}</small></div>
+        <div class="calibration-value output"><span>${outputLabel}</span><b>${output}</b><small>${unit}</small></div>
       </div>`;
       if(!channel.editable){
         return `<section class="calibration-channel"><div class="calibration-channel-title"><b>${channel.label}</b><span>${metric}</span></div>${values}<div class="calibration-lock">🔒 ${channel.lock_reason||'ค่าจาก Algorithm แสดงแบบ read-only'}</div></section>`;
@@ -4403,7 +4407,7 @@ function renderCalibrationInspector(data,{force=false}={}){
       return `<section class="calibration-channel"><div class="calibration-channel-title"><b>${channel.label}</b><span>${metric}</span></div>${values}
         <div class="calibration-tools">
           <div class="calibration-input"><label>REFERENCE · ${unit}</label><input type="number" inputmode="decimal" step="${step}" value="${referenceDraft}" placeholder="Meter" oninput="calibrationReferenceChanged('${metric}',this)"></div>
-          <div class="calibration-input"><label>NEW BIAS · ${channel.bias_min}…${channel.bias_max}</label><input type="number" inputmode="decimal" data-calibration-bias="${metric}" min="${channel.bias_min}" max="${channel.bias_max}" step="${step}" value="${biasDraft}" oninput="calibrationBiasChanged('${metric}',this)"></div>
+          <div class="calibration-input"><label>${adjustmentLabel} · ${channel.bias_min}…${channel.bias_max}</label><input type="number" inputmode="decimal" data-calibration-bias="${metric}" min="${channel.bias_min}" max="${channel.bias_max}" step="${step}" value="${biasDraft}" oninput="calibrationBiasChanged('${metric}',this)"></div>
           <button class="calibration-apply" onclick="applyCalibrationBias('${metric}',this)">APPLY</button>
         </div></section>`;
     }).join('');
@@ -4428,14 +4432,15 @@ async function applyCalibrationBias(metric,btn){
   const rawReference=calibrationReferenceDraft[metric];
   const reference=rawReference===''||rawReference==null?null:Number(rawReference);
   if(!channel?.editable){toast('Sensor channel นี้เป็น Algorithm locked','error');return;}
-  if(!Number.isFinite(bias)||bias<Number(channel.bias_min)||bias>Number(channel.bias_max)){toast(`Bias ต้องอยู่ระหว่าง ${channel.bias_min} ถึง ${channel.bias_max}`,'error');return;}
+  const adjustmentName=metric==='sound_dba_est'?'Adjustment':'Bias';
+  if(!Number.isFinite(bias)||bias<Number(channel.bias_min)||bias>Number(channel.bias_max)){toast(`${adjustmentName} ต้องอยู่ระหว่าง ${channel.bias_min} ถึง ${channel.bias_max}`,'error');return;}
   if(reference!==null&&!Number.isFinite(reference)){toast('ค่า Reference ไม่ถูกต้อง','error');return;}
   return withBusy(btn,async()=>{
     const result=await post('/api/admin/calibration/bias',{metric,bias,reference_value:reference});
     if(!result)return null;
     delete calibrationBiasDraft[metric];delete calibrationReferenceDraft[metric];
     renderCalibrationInspector(result.calibration,{force:true});
-    toast(`${channel.device} · ${channel.label}: บันทึก Bias ${bias>=0?'+':''}${bias} แล้ว`,'ok',3000);
+    toast(`${channel.device} · ${channel.label}: บันทึก ${adjustmentName} ${bias>=0?'+':''}${bias} แล้ว`,'ok',3000);
     return result;
   });
 }
@@ -5163,7 +5168,7 @@ function renderReport(rec){
       sleepSensorTile('temp','°C','อุณหภูมิเฉลี่ย',temperatureAvg==null?'--':`${temperatureAvg.toFixed(1)} °C`),
       sleepSensorTile('humidity','%RH','ความชื้นเฉลี่ย',humidityAvg==null?'--':`${humidityAvg.toFixed(1)} %RH`),
       sleepSensorTile('co2','CO₂','CO₂ เฉลี่ย',co2Avg==null?'--':`${Math.round(co2Avg)} ppm`),
-      sleepSensorTile('sound','dB','เสียงเฉลี่ย (est.)',soundAvg==null?'--':`${soundAvg.toFixed(1)} dBA`),
+      sleepSensorTile('sound','dB','เสียงเฉลี่ยโดยประมาณ',soundAvg==null?'--':`${soundAvg.toFixed(1)} dBA est.`),
       sleepSensorTile('light','lx','แสงเฉลี่ย',lightAvg==null?'--':`${lightAvg.toFixed(1)} lux`),
       sleepSensorTile('heart','HR','ชีพจรเฉลี่ย',heartAvg==null||!Number.isFinite(heartAvg)?'--':`${heartAvg.toFixed(1)} bpm`),
       sleepSensorTile('respiration','RR','หายใจเฉลี่ย',respirationAvg==null||!Number.isFinite(respirationAvg)?'--':`${respirationAvg.toFixed(1)} ครั้ง/นาที`),
@@ -5196,7 +5201,7 @@ function renderReport(rec){
     <div class="report-grid">
       ${statBlock('อุณหภูมิเฉลี่ย', su.temperature_c, ' °C')}
       ${statBlock('ความชื้นเฉลี่ย', su.humidity_rh, ' %RH')}
-      ${statBlock('เสียงเฉลี่ย', su.sound_dba_est, ' dBA')}
+      ${statBlock('เสียงเฉลี่ยโดยประมาณ', su.sound_dba_est, ' dBA est.')}
       ${statBlock('แสงเฉลี่ย', su.lux, ' lx')}
       ${statBlock('HR (Heart Rate) เฉลี่ย', su.heart_rate_bpm, ' ครั้ง/นาที (BPM)')}
       ${statBlock('RR (Respiratory Rate) เฉลี่ย', su.respiration_rate, ' ครั้ง/นาที')}
@@ -5392,11 +5397,11 @@ function render(s, source='ws'){
   const bcgAgeText = Number.isFinite(bcgAge) ? `${bcgAge.toFixed(1)} วินาที` : 'ไม่ทราบอายุ';
   document.getElementById('sound').title = e.sound_value_held
     ? e.sound_invalid_value != null && Number(e.sound_invalid_value) < 0
-      ? `ค่าคำนวณใหม่ ${e.sound_invalid_value} dBA ต่ำกว่า 0 จึงคงค่าที่ valid ก่อนหน้า`
+      ? `ค่าประเมินใหม่ ${e.sound_invalid_value} dBA est. ต่ำกว่า 0 จึงคงค่าที่ valid ก่อนหน้า`
       : 'คงค่าล่าสุด เนื่องจากไม่ได้รับค่าที่เป็นตัวเลขจาก sensor'
     : e.sound_value_limited
-      ? `ค่าก่อนจำกัดช่วง ${e.sound_dba_est_unbounded ?? 'N/A'} dBA · ค่าสูงสุดที่แสดง 120 dBA`
-      : 'ค่าปัจจุบันจาก SPH0645 หลังใช้ calibration offset';
+      ? `ค่าก่อนจำกัดช่วง ${e.sound_dba_est_unbounded ?? 'N/A'} dBA est. · ค่าสูงสุดที่แสดง 120`
+      : 'ค่าประเมินจาก SPH0645 · abs(raw dBFS) − 2';
   const soundQuality=document.getElementById('soundQuality');
   soundQuality.textContent=espFallback
     ? `⚠ SPH0645 · ใช้ค่าล่าสุด (${espAgeText})`
@@ -5407,7 +5412,7 @@ function render(s, source='ws'){
       ? '⚠ SPH0645 · ค่าต่ำกว่า 0 จึงคงค่าที่ valid ก่อนหน้า'
       : '⚠ SPH0645 · ไม่มีค่าปัจจุบัน จึงคงค่าที่ valid ก่อนหน้า'
     : e.sound_value_limited
-      ? '⚠ SPH0645 · ค่าปัจจุบันเกินช่วงแสดงผลสูงสุด 120 dBA'
+      ? '⚠ SPH0645 · ค่าประเมินเกินช่วงแสดงผลสูงสุด 120'
       : '✓ SPH0645 · ค่า valid ปัจจุบัน';
   soundQuality.className=`sensor-note ${espFallback||environment.sound_dba_est==null||e.sound_value_held||e.sound_value_limited?'status-warn':'status-good'}`;
   document.getElementById('environmentCard').title=[espFallback?`Pi5 Sensor Set 1 fallback ${espAgeText}`:null,hub2Fallback?`ESP32 Air Sensor fallback ${hub2AgeText}`:null].filter(Boolean).join(' · ');

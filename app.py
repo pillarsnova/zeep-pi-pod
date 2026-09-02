@@ -643,11 +643,11 @@ CONTROLHUB2_ACK_TIMEOUT_SECONDS = float(
 # immediately through the internal bed_stop command.
 BED_MOVE_SECONDS = max(0.5, float(os.getenv("BED_MOVE_SECONDS", "2")))
 
-# One-point sound calibration for the current ESP32 microphone.
-# dBA_est = sound_dbfs + offset. Per-device value belongs in calibration.json:
-#   {"sound_dba_offset": 76.7, "calibrated_at": "2026-07-30",
-#    "method": "one-point vs DT-8852", "operator": "..."}
-# Priority: SOUND_DBA_OFFSET env > calibration.json > default 76.7.
+# Requested SPH0645 display transform for the current field trial.
+# dBA_est = abs(sound_dbfs) + adjustment, with the adjustment fixed at -2 dB
+# in calibration.json. Raw dBFS remains untouched for audit/recalibration.
+# This is an estimated display value, not a traceable SPL calibration.
+# Priority: SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB env > calibration.json > -2.0.
 CALIBRATION_PATH = BASE_DIR / "calibration.json"
 
 
@@ -664,22 +664,22 @@ def _load_calibration() -> Dict[str, Any]:
 
 
 CALIBRATION = _load_calibration()
-_ENV_OFFSET = os.getenv("SOUND_DBA_OFFSET")
-if _ENV_OFFSET is not None:
-    SOUND_DBA_OFFSET = float(_ENV_OFFSET)
-    SOUND_OFFSET_SOURCE = "env"
-elif "sound_dba_offset" in CALIBRATION:
-    SOUND_DBA_OFFSET = float(CALIBRATION["sound_dba_offset"])
-    SOUND_OFFSET_SOURCE = "calibration.json"
+_ENV_SOUND_ADJUSTMENT = os.getenv("SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB")
+if _ENV_SOUND_ADJUSTMENT is not None:
+    SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB = float(_ENV_SOUND_ADJUSTMENT)
+    SOUND_TRANSFORM_SOURCE = "env"
+elif "sound_dbfs_magnitude_adjustment_db" in CALIBRATION:
+    SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB = float(
+        CALIBRATION["sound_dbfs_magnitude_adjustment_db"]
+    )
+    SOUND_TRANSFORM_SOURCE = "calibration.json"
 else:
-    SOUND_DBA_OFFSET = 76.7
-    SOUND_OFFSET_SOURCE = "default"
+    SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB = -2.0
+    SOUND_TRANSFORM_SOURCE = "default"
 
-# SHT3x-DIS field comparison showed the Pod reading 1.5 percentage points
-# higher than the reference meter. Apply this once in the canonical merged
-# environment snapshot so Dashboard, Session storage, Sleep context and Safety
-# all consume the same corrected value. Raw serial payload remains untouched
-# in Hub 1 diagnostics. Priority: env > calibration.json > field default.
+# SHT3x-DIS currently uses raw pass-through (0.0 percentage-point bias).
+# A future validated adjustment may still be supplied through env or
+# calibration.json without modifying the raw Hub 1 payload.
 _ENV_HUMIDITY_BIAS = os.getenv("HUMIDITY_RH_BIAS")
 if _ENV_HUMIDITY_BIAS is not None:
     HUMIDITY_RH_BIAS = float(_ENV_HUMIDITY_BIAS)
@@ -688,8 +688,8 @@ elif "humidity_rh_bias" in CALIBRATION:
     HUMIDITY_RH_BIAS = float(CALIBRATION["humidity_rh_bias"])
     HUMIDITY_BIAS_SOURCE = "calibration.json"
 else:
-    HUMIDITY_RH_BIAS = -1.5
-    HUMIDITY_BIAS_SOURCE = "field_default"
+    HUMIDITY_RH_BIAS = 0.0
+    HUMIDITY_BIAS_SOURCE = "default"
 if not math.isfinite(HUMIDITY_RH_BIAS) or not -20.0 <= HUMIDITY_RH_BIAS <= 20.0:
     raise RuntimeError("HUMIDITY_RH_BIAS must be finite and between -20 and +20 %RH")
 
@@ -710,7 +710,7 @@ SENSOR_CALIBRATION_SPECS: Dict[str, Dict[str, Any]] = {
     "humidity_rh": {
         "device": "SHT3x-DIS", "device_key": "sht3x_dis",
         "label": "ความชื้น", "unit": "%RH", "config_key": "humidity_rh_bias",
-        "default": -1.5, "bias_min": -20.0, "bias_max": 20.0,
+        "default": 0.0, "bias_min": -20.0, "bias_max": 20.0,
         "value_min": 0.0, "value_max": 100.0, "step": 0.1,
     },
     "lux": {
@@ -721,10 +721,13 @@ SENSOR_CALIBRATION_SPECS: Dict[str, Dict[str, Any]] = {
     },
     "sound_dba_est": {
         "device": "SPH0645", "device_key": "sph0645",
-        "label": "ระดับเสียง", "unit": "dBA est.", "config_key": "sound_dba_offset",
-        "default": 76.7, "bias_min": 0.0, "bias_max": 140.0,
+        "label": "ระดับเสียงโดยประมาณ", "unit": "dBA est.",
+        "config_key": "sound_dbfs_magnitude_adjustment_db",
+        "default": -2.0, "bias_min": -30.0, "bias_max": 30.0,
         "value_min": 0.0, "value_max": 120.0, "step": 0.1,
-        "raw_field": "sound_dbfs", "bias_label": "dBFS offset",
+        "raw_field": "sound_dbfs", "bias_label": "ABS(dBFS) ADJUSTMENT",
+        "raw_unit": "dBFS",
+        "formula": "abs(raw dBFS) + adjustment",
     },
     "co2_ppm": {
         "device": "MH-Z19C", "device_key": "mhz19c",
@@ -758,7 +761,8 @@ def _load_sensor_biases() -> tuple[Dict[str, float], Dict[str, str]]:
     sources: Dict[str, str] = {}
     for metric, spec in SENSOR_CALIBRATION_SPECS.items():
         if metric == "sound_dba_est":
-            value, source = SOUND_DBA_OFFSET, SOUND_OFFSET_SOURCE
+            value = SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB
+            source = SOUND_TRANSFORM_SOURCE
         elif metric == "humidity_rh":
             value, source = HUMIDITY_RH_BIAS, HUMIDITY_BIAS_SOURCE
         elif spec["config_key"] in CALIBRATION:
@@ -808,7 +812,7 @@ def _persist_calibration(data: Dict[str, Any]) -> None:
 def update_sensor_bias(metric: str, bias: float, *, operator: str,
                        reference_value: Optional[float] = None) -> Dict[str, Any]:
     """Validate, persist and activate one Admin calibration adjustment."""
-    global SOUND_DBA_OFFSET, SOUND_OFFSET_SOURCE
+    global SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB, SOUND_TRANSFORM_SOURCE
     global HUMIDITY_RH_BIAS, HUMIDITY_BIAS_SOURCE
     spec = SENSOR_CALIBRATION_SPECS.get(metric)
     if spec is None:
@@ -830,6 +834,7 @@ def update_sensor_bias(metric: str, bias: float, *, operator: str,
             "operator": operator,
             "reference_value": reference,
             "unit": spec["unit"],
+            "raw_unit": spec.get("raw_unit", spec["unit"]),
         }
         updated["sensor_bias_metadata"] = metadata
         _persist_calibration(updated)
@@ -838,8 +843,8 @@ def update_sensor_bias(metric: str, bias: float, *, operator: str,
         SENSOR_BIASES[metric] = rounded
         SENSOR_BIAS_SOURCES[metric] = "calibration.json"
         if metric == "sound_dba_est":
-            SOUND_DBA_OFFSET = rounded
-            SOUND_OFFSET_SOURCE = "calibration.json"
+            SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB = rounded
+            SOUND_TRANSFORM_SOURCE = "calibration.json"
         elif metric == "humidity_rh":
             HUMIDITY_RH_BIAS = rounded
             HUMIDITY_BIAS_SOURCE = "calibration.json"
@@ -851,8 +856,9 @@ def update_sensor_bias(metric: str, bias: float, *, operator: str,
         environment_calibration["humidity_rh_bias"] = HUMIDITY_RH_BIAS
         environment_calibration["humidity_bias_source"] = HUMIDITY_BIAS_SOURCE
         if metric == "sound_dba_est":
-            state["system"]["sound_calibration"]["offset_db"] = SOUND_DBA_OFFSET
-            state["system"]["sound_calibration"]["source"] = SOUND_OFFSET_SOURCE
+            sound_transform = state["system"]["sound_transform"]
+            sound_transform["adjustment_db"] = SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB
+            sound_transform["source"] = SOUND_TRANSFORM_SOURCE
     return {
         "metric": metric, "bias": rounded, "source": "calibration.json",
         "updated_at": changed_at, "reference_value": reference,
@@ -860,11 +866,11 @@ def update_sensor_bias(metric: str, bias: float, *, operator: str,
 
 # User-facing SPL range. Raw dBFS and the unbounded calibrated estimate remain
 # available for developer diagnostics, but the dashboard must never show a
-# negative SPL value or a value above the supported 120 dBA display range.
+# negative estimate or a value above the supported 120 dBA est. display range.
 SOUND_DBA_DISPLAY_MIN = 0.0
 SOUND_DBA_DISPLAY_MAX = 120.0
 # Operational sleep-comfort target used by Monitor recommendations. This is
-# separate from microphone calibration and the 0–120 dBA display envelope.
+# separate from the sound transform and the 0–120 dBA est. display envelope.
 SOUND_DBA_SLEEP_TARGET = 35.0
 
 # Shared temperature comfort band for the user dashboard and Monitor advice.
@@ -896,7 +902,7 @@ bcg_raw_history: deque = deque(maxlen=200)
 # Every valid SPH0645 level is retained briefly so the canonical analysis
 # frame can publish an energy average (Leq) instead of whichever serial sample
 # happened to arrive last. This also prevents a single low transient such as
-# 4 dBA from pulling an otherwise 45–50 dBA window down to a false quiet state.
+# 4 dB from pulling an otherwise 45–50 dBA est. window to a false quiet state.
 sound_history_lock = threading.Lock()
 sound_level_history: deque = deque(maxlen=600)
 
@@ -1140,13 +1146,14 @@ state: Dict[str, Any] = {
         "bed_start_s": BED_START_SECONDS,
         "session_vital_start_packets": SESSION_VITAL_START_PACKETS,
         "player": None,  # filled in once the audio backend is chosen
-        "sound_calibration": {
-            "offset_db": SOUND_DBA_OFFSET,
-            "source": SOUND_OFFSET_SOURCE,
+        "sound_transform": {
+            "formula": "abs(sound_dbfs) + adjustment_db",
+            "adjustment_db": SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB,
+            "source": SOUND_TRANSFORM_SOURCE,
             "calibrated_at": CALIBRATION.get("calibrated_at"),
             "method": CALIBRATION.get("method"),
             # Calibration provenance is Admin-only because snapshot_for()
-            # removes sound_calibration from the consumer system payload.
+            # removes sound_transform from the consumer system payload.
             "status": CALIBRATION.get("status"),
             "operator": CALIBRATION.get("operator"),
             "reference_meter": CALIBRATION.get("reference_meter"),
@@ -3186,7 +3193,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
     if environment["lux"] is not None:
         reason_bits.append(f"แสงเฉลี่ย {environment['lux']:.0f} lux")
     if environment["sound_dba"] is not None:
-        reason_bits.append(f"เสียงเฉลี่ย {environment['sound_dba']:.1f} dBA")
+        reason_bits.append(f"เสียงเฉลี่ย {environment['sound_dba']:.1f} dBA est.")
     result.update({
         "state": confirmed_state or "no_data",
         "confirmed_state": confirmed_state,
@@ -3946,11 +3953,11 @@ def build_smart_response(snap: Dict[str, Any],
                   "คงระดับเสียงเดิมและรอ SPH0645 กลับมา")
     elif sound > SOUND_DBA_SLEEP_TARGET:
         recommend("sound", "attention", "เสียงสูงกว่าเป้าหมายกลางคืน",
-                  f"วัดได้ {sound:.1f} dBA; เป้าหมายไม่เกิน {SOUND_DBA_SLEEP_TARGET:.0f} dBA — ตรวจ LAeq ที่ตำแหน่งหมอนและลดเสียงอย่างนุ่มนวล",
+                  f"ประเมินได้ {sound:.1f} dBA est.; เป้าหมายไม่เกิน {SOUND_DBA_SLEEP_TARGET:.0f} — ตรวจเทียบ LAeq ที่ตำแหน่งหมอนและลดเสียงอย่างนุ่มนวล",
                   "เสนอให้ลดระดับเสียง (ยังไม่สั่งจริง)")
     else:
         recommend("sound", "stable", "ระดับเสียงอยู่ในเป้าหมาย",
-                  f"{sound:.1f} dBA · เป้าหมาย ≤{SOUND_DBA_SLEEP_TARGET:.0f} dBA · คงระดับปัจจุบัน")
+                  f"{sound:.1f} dBA est. · เป้าหมาย ≤{SOUND_DBA_SLEEP_TARGET:.0f} · คงระดับปัจจุบัน")
 
     lux = numeric("lux")
     lux_limit = 1.0 if phase == "sleep_session" else 10.0
@@ -3992,7 +3999,7 @@ def build_smart_response(snap: Dict[str, Any],
 
 
 def sound_energy_average_db(levels: List[float]) -> Optional[float]:
-    """Return an energy-domain average for valid 0–120 dBA samples.
+    """Return an energy-domain average for valid 0–120 dBA estimates.
 
     Arithmetic averaging in decibels is physically incorrect. Subtracting the
     peak before exponentiation keeps the calculation numerically stable while
@@ -4054,19 +4061,23 @@ def normalize_esp32_sensor(obj: Dict[str, Any]) -> Dict[str, Any]:
         value = _first_numeric(obj, keys)
         if value is not None:
             out[target] = value
-    # dBFS is correctly negative; convert to a one-point calibrated estimate.
-    # Values from 0-120 dBA are displayed as measured. An estimate below zero
+    # Preserve raw dBFS and apply the field-requested magnitude transform.
+    # Estimates from 0-120 are displayed as dBA est. An estimate below zero
     # is left invalid so hold_last_valid_sound() can keep the prior valid
-    # display value; estimates above 120 dBA are capped for the user display.
+    # display value; estimates above 120 are capped for the user display.
     sound_dbfs = out.get("sound_dbfs")
     if isinstance(sound_dbfs, (int, float)) and not isinstance(sound_dbfs, bool):
-        unbounded = float(sound_dbfs) + SOUND_DBA_OFFSET
+        unbounded = (
+            abs(float(sound_dbfs)) + SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB
+        )
         if math.isfinite(unbounded):
             unbounded = round(unbounded, 2)
             out["sound_dba_est_unbounded"] = unbounded
             out["sound_dba_est"] = round(min(SOUND_DBA_DISPLAY_MAX, unbounded), 2)
             out["sound_value_limited"] = unbounded > SOUND_DBA_DISPLAY_MAX
-            out["sound_calibration_offset_db"] = SOUND_DBA_OFFSET
+            out["sound_display_adjustment_db"] = (
+                SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB
+            )
     return out
 
 
@@ -4995,7 +5006,7 @@ def sensor_frame_sampler():
         sph0645_status = ((environment.get("devices") or {}).get("sph0645") or {}).get("status")
         if sound_summary.get("leq_dba") is not None and sph0645_status == "live":
             # All pages and analytical consumers receive this same analysis
-            # energy average. Raw/latest dBA and dBFS remain in the Admin state.
+            # energy average. Raw dBFS and latest estimate remain in Admin state.
             environment["sound_dba_est"] = sound_summary["leq_dba"]
         with state_lock:
             state["system"]["sound_analysis"] = {
@@ -6901,9 +6912,11 @@ def sensor_calibration_inspector_snapshot() -> Dict[str, Any]:
             "device_key": spec["device_key"],
             "label": spec["label"],
             "unit": spec["unit"],
+            "raw_unit": spec.get("raw_unit", spec["unit"]),
             "raw": raw_value,
             "bias": sensor_bias_value(metric),
             "bias_label": spec.get("bias_label", "additive bias"),
+            "formula": spec.get("formula", "clamp(raw + bias)"),
             "calibrated": environment.get(metric),
             "editable": True,
             "bias_min": spec["bias_min"],
@@ -6961,7 +6974,10 @@ def sensor_calibration_inspector_snapshot() -> Dict[str, Any]:
         "session_active": bool((snap.get("session") or {}).get("active")),
         "channels": channels,
         "calibration_file": str(CALIBRATION_PATH),
-        "formula": "calibrated = clamp(raw + bias)",
+        "formula": {
+            "default": "calibrated = clamp(raw + bias)",
+            "sound_dba_est": "estimate = clamp(abs(raw dBFS) + adjustment)",
+        },
     }
 
 
@@ -8606,7 +8622,10 @@ def sleep_policy_admin():
             "n2_rr_conflict_support": SLEEP_N2_RR_CONFLICT_SUPPORT,
         },
         "humidity_bias_percentage_points": HUMIDITY_RH_BIAS,
-        "sound_calibration_offset_db": SOUND_DBA_OFFSET,
+        "sound_display_transform": {
+            "formula": "abs(sound_dbfs) + adjustment_db",
+            "adjustment_db": SOUND_DBFS_MAGNITUDE_ADJUSTMENT_DB,
+        },
         "sensor_biases": dict(SENSOR_BIASES),
     }
     return policy

@@ -99,6 +99,7 @@ def build_record(
         "terminal_wake_transition": {"start_time": "x"},
         "summary": {
             "heart_rate_bpm": {"avg": 60.0, "min": 47.0, "max": 88.0, "n": len(rows)},
+            "respiration_rate": {"avg": 14.2, "min": 9.0, "max": 21.0, "n": len(rows)},
             "sleep_state_counts": counts,
         },
         "sleep_quality": quality, "session_report": report,
@@ -219,6 +220,23 @@ class IngestPayloadTests(unittest.TestCase):
 
     def test_heart_rate_is_reduced_to_the_fields_the_backend_reads(self) -> None:
         self.assertEqual(set(self.result["heart_rate"]), {"avg", "min", "max"})
+
+    def test_respiration_rate_travels_in_the_raw_result_blob(self) -> None:
+        # There is no respiration column, so this is only readable from
+        # scoring_result. Same three statistics as heart rate, n dropped.
+        self.assertEqual(set(self.result["respiration_rate"]), {"avg", "min", "max"})
+        source = self.record["summary"]["respiration_rate"]
+        for key in ("avg", "min", "max"):
+            self.assertEqual(self.result["respiration_rate"][key], source[key])
+
+    def test_a_missing_vital_series_becomes_an_empty_object(self) -> None:
+        # _series_stats returns None when the sensor produced nothing usable.
+        record, rows = build_record(NIGHT, 5.0)
+        record["summary"]["respiration_rate"] = None
+        record["summary"]["heart_rate_bpm"] = None
+        result = app._build_ingest_payload(record, rows)["record"]
+        self.assertEqual(result["respiration_rate"], {})
+        self.assertEqual(result["heart_rate"], {})
 
 
 class IngestEnvironmentTests(unittest.TestCase):

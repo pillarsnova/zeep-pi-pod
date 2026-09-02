@@ -391,8 +391,8 @@ health record เดิม การแก้ derived record จริงยั�
 
 ## 7. Sensor calibration ที่เกี่ยวกับรายงาน
 
-- Humidity ใช้ bias `−1.5 percentage points` ครั้งเดียวใน canonical environment snapshot; raw Hub diagnostics ไม่ถูกแก้
-- Sound ใช้ `dBA_est = dBFS + per-device offset`; priority คือ environment → `calibration.json` → field default 76.7 dB
+- Humidity ใช้ raw pass-through (`0.0 percentage-point bias`) ใน canonical environment snapshot; raw Hub diagnostics ไม่ถูกแก้
+- Sound ใช้ `dBA_est = round(abs(sound_dbfs), 1)` โดยไม่ลด 3%; raw dBFS ยังคงถูกเก็บเพื่อ audit/recalibration
 - ค่าเสียง valid แสดง 0–120 dBA; ค่าติดลบ/invalid คง valid value ก่อนหน้า และค่ามากกว่า 120 จำกัดเฉพาะการแสดงผล
 - Monitor comfort target ใช้ ≤35 dBA; Dashboard overall “ยอดเยี่ยม” ใช้ `<40 dBA` จึงเป็นคนละวัตถุประสงค์ ไม่ใช่ calibration คนละชุด
 - Calibration provenance แสดงเฉพาะ Admin

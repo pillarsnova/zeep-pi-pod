@@ -54,16 +54,16 @@ def hub2(**overrides):
 
 
 class EnvironmentContractTests(unittest.TestCase):
-    def test_sph0645_display_uses_rounded_absolute_dbfs_minus_three_percent(self):
-        with patch.object(app, "SOUND_DBFS_ERROR_PERCENT", 3.0):
+    def test_sph0645_display_uses_rounded_absolute_dbfs_without_reduction(self):
+        with patch.object(app, "SOUND_DBFS_ERROR_PERCENT", 0.0):
             negative = app.normalize_esp32_sensor({"sound_dbfs": -39.69})
             positive = app.normalize_esp32_sensor({"sound_dbfs": 39.69})
 
         self.assertEqual(negative["sound_dbfs"], -39.69)
         self.assertEqual(negative["sound_dbfs_magnitude"], 39.7)
-        self.assertEqual(negative["sound_dba_est"], 38.51)
-        self.assertEqual(positive["sound_dba_est"], 38.51)
-        self.assertEqual(negative["sound_error_percent"], 3.0)
+        self.assertEqual(negative["sound_dba_est"], 39.7)
+        self.assertEqual(positive["sound_dba_est"], 39.7)
+        self.assertEqual(negative["sound_error_percent"], 0.0)
 
     def test_six_live_sensors_are_merged_from_two_hubs(self):
         result = app.build_environment_snapshot(hub1(), hub2(), NOW)

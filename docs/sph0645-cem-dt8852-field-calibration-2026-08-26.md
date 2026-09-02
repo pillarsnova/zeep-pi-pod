@@ -1,10 +1,10 @@
 # SPH0645 ↔ CEM DT-8852 field comparison — 2026-08-26
 
 > **Document status: historical evidence / superseded for runtime.** ตั้งแต่
-> 2026-09-02 ระบบใช้ Field Trial display transform:
-> `magnitude = round(abs(sound_dbfs), 1)` และ
-> `dBA_est = magnitude × (1 - 3/100)`. ตัวอย่าง raw `-39.69 dBFS` แสดงเป็น
-> `38.51 dBA est.` สูตร offset และค่าที่บันทึกด้านล่างเป็น
+> 2026-09-03 ระบบใช้ Field Trial display transform:
+> `dBA_est = round(abs(sound_dbfs), 1)` โดยไม่ลด `3%` อีกต่อไป
+> ตัวอย่าง raw `-39.69 dBFS` แสดงเป็น `39.7 dBA est.`
+> สูตร offset และค่าที่บันทึกด้านล่างเป็น
 > ลำดับเหตุการณ์เดิมสำหรับ Audit เท่านั้น ไม่ใช่ Runtime configuration ปัจจุบัน
 > และค่าปัจจุบันยังไม่ใช่ traceable SPL calibration.
 

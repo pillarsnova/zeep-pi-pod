@@ -203,22 +203,22 @@ lux: `lux|light|illuminance` · sound: `sound_dbfs` เท่านั้น
 
 `magnitude = round(abs(sound_dbfs), 1)` และ
 `dBA_est = magnitude × (1 - error_percent / 100)` — รุ่นปัจจุบันใช้
-`error_percent = 3.0` ตามข้อกำหนด Field Trial และเก็บใน
+`error_percent = 0.0` จึงเท่ากับ `dBA_est = magnitude` โดยไม่ลด 3% และเก็บค่าใน
 `calibration.json` ข้าง `app.py`:
 
 ```json
-{"sound_dbfs_error_percent": 3.0,
- "calibrated_at": "2026-09-02T23:25:29+07:00",
- "method": "round(abs(raw sound_dbfs), 1), then reduce by 3 percent",
+{"sound_dbfs_error_percent": 0.0,
+ "calibrated_at": "2026-09-03T00:31:40+07:00",
+ "method": "round(abs(raw sound_dbfs), 1), no percentage reduction",
  "operator": "super"}
 ```
 
 ลำดับความสำคัญ: env `SOUND_DBFS_ERROR_PERCENT` >
-`calibration.json` > ค่าเริ่มต้น `3.0` ค่าที่ใช้จริงและที่มาดูได้ใน
+`calibration.json` > ค่าเริ่มต้น `0.0` ค่าที่ใช้จริงและที่มาดูได้ใน
 `/api/state → system.sound_transform`
 
-ตัวอย่าง: raw `-39.69 dBFS` → magnitude `39.7` → หัก error `3%` →
-`38.51 dBA est.` (ปัดผลลัพธ์สุดท้าย 2 ตำแหน่ง)
+ตัวอย่าง: raw `-39.69 dBFS` → magnitude `39.7` →
+`39.7 dBA est.`
 
 **นี่คือค่าประเมินสำหรับ Field Trial ไม่ใช่ค่า SPL/dBA ที่สอบเทียบแบบ
 traceable ด้วยเครื่อง Class 1/2** ค่า `sound_dbfs` ดิบยังคงถูกเก็บโดยไม่แก้ไข

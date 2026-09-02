@@ -649,12 +649,12 @@ CONTROLHUB2_ACK_TIMEOUT_SECONDS = float(
 # immediately through the internal bed_stop command.
 BED_MOVE_SECONDS = max(0.5, float(os.getenv("BED_MOVE_SECONDS", "2")))
 
-# Requested SPH0645 display transform for the current field trial.
+# SPH0645 display transform for the current field trial.
 # magnitude = round(abs(sound_dbfs), 1)
-# dBA_est = magnitude * (1 - error_percent / 100), with error_percent = 3%.
+# dBA_est = magnitude when error_percent = 0% (current approved setting).
 # Raw dBFS remains untouched for audit/recalibration.
 # This is an estimated display value, not a traceable SPL calibration.
-# Priority: SOUND_DBFS_ERROR_PERCENT env > calibration.json > 3.0.
+# Priority: SOUND_DBFS_ERROR_PERCENT env > calibration.json > 0.0.
 CALIBRATION_PATH = BASE_DIR / "calibration.json"
 
 
@@ -681,7 +681,7 @@ elif "sound_dbfs_error_percent" in CALIBRATION:
     )
     SOUND_TRANSFORM_SOURCE = "calibration.json"
 else:
-    SOUND_DBFS_ERROR_PERCENT = 3.0
+    SOUND_DBFS_ERROR_PERCENT = 0.0
     SOUND_TRANSFORM_SOURCE = "default"
 
 # SHT3x-DIS currently uses raw pass-through (0.0 percentage-point bias).
@@ -731,7 +731,7 @@ SENSOR_CALIBRATION_SPECS: Dict[str, Dict[str, Any]] = {
         "device": "SPH0645", "device_key": "sph0645",
         "label": "ระดับเสียงโดยประมาณ", "unit": "dBA est.",
         "config_key": "sound_dbfs_error_percent",
-        "default": 3.0, "bias_min": 0.0, "bias_max": 30.0,
+        "default": 0.0, "bias_min": 0.0, "bias_max": 30.0,
         "value_min": 0.0, "value_max": 120.0, "step": 0.1,
         "raw_field": "sound_dbfs", "bias_label": "ERROR REDUCTION",
         "parameter_unit": "%",

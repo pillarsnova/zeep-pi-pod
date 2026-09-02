@@ -5686,7 +5686,10 @@ def _build_ingest_payload(record: Dict[str, Any],
     def seconds_to_minutes(value: Any) -> Optional[float]:
         return round(value / 60.0, 1) if isinstance(value, (int, float)) else None
 
-    heart_rate = ((record.get("summary") or {}).get("heart_rate_bpm")) or {}
+    def vitals(summary_key: str) -> Dict[str, Any]:
+        """Keep only the three statistics a reader needs; drop _series_stats' n."""
+        series = ((record.get("summary") or {}).get(summary_key)) or {}
+        return {key: series[key] for key in ("avg", "min", "max") if key in series}
 
     slim: Dict[str, Any] = {
         # sleep_score must be present: the backend skips a session with a null
@@ -5718,9 +5721,12 @@ def _build_ingest_payload(record: Dict[str, Any],
         "n2_percent": (stages.get("n2") or {}).get("pct_scored"),
         "n3_percent": (stages.get("n3") or {}).get("pct_scored"),
         "rem_percent": (stages.get("rem") or {}).get("pct_scored"),
-        "heart_rate": {
-            key: heart_rate[key] for key in ("avg", "min", "max") if key in heart_rate
-        },
+        "heart_rate": vitals("heart_rate_bpm"),
+        # The account backend has no respiration column, so this rides along in
+        # the scoring_result jsonb that the history detail returns verbatim.
+        # BCG measures it every round beside HR; leaving it behind would drop
+        # the one vital the Pod records that the account cannot show at all.
+        "respiration_rate": vitals("respiration_rate"),
         "start": record["started_at_utc"],
         "segments": segments,
         "total_segments": len(segments),

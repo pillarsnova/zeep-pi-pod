@@ -1,9 +1,8 @@
-"""ZEEP Pod local dashboard server (Raspberry Pi 5).
+"""ZEEP Pod process composition root for Raspberry Pi 5.
 
-Single-file FastAPI app: ESP32 + BCG serial readers, GPIO outputs
-(door/ceiling light/star light/aroma/steam), local music playback, per-person test sessions with
-on-device history. Built and maintained in the zeep-lab Claude session —
-keep changes going through that session so the trail stays in git.
+This module wires FastAPI, lifecycle threads and hardware adapters together.
+Pure sensor/calibration/recommendation rules live in dedicated modules so they
+can be reviewed and tested without starting GPIO, serial or MQTT resources.
 """
 import asyncio
 import json
@@ -45,11 +44,28 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
-
 # Team database layer (SQLite V2): queue-based single-writer + BCG epoch
 # storage + daily backup + read-side history router. Merged 2026-08-04.
 from api_history import create_history_router
+from api_models import (
+    ActiveSessionProfileCommand,
+    AdminLoginCommand,
+    AirconCommand,
+    AirconFanLevelReferenceCommand,
+    AuthLoginCommand,
+    BedControlCommand,
+    BrainwavePreviewCommand,
+    ForceLogoutCommand,
+    LabelCommand,
+    LoginCommand,
+    ProgressiveProfileAnswerCommand,
+    ProgressiveProfileConsentCommand,
+    ProgressiveProfileDeferCommand,
+    SensorBiasCommand,
+    SwitchCommand,
+    TrackCommand,
+    VolumeCommand,
+)
 from access_control import (
     COOKIE_NAME,
     CSRF_COOKIE_NAME,
@@ -60,6 +76,11 @@ from backup import DailyBackup
 from bcg_storage import BCGStorage
 from brainwave_audio import public_presets as brainwave_public_presets
 from brainwave_audio import render_preview as render_brainwave_preview
+from control_protocol import (
+    apply_aircon_temperature_bias,
+    normalize_aircon_command,
+    normalize_bed_command,
+)
 from database import DatabaseManager
 from api_v1 import create_api_v1_router
 from maintenance_registry import maintenance_contract_snapshot
@@ -88,6 +109,24 @@ from sensor_contracts import (
     decode_hub_payload,
     parse_lsm800t_frame,
     sensor_contract_snapshot,
+)
+from sensor_calibration import (
+    SENSOR_CALIBRATION_SPECS,
+    apply_additive_bias,
+    load_calibration,
+    persist_calibration,
+    resolve_biases,
+)
+from sensor_runtime import (
+    compose_environment_snapshot,
+    energy_average_db,
+    hold_last_valid_sound as hold_sound_value,
+    normalize_hub1_sensor,
+    summarize_sound_window,
+)
+from smart_response import (
+    SmartResponsePolicy,
+    evaluate_smart_response,
 )
 from sleep_signal_features import (
     HR_SANITY_RANGE_BPM,
@@ -660,11 +699,7 @@ CALIBRATION_PATH = BASE_DIR / "calibration.json"
 
 def _load_calibration() -> Dict[str, Any]:
     try:
-        with CALIBRATION_PATH.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except FileNotFoundError:
-        return {}
+        return load_calibration(CALIBRATION_PATH)
     except Exception as exc:
         print(f"[CAL] ignoring invalid calibration.json: {exc}")
         return {}
@@ -700,92 +735,19 @@ else:
 if not math.isfinite(HUMIDITY_RH_BIAS) or not -20.0 <= HUMIDITY_RH_BIAS <= 20.0:
     raise RuntimeError("HUMIDITY_RH_BIAS must be finite and between -20 and +20 %RH")
 
-# Admin calibration is additive for ordinary sensors. SPH0645 is the explicit
-# exception: its configurable parameter is a percentage reduction applied by
-# normalize_esp32_sensor(). Raw hub payloads and byte-exact BCG frames are never
-# rewritten, which keeps every adjustment auditable and reversible. SGP40 VOC
-# Index and LSM-800-T HR/RR stay read-only:
-# the former owns an adaptive baseline and the latter feeds sleep physiology,
-# so an arbitrary UI offset would invalidate their algorithms.
+# Calibration definitions and file mechanics live in sensor_calibration.py.
+# app.py owns only authorization and publishing the resulting runtime state.
 SENSOR_CALIBRATION_LOCK = threading.RLock()
-SENSOR_CALIBRATION_SPECS: Dict[str, Dict[str, Any]] = {
-    "temperature_c": {
-        "device": "SHT3x-DIS", "device_key": "sht3x_dis",
-        "label": "อุณหภูมิ", "unit": "°C", "config_key": "temperature_c_bias",
-        "default": 0.0, "bias_min": -20.0, "bias_max": 20.0,
-        "value_min": -40.0, "value_max": 125.0, "step": 0.1,
-    },
-    "humidity_rh": {
-        "device": "SHT3x-DIS", "device_key": "sht3x_dis",
-        "label": "ความชื้น", "unit": "%RH", "config_key": "humidity_rh_bias",
-        "default": 0.0, "bias_min": -20.0, "bias_max": 20.0,
-        "value_min": 0.0, "value_max": 100.0, "step": 0.1,
-    },
-    "lux": {
-        "device": "OPT3001", "device_key": "opt3001",
-        "label": "ความสว่าง", "unit": "lux", "config_key": "lux_bias",
-        "default": 0.0, "bias_min": -5000.0, "bias_max": 5000.0,
-        "value_min": 0.0, "value_max": 83865.0, "step": 0.1,
-    },
-    "sound_dba_est": {
-        "device": "SPH0645", "device_key": "sph0645",
-        "label": "ระดับเสียงโดยประมาณ", "unit": "dBA est.",
-        "config_key": "sound_dbfs_error_percent",
-        "default": 0.0, "bias_min": 0.0, "bias_max": 30.0,
-        "value_min": 0.0, "value_max": 120.0, "step": 0.1,
-        "raw_field": "sound_dbfs", "bias_label": "ERROR REDUCTION",
-        "parameter_unit": "%",
-        "raw_unit": "dBFS",
-        "formula": "round(abs(raw dBFS), 1) × (1 - error_percent / 100)",
-    },
-    "co2_ppm": {
-        "device": "MH-Z19C", "device_key": "mhz19c",
-        "label": "คาร์บอนไดออกไซด์", "unit": "ppm", "config_key": "co2_ppm_bias",
-        "default": 0.0, "bias_min": -2000.0, "bias_max": 2000.0,
-        "value_min": 400.0, "value_max": 5000.0, "step": 1.0,
-    },
-    "pm1_0_ug_m3": {
-        "device": "PMS7003", "device_key": "pms7003",
-        "label": "PM1.0", "unit": "µg/m³", "config_key": "pm1_0_bias",
-        "default": 0.0, "bias_min": -500.0, "bias_max": 500.0,
-        "value_min": 0.0, "value_max": 1000.0, "step": 0.1,
-    },
-    "pm2_5_ug_m3": {
-        "device": "PMS7003", "device_key": "pms7003",
-        "label": "PM2.5", "unit": "µg/m³", "config_key": "pm2_5_bias",
-        "default": 0.0, "bias_min": -500.0, "bias_max": 500.0,
-        "value_min": 0.0, "value_max": 1000.0, "step": 0.1,
-    },
-    "pm10_ug_m3": {
-        "device": "PMS7003", "device_key": "pms7003",
-        "label": "PM10", "unit": "µg/m³", "config_key": "pm10_bias",
-        "default": 0.0, "bias_min": -500.0, "bias_max": 500.0,
-        "value_min": 0.0, "value_max": 1000.0, "step": 0.1,
-    },
-}
 
 
 def _load_sensor_biases() -> tuple[Dict[str, float], Dict[str, str]]:
-    biases: Dict[str, float] = {}
-    sources: Dict[str, str] = {}
-    for metric, spec in SENSOR_CALIBRATION_SPECS.items():
-        if metric == "sound_dba_est":
-            value = SOUND_DBFS_ERROR_PERCENT
-            source = SOUND_TRANSFORM_SOURCE
-        elif metric == "humidity_rh":
-            value, source = HUMIDITY_RH_BIAS, HUMIDITY_BIAS_SOURCE
-        elif spec["config_key"] in CALIBRATION:
-            value, source = float(CALIBRATION[spec["config_key"]]), "calibration.json"
-        else:
-            value, source = float(spec["default"]), "default"
-        if not math.isfinite(value) or not spec["bias_min"] <= value <= spec["bias_max"]:
-            raise RuntimeError(
-                f"{spec['config_key']} must be finite and between "
-                f"{spec['bias_min']} and {spec['bias_max']}"
-            )
-        biases[metric] = float(value)
-        sources[metric] = source
-    return biases, sources
+    return resolve_biases(
+        CALIBRATION,
+        sound_error_percent=SOUND_DBFS_ERROR_PERCENT,
+        sound_source=SOUND_TRANSFORM_SOURCE,
+        humidity_bias=HUMIDITY_RH_BIAS,
+        humidity_source=HUMIDITY_BIAS_SOURCE,
+    )
 
 
 SENSOR_BIASES, SENSOR_BIAS_SOURCES = _load_sensor_biases()
@@ -797,25 +759,14 @@ def sensor_bias_value(metric: str) -> float:
 
 
 def _apply_sensor_bias(metric: str, raw_value: Optional[float]) -> Optional[float]:
-    if raw_value is None:
-        return None
-    spec = SENSOR_CALIBRATION_SPECS.get(metric)
-    if spec is None:
-        return raw_value
-    adjusted = float(raw_value) + sensor_bias_value(metric)
-    adjusted = min(float(spec["value_max"]), max(float(spec["value_min"]), adjusted))
-    return round(adjusted, 2)
+    # Keep the original read/write synchronization: Admin may update a bias
+    # while Sensor Hub threads are composing the next canonical snapshot.
+    with SENSOR_CALIBRATION_LOCK:
+        return apply_additive_bias(metric, raw_value, biases=SENSOR_BIASES)
 
 
 def _persist_calibration(data: Dict[str, Any]) -> None:
-    """Atomically replace calibration.json so power loss cannot truncate it."""
-    temporary = CALIBRATION_PATH.with_name(f".{CALIBRATION_PATH.name}.tmp")
-    with temporary.open("w", encoding="utf-8") as handle:
-        json.dump(data, handle, ensure_ascii=False, indent=2, sort_keys=True)
-        handle.write("\n")
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(temporary, CALIBRATION_PATH)
+    persist_calibration(CALIBRATION_PATH, data)
 
 
 def update_sensor_bias(metric: str, bias: float, *, operator: str,
@@ -3649,170 +3600,21 @@ def snapshot_for(principal: Principal) -> Dict[str, Any]:
     return result
 
 
-def _first_numeric(obj: Dict[str, Any], keys):
-    for key in keys:
-        value = obj.get(key)
-        if value is None or isinstance(value, bool):
-            continue
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            continue
-    return None
-
-
-def _source_freshness(payload: Dict[str, Any], stale_s: float,
-                      now: float) -> Dict[str, Any]:
-    last = payload.get("last_update")
-    age = max(0.0, now - last) if isinstance(last, (int, float)) else None
-    live = bool(payload.get("connected") and age is not None and age <= stale_s)
-    return {
-        "live": live,
-        "age_s": round(age, 1) if age is not None else None,
-        "has_history": last is not None,
-    }
-
-
-def _sensor_flag(payload: Dict[str, Any], keys) -> Optional[bool]:
-    status = payload.get("sensor_status")
-    if not isinstance(status, dict):
-        return None
-    for key in keys:
-        if key in status:
-            return bool(status[key])
-    return None
-
-
-def _bounded_number(payload: Dict[str, Any], aliases, low: float,
-                    high: float) -> tuple[Optional[float], Optional[float]]:
-    value = _first_numeric(payload, aliases)
-    if value is None or not math.isfinite(value):
-        return None, value
-    if value < low or value > high:
-        return None, value
-    return value, None
-
-
 def build_environment_snapshot(esp32: Dict[str, Any], hub2: Dict[str, Any],
                                now: Optional[float] = None) -> Dict[str, Any]:
-    """Create one validated view from both environment hubs.
-
-    Raw hub payloads remain available for diagnostics.  This view is the only
-    source used by the dashboard, session sampling and the safety supervisor,
-    preventing a live Hub 2 CO2 value from being hidden by an empty Hub 1 field.
-    """
-    now = time.time() if now is None else now
-    sources = {
-        "hub1": {
-            "payload": esp32,
-            "label": "Hub 1 · USB",
-            **_source_freshness(esp32, ESP32_STALE_SECONDS, now),
-        },
-        "hub2": {
-            "payload": hub2,
-            "label": "Hub 2 · MQTT",
-            **_source_freshness(hub2, SENSORHUB2_STALE_SECONDS, now),
-        },
-    }
-    # Electrical limits, aliases and physical ranges live in the versioned
-    # sensor contract.  Dashboard, Session storage and Safety therefore cannot
-    # drift to different definitions of the same device.
-    specs = ENVIRONMENT_DEVICE_SPECS
-    values: Dict[str, Optional[float]] = {}
-    devices: Dict[str, Dict[str, Any]] = {}
-    for key, spec in specs.items():
-        attempts = []
-        for source_id in spec["sources"]:
-            source = sources[source_id]
-            payload = source["payload"]
-            field_values: Dict[str, Optional[float]] = {}
-            invalid_values: Dict[str, Any] = {}
-            for field, (aliases, low, high) in spec["fields"].items():
-                value, invalid = _bounded_number(payload, aliases, low, high)
-                field_values[field] = value
-                if invalid is not None:
-                    invalid_values[field] = invalid
-            flag = _sensor_flag(payload, spec["status"])
-            valid = all(value is not None for value in field_values.values())
-            attempts.append({
-                "source": source_id, "source_label": source["label"],
-                "live": source["live"], "age_s": source["age_s"],
-                "has_history": source["has_history"], "flag": flag,
-                "valid": valid, "values": field_values,
-                "invalid_values": invalid_values,
-            })
-        selected = next((a for a in attempts if a["live"] and a["flag"] is not False and a["valid"]), None)
-        if selected is None:
-            selected = next((a for a in attempts if a["flag"] is not False and a["valid"]), None)
-        primary = attempts[0]
-        chosen = selected or primary
-        warmup = False
-        if key == "mhz19c":
-            chosen_payload = sources[chosen["source"]]["payload"]
-            warmup = bool(chosen_payload.get("co2_warmup"))
-            warmup = warmup or bool(
-                (chosen_payload.get("warmup") or {}).get("mhz19c")
-            )
-        if selected and selected["live"]:
-            status = "live"
-        elif selected:
-            status = "stale"
-        elif warmup and primary["live"]:
-            status = "warming"
-        elif primary["live"] and primary["flag"] is False:
-            status = "fault"
-        elif primary["live"]:
-            status = "invalid" if primary["invalid_values"] else "no_data"
-        elif primary["has_history"]:
-            status = "stale"
-        else:
-            status = "offline"
-        if key == "sph0645" and esp32.get("sound_value_held") and selected:
-            status = "held"
-        for field in spec["fields"]:
-            values[field] = selected["values"].get(field) if selected else None
-        devices[key] = {
-            "model": spec["model"], "status": status,
-            "source": chosen["source"], "source_label": chosen["source_label"],
-            "data_age_s": chosen["age_s"],
-            "invalid_values": chosen["invalid_values"],
-        }
-    live_count = sum(1 for device in devices.values() if device["status"] == "live")
-    stale_count = sum(1 for device in devices.values() if device["status"] in ("stale", "held"))
-    overall = "live" if live_count == len(devices) else "degraded" if live_count or stale_count else "offline"
-    # Preserve the selected, range-validated source value before applying any
-    # software adjustment. Packet Inspector uses this immutable view to show
-    # Raw → Bias → Calibrated without modifying serial/MQTT payloads.
-    raw_values = dict(values)
-    for metric in SENSOR_CALIBRATION_SPECS:
-        # SPH0645 is already transformed from dBFS in normalize_esp32_sensor().
-        # Applying the generic additive path here would corrupt the estimate.
-        if metric == "sound_dba_est":
-            continue
-        values[metric] = _apply_sensor_bias(metric, values.get(metric))
-    return {
-        **values,
-        "temperature": values.get("temperature_c"),
-        "humidity": values.get("humidity_rh"),
-        "co2": values.get("co2_ppm"),
-        "pm2_5": values.get("pm2_5_ug_m3"),
-        "raw_values": raw_values,
-        "calibration": {
-            metric: {
-                "bias": sensor_bias_value(metric),
-                "source": SENSOR_BIAS_SOURCES.get(metric, "default"),
-            }
-            for metric in SENSOR_CALIBRATION_SPECS
-        },
-        "devices": devices,
-        "live_count": live_count,
-        "total_count": len(devices),
-        "status": overall,
-        "sources": {
-            key: {k: v for k, v in source.items() if k != "payload"}
-            for key, source in sources.items()
-        },
-    }
+    """Compatibility facade over the pure two-hub Sensor runtime."""
+    return compose_environment_snapshot(
+        esp32,
+        hub2,
+        now=now,
+        hub1_stale_s=ESP32_STALE_SECONDS,
+        hub2_stale_s=SENSORHUB2_STALE_SECONDS,
+        device_specs=ENVIRONMENT_DEVICE_SPECS,
+        calibration_metrics=tuple(SENSOR_CALIBRATION_SPECS),
+        apply_bias=_apply_sensor_bias,
+        bias_value=sensor_bias_value,
+        bias_sources=SENSOR_BIAS_SOURCES,
+    )
 
 
 SMART_RESPONSE_POLICY_VERSION = "shadow-env-v1.0"
@@ -3820,306 +3622,57 @@ SMART_RESPONSE_POLICY_VERSION = "shadow-env-v1.0"
 
 def build_smart_response(snap: Dict[str, Any],
                          now: Optional[float] = None) -> Dict[str, Any]:
-    """Evaluate sleep-environment recommendations without actuating anything.
-
-    This is intentionally a separate control path from the BCG sleep-stage
-    estimator.  Before G2/PSG validation, stage labels are telemetry only and
-    must not trigger the bed, HVAC, lighting, audio, aroma or other outputs.
-    """
-    now = time.time() if now is None else now
-    environment = ((snap.get("sensor") or {}).get("environment") or {})
-    devices = environment.get("devices") or {}
-    safety = snap.get("safety") or {}
-    session = snap.get("session") or {}
-    aircon = snap.get("aircon") or {}
-
-    if session.get("active") and session.get("recording"):
-        phase = "sleep_session"
-        phase_label = "กำลังบันทึกการนอน"
-    elif session.get("active"):
-        phase = "wind_down"
-        phase_label = "เตรียมเข้านอน"
-    else:
-        phase = "standby"
-        phase_label = "Standby"
-
-    recommendations: list[Dict[str, Any]] = []
-    blockers: list[Dict[str, str]] = []
-
-    def recommend(domain: str, level: str, title: str, detail: str,
-                  suggestion: Optional[str] = None) -> None:
-        item: Dict[str, Any] = {
-            "domain": domain, "level": level, "title": title,
-            "detail": detail,
-        }
-        if suggestion:
-            item["suggestion"] = suggestion
-        recommendations.append(item)
-
-    def numeric(name: str) -> Optional[float]:
-        value = environment.get(name)
-        if (not isinstance(value, (int, float)) or isinstance(value, bool)
-                or not math.isfinite(float(value))):
-            return None
-        return float(value)
-
-    # Blocking conditions are explicit; missing data never becomes zero and
-    # never produces an actuator recommendation from a stale last value.
-    if not safety.get("ready"):
-        blockers.append({"code": "safety_not_ready",
-                         "message": "Safety Supervisor ยังไม่ READY"})
-    if not safety.get("armed"):
-        blockers.append({"code": "safety_not_armed",
-                         "message": "ระบบยังไม่ได้ ARM"})
-    for key in ("mhz19c", "pms7003", "sgp40"):
-        device = devices.get(key) or {}
-        if device.get("status") != "live":
-            blockers.append({
-                "code": f"{key}_not_live",
-                "message": f"{device.get('model', key)} ไม่ได้ส่งข้อมูล Live",
-            })
-    if not aircon.get("connected") or aircon.get("stale"):
-        blockers.append({"code": "aircon_offline",
-                         "message": "Control Hub 1 ของแอร์ Offline"})
-
-    temperature = numeric("temperature_c")
-    if temperature is None:
-        recommend("temperature", "blocked", "ไม่มีข้อมูลอุณหภูมิสด",
-                  "คงสถานะเดิมและรอ SHT3x-DIS กลับมา")
-    elif temperature > TEMPERATURE_EXCELLENT_MAX_C:
-        recommend("temperature", "attention", "อุณหภูมิสูงกว่าช่วงเป้าหมาย",
-                  f"วัดได้ {temperature:.1f}°C; ตรวจความสบายก่อนลด setpoint แบบทีละ 1°C",
-                  "เสนอให้ลด setpoint 1°C (ยังไม่สั่งจริง)")
-    elif temperature < TEMPERATURE_EXCELLENT_MIN_C:
-        recommend("temperature", "attention", "อุณหภูมิต่ำกว่าช่วงเป้าหมาย",
-                  f"วัดได้ {temperature:.1f}°C; ตรวจความสบายก่อนเพิ่ม setpoint แบบทีละ 1°C",
-                  "เสนอให้เพิ่ม setpoint 1°C (ยังไม่สั่งจริง)")
-    else:
-        recommend("temperature", "stable", "อุณหภูมิอยู่ในช่วงยอดเยี่ยม",
-                  f"{temperature:.1f}°C · คงค่าปัจจุบันและติดตามแนวโน้ม")
-
-    humidity = numeric("humidity_rh")
-    if humidity is None:
-        recommend("humidity", "blocked", "ไม่มีข้อมูลความชื้นสด",
-                  "คงสถานะเดิมและรอ SHT3x-DIS กลับมา")
-    elif humidity > 60.0:
-        recommend("humidity", "attention", "ความชื้นเริ่มสูง",
-                  f"วัดได้ {humidity:.1f}%RH; ตรวจ condensation และการระบายอากาศ")
-    elif humidity < 40.0:
-        recommend("humidity", "attention", "ความชื้นค่อนข้างต่ำ",
-                  f"วัดได้ {humidity:.1f}%RH; หลีกเลี่ยงการพ่นไอน้ำอัตโนมัติจนผ่าน safety review")
-    else:
-        recommend("humidity", "stable", "ความชื้นอยู่ในช่วงเฝ้าดู",
-                  f"{humidity:.1f}%RH · คงค่าปัจจุบัน")
-
-    co2 = numeric("co2_ppm")
-    if co2 is None or (devices.get("mhz19c") or {}).get("status") != "live":
-        recommend("air", "blocked", "ยังประเมินอากาศสดไม่ได้",
-                  "MH-Z19C Offline — ห้ามสั่ง ventilation อัตโนมัติจากค่าค้าง")
-    elif co2 >= SAFETY_CO2_CRITICAL_PPM:
-        recommend("air", "critical", "CO₂ ถึงระดับฉุกเฉิน",
-                  f"{co2:.0f} ppm · ใช้ Safety SOP และเพิ่มอากาศสดทันทีเมื่อระบบระบายพร้อม")
-    elif co2 >= SAFETY_CO2_WARN_PPM:
-        recommend("air", "attention", "CO₂ เริ่มสูง",
-                  f"{co2:.0f} ppm · เสนอเพิ่มอากาศสดและติดตามค่าเฉลี่ยเคลื่อนที่")
-    elif co2 >= 800:
-        recommend("air", "watch", "CO₂ กำลังไต่ขึ้น",
-                  f"{co2:.0f} ppm · เตรียมเพิ่มอากาศสดก่อนถึง 1,000 ppm")
-    else:
-        recommend("air", "stable", "CO₂ อยู่ในช่วงเฝ้าดู",
-                  f"{co2:.0f} ppm · คง ventilation ปัจจุบัน")
-
-    pm25 = numeric("pm2_5_ug_m3")
-    if pm25 is None or (devices.get("pms7003") or {}).get("status") != "live":
-        recommend("particles", "blocked", "ยังประเมิน PM2.5 ไม่ได้",
-                  "PMS7003 Offline — ไม่อนุมานว่าฝุ่นเป็นศูนย์")
-    elif pm25 >= 35:
-        recommend("particles", "attention", "PM2.5 สูงกว่าช่วง Pilot",
-                  f"{pm25:.1f} µg/m³ · เสนอเพิ่ม HEPA recirculation")
-    elif pm25 >= 15:
-        recommend("particles", "watch", "PM2.5 ควรติดตาม",
-                  f"{pm25:.1f} µg/m³ · ตรวจ filter และแนวโน้มต่อเนื่อง")
-    else:
-        recommend("particles", "stable", "PM2.5 อยู่ในช่วงเฝ้าดู",
-                  f"{pm25:.1f} µg/m³ · คงการกรองปัจจุบัน")
-
-    voc = numeric("voc_index")
-    if voc is None or (devices.get("sgp40") or {}).get("status") != "live":
-        recommend("voc", "blocked", "ยังประเมิน VOC Index ไม่ได้",
-                  "SGP40 Offline — รอ Adaptive Baseline กลับมาทำงาน")
-    elif voc >= 200:
-        recommend("voc", "attention", "VOC เพิ่มสูงจาก Baseline",
-                  f"VOC Index {voc:.0f} · เสนอเพิ่ม carbon filtration/อากาศสด")
-    elif voc >= 150:
-        recommend("voc", "watch", "VOC สูงกว่าค่ากลางของห้อง",
-                  f"VOC Index {voc:.0f} · ติดตามแนวโน้มก่อนสั่งงาน")
-    else:
-        recommend("voc", "stable", "VOC ใกล้ Adaptive Baseline",
-                  f"VOC Index {voc:.0f} · ค่า 100 คือ Baseline ที่ SGP40 เรียนรู้")
-
-    sound = numeric("sound_dba_est")
-    if sound is None:
-        recommend("sound", "blocked", "ไม่มีข้อมูลเสียงสด",
-                  "คงระดับเสียงเดิมและรอ SPH0645 กลับมา")
-    elif sound > SOUND_DBA_SLEEP_TARGET:
-        recommend("sound", "attention", "เสียงสูงกว่าเป้าหมายกลางคืน",
-                  f"ประเมินได้ {sound:.1f} dBA est.; เป้าหมายไม่เกิน {SOUND_DBA_SLEEP_TARGET:.0f} — ตรวจเทียบ LAeq ที่ตำแหน่งหมอนและลดเสียงอย่างนุ่มนวล",
-                  "เสนอให้ลดระดับเสียง (ยังไม่สั่งจริง)")
-    else:
-        recommend("sound", "stable", "ระดับเสียงอยู่ในเป้าหมาย",
-                  f"{sound:.1f} dBA est. · เป้าหมาย ≤{SOUND_DBA_SLEEP_TARGET:.0f} · คงระดับปัจจุบัน")
-
-    lux = numeric("lux")
-    lux_limit = 1.0 if phase == "sleep_session" else 10.0
-    if lux is not None and phase != "standby" and lux > lux_limit:
-        recommend("light", "attention", "แสงสูงกว่าช่วงของ Session",
-                  f"Photopic {lux:.2f} lux; เสนอหรี่ไฟ แต่ยังยืนยัน mEDI ไม่ได้หากไม่มี spectral sensor")
-    elif lux is not None:
-        recommend("light", "stable", "แสงอยู่ในช่วงเฝ้าดู",
-                  f"Photopic {lux:.2f} lux · ไม่อ้าง mEDI จาก lux เพียงค่าเดียว")
-
-    severe_levels = {"critical", "attention", "blocked"}
-    attention_count = sum(1 for item in recommendations
-                          if item["level"] in severe_levels)
-    status = "blocked" if blockers else "attention" if attention_count else "stable"
-    summary = ("ยังไม่พร้อมทดสอบ Auto Response"
-               if blockers else "พร้อมเก็บผล Shadow เพื่อทวนกฎควบคุม")
-    return {
-        "enabled": True,
-        "mode": "shadow",
-        "status": status,
-        "policy_version": SMART_RESPONSE_POLICY_VERSION,
-        "cadence_s": 1,
-        "evaluated_at": now,
-        "phase": phase,
-        "phase_label": phase_label,
-        "summary": summary,
-        "recommendations": recommendations,
-        "blockers": blockers,
-        "attention_count": attention_count,
-        "automatic_actuation": False,
-        "sleep_stage_used": False,
-        "bed_auto_move": False,
-        "guardrails": [
-            "Sleep Stage เป็น telemetry เท่านั้นและไม่ใช้สั่งอุปกรณ์",
-            "เตียงควบคุมด้วยผู้ใช้และปุ่มหยุดเท่านั้น",
-            "ค่าที่ Offline/Stale ไม่ถูกแทนเป็นศูนย์หรือใช้สั่งงาน",
-        ],
-    }
+    """Compatibility facade over the side-effect-free Shadow evaluator."""
+    policy = SmartResponsePolicy(
+        version=SMART_RESPONSE_POLICY_VERSION,
+        temperature_min_c=TEMPERATURE_EXCELLENT_MIN_C,
+        temperature_max_c=TEMPERATURE_EXCELLENT_MAX_C,
+        co2_warn_ppm=SAFETY_CO2_WARN_PPM,
+        co2_critical_ppm=SAFETY_CO2_CRITICAL_PPM,
+        sound_sleep_target_dba=SOUND_DBA_SLEEP_TARGET,
+    )
+    return evaluate_smart_response(snap, policy, now=now)
 
 
 def sound_energy_average_db(levels: List[float]) -> Optional[float]:
-    """Return an energy-domain average for valid 0–120 dBA estimates.
-
-    Arithmetic averaging in decibels is physically incorrect. Subtracting the
-    peak before exponentiation keeps the calculation numerically stable while
-    preserving the same Leq result.
-    """
-    valid = [
-        float(value) for value in levels
-        if isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(float(value))
-        and SOUND_DBA_DISPLAY_MIN <= float(value) <= SOUND_DBA_DISPLAY_MAX
-    ]
-    if not valid:
-        return None
-    peak = max(valid)
-    relative_energy = sum(10 ** ((value - peak) / 10.0) for value in valid) / len(valid)
-    return round(peak + 10.0 * math.log10(relative_energy), 2)
+    """Compatibility facade for the pure energy-domain average."""
+    return energy_average_db(
+        levels,
+        display_min=SOUND_DBA_DISPLAY_MIN,
+        display_max=SOUND_DBA_DISPLAY_MAX,
+    )
 
 
 def sound_window_summary(start_s: float, end_s: float) -> Dict[str, Any]:
     """Summarize SPH0645 samples aligned to one canonical analysis bucket."""
     with sound_history_lock:
-        levels = [
-            float(row["dba"]) for row in sound_level_history
-            if start_s < float(row["t"]) <= end_s
-        ]
-    leq = sound_energy_average_db(levels)
-    if leq is None:
-        return {
-            "method": "energy_average_leq", "window_s": round(end_s - start_s, 2),
-            "sample_count": 0, "status": "no_samples",
-        }
-    span = max(levels) - min(levels)
-    return {
-        "method": "energy_average_leq", "window_s": round(end_s - start_s, 2),
-        "sample_count": len(levels), "leq_dba": leq,
-        "min_dba": round(min(levels), 2), "max_dba": round(max(levels), 2),
-        "span_db": round(span, 2),
-        # Keep displaying non-negative readings as required, but identify a
-        # window whose dynamics are too large to treat as a steady calibration point.
-        "large_step_detected": span >= 20.0,
-        "status": "dynamic" if span >= 20.0 else "valid",
-    }
+        rows = list(sound_level_history)
+    return summarize_sound_window(
+        rows,
+        start_s,
+        end_s,
+        display_min=SOUND_DBA_DISPLAY_MIN,
+        display_max=SOUND_DBA_DISPLAY_MAX,
+    )
 
 
 def normalize_esp32_sensor(obj: Dict[str, Any]) -> Dict[str, Any]:
-    """Keep the original ESP32 payload and add normalized dashboard fields."""
-    out = dict(obj)
-    aliases = {
-        "temperature": ("temperature_c", "temperature", "temp", "temp_c"),
-        "humidity": ("humidity", "hum", "rh", "humidity_rh"),
-        "lux": ("lux", "light", "illuminance"),
-        "co2": ("co2", "co2_ppm", "carbon_dioxide"),
-        "sound_dbfs": ("sound_dbfs",),
-        "sound_rms": ("sound_rms",),
-        "sound_peak": ("sound_peak",),
-    }
-    for target, keys in aliases.items():
-        value = _first_numeric(obj, keys)
-        if value is not None:
-            out[target] = value
-    # Preserve raw dBFS and apply the field-requested percentage transform.
-    # Estimates from 0-120 are displayed as dBA est. An estimate below zero
-    # is left invalid so hold_last_valid_sound() can keep the prior valid
-    # display value; estimates above 120 are capped for the user display.
-    sound_dbfs = out.get("sound_dbfs")
-    if isinstance(sound_dbfs, (int, float)) and not isinstance(sound_dbfs, bool):
-        magnitude = round(abs(float(sound_dbfs)), 1)
-        unbounded = magnitude * (1.0 - SOUND_DBFS_ERROR_PERCENT / 100.0)
-        if math.isfinite(unbounded):
-            unbounded = round(unbounded, 2)
-            out["sound_dba_est_unbounded"] = unbounded
-            out["sound_dba_est"] = round(min(SOUND_DBA_DISPLAY_MAX, unbounded), 2)
-            out["sound_value_limited"] = unbounded > SOUND_DBA_DISPLAY_MAX
-            out["sound_dbfs_magnitude"] = magnitude
-            out["sound_error_percent"] = SOUND_DBFS_ERROR_PERCENT
-    return out
+    """Compatibility facade for deterministic Hub 1 normalization."""
+    return normalize_hub1_sensor(
+        obj,
+        sound_error_percent=SOUND_DBFS_ERROR_PERCENT,
+        sound_display_max=SOUND_DBA_DISPLAY_MAX,
+    )
 
 
 def hold_last_valid_sound(current: Dict[str, Any], previous: Dict[str, Any]) -> Dict[str, Any]:
-    """Publish only a finite SPH0645 value inside the display range.
-
-    The signed dBFS and unbounded estimate remain available for developer
-    diagnostics. A non-finite/missing sample may hold the last valid value;
-    ordinary out-of-range values are already bounded by normalization.
-    """
-    value = current.get("sound_dba_est")
-    if (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(float(value))
-        and SOUND_DBA_DISPLAY_MIN <= float(value) <= SOUND_DBA_DISPLAY_MAX
-    ):
-        current["sound_value_held"] = False
-        return current
-    old = previous.get("sound_dba_est")
-    if (
-        isinstance(old, (int, float))
-        and not isinstance(old, bool)
-        and math.isfinite(float(old))
-        and SOUND_DBA_DISPLAY_MIN <= float(old) <= SOUND_DBA_DISPLAY_MAX
-    ):
-        current["sound_dba_est"] = old
-        current["sound_value_held"] = True
-        current["sound_invalid_value"] = value
-    else:
-        current.pop("sound_dba_est", None)
-        current["sound_value_held"] = True
-        current["sound_invalid_value"] = value
-    return current
+    """Compatibility facade for the missing-value hold policy."""
+    return hold_sound_value(
+        current,
+        previous,
+        display_min=SOUND_DBA_DISPLAY_MIN,
+        display_max=SOUND_DBA_DISPLAY_MAX,
+    )
 
 
 def esp32_reader():
@@ -6889,12 +6442,6 @@ async def bcg_raw(limit: int = 12):
     return {"frame_bytes": 66, "count": len(packets), "packets": packets}
 
 
-class SensorBiasCommand(BaseModel):
-    metric: str
-    bias: float
-    reference_value: Optional[float] = None
-
-
 def sensor_calibration_inspector_snapshot() -> Dict[str, Any]:
     """Build the Admin-only Raw → Parameter → Output comparison table."""
     snap = snapshot()
@@ -7034,162 +6581,32 @@ async def api_logs(limit: int = 100):
             "db_health": database.health()}
 
 
-class SwitchCommand(BaseModel):
-    on: bool
-
-
-class VolumeCommand(BaseModel):
-    volume: int
-
-
-class TrackCommand(BaseModel):
-    track: str
-    loop: bool = False
-    queue: bool = False
-    user_initiated: bool = False
-
-
-class BrainwavePreviewCommand(BaseModel):
-    preset_id: str
-    duration_seconds: int = 30
-    volume: int = 35
-    confirm_occupied: bool = False
-
-
-class LoginCommand(BaseModel):
-    username: str
-    gender: Optional[str] = None
-    age: Optional[int] = None
-    age_group: Optional[str] = None
-    # Reserved for Local fallback and future Profile editing. Missing means
-    # unknown; the service never fabricates body measurements or blood group.
-    height_cm: Optional[float] = None
-    weight_kg: Optional[float] = None
-    blood_group: Optional[str] = None
-    rest_mode: str = "nap_recovery"
-    # One-time proof returned only after this Pi actually failed to reach ZEEP.
-    # This closes the old unauthenticated local-login bypass.
-    offline_ticket: str
-    offline_identifier: str
-
-
-class AuthLoginCommand(BaseModel):
-    identifier: str          # username หรือ email — ตรงกับ contract ของ ZEEP API
-    password: str
-    # ส่งมาเฉพาะรอบที่สอง หลัง /api/auth/login ตอบ 422 age_group_required
-    # (บัญชี ZEEP ที่ยังไม่ได้ตั้งวันเกิด → คำนวณ Baseline จากอายุไม่ได้)
-    age_group: Optional[str] = None
-    rest_mode: str = "nap_recovery"
-
-
-class AdminLoginCommand(BaseModel):
-    identifier: str
-    password: str
-
-
-class ForceLogoutCommand(BaseModel):
-    reason: str = "admin_force_logout"
-
-
-class ActiveSessionProfileCommand(BaseModel):
-    session_id: str
-    display_name: str
-    gender: str
-    reason: str = "admin_profile_correction"
-
-
-class ProgressiveProfileConsentCommand(BaseModel):
-    granted: bool
-
-
-class ProgressiveProfileAnswerCommand(BaseModel):
-    question_id: str
-    value: Any
-
-
-class ProgressiveProfileDeferCommand(BaseModel):
-    question_id: Optional[str] = None
-
-
-class LabelCommand(BaseModel):
-    label: str
-
-
-class AirconCommand(BaseModel):
-    command: str
-    # Admin Control Debug may bypass the user-facing -5 C comfort bias.  The
-    # endpoint verifies the authenticated role again before accepting this.
-    direct: bool = False
-
-
-class AirconFanLevelReferenceCommand(BaseModel):
-    # Administrative correction only. This updates the Pi reference without
-    # transmitting an IR frame to the air conditioner.
-    level: int
-    note: Optional[str] = None
-
-
-class BedControlCommand(BaseModel):
-    command: str
-
-
 def _normalize_aircon_command(raw: str) -> str:
-    command = " ".join((raw or "").strip().lower().split())
-    fixed = {
-        "on", "off", "fan", "swing_on", "swing_off",
-        "light_on", "light_off", "status",
-    }
-    if command in fixed:
-        return command
-    parts = command.split(" ")
-    if len(parts) == 2 and parts[0] == "temp":
-        try:
-            temperature_c = int(parts[1])
-        except ValueError:
-            temperature_c = -1
-        if 5 <= temperature_c <= 32:
-            return f"temp {temperature_c}"
-    raise HTTPException(
-        422,
-        "คำสั่ง Air Con ไม่ถูกต้อง: ใช้ on, off, temp 5-32, fan, "
-        "swing_on/off, light_on/off หรือ status",
-    )
+    try:
+        return normalize_aircon_command(raw)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 def _apply_aircon_temperature_bias(command: str) -> Tuple[str, Optional[int], Optional[int]]:
-    """Translate a user-facing temperature into the colder ESP32 IR setpoint.
-
-    Example with the default -5 °C bias: ``temp 20`` becomes ``temp 15``.
-    Non-temperature commands pass through unchanged.
-    """
-    if not command.startswith("temp "):
-        return command, None, None
-    desired_temperature = int(command.split(" ", 1)[1])
-    if not AIRCON_DESIRED_TEMP_MIN_C <= desired_temperature <= AIRCON_DESIRED_TEMP_MAX_C:
-        raise HTTPException(
-            422,
-            f"อุณหภูมิที่ผู้ใช้เลือกต้องอยู่ระหว่าง "
-            f"{AIRCON_DESIRED_TEMP_MIN_C}-{AIRCON_DESIRED_TEMP_MAX_C} °C",
+    try:
+        return apply_aircon_temperature_bias(
+            command,
+            desired_min_c=AIRCON_DESIRED_TEMP_MIN_C,
+            desired_max_c=AIRCON_DESIRED_TEMP_MAX_C,
+            bias_c=AIRCON_TEMPERATURE_BIAS_C,
         )
-    commanded_temperature = desired_temperature + AIRCON_TEMPERATURE_BIAS_C
-    if not 5 <= commanded_temperature <= 32:
-        raise HTTPException(500, "ค่า Air Con bias อยู่นอกช่วงคำสั่ง 5-32 °C")
-    return f"temp {commanded_temperature}", desired_temperature, commanded_temperature
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(500, str(exc)) from exc
 
 
 def _normalize_bed_command(raw: str) -> str:
-    command = (raw or "").strip().lower()
-    allowed = {
-        "head_up", "head_down", "foot_up", "foot_down",
-        "bed_stop", "flat", "center_all", "status",
-    }
-    if command not in allowed:
-        raise HTTPException(
-            422,
-            "คำสั่ง Bed ไม่ถูกต้อง: ใช้ head_up, head_down, foot_up, "
-            "foot_down, bed_stop, flat, center_all หรือ status",
-        )
-    return command
+    try:
+        return normalize_bed_command(raw)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @app.post("/api/safety/arm", dependencies=[Depends(require_admin)])

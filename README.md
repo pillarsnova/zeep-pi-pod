@@ -2,14 +2,16 @@
 
 จอควบคุมภายในตู้ ZEEP Pod สำหรับ Raspberry Pi 5 — ธีม J.A.R.V.I.S. HUD
 ใช้งานผ่านแท็บเล็ต/เบราว์เซอร์บน Wi-Fi hotspot ของ Pi ได้โดย**ไม่ต้องมีอินเทอร์เน็ต**
-ดูแลผ่าน Claude session ของ repo `zeep-lab` — การแก้ไขให้ผ่านช่องทางนั้นเพื่อให้
-ประวัติการเปลี่ยนแปลงอยู่ใน git ครบ
+การเปลี่ยนแปลง production ใช้ branch `develop` และต้องผ่าน regression tests
+เพื่อให้ประวัติการเปลี่ยนแปลงและเหตุผลอยู่ใน git ครบ
 
 ## โครงสร้างของระบบ (System Structure)
 
 ```
 pi5/
-├── app.py                  # Sensor, actuator, safety และ pod-session orchestration
+├── app.py                  # Composition root: FastAPI, lifecycle, hardware orchestration
+├── api_models.py           # Pydantic request contracts ของ HTTP API
+├── control_protocol.py     # ตรวจคำสั่ง Aircon/Bed และแปลง temperature bias
 ├── access_control.py       # Browser session, User/Admin RBAC, CSRF, offline ticket
 ├── pod_occupancy.py        # Lease ป้องกัน login ซ้ำ และ coordinator สำหรับหลายตู้
 ├── api_history.py          # Raw history/export API สำหรับ Admin เท่านั้น
@@ -18,6 +20,9 @@ pi5/
 ├── static/partials/control # Source ของการ์ดควบคุม 6 ส่วน
 ├── ui_composer.py          # Build/check bundle โดยไม่เพิ่ม browser-side fetch
 ├── sensor_contracts.py     # Datasheet/as-built/telemetry contract กลาง
+├── sensor_calibration.py   # Calibration spec, validation และ atomic persistence
+├── sensor_runtime.py       # Normalize/validate/compose Sensor Hub + Sound Leq
+├── smart_response.py       # Shadow recommendations แบบ pure/read-only
 ├── api_v1.py               # Versioned read API envelope
 ├── sleep_signal_features.py# BCG/movement/arousal/HR-RR engineering proxies
 ├── sleep_stage_scoring.py  # Evidence scorer ร่วมของ Live และ Replay
@@ -43,6 +48,11 @@ pi5/
     ├── calibration.json    #   Bias/calibration และ provenance ของอุปกรณ์
     └── active_session_checkpoint.json # Session continuity หลัง restart/ไฟดับ
 ```
+
+หลักการแบ่ง module และ dependency/data flow ฉบับสำหรับทีมพัฒนาอยู่ที่
+[Pi5 Software Architecture](docs/pi5-software-architecture.md) โดย `app.py`
+ทำหน้าที่ประกอบระบบและ side effects เท่านั้น ส่วนกฎที่คำนวณได้ต้องอยู่ใน pure
+module ที่ import และทดสอบได้โดยไม่เปิด GPIO, Serial, MQTT หรือเว็บเซิร์ฟเวอร์
 
 ### ขอบเขตความรับผิดชอบของ Backend
 

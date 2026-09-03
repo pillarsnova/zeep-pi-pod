@@ -136,9 +136,9 @@ class SleepTransitionPolicyTests(unittest.TestCase):
             self.assertEqual(
                 zeep._transition_fallback_state(blocked, "wake"), "n1")
 
-    def test_n1_must_progress_through_n2(self):
+    def test_n1_can_enter_guarded_rem_but_not_n3(self):
         self.apply("wake", "n1")
-        self.assert_allowed({"wake", "n1", "n2"}, {"n3", "rem"})
+        self.assert_allowed({"wake", "n1", "n2", "rem"}, {"n3"})
         self.assertEqual(zeep._transition_fallback_state("n3", "n1"), "n2")
 
     def test_n2_can_enter_n3_or_rem(self):
@@ -147,7 +147,7 @@ class SleepTransitionPolicyTests(unittest.TestCase):
         self.assertEqual(zeep._transition_fallback_state("wake", "n2"), "n1")
         self.assertTrue(zeep._transition_allowed("wake", strong_wake=True)[0])
 
-    def test_n3_can_enter_rem_but_quiet_wake_still_uses_bridge(self):
+    def test_n3_can_enter_rem_and_rem_can_wake_naturally(self):
         self.apply("wake", "n1", "n2", "n3")
         self.assert_allowed({"n3", "n2", "rem"}, {"wake", "n1"})
         self.assertEqual(zeep._transition_fallback_state("wake", "n3"), "n2")
@@ -156,20 +156,20 @@ class SleepTransitionPolicyTests(unittest.TestCase):
         with zeep.sleep_path_lock:
             zeep._reset_sleep_stage_path("test-session")
         self.apply("wake", "n1", "n2", "rem")
-        self.assert_allowed({"rem", "n2", "n1"}, {"wake", "n3"})
-        self.assertEqual(zeep._transition_fallback_state("wake", "rem"), "n1")
+        self.assert_allowed({"rem", "n2", "n1", "wake"}, {"n3"})
         self.assertTrue(zeep._transition_allowed("wake", strong_wake=True)[0])
 
-    def test_n3_to_rem_requires_normal_dwell_and_five_confirmations(self):
+    def test_n3_to_rem_requires_normal_dwell_and_two_evidence_epochs(self):
         with zeep.sleep_path_lock:
             zeep._reset_sleep_stage_path("test-session")
             for index, stage in enumerate(("wake", "n1", "n2", "n3")):
                 zeep._apply_stage_to_path(stage, now=index * 60.0)
-        for index, now in enumerate((240.0, 245.0, 250.0, 255.0, 260.0), start=1):
+        for index, now in enumerate((240.0, 270.0), start=1):
             stage, meta = zeep._stabilize_sleep_stage("rem", now=now)
-            self.assertEqual(meta["required_ticks"], 5)
+            self.assertEqual(meta["required_ticks"], 2)
             self.assertEqual(meta["candidate_ticks"], index)
-            self.assertEqual(stage, "rem" if index == 5 else "n3")
+            self.assertEqual(meta["confirmation_seconds"], 60.0)
+            self.assertEqual(stage, "rem" if index == 2 else "n3")
 
     def test_wake_resets_n1_gate_for_the_next_cycle(self):
         self.apply("wake", "n1", "n3", "wake")
@@ -184,18 +184,16 @@ class SleepTransitionPolicyTests(unittest.TestCase):
         self.assertTrue(zeep._transition_allowed("n2")[0])
         self.assertEqual(zeep._transition_fallback_state("n1", "n3"), "n2")
 
-    def test_transition_requires_repeated_five_second_evidence(self):
+    def test_transition_requires_two_thirty_second_evidence_epochs(self):
         with zeep.sleep_path_lock:
             zeep._apply_stage_to_path("wake", now=0.0)
-        stage, meta = zeep._stabilize_sleep_stage("n1", now=20.0)
-        self.assertEqual(stage, "wake")
-        self.assertTrue(meta["held"])
-        stage, meta = zeep._stabilize_sleep_stage("n1", now=25.0)
-        self.assertEqual(stage, "wake")
-        self.assertTrue(meta["held"])
         stage, meta = zeep._stabilize_sleep_stage("n1", now=30.0)
+        self.assertEqual(stage, "wake")
+        self.assertTrue(meta["held"])
+        stage, meta = zeep._stabilize_sleep_stage("n1", now=60.0)
         self.assertEqual(stage, "n1")
         self.assertFalse(meta["held"])
+        self.assertEqual(meta["confirmation_seconds"], 60.0)
 
 
 class BaselineProximityTests(unittest.TestCase):
@@ -275,35 +273,49 @@ class SleepStageWeightingTests(unittest.TestCase):
 
 
 class AnalysisFrameTests(unittest.TestCase):
-    def test_one_frame_carries_all_analytics_on_the_ten_second_clock(self):
+    def test_three_sensor_frames_publish_one_thirty_second_sleep_epoch(self):
         original_estimator = zeep.estimate_sleep_state
         with zeep.analysis_frame_lock:
             original_frame = zeep._analysis_frame
             original_cache = dict(zeep._sleep_cache)
         with zeep.state_lock:
-            original_session_id = zeep.state["session"].get("session_id")
-            zeep.state["session"]["session_id"] = "frame-test"
+            original_session = copy.deepcopy(zeep.state["session"])
+            zeep.state["session"].update({
+                "session_id": "frame-test", "active": True, "recording": True,
+            })
+        with zeep.sleep_path_lock:
+            original_path = copy.deepcopy(zeep._sleep_stage_path)
+            zeep._reset_sleep_stage_path("frame-test")
         zeep.estimate_sleep_state = lambda: {"state": "n2", "probabilities": {"n2": 1.0}}
         try:
-            zeep._publish_analysis_frame(
-                {
-                    "t": 100.0, "status": 3, "hr": 61.0, "rr": 14.0,
-                    "bcg_frames": 2, "bcg_valid": True, "bcg_latest_t": 99.5,
-                },
-                {"temperature_c": 23.5, "humidity_rh": 52.0},
-                {"connected": True},
-            )
+            for timestamp in (100.0, 110.0, 120.0):
+                zeep._publish_analysis_frame(
+                    {
+                        "t": timestamp, "status": 3, "hr": 61.0, "rr": 14.0,
+                        "bcg_frames": 2, "bcg_valid": True,
+                        "bcg_latest_t": timestamp - 0.5,
+                    },
+                    {"temperature_c": 23.5, "humidity_rh": 52.0},
+                    {"connected": True},
+                )
             frame = zeep.analysis_frame_cached()
             self.assertEqual(frame["refresh_s"], 10.0)
-            self.assertEqual(frame["sequence"], 10)
+            self.assertEqual(frame["evidence_refresh_s"], 30.0)
+            self.assertEqual(frame["confirmation_s"], 60.0)
+            self.assertEqual(frame["sequence"], 12)
             self.assertEqual(frame["session_id"], "frame-test")
             self.assertEqual(frame["environment"]["temperature_c"], 23.5)
             self.assertEqual(frame["bcg"]["heart_rate_bpm"], 61.0)
             self.assertEqual(frame["sleep"]["state"], "n2")
+            self.assertTrue(frame["sleep"]["evidence_epoch_due"])
         finally:
             zeep.estimate_sleep_state = original_estimator
             with zeep.state_lock:
-                zeep.state["session"]["session_id"] = original_session_id
+                zeep.state["session"].clear()
+                zeep.state["session"].update(original_session)
+            with zeep.sleep_path_lock:
+                zeep._sleep_stage_path.clear()
+                zeep._sleep_stage_path.update(original_path)
             with zeep.analysis_frame_lock:
                 zeep._analysis_frame = original_frame
                 zeep._sleep_cache.clear()

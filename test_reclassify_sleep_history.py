@@ -107,16 +107,15 @@ class HistoricalStagePathTests(unittest.TestCase):
         self.assertEqual(selected, "wake")
         path.commit(selected, 0.0)
 
-        # A direct N3 candidate is bridged through N1 and requires three ticks.
+        # A direct N3 candidate is bridged through N1 and requires two
+        # 30-second evidence epochs (60 seconds total).
         selected, metadata = path.stabilize("n3", now=15.0, strong_wake=False)
         self.assertEqual(selected, "wake")
         self.assertEqual(metadata["bridge_state"], "n1")
         path.commit(selected, 15.0)
-        selected, _ = path.stabilize("n3", now=20.0, strong_wake=False)
-        self.assertEqual(selected, "wake")
-        path.commit(selected, 20.0)
-        selected, _ = path.stabilize("n3", now=25.0, strong_wake=False)
+        selected, metadata = path.stabilize("n3", now=45.0, strong_wake=False)
         self.assertEqual(selected, "n1")
+        self.assertEqual(metadata["required_ticks"], 2)
 
     def test_emitted_stage_remains_probability_winner(self):
         result = adjusted_probabilities(
@@ -143,10 +142,11 @@ class HistoricalStagePathTests(unittest.TestCase):
             path.commit(stage, index * 60.0)
         self.assertTrue(path._allowed("rem", False))
         selected = "n3"
-        for now in (240.0, 245.0, 250.0, 255.0, 260.0):
+        for now in (240.0, 270.0):
             selected, metadata = path.stabilize("rem", now=now, strong_wake=False)
         self.assertEqual(selected, "rem")
-        self.assertEqual(metadata["required_ticks"], 5)
+        self.assertEqual(metadata["required_ticks"], 2)
+        self.assertEqual(metadata["confirmation_seconds"], 60.0)
 
     def test_historical_n2_to_wake_requires_strong_proxy_or_n1_bridge(self):
         path = HistoricalStagePath()

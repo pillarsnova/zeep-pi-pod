@@ -1,6 +1,6 @@
 # ZEEP Pi5 Software Architecture
 
-สถานะ: **Current implementation**  
+สถานะ: **Current implementation**
 ขอบเขต: `/home/pod1/pi5` · branch `origin/develop`
 
 เอกสารนี้เป็นแผนที่กลางสำหรับพัฒนาและตรวจสอบ Pi5 runtime ของ ZEEP ทุกตู้

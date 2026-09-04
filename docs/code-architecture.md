@@ -21,7 +21,8 @@ zeep_pod/
 ├── identity/
 │   └── profile_fields.py # account/profile/health field normalization
 └── sessions/
-    └── cadence.py        # mixed 5/10-second timeline normalization
+    ├── cadence.py        # mixed 5/10-second timeline normalization
+    └── lifecycle.py      # checkpoint, bed occupancy and HR/RR start gate
 ```
 
 Existing domain modules at the repository root remain supported while they
@@ -65,7 +66,10 @@ must shrink at each extraction phase.
 
 1. **Completed in Phase 1:** Session cadence, profile normalization, GPIO and
    audio runtime extracted with API compatibility.
-2. **Phase 2:** move Session lifecycle/checkpoint/ingest into `sessions/`.
+2. **Phase 2 — in progress:** checkpoint persistence, Bed Status and the fresh
+   HR/RR recording gate now live in `sessions/lifecycle.py`. Next, move Session
+   start/finalize/restore orchestration and account ingest behind injected
+   database, occupancy and logging ports.
 3. **Phase 3:** move ESP32, MQTT and BCG readers into `sensors/` services.
 4. **Phase 4:** move air-conditioner, bed and accessory commands into
    `controls/` services.
@@ -74,4 +78,3 @@ must shrink at each extraction phase.
 
 Every phase must pass the full regression suite on a workstation and a Pi
 smoke test before the service is restarted.
-

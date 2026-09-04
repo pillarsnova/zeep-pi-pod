@@ -104,6 +104,12 @@ from zeep_pod.sessions.cadence import (
     sample_interval_seconds as _sample_interval_seconds_impl,
     timeline_sample_interval as _timeline_sample_interval,
 )
+from zeep_pod.sessions.lifecycle import (
+    SESSION_CHECKPOINT_VERSION,
+    SessionCheckpointStore,
+    bed_is_occupied,
+    evaluate_vital_start_gate,
+)
 from maintenance_registry import maintenance_contract_snapshot
 from migration import migrate_jsonl
 from personal import BaselineStore
@@ -1265,7 +1271,6 @@ def safety_supervisor():
 profile_lock = threading.Lock()
 sessions_file_lock = threading.Lock()
 session_lock = threading.Lock()
-active_session_checkpoint_lock = threading.Lock()
 last_sensor_frame_lock = threading.Lock()
 ingest_outbox_lock = threading.Lock()
 sleep_path_lock = threading.Lock()
@@ -1283,95 +1288,39 @@ _sleep_stage_path = {
 }
 _analysis_frame: Optional[Dict[str, Any]] = None
 
-ACTIVE_SESSION_CHECKPOINT_VERSION = 1
 LAST_SENSOR_FRAME_VERSION = 1
 INGEST_OUTBOX_VERSION = 1
-_CHECKPOINT_RECORD_FIELDS = {
-    "session_id", "username", "username_key", "display_name", "gender", "age", "age_group",
-    "health_reference", "wellness_context",
-    "rest_mode", "auth_source", "zeep_public_id", "identity_subject", "pod_id",
-    "armed_at_utc", "started_at_utc", "sample_interval_s",
-    "sample_cadence_segments",
-}
+
+
+def _log_invalid_session_checkpoint(exc: Exception) -> None:
+    log_event("session", "restart_checkpoint_invalid", error=str(exc))
+
+
+session_checkpoint_store = SessionCheckpointStore(
+    path=ACTIVE_SESSION_CHECKPOINT_PATH,
+    bed_start_seconds=BED_START_SECONDS,
+    on_invalid=_log_invalid_session_checkpoint,
+)
+active_session_checkpoint_lock = session_checkpoint_store.lock
+ACTIVE_SESSION_CHECKPOINT_VERSION = SESSION_CHECKPOINT_VERSION
 
 
 def _active_session_checkpoint_payload(active: Dict[str, Any]) -> Dict[str, Any]:
-    """Build the restart checkpoint without persisting ZEEP credentials.
-
-    Browser Login is already durable in ``auth.db``.  This checkpoint stores
-    only the minimum link between that browser identity and the physical Pod
-    Session, including the pre-recording ``waiting_bed`` phase which has no
-    row in ``sessions.db`` yet.  Access/refresh tokens and passwords are never
-    copied from ``active['auth']``.
-    """
-    record = dict(active.get("record") or {})
-    safe_record = {
-        key: record.get(key)
-        for key in _CHECKPOINT_RECORD_FIELDS
-        if key in record
-    }
-    phase = active.get("phase")
-    if phase not in {"waiting_bed", "recording"}:
-        raise ValueError("active session phase is not restart-safe")
-    onbed_since = active.get("onbed_since")
-    onbed_elapsed_s = (
-        max(0.0, time.monotonic() - float(onbed_since))
-        if phase == "waiting_bed" and isinstance(onbed_since, (int, float))
-        else 0.0
-    )
-    return {
-        "schema_version": ACTIVE_SESSION_CHECKPOINT_VERSION,
-        "saved_at_utc": datetime.now(timezone.utc).isoformat(),
-        "phase": phase,
-        "owner_auth_session_id": active.get("owner_auth_session_id"),
-        "onbed_elapsed_s": round(min(onbed_elapsed_s, BED_START_SECONDS), 3),
-        "record": safe_record,
-    }
+    """Compatibility facade for the extracted Session checkpoint store."""
+    return session_checkpoint_store.build_payload(active)
 
 
 def _save_active_session_checkpoint(active: Dict[str, Any]) -> Dict[str, Any]:
-    """Atomically persist the active Login/Session link for service restart."""
-    payload = _active_session_checkpoint_payload(active)
-    with active_session_checkpoint_lock:
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        temporary = ACTIVE_SESSION_CHECKPOINT_PATH.with_suffix(".json.tmp")
-        with temporary.open("w", encoding="utf-8") as handle:
-            json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
-            handle.write("\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, ACTIVE_SESSION_CHECKPOINT_PATH)
-    return payload
+    """Compatibility facade for durable Session checkpoint persistence."""
+    return session_checkpoint_store.save(active)
 
 
 def _load_active_session_checkpoint() -> Optional[Dict[str, Any]]:
-    try:
-        with active_session_checkpoint_lock:
-            with ACTIVE_SESSION_CHECKPOINT_PATH.open("r", encoding="utf-8") as handle:
-                payload = json.load(handle)
-        if not isinstance(payload, dict):
-            raise ValueError("checkpoint is not an object")
-        if payload.get("schema_version") != ACTIVE_SESSION_CHECKPOINT_VERSION:
-            raise ValueError("unsupported checkpoint version")
-        if payload.get("phase") not in {"waiting_bed", "recording"}:
-            raise ValueError("invalid checkpoint phase")
-        record = payload.get("record")
-        if not isinstance(record, dict):
-            raise ValueError("checkpoint record is missing")
-        required = {"session_id", "username", "username_key", "identity_subject", "pod_id"}
-        if any(not record.get(key) for key in required):
-            raise ValueError("checkpoint identity is incomplete")
-        return payload
-    except FileNotFoundError:
-        return None
-    except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
-        log_event("session", "restart_checkpoint_invalid", error=str(exc))
-        return None
+    return session_checkpoint_store.load()
 
 
 def _clear_active_session_checkpoint() -> None:
-    with active_session_checkpoint_lock:
-        ACTIVE_SESSION_CHECKPOINT_PATH.unlink(missing_ok=True)
+    session_checkpoint_store.clear()
 
 
 def _persist_last_sensor_frame(frame: Optional[Dict[str, Any]]) -> bool:
@@ -4954,12 +4903,11 @@ def bed_occupied_now() -> bool:
     """มีคนบนเตียงจริงตอนนี้ไหม — จาก frame BCG ล่าสุดที่ยังสด"""
     with state_lock:
         b = dict(state["sensor"]["bcg"])
-    last = b.get("last_update")
-    return bool(
-        b.get("connected")
-        and isinstance(last, (int, float))
-        and time.time() - last <= BCG_STALE_SECONDS
-        and b.get("status_code") in ON_BED_CODES
+    return bed_is_occupied(
+        b,
+        now_epoch_s=time.time(),
+        stale_seconds=BCG_STALE_SECONDS,
+        on_bed_codes=ON_BED_CODES,
     )
 
 
@@ -4973,67 +4921,14 @@ def session_vital_gate_now(active: Optional[Dict[str, Any]] = None) -> Dict[str,
     """
     with state_lock:
         b = dict(state["sensor"]["bcg"])
-    now = time.time()
-    last = b.get("last_update")
-    fresh = bool(
-        b.get("connected")
-        and isinstance(last, (int, float))
-        and now - last <= BCG_STALE_SECONDS
+    return evaluate_vital_start_gate(
+        b,
+        active,
+        now_epoch_s=time.time(),
+        stale_seconds=BCG_STALE_SECONDS,
+        on_bed_codes=ON_BED_CODES,
+        required_packets=SESSION_VITAL_START_PACKETS,
     )
-    on_bed = bool(fresh and b.get("status_code") in ON_BED_CODES)
-    hr_valid = bool(
-        on_bed
-        and b.get("heart_rate_current_valid")
-        and not b.get("heart_rate_held")
-    )
-    rr_valid = bool(
-        on_bed
-        and b.get("respiration_current_valid")
-        and not b.get("respiration_held")
-    )
-    packet_count = int(b.get("packets") or 0)
-    raw_start_packet_count = (active or {}).get("vital_gate_start_packet_count")
-    start_packet_count = (
-        int(raw_start_packet_count)
-        if isinstance(raw_start_packet_count, (int, float))
-        else packet_count
-    )
-    packets_since_start = max(0, packet_count - start_packet_count)
-    confirmed_packets = min(
-        packets_since_start,
-        int(b.get("vital_valid_streak") or 0),
-    ) if hr_valid and rr_valid else 0
-    ready = bool(
-        on_bed
-        and hr_valid
-        and rr_valid
-        and confirmed_packets >= SESSION_VITAL_START_PACKETS
-    )
-    if not fresh:
-        reason = "waiting_for_bcg"
-    elif not on_bed:
-        reason = "waiting_for_bed"
-    elif not hr_valid and not rr_valid:
-        reason = "waiting_for_hr_rr"
-    elif not hr_valid:
-        reason = "waiting_for_hr"
-    elif not rr_valid:
-        reason = "waiting_for_rr"
-    elif not ready:
-        reason = "confirming_hr_rr"
-    else:
-        reason = "ready"
-    return {
-        "ready": ready,
-        "heart_rate_valid": hr_valid,
-        "respiration_rate_valid": rr_valid,
-        "confirmed_packets": confirmed_packets,
-        "required_packets": SESSION_VITAL_START_PACKETS,
-        "packets_since_login": packets_since_start,
-        "bcg_fresh": fresh,
-        "on_bed": on_bed,
-        "reason": reason,
-    }
 
 
 def _begin_recording(active: Dict[str, Any]):

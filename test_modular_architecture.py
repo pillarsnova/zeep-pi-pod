@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parent
 PACKAGE = ROOT / "zeep_pod"
 MAX_PACKAGE_FILE_LINES = 500
 MAX_FUNCTION_LINES = 90
-MAX_APP_LINES = 8_900
+MAX_APP_LINES = 8_800
 
 
 class ModularArchitectureTests(unittest.TestCase):
@@ -73,4 +73,3 @@ class ModularArchitectureTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

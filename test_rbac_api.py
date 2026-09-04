@@ -1029,6 +1029,27 @@ class RbacApiTests(unittest.TestCase):
         self.assertIn("อัปเดตจากบัญชี ZEEP เมื่อ Login", ui)
         self.assertIn("Profile API ไม่พร้อม", ui)
 
+    def test_admin_dashboard_explains_live_values_without_clinical_claims(self) -> None:
+        """Admin gets contextual explanations while the user view stays lean."""
+        ui = (Path(__file__).resolve().parent / "static" / "index.html").read_text(
+            encoding="utf-8"
+        )
+        css = (Path(__file__).resolve().parent / "static" / "theme-modern.css").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('id="adminLiveExplanation" data-admin-panel', ui)
+        self.assertIn('id="adminBioExplanation"', ui)
+        self.assertIn('id="adminEnvironmentExplanation"', ui)
+        self.assertIn("function renderAdminLiveExplanation", ui)
+        self.assertIn("adminBaselineComparison(hr,baseline.hr", ui)
+        self.assertIn("adminBaselineComparison(rr,baseline.rr", ui)
+        self.assertIn("rawHr!==null", ui)
+        self.assertIn("rawRr!==null", ui)
+        self.assertIn("Sleep Stage เป็นค่าประเมินจาก BCG/HR/RR ไม่ใช่ผลยืนยันจาก PSG", ui)
+        self.assertIn("SGP40 เป็น Adaptive VOC Index แบบสัมพัทธ์", ui)
+        self.assertIn("ไม่ใช่เครื่องวัดเสียง Class 1", ui)
+        self.assertIn('body:not([data-role="admin"]) [data-admin-panel]', css)
+
     def test_sensor_integrity_displays_every_sensor_and_primary_reading(self) -> None:
         ui = (Path(__file__).resolve().parent / "static" / "index.html").read_text(
             encoding="utf-8"

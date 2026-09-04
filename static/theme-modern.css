@@ -13900,3 +13900,157 @@ body[data-view="control"] .audio-zone .stream-queue-row select {
 body[data-view="control"] .aircon-control-stack .fan-level-control .toggle-state-copy b {
   font-size: 12px !important;
 }
+
+/* Admin live interpretation -------------------------------------------------
+ * Explain the same confirmed sleep payload and versioned environment result
+ * already rendered above. This is intentionally Admin-only and never turns a
+ * single wellness reading into a diagnosis or a PSG-equivalent conclusion. */
+.admin-live-explanation {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid rgba(71, 154, 180, .3);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(9, 30, 44, .96), rgba(7, 19, 31, .98));
+}
+
+.admin-live-explanation-head,
+.admin-live-explanation-head > div,
+.admin-live-explanation-row-head {
+  display: flex;
+  align-items: center;
+}
+
+.admin-live-explanation-head {
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 9px;
+}
+
+.admin-live-explanation-head > div { gap: 8px; }
+.admin-live-explanation-head b,
+.admin-live-explanation-head small { display: block; }
+.admin-live-explanation-head b { color: #edfaff; font-size: 13px; }
+.admin-live-explanation-head small { margin-top: 2px; color: #7192a2; font-size: 10px; }
+.admin-live-explanation-head > span {
+  padding: 5px 8px;
+  border: 1px solid rgba(69, 199, 219, .27);
+  border-radius: 999px;
+  color: #8fe8f4;
+  background: rgba(30, 118, 137, .16);
+  font-size: 9px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.admin-live-explanation-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  flex: 0 0 28px;
+  border: 1px solid rgba(69, 215, 229, .35);
+  border-radius: 9px;
+  color: #a8f7ff;
+  background: rgba(31, 145, 158, .2);
+  font: 800 14px Georgia, serif;
+}
+
+.admin-live-explanation-grid {
+  display: grid;
+  grid-template-columns: minmax(250px, .8fr) minmax(0, 1.2fr);
+  gap: 8px;
+}
+
+.admin-live-explanation-group {
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid rgba(78, 126, 148, .2);
+  border-radius: 11px;
+  background: rgba(3, 15, 25, .62);
+}
+
+.admin-live-explanation-group h4 {
+  margin: 0 0 7px;
+  color: #cce9f0;
+  font-size: 11px;
+  letter-spacing: .02em;
+}
+
+.admin-live-explanation-list { display: grid; gap: 6px; }
+.admin-live-explanation-list.environment { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.admin-live-explanation-row {
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr);
+  gap: 7px;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid rgba(73, 114, 132, .18);
+  border-radius: 9px;
+  background: rgba(8, 24, 35, .76);
+}
+
+.admin-live-explanation-dot {
+  width: 6px;
+  height: 6px;
+  margin-top: 4px;
+  border-radius: 50%;
+  color: #6f8995;
+  background: currentColor;
+  box-shadow: 0 0 7px currentColor;
+}
+
+.admin-live-explanation-row.tone-excellent .admin-live-explanation-dot { color: #35edac; }
+.admin-live-explanation-row.tone-good .admin-live-explanation-dot { color: #43d8ec; }
+.admin-live-explanation-row.tone-info .admin-live-explanation-dot { color: #b49cff; }
+.admin-live-explanation-row.tone-fair .admin-live-explanation-dot { color: #f2c14d; }
+.admin-live-explanation-row.tone-poor .admin-live-explanation-dot { color: #ff8c42; }
+.admin-live-explanation-row.tone-critical .admin-live-explanation-dot { color: #ff5570; }
+
+.admin-live-explanation-row-head { justify-content: space-between; gap: 6px; }
+.admin-live-explanation-row-head b { color: #d9ebf0; font-size: 10px; }
+.admin-live-explanation-row-head strong {
+  overflow: hidden;
+  color: #f2fbff;
+  font: 750 10px "SF Mono", ui-monospace, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-live-explanation-row p {
+  margin: 3px 0 0;
+  color: #9fc0cc;
+  font-size: 9.5px;
+  line-height: 1.4;
+}
+.admin-live-explanation-row small {
+  display: block;
+  margin-top: 2px;
+  color: #688795;
+  font-size: 8.5px;
+  line-height: 1.45;
+}
+.admin-live-explanation-note {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(73, 114, 132, .18);
+  color: #6d8996;
+  font-size: 8.5px;
+  line-height: 1.5;
+}
+.admin-live-explanation-note b { color: #9cb7c1; }
+.admin-live-explanation-empty {
+  padding: 12px;
+  border: 1px dashed rgba(92, 131, 148, .25);
+  border-radius: 9px;
+  color: #708995;
+  text-align: center;
+  font-size: 8px;
+}
+
+@media (max-width: 900px) {
+  .admin-live-explanation-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 620px) {
+  .admin-live-explanation-list.environment { grid-template-columns: 1fr; }
+  .admin-live-explanation-head { align-items: flex-start; flex-direction: column; }
+}

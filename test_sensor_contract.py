@@ -70,7 +70,8 @@ class EnvironmentContractTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "live")
         self.assertEqual(result["live_count"], 6)
-        self.assertEqual(result["temperature_c"], 24.2)
+        self.assertEqual(result["temperature_c"], 24.4)
+        self.assertEqual(result["humidity_rh"], 44.3)
         self.assertEqual(result["co2_ppm"], 750.0)
         self.assertEqual(result["devices"]["sht3x_dis"]["source"], "hub1")
         self.assertEqual(result["devices"]["mhz19c"]["source"], "hub2")

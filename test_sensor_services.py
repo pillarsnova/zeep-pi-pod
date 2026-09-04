@@ -49,9 +49,10 @@ class CalibrationServiceTests(unittest.TestCase):
         self.assertEqual(apply_additive_bias("unknown", 12.3, biases=biases), 12.3)
         self.assertIsNone(apply_additive_bias("humidity_rh", None, biases=biases))
 
-    def test_approved_humidity_bias_subtracts_three_percentage_points(self) -> None:
+    def test_approved_sht3x_field_biases_match_reference_pair(self) -> None:
         document = load_calibration(Path(__file__).with_name("calibration.json"))
-        self.assertEqual(document["humidity_rh_bias"], -3.0)
+        self.assertEqual(document["temperature_c_bias"], 0.2)
+        self.assertEqual(document["humidity_rh_bias"], -7.0)
         biases, _ = resolve_biases(
             document,
             sound_error_percent=0.0,
@@ -60,8 +61,12 @@ class CalibrationServiceTests(unittest.TestCase):
             humidity_source="calibration.json",
         )
         self.assertEqual(
-            apply_additive_bias("humidity_rh", 59.7, biases=biases),
-            56.7,
+            apply_additive_bias("temperature_c", 18.2, biases=biases),
+            18.4,
+        )
+        self.assertEqual(
+            apply_additive_bias("humidity_rh", 68.0, biases=biases),
+            61.0,
         )
 
 

@@ -21,9 +21,15 @@
     },
     "humidity_rh": {
       "operator": "super",
-      "reference_value": null,
+      "reference_value": 61.0,
       "unit": "%RH",
-      "updated_at": "2026-09-04T07:41:09+00:00"
+      "updated_at": "2026-09-04T08:40:19+00:00"
+    },
+    "temperature_c": {
+      "operator": "super",
+      "reference_value": 18.4,
+      "unit": "°C",
+      "updated_at": "2026-09-04T08:40:19+00:00"
     }
   },
   "photo_audit": {
@@ -65,9 +71,30 @@
     "under_range_pair_count": 2,
     "decision": "reject the two UNDER readings and apply only the conservative -2.5 dB correction from the single in-range pair; synchronized A/SLOW LO 30-80 retest is still required"
   },
-  "humidity_rh_bias": -3.0,
+  "temperature_c_bias": 0.2,
+  "temperature_bias_unit": "celsius",
+  "temperature_calibrated_at": "2026-09-04T15:40:19+07:00",
+  "temperature_method": "displayed °C = raw SHT3x-DIS °C + 0.2 °C; based on one simultaneous field pair (dashboard 18.2 °C, reference meter 18.4 °C); raw reading retained unchanged",
+  "temperature_status": "provisional_one_point_field_calibration",
+  "humidity_rh_bias": -7.0,
   "humidity_bias_unit": "percentage_points",
-  "humidity_calibrated_at": "2026-09-04T14:41:09+07:00",
-  "humidity_method": "displayed %RH = raw SHT3x-DIS %RH - 3.0 percentage points; raw reading retained unchanged",
-  "humidity_status": "provisional_minus_3_percentage_points"
+  "humidity_calibrated_at": "2026-09-04T15:40:19+07:00",
+  "humidity_method": "displayed %RH = raw SHT3x-DIS %RH - 7.0 percentage points; previous displayed value 65.0 %RH already included a -3.0 point bias, so the simultaneous 61.0 %RH reference adds -4.0 points; raw reading retained unchanged",
+  "humidity_status": "provisional_one_point_field_calibration",
+  "temperature_humidity_field_reference": {
+    "captured_at": "2026-09-04",
+    "evidence_files": [
+      "messageImage_1788510530359.jpg",
+      "S__60579844.jpg"
+    ],
+    "temperature_dashboard_before_c": 18.2,
+    "temperature_reference_c": 18.4,
+    "temperature_delta_c": 0.2,
+    "humidity_dashboard_before_rh": 65.0,
+    "humidity_reference_rh": 61.0,
+    "humidity_delta_from_display_points": -4.0,
+    "humidity_previous_bias_points": -3.0,
+    "humidity_applied_total_bias_points": -7.0,
+    "method": "single-point co-location comparison; provisional until verified with synchronized multi-point readings after equilibration"
+  }
 }

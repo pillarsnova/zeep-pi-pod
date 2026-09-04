@@ -1406,7 +1406,7 @@
             <div class="debug-aircon-telemetry" aria-label="การแปลงอุณหภูมิสำหรับผู้ดูแลระบบ">
               <div><span>เปิดแอร์เริ่มต้น</span><b id="debugAirconDefaultTemp">18°C · สวิง</b></div>
               <div><span>ค่าที่ผู้ใช้เลือก</span><b id="debugAirconDesiredTemp">--</b></div>
-              <div><span>System Bias</span><b id="debugAirconBias">−5°C</b></div>
+              <div><span>System Bias</span><b id="debugAirconBias">−3°C</b></div>
               <div><span>ค่าที่ส่ง ESP32</span><b id="debugAirconCommandedTemp">--</b></div>
             </div>
             <div class="debug-command-grid">
@@ -2024,7 +2024,7 @@ let airconRequestBusy = false;
 // firmware-reported boolean when available. A fresh unknown state safely
 // offers SWING ON as the first deterministic command.
 let unifiedAirconSwingState = null;
-// User controls expose the comfort target only. The Pi owns the -5°C hardware
+// User controls expose the comfort target only. The Pi owns the -3°C hardware
 // conversion, while Admin Debug shows both sides of the mapping.
 const AIRCON_DESIRED_TEMPERATURE_MIN_C = 15;
 const AIRCON_DESIRED_TEMPERATURE_MAX_C = 25;

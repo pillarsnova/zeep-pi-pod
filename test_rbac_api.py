@@ -688,15 +688,15 @@ class RbacApiTests(unittest.TestCase):
 
             commands.clear()
             coldest = pod_app.aircon_command(pod_app.AirconCommand(command="temp 15"))
-            self.assertEqual(commands, ["temp 10"])
+            self.assertEqual(commands, ["temp 12"])
             self.assertEqual(coldest["desired_temperature_c"], 15)
-            self.assertEqual(coldest["commanded_temperature_c"], 10)
+            self.assertEqual(coldest["commanded_temperature_c"], 12)
 
             commands.clear()
             changed = pod_app.aircon_command(pod_app.AirconCommand(command="temp 20"))
-            self.assertEqual(commands, ["temp 15"])
+            self.assertEqual(commands, ["temp 17"])
             self.assertEqual(changed["desired_temperature_c"], 20)
-            self.assertEqual(changed["commanded_temperature_c"], 15)
+            self.assertEqual(changed["commanded_temperature_c"], 17)
         finally:
             pod_app.controlhub1_mqtt.publish_and_wait = original_publish
             pod_app.controlhub1_mqtt.publish_sequence_and_wait = original_publish_sequence

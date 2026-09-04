@@ -373,7 +373,7 @@ MUSIC_STOP_GUARD_SECONDS = max(
 # command is intentionally biased colder because the current installation's
 # measured room response runs warmer than its setpoint. Keep this conversion
 # on the Pi API so every UI/client applies exactly the same rule.
-AIRCON_TEMPERATURE_BIAS_C = int(os.getenv("AIRCON_TEMPERATURE_BIAS_C", "-5"))
+AIRCON_TEMPERATURE_BIAS_C = int(os.getenv("AIRCON_TEMPERATURE_BIAS_C", "-3"))
 AIRCON_DESIRED_TEMP_MIN_C = 15
 AIRCON_DESIRED_TEMP_MAX_C = 25
 AIRCON_POWER_ON_DEFAULT_TEMP_C = int(os.getenv("AIRCON_POWER_ON_DEFAULT_TEMP_C", "18"))

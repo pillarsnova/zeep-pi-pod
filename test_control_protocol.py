@@ -21,19 +21,19 @@ class AirconProtocolTests(unittest.TestCase):
     def test_user_temperature_bias_is_explicit_and_bounded(self) -> None:
         self.assertEqual(
             apply_aircon_temperature_bias(
-                "temp 20", desired_min_c=15, desired_max_c=25, bias_c=-5,
+                "temp 20", desired_min_c=15, desired_max_c=25, bias_c=-3,
             ),
-            ("temp 15", 20, 15),
+            ("temp 17", 20, 17),
         )
         self.assertEqual(
             apply_aircon_temperature_bias(
-                "swing_on", desired_min_c=15, desired_max_c=25, bias_c=-5,
+                "swing_on", desired_min_c=15, desired_max_c=25, bias_c=-3,
             ),
             ("swing_on", None, None),
         )
         with self.assertRaises(ValueError):
             apply_aircon_temperature_bias(
-                "temp 14", desired_min_c=15, desired_max_c=25, bias_c=-5,
+                "temp 14", desired_min_c=15, desired_max_c=25, bias_c=-3,
             )
 
 

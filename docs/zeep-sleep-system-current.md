@@ -336,6 +336,9 @@ Nap & Refresh ใช้ Recovery Score: เวลา 20 + การตอบส�
 สิ่งแวดล้อมสนับสนุน 20 + ความครบข้อมูล 10 ไม่บังคับให้หลับและไม่บังคับ N3/REM
 ส่วนความสดชื่นจริงต้องใช้แบบประเมินหลัง Session ประกอบ ห้ามอนุมานจาก Sensor เพียงอย่างเดียว
 
+คำอธิบายสองรูปแบบ แผนที่หลักฐาน และข้อห้ามในการเปรียบเทียบคะแนนอยู่ที่
+[`TWO_MODE_SCORE_EVIDENCE.md`](../research/evidence-library/TWO_MODE_SCORE_EVIDENCE.md)
+
 ### 4.2 Rest Mode และ Duration target
 
 | Mode | Target ที่ใช้ใน duration 15 คะแนน |

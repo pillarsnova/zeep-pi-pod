@@ -1,4 +1,4 @@
-# ZEEP Pilot · Two-Mode Test Protocol v1.0
+# ZEEP Pilot · Two-Mode Test Protocol v1.1
 
 สถานะ: เอกสารใช้งานปัจจุบัน  
 ขอบเขต: ZEEP Sleep Wellness Pilot; ไม่ใช่การวินิจฉัยหรือการรักษา
@@ -11,6 +11,9 @@
    พักสายตา หรือทำสมาธิก็ได้ ไม่จำเป็นต้องหลับลึก
 2. **Overnight Recovery** — การพักผ่อนแบบค้างคืน แนะนำให้นอนตามปกติและ
    ทำตัวให้สบายที่สุด
+
+หลักจำง่าย: **Overnight Recovery แสดง Sleep Score** ส่วน **Nap & Refresh แสดง
+Recovery Score** ทั้งสองคะแนนตอบคนละคำถามและไม่ควรนำมาเปรียบเทียบตรง ๆ
 
 ## ขั้นตอนสำหรับผู้ทดสอบ
 
@@ -73,6 +76,9 @@
 เป้าหมาย 7 ชั่วโมงเป็นเกณฑ์ duration สำหรับผู้ใหญ่ตาม AASM/SRS ไม่ใช่ข้อวินิจฉัย
 รายบุคคล และ “ความสดชื่นหลังตื่น” ต้องใช้แบบประเมินหลัง Session ประกอบ
 
+รายละเอียดสูตร release gate และข้อจำกัดของหลักฐานดูที่
+[ZEEP Two-Mode Score Framework](../research/evidence-library/TWO_MODE_SCORE_EVIDENCE.md)
+
 ## Compatibility และข้อห้าม
 
 - UI ใหม่รับเฉพาะ `nap_recovery` และ `sleep`
@@ -85,6 +91,8 @@
 
 ## แหล่งอ้างอิงหลัก
 
-- [AASM/SRS Adult Sleep Duration Consensus](https://aasm.org/resources/pdf/pressroom/adult-sleep-duration-consensus.pdf) — ผู้ใหญ่ควรนอนอย่างน้อย 7 ชั่วโมงต่อคืนเป็นประจำ
-- [Brooks & Lack, 2006](https://pubmed.ncbi.nlm.nih.gov/16796222/) — เปรียบเทียบงีบ 5/10/20/30 นาที และรายงาน sleep inertia หลังงีบ 30 นาที
-- [Hilditch et al., 2017](https://pubmed.ncbi.nlm.nih.gov/28366332/) — ทบทวนว่า sleep inertia จากงีบสั้นขึ้นกับเวลาและประวัติการนอน จึงไม่ควรใช้ duration เดียวเป็นกฎตายตัว
+- [SLP-001 · AASM/SRS Adult Sleep Duration Consensus](https://doi.org/10.5665/sleep.4716) — ผู้ใหญ่ควรนอนอย่างน้อย 7 ชั่วโมงต่อคืนเป็นประจำ
+- [SLP-007 · Daytime Nap Meta-analysis](https://pmc.ncbi.nlm.nih.gov/articles/PMC8507757/) — nap อาจสนับสนุน cognition/alertness แต่ผลช่วง sleep inertia ยังไม่สม่ำเสมอ
+- [SLP-009 · Wakeful Rest Meta-analysis](https://pmc.ncbi.nlm.nih.gov/articles/PMC12808189/) — quiet wakeful rest เป็นผลที่ควรศึกษาได้โดยไม่อ้างว่าเป็นการนอน
+- [SLP-010 · Brooks & Lack, 2006](https://pubmed.ncbi.nlm.nih.gov/16796222/) — เปรียบเทียบงีบ 5/10/20/30 นาทีและผลทันทีหลังตื่น
+- [SLP-011 · Hilditch et al., 2017](https://pubmed.ncbi.nlm.nih.gov/28366332/) — sleep inertia จากงีบสั้นขึ้นกับบริบท จึงไม่ใช้ duration เดียวเป็นกฎตายตัว

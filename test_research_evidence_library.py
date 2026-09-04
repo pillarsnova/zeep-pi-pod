@@ -105,6 +105,25 @@ class ResearchEvidenceLibraryTests(unittest.TestCase):
         markdown = (LIBRARY / "SOURCE_REGISTER.md").read_text(encoding="utf-8")
         self.assertEqual(self.tool.validate_markdown_consistency(self.register, markdown), [])
 
+    def test_two_mode_score_evidence_is_registered_and_explicit(self):
+        source_ids = {source["id"] for source in self.sources}
+        self.assertTrue({"SLP-007", "SLP-008", "SLP-009", "SLP-010", "SLP-011"} <= source_ids)
+        for source_id in ("SLP-007", "SLP-008", "SLP-009"):
+            source = next(item for item in self.sources if item["id"] == source_id)
+            self.assertEqual(source["access"], "downloadable")
+            self.assertTrue(source["local_file"].startswith("papers/sleep/"))
+
+        guide = (LIBRARY / "TWO_MODE_SCORE_EVIDENCE.md").read_text(encoding="utf-8")
+        self.assertIn("Overnight Recovery** | คืนนี้นอนเป็นอย่างไร | **Sleep Score", guide)
+        self.assertIn("Nap & Refresh** | การพักครั้งนี้", guide)
+        self.assertIn("**Recovery Score**", guide)
+        self.assertIn("ไม่ควรนำตัวเลขของสองรูปแบบมาเทียบตรง ๆ", guide)
+        for evidence_group in (
+            "SLP-001", "SLP-002–004", "SLP-005–006", "SLP-007",
+            "SLP-008", "SLP-009", "SLP-010–011",
+        ):
+            self.assertIn(evidence_group, guide)
+
     def test_shared_path_resolver_blocks_escape_for_all_commands(self):
         for unsafe in ("../outside.pdf", "/tmp/outside.pdf", "papers/../../outside.pdf"):
             with self.subTest(path=unsafe):

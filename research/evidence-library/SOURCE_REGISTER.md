@@ -6,7 +6,7 @@
 ชื่อเรื่อง, URL, access tier, provenance และ checksum ส่วนเอกสารนี้เป็น human-readable
 view สำหรับทีม หากข้อมูลต่างกันให้ยึด JSON และแก้ Markdown ให้ตรงใน pull request เดียวกัน
 
-Canonical JSON SHA-256: `310e95990e64877efbd66e3d44376f59395bbabf0d6807944ec012beb17ab8ae`
+Canonical JSON SHA-256: `003f3a18088bfc3174b2ea070fe72e99863a18728d7c4a02c8e7d746b4c56816`
 
 ## 1. Sleep และการประเมินสถานะการนอน
 
@@ -18,6 +18,11 @@ Canonical JSON SHA-256: `310e95990e64877efbd66e3d44376f59395bbabf0d6807944ec012b
 | SLP-004 | [EMFIT BCG validation against PSG](https://doi.org/10.5664/jcsm.9754) | รองรับ data-quality gate, Unknown และการไม่กล่าวอ้างเทียบเท่า PSG | ไม่ใช่ผลทดสอบ ZEEP; พบ data loss และ stage agreement ต่ำในอุปกรณ์ที่ศึกษา |
 | SLP-005 | [Consumer Sleep Technology: An American Academy of Sleep Medicine Position Statement](https://pmc.ncbi.nlm.nih.gov/articles/PMC5940440/) | กำหนดขอบเขตว่า consumer/wellness data ไม่ใช้วินิจฉัยหรือรักษาโรคโดยไม่มี validation/การรับรอง | Full text เปิดอ่านบน PMC และ cache เป็น NCBI XML ที่ล็อก checksum; ลิขสิทธิ์ยังเป็นของ AASM และห้ามเผยแพร่ซ้ำโดยพลการ |
 | SLP-006 | [AASM Scoring Manual](https://aasm.org/clinical-resources/scoring-manual/) | นิยามมาตรฐาน W/N1/N2/N3/REM และ epoch scoring สำหรับ PSG | มีลิขสิทธิ์/สิทธิ์เข้าถึง; ไม่ดาวน์โหลดหรือคัดลอกเนื้อหาเข้า repo |
+| SLP-007 | [Short Daytime Nap and Cognitive Performance Meta-analysis](https://pmc.ncbi.nlm.nih.gov/articles/PMC8507757/) | รองรับการศึกษาความตื่นตัว/cognition หลัง nap และการติดตาม sleep inertia | งานส่วนใหญ่อยู่ในห้องทดลอง ระยะ nap หลากหลาย; ไม่ได้ยืนยันเป้า 30 นาทีหรือน้ำหนัก Recovery Score |
+| SLP-008 | [Daytime Napping, Autonomic Activity and Cognitive Function in Interns](https://pmc.ncbi.nlm.nih.gov/articles/PMC9589154/) | รองรับการเก็บ physiological response ร่วมกับผลก่อน–หลัง แทนการตัดสิน recovery จาก Stage อย่างเดียว | กลุ่ม intern หลังงานกะและใช้ vmHRV; ไม่เท่ากับ sample-level HR/RR regularity ของ ZEEP |
+| SLP-009 | [Wakeful Rest Meta-analysis](https://pmc.ncbi.nlm.nih.gov/articles/PMC12808189/) | รองรับการศึกษาการพักแบบตื่นสงบเมื่อผู้ใช้ Nap & Refresh ไม่หลับ | ผลด้าน memory มี heterogeneity และเล็กกว่าในวัยหนุ่มสาวสุขภาพดี; ไม่พิสูจน์ whole-body recovery |
+| SLP-010 | [Brooks & Lack: Which Nap Duration is Most Recuperative?](https://pubmed.ncbi.nlm.nih.gov/16796222/) | เปรียบเทียบ nap 5/10/20/30 นาทีและผลทันที/ล่าช้าหลังตื่น | ผู้ใหญ่สุขภาพดี 24 คนหลังจำกัดการนอน; ไม่ใช่ duration สากลหรือสูตรคะแนน ZEEP |
+| SLP-011 | [Review of Short Naps and Sleep Inertia](https://pubmed.ncbi.nlm.nih.gov/28366332/) | รองรับคำเตือนว่า duration อย่างเดียวไม่รับประกันการหลีกเลี่ยง SWS/sleep inertia | เป็น review ของ protocol ที่หลากหลาย; ไม่ใช้ตั้งกฎตายตัว 30 นาที |
 
 ## 2. Health & Wellness Guardrails
 

@@ -2022,11 +2022,21 @@ def _restore_latest_sensor_frame() -> bool:
         "analysis_source_connected": False,
         "restored_after_restart": True,
     })
+    # The Timeline row can be a few seconds newer than the analysis frame, but
+    # it deliberately contains no current Sleep label.  Environment/BCG may
+    # use that freshest row; the restart bridge must come from the separately
+    # persisted analysis frame that actually carried the confirmed decision.
+    sleep_source_frame = (
+        cached
+        if isinstance(cached, dict)
+        and cached.get("session_id") == current_session_id
+        else frame
+    )
     held_sleep = (
         _install_restart_sleep_hold(
-            dict(frame.get("sleep") or {}),
+            dict(sleep_source_frame.get("sleep") or {}),
             session_id=current_session_id,
-            source_epoch_s=float(frame["epoch_s"]),
+            source_epoch_s=float(sleep_source_frame["epoch_s"]),
         )
         if same_session else None
     )

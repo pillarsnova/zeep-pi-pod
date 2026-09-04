@@ -571,7 +571,20 @@ class RbacApiTests(unittest.TestCase):
                     "session_id": session_id,
                 })
             self.assertTrue(pod_app._persist_last_sensor_frame(frame))
-            self.assertTrue(pod_app._restore_latest_sensor_frame())
+            # Session Timeline can be newer than the saved analysis frame but
+            # carries no Sleep decision.  The display bridge must still use
+            # the durable, matching N3 from the saved frame.
+            newer_timeline = copy.deepcopy(frame)
+            newer_timeline.update({
+                "epoch_s": now + 1.0,
+                "source": "session_timeline",
+                "sleep": {},
+            })
+            with patch.object(
+                pod_app, "_timeline_restart_frame",
+                return_value=newer_timeline,
+            ):
+                self.assertTrue(pod_app._restore_latest_sensor_frame())
             with patch.object(pod_app, "system_health_cached", return_value={}):
                 restored = pod_app.snapshot()
             environment = restored["sensor"]["environment"]

@@ -781,7 +781,7 @@
     Increment the query value when deploying a new theme so the ZEEP browser does not
     reuse a cached stylesheet.
   -->
-  <link rel="stylesheet" href="/static/theme-modern.css?v=20260903-152" />
+  <link rel="stylesheet" href="/static/theme-modern.css?v=20260905-153" />
 </head>
 <body>
 <!-- Shared line-icon library: every interactive view reuses the same 24 px
@@ -1045,20 +1045,26 @@
       </section>
       <section class="admin-live-explanation" id="adminLiveExplanation" data-admin-panel aria-label="คำอธิบายค่าปัจจุบันสำหรับผู้ดูแลระบบ">
         <div class="admin-live-explanation-head">
-          <div><span class="admin-live-explanation-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 18V9m6 9V5m6 13v-7m4 7V3"/><path d="M3 21h18"/></svg></span><div><b>คำอธิบายค่าปัจจุบัน</b><small>ค่าจริง · เทียบ Baseline และเกณฑ์ของโหมด</small></div></div>
-          <span id="adminExplanationMode">กำลังรอโหมด</span>
+          <div class="admin-live-explanation-identity">
+            <span class="admin-live-explanation-icon" aria-hidden="true"><i></i><svg viewBox="0 0 24 24"><path d="M4 18V9m6 9V5m6 13v-7m4 7V3"/><path d="M3 21h18"/></svg></span>
+            <div><em>LIVE INTERPRETATION</em><b>คำอธิบายค่าปัจจุบัน</b><small>อ่านค่าจริงพร้อมบริบทที่ใช้ประเมิน</small></div>
+          </div>
+          <div class="admin-live-explanation-context" aria-label="ค่าจริง · เทียบ Baseline และเกณฑ์ของโหมด">
+            <div class="admin-live-explanation-basis"><span><i></i>ค่าปัจจุบัน</span><span>Baseline</span><span>เกณฑ์โหมด</span></div>
+            <strong id="adminExplanationMode">กำลังรอโหมด</strong>
+          </div>
         </div>
         <div class="admin-live-explanation-grid">
-          <article class="admin-live-explanation-group" aria-labelledby="adminBioExplanationTitle">
-            <div class="admin-live-explanation-group-head"><span aria-hidden="true">♥</span><div><h4 id="adminBioExplanationTitle">สัญญาณชีพและการนอน</h4><small>BCG · Baseline รายบุคคลหรืออายุและเพศ</small></div></div>
+          <article class="admin-live-explanation-group admin-live-explanation-bio" aria-labelledby="adminBioExplanationTitle">
+            <div class="admin-live-explanation-group-head"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h4l2-4 4 9 2-5h6"/><path d="M12 21C5 17 3 13 3 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 9 2.5c0 3.5-2 7.5-9 11.5Z"/></svg></span><div><h4 id="adminBioExplanationTitle">สัญญาณชีพและการนอน</h4><small>BCG · Baseline รายบุคคล หรืออายุและเพศ</small></div><em>BIOMETRIC</em></div>
             <div class="admin-live-explanation-list" id="adminBioExplanation"><div class="admin-live-explanation-empty">กำลังรอข้อมูล BCG, HR และ RR</div></div>
           </article>
-          <article class="admin-live-explanation-group" aria-labelledby="adminEnvironmentExplanationTitle">
-            <div class="admin-live-explanation-group-head"><span aria-hidden="true">⌁</span><div><h4 id="adminEnvironmentExplanationTitle">สภาพแวดล้อมภายใน ZEEP</h4><small>Sensor สด · ประเมินตามเกณฑ์ ZEEP ของโหมด</small></div></div>
+          <article class="admin-live-explanation-group admin-live-explanation-environment" aria-labelledby="adminEnvironmentExplanationTitle">
+            <div class="admin-live-explanation-group-head"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8c4-4 8 4 12 0 2-2 3-2 4-2M4 13c4-4 8 4 12 0 2-2 3-2 4-2M4 18c4-4 8 4 12 0 2-2 3-2 4-2"/></svg></span><div><h4 id="adminEnvironmentExplanationTitle">สภาพแวดล้อมภายใน ZEEP</h4><small>Sensor สด · เกณฑ์ ZEEP ที่อนุมัติตามโหมด</small></div><em>ENVIRONMENT</em></div>
             <div class="admin-live-explanation-list environment" id="adminEnvironmentExplanation"><div class="admin-live-explanation-empty">กำลังรอข้อมูล Sensor</div></div>
           </article>
         </div>
-        <div class="admin-live-explanation-note"><span aria-hidden="true">i</span><div><b>ขอบเขตการแปลผล</b><small>Wellness และการตรวจระบบ · Sleep Stage เป็นค่าประเมินจาก BCG/HR/RR ไม่ใช่ผลยืนยันจาก PSG · Sensor ที่ไม่ Live จะไม่ถูกตีความ</small></div></div>
+        <div class="admin-live-explanation-note"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></svg></span><div><b>WELLNESS INTERPRETATION</b><small>ใช้ติดตามแนวโน้มและตรวจระบบ · Sleep Stage เป็นค่าประเมินจาก BCG/HR/RR ไม่ใช่ผลยืนยันจาก PSG · Sensor ที่ไม่ Live จะไม่ถูกตีความ</small></div></div>
       </section>
       <div class="dash-foot"><span class="dash-foot-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></svg></span><span id="dashHealthNote">ข้อมูลจาก Sensor ใช้ติดตามแนวโน้มการนอน</span></div>
     </section>

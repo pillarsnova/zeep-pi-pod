@@ -14,12 +14,12 @@ from typing import Any
 
 # Every persisted decision/report carries these versions for provenance.
 SLEEP_PIPELINE_CONTRACT_VERSION = "zeep-sleep-health-pipeline-v1.3-stable-30s-epoch"
-SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.18-guarded-rem-wake"
+SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.19-balanced-n3-evidence"
 SLEEP_EVIDENCE_VERSION = "zeep-sleep-state-evidence-v2.0-30s-epoch"
 ZEEP_SLEEP_BASELINE_VERSION = "zeep-sleep-state-baseline-v1.5"
-ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.10-rem-wake-soremp-guard"
+ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.11-evidence-confirmation"
 SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
-SLEEP_HISTORY_BACKFILL_VERSION = "zeep-sleep-history-reclass-v13-rem-wake-soremp-guard"
+SLEEP_HISTORY_BACKFILL_VERSION = "zeep-sleep-history-reclass-v14-balanced-n3-evidence"
 SESSION_REPORT_VERSION = "zeep-session-report-v9.3-two-pilot-modes"
 SLEEP_QUALITY_VERSION = "zeep-rest-quality-v7.0-two-pilot-modes"
 ENVIRONMENT_CONTEXT_POLICY_VERSION = "zeep-environment-context-v2.0-mode-aware-fair-floor"
@@ -111,11 +111,14 @@ SLEEP_STAGE_MIN_DWELL_SECONDS = {
     "wake": 10.0, "n1": 30.0, "n2": 60.0, "n3": 60.0, "rem": 60.0,
 }
 
-# Probability telemetry is filtered independently from the 60-second feature
-# window.  Without this second layer, one newly arriving analysis bucket can
-# visibly move every percentage even while the semi-Markov state is correctly
-# held.  The EMA and winner margin are engineering stability controls; they do
-# not add physiological evidence or turn the estimate into an AASM/PSG score.
+# Probability telemetry is filtered independently from the rolling feature
+# window. EMA remains the default continuity source for Wake/N1/N2/REM. A
+# current N3 winner may bypass EMA only when the strict physiology gate and the
+# normal winner margin both pass; the semi-Markov guard then still requires two
+# consecutive evidence epochs (60 seconds). This targeted exception prevents
+# duplicate historical inertia from making valid N3 runs unreachable without
+# making the other states more reactive. These are engineering controls, not
+# AASM/PSG scoring criteria.
 SLEEP_PROBABILITY_EMA_ALPHA = 0.20
 SLEEP_PROBABILITY_SWITCH_MARGIN = 0.05
 SLEEP_DISPLAY_WINNER_MARGIN = 0.01
@@ -591,6 +594,9 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "method": "ema_after_60s_rolling_features",
             "alpha": SLEEP_PROBABILITY_EMA_ALPHA,
             "candidate_switch_margin": SLEEP_PROBABILITY_SWITCH_MARGIN,
+            "candidate_source": "ema_with_gated_n3_current_evidence_override",
+            "ema_role": "default_candidate_stability_and_display",
+            "n3_current_evidence_override_requires_gate": True,
             "display_winner_margin": SLEEP_DISPLAY_WINNER_MARGIN,
             "instant_strong_wake_bypass": False,
             "strong_wake_still_requires_confirmation": True,

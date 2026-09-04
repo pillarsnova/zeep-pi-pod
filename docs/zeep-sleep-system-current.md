@@ -27,12 +27,12 @@
 | ชั้นระบบ | Version |
 |---|---|
 | Health pipeline contract | `zeep-sleep-health-pipeline-v1.3-stable-30s-epoch` |
-| Live estimator | `bcg-audio-bed-5state-v1.18-guarded-rem-wake` |
+| Live estimator | `bcg-audio-bed-5state-v1.19-balanced-n3-evidence` |
 | Evidence definition | `zeep-sleep-state-evidence-v2.0-30s-epoch` |
 | Baseline | `zeep-sleep-state-baseline-v1.5` |
-| Semi-Markov transition | `zeep-semimarkov-30s-v1.10-rem-wake-soremp-guard` |
+| Semi-Markov transition | `zeep-semimarkov-30s-v1.11-evidence-confirmation` |
 | G2 ontology | `g2-aasm-5class-v1.0` |
-| Historical replay | `zeep-sleep-history-reclass-v13-rem-wake-soremp-guard` |
+| Historical replay | `zeep-sleep-history-reclass-v14-balanced-n3-evidence` |
 | Sleep / Rest quality | `zeep-rest-quality-v7.0-two-pilot-modes` |
 | Session report | `zeep-session-report-v9.3-two-pilot-modes` |
 | Environment context | `zeep-environment-context-v2.0-mode-aware-fair-floor` |
@@ -121,9 +121,12 @@ accuracy ดู [AASM Scoring Manual](https://learn.aasm.org/AssetListing/The-AA
 - เฉพาะ Sleep State ใช้ 3 Sensor frames สร้าง Evidence epoch ทุก 30 วินาที
 - เป้าหมาย confidence ใช้ rolling 6 feature buckets = 60 วินาที
 - หลักฐาน (`candidate` + probability ทั้ง 5) แยกจากสถานะที่ยืนยันแล้ว (`confirmed_state`) และต้องชนะต่อเนื่อง 2 epoch = 60 วินาทีก่อนเปลี่ยน State
-- Probability ทั้ง 5 ใช้ EMA `alpha=0.20` ต่อจาก rolling 60 วินาที และผู้ท้าชิง
-  ต้องนำสถานะปัจจุบันอย่างน้อย 5 จุดเปอร์เซ็นต์ก่อนเริ่ม transition confirmation;
-  strong Wake เปิดเส้นทางไป Wake ได้ แต่ยังต้องผ่าน 2 evidence epochs; Bed Exit และ Safety ตอบสนองใน pipeline แยกและไม่รอ Sleep State
+- Probability ทั้ง 5 ใช้ EMA `alpha=0.20` ต่อจาก rolling 60 วินาทีเป็น continuity หลักของ
+  W/N1/N2/REM; เฉพาะ N3 ที่ชนะจากหลักฐานปัจจุบันอย่างน้อย 5 จุดเปอร์เซ็นต์และผ่าน
+  N3 physiology gate เท่านั้นที่เสนอ candidate ก่อน EMA ได้ จากนั้น State Machine ยังต้องยืนยัน
+  N3 เดิม 2 epoch/60 วินาที การยกเว้นเฉพาะจุดนี้ป้องกัน EMA + confirmation กดช่วง N3 ที่มีหลักฐานครบ
+  จนหายไป โดยไม่ทำให้ State อื่นสลับไวขึ้น; strong Wake ยังต้องผ่าน 2 evidence epochs;
+  Bed Exit และ Safety ตอบสนองใน pipeline แยกและไม่รอ Sleep State
 - เปอร์เซ็นต์สูงสุดบน Dashboard คือ **หลักฐานล่าสุด** จึงอาจต่างจาก `confirmed_state` ระหว่างช่วงรอยืนยัน โดย UI ต้องติดป้ายสองค่านี้แยกกัน
 - ก่อนครบ 2 Evidence epochs จะแสดง candidate แบบ provisional/low confidence แต่ยังไม่มี confirmed Sleep State ใหม่
 - Timeline ของ Session บันทึก Sensor ทุก 10 วินาที, `sleep_stage_evidence` ทุก 30 วินาที และ `sleep_stage` ที่ยืนยันแล้วทุก 30 วินาที; เมื่อ hard gate ไม่ผ่านช่อง Sleep State เป็น `null`
@@ -509,6 +512,7 @@ systemctl is-active zeep-pod.service
 | v1.14 rollback backup | `/home/pod1/pi5/backup/pre-vital-occupancy-gate-20260827T234113` |
 | Stable 30-second epoch release | Estimator v1.17: Sensor 10 s → Evidence 30 s → Confirmed State 60 s; rolling features 60 s (6 buckets) + EMA 20% + candidate margin 5%; Evidence probability ไม่ถูกบิดให้ตรงกับ State ที่กำลัง hold |
 | Guarded REM/Wake transition release | Estimator v1.18 / Transition v1.10: เปิด N1→REM แบบ REM-gated และ REM→Wake แบบปกติ โดยทุก transition ยังยืนยัน 2 evidence epochs/60 s; ไม่เปิด Wake→REM จากความง่วงหรือ daydream |
+| Balanced N3 evidence release | Estimator v1.19 / Transition v1.11: เฉพาะ N3 ที่ชนะ current 30 s evidence และผ่าน physiology gate เสนอ candidate ก่อน EMA แล้วจึงยืนยัน 2 epochs/60 s; State อื่นยังใช้ EMA และข้อห้ามเมื่อไม่มี HR/RR/on-bed ยังคงเดิม |
 | Terminal Wake sequence | รายงานปิดลำดับเป็น `Sleep State สุดท้าย → W · ตื่น → Occupancy/END`; marker 0 s แยกจาก physiology และไม่เปลี่ยน Stage statistics/Score/Baseline |
 | Classification-gap visibility | ลำดับรายงานแสดง WAIT/OFF ทุกช่องว่างที่ยืนยัน State ไม่ได้ แทนการซ่อนเวลา; Raw Timeline/decision และคะแนนไม่ถูกแก้ |
 

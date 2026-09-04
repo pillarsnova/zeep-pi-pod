@@ -208,7 +208,7 @@ class BaselineProximityTests(unittest.TestCase):
 
 
 class SleepProbabilityStabilityTests(unittest.TestCase):
-    def test_ema_damps_one_five_second_probability_jump(self):
+    def test_ema_damps_one_thirty_second_probability_jump(self):
         previous = {"wake": 0.05, "n1": 0.05, "n2": 0.15, "n3": 0.05, "rem": 0.70}
         current = {"wake": 0.05, "n1": 0.05, "n2": 0.65, "n3": 0.05, "rem": 0.20}
         smoothed = zeep.smooth_stage_probabilities(
@@ -226,6 +226,72 @@ class SleepProbabilityStabilityTests(unittest.TestCase):
         )
         self.assertEqual(candidate, "n2")
         self.assertTrue(metadata["margin_held"])
+
+    def test_current_gated_n3_evidence_is_not_blocked_by_display_ema(self):
+        """Regression for two nights where valid N3 never escaped N2.
+
+        The rolling evidence has already changed decisively to N3, while the
+        separately published EMA still trails N2. State confirmation must
+        consume the former and leave the latter as display telemetry.
+        """
+        current_evidence = {
+            "wake": 0.034, "n1": 0.064, "n2": 0.338,
+            "n3": 0.540, "rem": 0.024,
+        }
+        display_ema = {
+            "wake": 0.0466, "n1": 0.0829, "n2": 0.4369,
+            "n3": 0.4117, "rem": 0.0219,
+        }
+
+        evidence_candidate, evidence_meta = zeep.candidate_from_stage_evidence(
+            current_evidence,
+            display_ema,
+            "n2",
+            switch_margin=zeep.SLEEP_PROBABILITY_SWITCH_MARGIN,
+            n3_gate=True,
+        )
+        display_candidate, display_meta = zeep.stable_probability_candidate(
+            display_ema,
+            "n2",
+            switch_margin=zeep.SLEEP_PROBABILITY_SWITCH_MARGIN,
+        )
+
+        self.assertEqual(evidence_candidate, "n3")
+        self.assertEqual(
+            evidence_meta["candidate_source"],
+            "gated_n3_current_30s_evidence_before_ema",
+        )
+        self.assertTrue(evidence_meta["gated_n3_current_evidence_override"])
+        self.assertEqual(display_candidate, "n2")
+        self.assertEqual(display_meta["filtered_winner"], "n2")
+        self.assertFalse(display_meta["margin_held"])
+
+    def test_current_n3_winner_cannot_bypass_ema_without_n3_gate(self):
+        candidate, metadata = zeep.candidate_from_stage_evidence(
+            {"wake": 0.034, "n1": 0.064, "n2": 0.338,
+             "n3": 0.540, "rem": 0.024},
+            {"wake": 0.0466, "n1": 0.0829, "n2": 0.4369,
+             "n3": 0.4117, "rem": 0.0219},
+            "n2",
+            switch_margin=zeep.SLEEP_PROBABILITY_SWITCH_MARGIN,
+            n3_gate=False,
+        )
+        self.assertEqual(candidate, "n2")
+        self.assertFalse(metadata["gated_n3_current_evidence_override"])
+        self.assertEqual(metadata["candidate_source"], "ema_probability")
+
+    def test_n3_evidence_still_needs_two_confirmation_epochs(self):
+        with zeep.sleep_path_lock:
+            zeep._reset_sleep_stage_path("n3-confirmation-test")
+            zeep._apply_stage_to_path("wake", now=-120.0)
+            zeep._apply_stage_to_path("n1", now=-90.0)
+            zeep._apply_stage_to_path("n2", now=0.0)
+        stage, first = zeep._stabilize_sleep_stage("n3", now=60.0)
+        self.assertEqual(stage, "n2")
+        self.assertTrue(first["held"])
+        stage, second = zeep._stabilize_sleep_stage("n3", now=90.0)
+        self.assertEqual(stage, "n3")
+        self.assertFalse(second["held"])
 
     def test_emitted_stage_is_winner_without_zeroing_challenger(self):
         visible = zeep.align_probabilities_to_emitted_stage(

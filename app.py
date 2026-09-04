@@ -144,6 +144,7 @@ from sleep_signal_features import (
 )
 from sleep_stage_scoring import (
     align_probabilities_to_emitted_stage,
+    candidate_from_stage_evidence,
     score_sleep_evidence,
     smooth_stage_probabilities,
     stable_probability_candidate,
@@ -3053,10 +3054,17 @@ def estimate_sleep_state() -> Dict[str, Any]:
         )
         _sleep_stage_path["probability_ema"] = dict(smoothed_probabilities)
         probability_current_stage = _sleep_stage_path.get("last")
-    filtered_candidate, probability_transition = stable_probability_candidate(
+    # EMA remains the default continuity source. Only a current N3 winner that
+    # passes the strict physiology gate may bypass EMA; the semi-Markov resolver
+    # below still requires two consecutive epochs before changing state. This
+    # removes the duplicate history lock that previously suppressed valid N3
+    # without making Wake/N1/N2/REM more reactive.
+    evidence_candidate, probability_transition = candidate_from_stage_evidence(
+        raw_probabilities,
         smoothed_probabilities,
         probability_current_stage,
         switch_margin=SLEEP_PROBABILITY_SWITCH_MARGIN,
+        n3_gate=bool(sleep_evidence["n3_gate"]),
     )
     # A position change or blanket adjustment is sleep-compatible movement.
     # Only the shared, physiology-corroborated movement rule may bypass the
@@ -3065,7 +3073,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
         instant_candidate == "wake"
         and sleep_evidence["movement"]["strong_wake"]
     )
-    raw_candidate = "wake" if strong_wake else filtered_candidate
+    raw_candidate = "wake" if strong_wake else evidence_candidate
     selected, transition_meta = _stabilize_sleep_stage(
         raw_candidate, now=now, strong_wake=strong_wake)
 
@@ -3185,6 +3193,8 @@ def estimate_sleep_state() -> Dict[str, Any]:
             "method": "ema_after_60s_rolling_features",
             "alpha": SLEEP_PROBABILITY_EMA_ALPHA,
             "candidate_switch_margin": SLEEP_PROBABILITY_SWITCH_MARGIN,
+            "candidate_source": "ema_with_gated_n3_current_evidence_override",
+            "ema_role": "default_candidate_stability_and_display",
             "display_winner_margin": SLEEP_DISPLAY_WINNER_MARGIN,
             **probability_transition,
         },

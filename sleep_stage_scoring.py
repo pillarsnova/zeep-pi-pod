@@ -101,6 +101,51 @@ def stable_probability_candidate(
     }
 
 
+def candidate_from_stage_evidence(
+    current_probabilities: Mapping[str, Any],
+    ema_probabilities: Mapping[str, Any],
+    current_stage: str | None,
+    *,
+    switch_margin: float,
+    n3_gate: bool,
+) -> tuple[str, dict[str, Any]]:
+    """Select a stable candidate without starving physiologically gated N3.
+
+    EMA remains the default candidate source for Wake/N1/N2/REM. A current N3
+    winner may bypass EMA only after the independent N3 physiology gate passes
+    and the normal winner margin is met. The caller's semi-Markov state machine
+    still requires two consecutive evidence epochs/60 seconds, so this removes
+    duplicate historical inertia without weakening N3 evidence requirements or
+    making the other states more reactive.
+    """
+    ema_candidate, ema_metadata = stable_probability_candidate(
+        ema_probabilities,
+        current_stage,
+        switch_margin=switch_margin,
+    )
+    current_candidate, current_metadata = stable_probability_candidate(
+        current_probabilities,
+        current_stage,
+        switch_margin=switch_margin,
+    )
+    gated_n3_override = bool(n3_gate and current_candidate == "n3")
+    candidate = current_candidate if gated_n3_override else ema_candidate
+    metadata = dict(current_metadata if gated_n3_override else ema_metadata)
+    metadata.update({
+        "candidate_source": (
+            "gated_n3_current_30s_evidence_before_ema"
+            if gated_n3_override
+            else "ema_probability"
+        ),
+        "ema_role": "default_candidate_stability_and_display",
+        "gated_n3_current_evidence_override": gated_n3_override,
+        "n3_gate": bool(n3_gate),
+        "current_evidence_winner": current_metadata["filtered_winner"],
+        "ema_winner": ema_metadata["filtered_winner"],
+    })
+    return candidate, metadata
+
+
 def align_probabilities_to_emitted_stage(
     probabilities: Mapping[str, Any],
     selected: str,

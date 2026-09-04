@@ -40,9 +40,9 @@ from sleep_signal_features import (
 )
 from sleep_stage_scoring import (
     align_probabilities_to_emitted_stage,
+    candidate_from_stage_evidence,
     score_sleep_evidence,
     smooth_stage_probabilities,
-    stable_probability_candidate,
 )
 from sleep_system_policy import (
     SLEEP_ALLOWED_TRANSITIONS,
@@ -403,10 +403,14 @@ def rescore_event(
         raw,
         alpha=SLEEP_PROBABILITY_EMA_ALPHA,
     )
-    candidate, probability_transition = stable_probability_candidate(
+    # Match live estimation: keep EMA continuity for every state except a
+    # current N3 winner that has passed the strict physiology gate.
+    candidate, probability_transition = candidate_from_stage_evidence(
+        raw,
         path.probability_ema,
         path.last,
         switch_margin=SLEEP_PROBABILITY_SWITCH_MARGIN,
+        n3_gate=bool(evidence["n3_gate"]),
     )
     strong_wake = bool(
         instant_candidate == "wake" and evidence["movement"]["strong_wake"]
@@ -471,6 +475,8 @@ def rescore_event(
             "method": "ema_after_60s_rolling_features",
             "alpha": SLEEP_PROBABILITY_EMA_ALPHA,
             "candidate_switch_margin": SLEEP_PROBABILITY_SWITCH_MARGIN,
+            "candidate_source": "ema_with_gated_n3_current_evidence_override",
+            "ema_role": "default_candidate_stability_and_display",
             "display_winner_margin": SLEEP_DISPLAY_WINNER_MARGIN,
             **probability_transition,
         },

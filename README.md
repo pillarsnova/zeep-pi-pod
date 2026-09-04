@@ -38,6 +38,7 @@ pi5/
 ├── run.sh / run.bat        # bootstrap คำสั่งเดียว: venv + deps + เสียง + รัน
 ├── requirements.txt        # fastapi · uvicorn · pyserial · gpiozero
 ├── REMOTE-ACCESS.md        # แผนเปิดใช้ผ่าน URL (Tailscale / Cloudflare Tunnel)
+├── research/evidence-library/ # ทะเบียนหลักฐาน Sleep/Health/WHO/VOC + downloader
 ├── music/     (gitignored) # ไฟล์เสียง — สร้างจากสคริปต์ หรือทีมวางไฟล์เพิ่มเอง
 └── data/      (gitignored) # ข้อมูลส่วนบุคคล เก็บบนเครื่องเท่านั้น:
     ├── sessions.db         #   Session, Timeline, Event และ derived report
@@ -53,6 +54,12 @@ pi5/
 [Pi5 Software Architecture](docs/pi5-software-architecture.md) โดย `app.py`
 ทำหน้าที่ประกอบระบบและ side effects เท่านั้น ส่วนกฎที่คำนวณได้ต้องอยู่ใน pure
 module ที่ import และทดสอบได้โดยไม่เปิด GPIO, Serial, MQTT หรือเว็บเซิร์ฟเวอร์
+
+เอกสารวิจัยที่ทีมใช้ทบทวนระบบอยู่ใน
+[ZEEP Research Evidence Library](research/evidence-library/README.md) พร้อมทะเบียน
+แหล่งข้อมูล ลิงก์ทางการ วันที่ตรวจสอบ SHA-256 และ case note เรื่อง VOC จาก
+ผู้ใช้งาน/thirdhand smoke เอกสารเหล่านี้ไม่เปลี่ยน runtime threshold หรือ model
+อัตโนมัติ การนำหลักฐานใหม่มาใช้ต้องผ่าน policy version และ regression test เสมอ
 
 ### ขอบเขตความรับผิดชอบของ Backend
 

@@ -17,6 +17,12 @@ backups/
 .lgd-nfy0
 pending-*/
 
+# Research evidence is downloaded on demand from the reviewed source register.
+# Keep large/copyrighted binaries out of Git; retain folders and metadata.
+research/evidence-library/papers/**/*.pdf
+research/evidence-library/vendor/*.pdf
+research/evidence-library/**/*.part
+
 .env
 .env.development.local
 .env.test.local

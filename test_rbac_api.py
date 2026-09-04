@@ -1048,6 +1048,9 @@ class RbacApiTests(unittest.TestCase):
         self.assertIn("Sleep Stage เป็นค่าประเมินจาก BCG/HR/RR ไม่ใช่ผลยืนยันจาก PSG", ui)
         self.assertIn("SGP40 เป็น Adaptive VOC Index แบบสัมพัทธ์", ui)
         self.assertIn("ไม่ใช่เครื่องวัดเสียง Class 1", ui)
+        self.assertIn("ค่าจริง · เทียบ Baseline และเกณฑ์ของโหมด", ui)
+        self.assertIn("admin-live-explanation-metric-icon", ui)
+        self.assertIn("ADMIN_EXPLANATION_STATUS", ui)
         self.assertIn('body:not([data-role="admin"]) [data-admin-panel]', css)
 
     def test_sensor_integrity_displays_every_sensor_and_primary_reading(self) -> None:

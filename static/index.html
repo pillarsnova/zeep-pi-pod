@@ -1045,20 +1045,20 @@
       </section>
       <section class="admin-live-explanation" id="adminLiveExplanation" data-admin-panel aria-label="คำอธิบายค่าปัจจุบันสำหรับผู้ดูแลระบบ">
         <div class="admin-live-explanation-head">
-          <div><span class="admin-live-explanation-icon" aria-hidden="true">i</span><div><b>คำอธิบายค่าปัจจุบัน</b><small>แปลค่าจริงตาม Baseline และ ZEEP operating bands ของ Mode นี้</small></div></div>
-          <span id="adminExplanationMode">กำลังรอ Mode</span>
+          <div><span class="admin-live-explanation-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 18V9m6 9V5m6 13v-7m4 7V3"/><path d="M3 21h18"/></svg></span><div><b>คำอธิบายค่าปัจจุบัน</b><small>ค่าจริง · เทียบ Baseline และเกณฑ์ของโหมด</small></div></div>
+          <span id="adminExplanationMode">กำลังรอโหมด</span>
         </div>
         <div class="admin-live-explanation-grid">
           <article class="admin-live-explanation-group" aria-labelledby="adminBioExplanationTitle">
-            <h4 id="adminBioExplanationTitle">สัญญาณชีพและการนอน</h4>
+            <div class="admin-live-explanation-group-head"><span aria-hidden="true">♥</span><div><h4 id="adminBioExplanationTitle">สัญญาณชีพและการนอน</h4><small>BCG · Baseline รายบุคคลหรืออายุและเพศ</small></div></div>
             <div class="admin-live-explanation-list" id="adminBioExplanation"><div class="admin-live-explanation-empty">กำลังรอข้อมูล BCG, HR และ RR</div></div>
           </article>
           <article class="admin-live-explanation-group" aria-labelledby="adminEnvironmentExplanationTitle">
-            <h4 id="adminEnvironmentExplanationTitle">สภาพแวดล้อมภายใน ZEEP</h4>
+            <div class="admin-live-explanation-group-head"><span aria-hidden="true">⌁</span><div><h4 id="adminEnvironmentExplanationTitle">สภาพแวดล้อมภายใน ZEEP</h4><small>Sensor สด · ประเมินตามเกณฑ์ ZEEP ของโหมด</small></div></div>
             <div class="admin-live-explanation-list environment" id="adminEnvironmentExplanation"><div class="admin-live-explanation-empty">กำลังรอข้อมูล Sensor</div></div>
           </article>
         </div>
-        <div class="admin-live-explanation-note"><b>ขอบเขต:</b> ใช้เพื่อ Wellness และช่วยตรวจระบบ ไม่ใช่การวินิจฉัย · Sleep Stage เป็นค่าประเมินจาก BCG/HR/RR ไม่ใช่ผลยืนยันจาก PSG · Sensor ที่ไม่ Live จะไม่ถูกตีความ</div>
+        <div class="admin-live-explanation-note"><span aria-hidden="true">i</span><div><b>ขอบเขตการแปลผล</b><small>Wellness และการตรวจระบบ · Sleep Stage เป็นค่าประเมินจาก BCG/HR/RR ไม่ใช่ผลยืนยันจาก PSG · Sensor ที่ไม่ Live จะไม่ถูกตีความ</small></div></div>
       </section>
       <div class="dash-foot"><span class="dash-foot-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></svg></span><span id="dashHealthNote">ข้อมูลจาก Sensor ใช้ติดตามแนวโน้มการนอน</span></div>
     </section>
@@ -2809,8 +2809,16 @@ const ADMIN_LEVEL_COPY=Object.freeze({
   critical:'วิกฤต ต้องตรวจสอบและแก้ไขทันที',
   unknown:'ยังแปลผลไม่ได้',
 });
-function adminExplanationRow({tone='unknown',title,value='--',summary,detail}){
-  return `<div class="admin-live-explanation-row tone-${tone}"><span class="admin-live-explanation-dot" aria-hidden="true"></span><div><div class="admin-live-explanation-row-head"><b>${title}</b><strong>${value}</strong></div><p>${summary}</p><small>${detail}</small></div></div>`;
+const ADMIN_EXPLANATION_ICON=Object.freeze({
+  hr:'♥',rr:'≈',sleep:'☾',temperature:'°',humidity:'%',light:'☼',sound:'dB',co2:'CO₂',pm25:'PM',voc:'VOC',unknown:'•',
+});
+const ADMIN_EXPLANATION_STATUS=Object.freeze({
+  excellent:'ยอดเยี่ยม',good:'อยู่ในช่วง',info:'ยืนยันแล้ว',fair:'ควรติดตาม',poor:'ควรปรับ',critical:'เร่งแก้ไข',unknown:'รอข้อมูล',
+});
+function adminExplanationRow({tone='unknown',icon='unknown',title,value='--',status,summary,detail}){
+  const marker=ADMIN_EXPLANATION_ICON[icon]||ADMIN_EXPLANATION_ICON.unknown;
+  const state=status||ADMIN_EXPLANATION_STATUS[tone]||ADMIN_EXPLANATION_STATUS.unknown;
+  return `<article class="admin-live-explanation-row tone-${tone}"><div class="admin-live-explanation-row-head"><span class="admin-live-explanation-metric-icon" aria-hidden="true">${marker}</span><b>${title}</b><em>${state}</em></div><strong>${value}</strong><p>${summary}</p><small><i aria-hidden="true">→</i>${detail}</small></article>`;
 }
 function adminBaselineComparison(value,range,unit){
   if(!Number.isFinite(Number(value))||!Array.isArray(range)||range.length<2)return 'ยังไม่มีช่วง Baseline ที่ใช้เทียบได้';
@@ -2849,17 +2857,19 @@ function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
   const bedLabel=BCG_STATUS_TH[bcg.status_code]||bcg.status_text||'รอสัญญาณจากเตียง';
   bioRoot.innerHTML=[
     adminExplanationRow({
-      tone:hrValid?adminBaselineTone(hr,baseline.hr):'unknown',title:'ชีพจร',value:hrValid?`${hr.toFixed(1)} ครั้ง/นาที`:'--',
+      tone:hrValid?adminBaselineTone(hr,baseline.hr):'unknown',icon:'hr',title:'ชีพจร',value:hrValid?`${hr.toFixed(1)} ครั้ง/นาที`:'--',
+      status:hrValid?(adminBaselineTone(hr,baseline.hr)==='good'?'ใน Baseline':'นอก Baseline'):'รอข้อมูล',
       summary:hrValid?adminBaselineComparison(hr,baseline.hr,'ครั้ง/นาที'):(onBed?'ยังคำนวณชีพจรไม่ได้':'ไม่มีสัญญาณผู้ใช้งานบนเตียง'),
       detail:hrValid?`ค่าประมาณจาก BCG${bcg.heart_rate_held?' · เป็นค่าล่าสุดที่คงไว้ระหว่างตรวจคุณภาพสัญญาณ':''}; ใช้ดูแนวโน้มและเทียบ ${source} ไม่ใช้ค่าเดียวสรุปการฟื้นตัว`:'ตรวจสถานะเตียง ตำแหน่งผู้ใช้ และคุณภาพสัญญาณ BCG',
     }),
     adminExplanationRow({
-      tone:rrValid?adminBaselineTone(rr,baseline.rr):'unknown',title:'อัตราการหายใจ',value:rrValid?`${rr.toFixed(1)} ครั้ง/นาที`:'--',
+      tone:rrValid?adminBaselineTone(rr,baseline.rr):'unknown',icon:'rr',title:'อัตราการหายใจ',value:rrValid?`${rr.toFixed(1)} ครั้ง/นาที`:'--',
+      status:rrValid?(adminBaselineTone(rr,baseline.rr)==='good'?'ใน Baseline':'นอก Baseline'):'รอข้อมูล',
       summary:rrValid?adminBaselineComparison(rr,baseline.rr,'ครั้ง/นาที'):(onBed?'ยังคำนวณอัตราการหายใจไม่ได้':'ไม่มีสัญญาณผู้ใช้งานบนเตียง'),
       detail:rrValid?`ค่าประมาณจาก BCG${bcg.respiration_held?' · เป็นค่าล่าสุดที่คงไว้ระหว่างตรวจคุณภาพสัญญาณ':''}; พิจารณาความนิ่งและแนวโน้มร่วมกับ HR/Movement`:'ยังไม่ใช้เป็นหลักฐาน Sleep Stage จนกว่า HR และ RR จะผ่าน Data-quality gate',
     }),
     adminExplanationRow({
-      tone:stageTone,title:'สถานะการนอน',value:stageKey?`${stage.code} · ${stage.label}`:'รอยืนยัน',
+      tone:stageTone,icon:'sleep',title:'สถานะการนอน',value:stageKey?`${stage.code} · ${stage.label}`:'รอยืนยัน',status:stageKey?'ยืนยันแล้ว':'รอหลักฐาน',
       summary:stageKey?(stage.meaning||stage.title):'ระบบยังไม่มีสถานะยืนยัน จึงไม่แสดง W/N1/N2/N3/REM แทนข้อมูลที่หาย',
       detail:stageKey?`${source} · ความมั่นใจ ${confidence} · Evidence 30 วินาทีและยืนยันแนวโน้ม 60 วินาที · ไม่ใช่ผล PSG`:`สถานะเตียง ${bedLabel} · ต้องมี Session, ผู้ใช้งานบนเตียง, HR และ RR ที่ใช้ได้ก่อน`,
     }),
@@ -2871,16 +2881,15 @@ function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
     const available=metric.status==='live'&&metric.level;
     const tone=available?(metric.level.key||'unknown'):'unknown';
     const levelLabel=available?(metric.level.label||ADMIN_LEVEL_COPY[tone]||tone):'ไม่มีข้อมูล Live';
-    const summary=available?`${levelLabel} · ${ADMIN_LEVEL_COPY[tone]||''}`:`ตรวจ ${metric.source||metric.name} และ freshness ก่อนแปลผล`;
-    const context=ADMIN_EXPLANATION_CONTEXT[metric.id||metric.key]||metric.principle||'ใช้ประกอบการประเมินสภาพแวดล้อมของ ZEEP';
+    const summary=available?(ADMIN_EXPLANATION_CONTEXT[metric.id||metric.key]||metric.principle||'ใช้ประกอบการประเมินสภาพแวดล้อมของ ZEEP'):`ตรวจ ${metric.source||metric.name} และ freshness ก่อนแปลผล`;
     const action=available?(metric.recommendation||'รักษาการตั้งค่าปัจจุบัน'):'ไม่ใช้ค่าค้างแทนค่าปัจจุบัน';
     const display=(metric.id||metric.key)==='sound'&&metric.display
       ? String(metric.display).replace(/\bdBA\b(?! est\.)/,'dBA est.')
       : metric.display||'--';
-    return adminExplanationRow({tone,title:metric.name||metric.label,value:display,summary,detail:`${context} · ${action}`});
+    return adminExplanationRow({tone,icon:metric.id||metric.key,status:levelLabel,title:metric.name||metric.label,value:display,summary,detail:action});
   }).join(''):'<div class="admin-live-explanation-empty">ยังไม่มีข้อมูล Sensor ที่ใช้แปลผลได้</div>';
   const modeLabel=({sleep:'Overnight Recovery',nap_recovery:'Nap & Refresh',relax_meditation:'Relax / Meditation',recovery_readiness:'Recovery / Readiness'})[result.mode]||session.rest_mode||'รอ Mode';
-  modeRoot.textContent=`Mode · ${modeLabel}`;
+  modeRoot.textContent=`โหมด · ${modeLabel}`;
 }
 function renderSimpleDashboard(state={},environment={},bcg={},session={}){
   const active=!!session.active,recording=!!session.recording;

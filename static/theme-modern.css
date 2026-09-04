@@ -13906,11 +13906,14 @@ body[data-view="control"] .aircon-control-stack .fan-level-control .toggle-state
  * already rendered above. This is intentionally Admin-only and never turns a
  * single wellness reading into a diagnosis or a PSG-equivalent conclusion. */
 .admin-live-explanation {
-  margin-top: 8px;
-  padding: 10px;
-  border: 1px solid rgba(71, 154, 180, .3);
-  border-radius: 14px;
-  background: linear-gradient(145deg, rgba(9, 30, 44, .96), rgba(7, 19, 31, .98));
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid rgba(70, 151, 177, .34);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(37, 169, 195, .13), transparent 28%),
+    linear-gradient(145deg, rgba(8, 29, 43, .97), rgba(6, 18, 30, .99));
+  box-shadow: inset 0 1px rgba(255, 255, 255, .025), 0 12px 36px rgba(0, 0, 0, .18);
 }
 
 .admin-live-explanation-head,
@@ -13922,135 +13925,239 @@ body[data-view="control"] .aircon-control-stack .fan-level-control .toggle-state
 
 .admin-live-explanation-head {
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 9px;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
-.admin-live-explanation-head > div { gap: 8px; }
+.admin-live-explanation-head > div { gap: 10px; }
 .admin-live-explanation-head b,
 .admin-live-explanation-head small { display: block; }
-.admin-live-explanation-head b { color: #edfaff; font-size: 13px; }
-.admin-live-explanation-head small { margin-top: 2px; color: #7192a2; font-size: 10px; }
+.admin-live-explanation-head b { color: #edfaff; font-size: 15px; letter-spacing: .01em; }
+.admin-live-explanation-head small { margin-top: 3px; color: #7fa2b1; font-size: 11px; }
 .admin-live-explanation-head > span {
-  padding: 5px 8px;
-  border: 1px solid rgba(69, 199, 219, .27);
+  padding: 6px 10px;
+  border: 1px solid rgba(69, 199, 219, .32);
   border-radius: 999px;
   color: #8fe8f4;
   background: rgba(30, 118, 137, .16);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 750;
   white-space: nowrap;
 }
 
 .admin-live-explanation-icon {
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   place-items: center;
-  flex: 0 0 28px;
-  border: 1px solid rgba(69, 215, 229, .35);
-  border-radius: 9px;
+  flex: 0 0 34px;
+  border: 1px solid rgba(69, 215, 229, .4);
+  border-radius: 11px;
   color: #a8f7ff;
   background: rgba(31, 145, 158, .2);
-  font: 800 14px Georgia, serif;
+  box-shadow: inset 0 0 16px rgba(55, 211, 227, .08);
+}
+.admin-live-explanation-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
 }
 
 .admin-live-explanation-grid {
   display: grid;
-  grid-template-columns: minmax(250px, .8fr) minmax(0, 1.2fr);
-  gap: 8px;
+  grid-template-columns: 1fr;
+  gap: 15px;
 }
 
 .admin-live-explanation-group {
   min-width: 0;
-  padding: 9px;
-  border: 1px solid rgba(78, 126, 148, .2);
-  border-radius: 11px;
-  background: rgba(3, 15, 25, .62);
+  padding: 0;
 }
 
-.admin-live-explanation-group h4 {
-  margin: 0 0 7px;
-  color: #cce9f0;
-  font-size: 11px;
-  letter-spacing: .02em;
+.admin-live-explanation-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
 }
-
-.admin-live-explanation-list { display: grid; gap: 6px; }
-.admin-live-explanation-list.environment { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.admin-live-explanation-row {
+.admin-live-explanation-group-head > span {
   display: grid;
-  grid-template-columns: 7px minmax(0, 1fr);
-  gap: 7px;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  flex: 0 0 26px;
+  border: 1px solid rgba(75, 178, 201, .25);
+  border-radius: 8px;
+  color: #91dfeb;
+  background: rgba(30, 114, 137, .18);
+  font-size: 12px;
+  font-weight: 800;
+}
+.admin-live-explanation-group h4 {
+  margin: 0;
+  color: #d7eef3;
+  font-size: 12px;
+  letter-spacing: .01em;
+}
+.admin-live-explanation-group-head small {
+  display: block;
+  margin-top: 1px;
+  color: #688997;
+  font-size: 9px;
+}
+
+.admin-live-explanation-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.admin-live-explanation-list.environment { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.admin-live-explanation-row {
+  --explanation-tone: #6f8995;
+  display: grid;
+  grid-template-rows: auto auto auto 1fr;
+  gap: 0;
   min-width: 0;
-  padding: 7px;
-  border: 1px solid rgba(73, 114, 132, .18);
-  border-radius: 9px;
-  background: rgba(8, 24, 35, .76);
+  min-height: 144px;
+  overflow: hidden;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--explanation-tone) 28%, rgba(73, 114, 132, .2));
+  border-radius: 13px;
+  background:
+    linear-gradient(140deg, color-mix(in srgb, var(--explanation-tone) 8%, transparent), transparent 58%),
+    rgba(7, 23, 34, .88);
+  box-shadow: inset 0 1px rgba(255, 255, 255, .025);
+}
+.admin-live-explanation-row::before {
+  height: 2px;
+  margin: -10px -10px 8px;
+  content: "";
+  background: linear-gradient(90deg, var(--explanation-tone), transparent 75%);
+  opacity: .75;
 }
 
-.admin-live-explanation-dot {
-  width: 6px;
-  height: 6px;
-  margin-top: 4px;
-  border-radius: 50%;
-  color: #6f8995;
-  background: currentColor;
-  box-shadow: 0 0 7px currentColor;
-}
-
-.admin-live-explanation-row.tone-excellent .admin-live-explanation-dot { color: #35edac; }
-.admin-live-explanation-row.tone-good .admin-live-explanation-dot { color: #43d8ec; }
-.admin-live-explanation-row.tone-info .admin-live-explanation-dot { color: #b49cff; }
-.admin-live-explanation-row.tone-fair .admin-live-explanation-dot { color: #f2c14d; }
-.admin-live-explanation-row.tone-poor .admin-live-explanation-dot { color: #ff8c42; }
-.admin-live-explanation-row.tone-critical .admin-live-explanation-dot { color: #ff5570; }
+.admin-live-explanation-row.tone-excellent { --explanation-tone: #35edac; }
+.admin-live-explanation-row.tone-good { --explanation-tone: #43d8ec; }
+.admin-live-explanation-row.tone-info { --explanation-tone: #b49cff; }
+.admin-live-explanation-row.tone-fair { --explanation-tone: #f2c14d; }
+.admin-live-explanation-row.tone-poor { --explanation-tone: #ff8c42; }
+.admin-live-explanation-row.tone-critical { --explanation-tone: #ff5570; }
 
 .admin-live-explanation-row-head { justify-content: space-between; gap: 6px; }
-.admin-live-explanation-row-head b { color: #d9ebf0; font-size: 10px; }
-.admin-live-explanation-row-head strong {
+.admin-live-explanation-row-head b {
+  min-width: 0;
+  margin-right: auto;
   overflow: hidden;
-  color: #f2fbff;
-  font: 750 10px "SF Mono", ui-monospace, monospace;
+  color: #dceff3;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-live-explanation-row-head em {
+  flex: 0 0 auto;
+  padding: 3px 6px;
+  border: 1px solid color-mix(in srgb, var(--explanation-tone) 42%, transparent);
+  border-radius: 999px;
+  color: var(--explanation-tone);
+  background: color-mix(in srgb, var(--explanation-tone) 10%, transparent);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.admin-live-explanation-metric-icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  flex: 0 0 24px;
+  border: 1px solid color-mix(in srgb, var(--explanation-tone) 38%, transparent);
+  border-radius: 7px;
+  color: var(--explanation-tone);
+  background: color-mix(in srgb, var(--explanation-tone) 11%, transparent);
+  font: 800 8px "SF Mono", ui-monospace, monospace;
+}
+.admin-live-explanation-row > strong {
+  display: block;
+  margin-top: 9px;
+  overflow: hidden;
+  color: #f3fbfd;
+  font: 760 clamp(15px, 1.45vw, 20px) "SF Mono", ui-monospace, monospace;
+  letter-spacing: -.03em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .admin-live-explanation-row p {
-  margin: 3px 0 0;
-  color: #9fc0cc;
-  font-size: 9.5px;
+  margin: 5px 0 0;
+  color: #a8c7d0;
+  font-size: 9px;
+  line-height: 1.35;
+}
+.admin-live-explanation-row > small {
+  display: block;
+  align-self: end;
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(88, 132, 149, .14);
+  color: #71929f;
+  font-size: 8px;
   line-height: 1.4;
 }
-.admin-live-explanation-row small {
-  display: block;
-  margin-top: 2px;
-  color: #688795;
-  font-size: 8.5px;
-  line-height: 1.45;
+.admin-live-explanation-row > small i {
+  margin-right: 5px;
+  color: var(--explanation-tone);
+  font-style: normal;
 }
 .admin-live-explanation-note {
-  margin-top: 7px;
-  padding-top: 7px;
-  border-top: 1px solid rgba(73, 114, 132, .18);
-  color: #6d8996;
-  font-size: 8.5px;
-  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px solid rgba(82, 135, 154, .16);
+  border-radius: 10px;
+  color: #7695a1;
+  background: rgba(5, 18, 28, .48);
 }
-.admin-live-explanation-note b { color: #9cb7c1; }
+.admin-live-explanation-note > span {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  flex: 0 0 22px;
+  border-radius: 50%;
+  color: #8fd9e4;
+  background: rgba(50, 145, 164, .17);
+  font: 800 11px Georgia, serif;
+}
+.admin-live-explanation-note b,
+.admin-live-explanation-note small { display: block; }
+.admin-live-explanation-note b { color: #a9c6cf; font-size: 9px; }
+.admin-live-explanation-note small { margin-top: 1px; color: #6f909d; font-size: 8px; line-height: 1.4; }
 .admin-live-explanation-empty {
-  padding: 12px;
+  grid-column: 1 / -1;
+  padding: 18px;
   border: 1px dashed rgba(92, 131, 148, .25);
-  border-radius: 9px;
+  border-radius: 12px;
   color: #708995;
   text-align: center;
-  font-size: 8px;
+  font-size: 10px;
 }
 
-@media (max-width: 900px) {
-  .admin-live-explanation-grid { grid-template-columns: 1fr; }
+@media (max-width: 1120px) {
+  .admin-live-explanation-list.environment { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 820px) {
+  .admin-live-explanation-list.environment { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-live-explanation-row { min-height: 138px; }
 }
 
 @media (max-width: 620px) {
+  .admin-live-explanation { padding: 11px; border-radius: 16px; }
+  .admin-live-explanation-list,
   .admin-live-explanation-list.environment { grid-template-columns: 1fr; }
-  .admin-live-explanation-head { align-items: flex-start; flex-direction: column; }
+  .admin-live-explanation-head { align-items: flex-start; }
+  .admin-live-explanation-head > span { font-size: 8px; }
+  .admin-live-explanation-row { min-height: 0; }
 }

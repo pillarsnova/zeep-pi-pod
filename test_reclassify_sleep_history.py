@@ -101,21 +101,22 @@ class RawBcgWindowTests(unittest.TestCase):
 
 
 class HistoricalStagePathTests(unittest.TestCase):
-    def test_new_cycle_is_anchored_at_wake_and_bridged_through_n1(self):
+    def test_new_cycle_is_anchored_at_wake_without_fabricated_bridge(self):
         path = HistoricalStagePath()
         selected, _ = path.stabilize("n3", now=0.0, strong_wake=False)
         self.assertEqual(selected, "wake")
         path.commit(selected, 0.0)
 
-        # A direct N3 candidate is bridged through N1 and requires two
-        # 30-second evidence epochs (60 seconds total).
+        # A direct N3 candidate is rejected until independent N1/N2 evidence
+        # arrives; the transition prior must not manufacture either label.
         selected, metadata = path.stabilize("n3", now=15.0, strong_wake=False)
         self.assertEqual(selected, "wake")
-        self.assertEqual(metadata["bridge_state"], "n1")
+        self.assertIsNone(metadata["bridge_state"])
+        self.assertEqual(metadata["decision"], "blocked_transition_abstain")
         path.commit(selected, 15.0)
         selected, metadata = path.stabilize("n3", now=45.0, strong_wake=False)
-        self.assertEqual(selected, "n1")
-        self.assertEqual(metadata["required_ticks"], 2)
+        self.assertEqual(selected, "wake")
+        self.assertEqual(metadata["required_ticks"], 0)
 
     def test_emitted_stage_remains_probability_winner(self):
         result = adjusted_probabilities(
@@ -134,7 +135,7 @@ class HistoricalStagePathTests(unittest.TestCase):
         self.assertNotIn("n1", path.seen)
         self.assertTrue(path.cycle_has_n1)
         self.assertTrue(path._allowed("n2", False))
-        self.assertEqual(path._fallback("n1"), "n2")
+        self.assertEqual(path._fallback("n1"), "n3")
 
     def test_historical_path_allows_sustained_n3_to_rem(self):
         path = HistoricalStagePath()
@@ -148,12 +149,12 @@ class HistoricalStagePathTests(unittest.TestCase):
         self.assertEqual(metadata["required_ticks"], 2)
         self.assertEqual(metadata["confirmation_seconds"], 60.0)
 
-    def test_historical_n2_to_wake_requires_strong_proxy_or_n1_bridge(self):
+    def test_historical_n2_to_wake_requires_strong_proxy_without_bridge(self):
         path = HistoricalStagePath()
         for index, stage in enumerate(("wake", "n1", "n2")):
             path.commit(stage, index * 60.0)
         self.assertFalse(path._allowed("wake", False))
-        self.assertEqual(path._fallback("wake"), "n1")
+        self.assertEqual(path._fallback("wake"), "n2")
         self.assertTrue(path._allowed("wake", True))
 
 

@@ -12,8 +12,10 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import json
+import math
 from pathlib import Path
 import sqlite3
+import statistics
 from typing import Any, Dict
 
 from sleep_session_report import (
@@ -30,7 +32,10 @@ from sleep_system_policy import (
 )
 from sleep_stage_annotations import apply_annotations, load_annotations
 from sleep_signal_features import (
+    HR_SANITY_RANGE_BPM,
+    RR_SANITY_RANGE_PER_MIN,
     debounced_bed_status_labels,
+    filter_vital_values,
     terminal_occupancy_timeline,
 )
 
@@ -54,6 +59,50 @@ def _timestamp(value: str) -> datetime:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
+def _positive_seconds(value: Any, fallback: float) -> float:
+    """Return a finite positive cadence without trusting legacy metadata."""
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return fallback
+    return seconds if seconds > 0 else fallback
+
+
+def _stage_cadence(values: list[Dict[str, Any]], fallback: float) -> float:
+    """Infer the cadence of derived stages independently from Sensor cadence.
+
+    Since stable-30s-epoch, Timeline Sensor samples arrive every 10 seconds but
+    one confirmed Sleep State represents 30 seconds.  Historical summaries may
+    still carry the Sensor cadence in ``sample_interval_s``; using that value
+    for state durations shortens TST and coverage by threefold.
+    """
+    intervals = [
+        _positive_seconds(value.get("sample_interval_s"), fallback)
+        for value in values
+        if value.get("sample_interval_s") is not None
+    ]
+    return float(statistics.median(intervals)) if intervals else fallback
+
+
+def _timeline_projection(connection: sqlite3.Connection) -> str:
+    """Read both current and pre-PM/VOC Timeline schemas without migration."""
+    columns = {
+        str(row[1]) for row in connection.execute("PRAGMA table_info(timeline)")
+    }
+    required = (
+        "timestamp", "temperature", "humidity", "co2", "lux", "sound",
+        "heart_rate", "respiration_rate", "bed_status",
+    )
+    missing = [column for column in required if column not in columns]
+    if missing:
+        raise ValueError(f"timeline schema missing required columns: {missing}")
+    optional = (
+        "pm2_5" if "pm2_5" in columns else "NULL AS pm2_5",
+        "voc_index" if "voc_index" in columns else "NULL AS voc_index",
+    )
+    return ",".join((*required, *optional))
+
+
 def _rebuild(connection: sqlite3.Connection, session: sqlite3.Row,
              requested_mode: str | None) -> Dict[str, Any]:
     session_id = session["session_id"]
@@ -64,15 +113,20 @@ def _rebuild(connection: sqlite3.Connection, session: sqlite3.Row,
     if final_row is None:
         raise ValueError(f"completed Session has no final_summary: {session_id}")
     old_final = _json(final_row["value"])
-    sample_seconds = float(old_final.get("sample_interval_s") or LEGACY_SAMPLE_SECONDS)
-    if sample_seconds <= 0:
-        sample_seconds = LEGACY_SAMPLE_SECONDS
+    start = _timestamp(session["start_time"])
+    sensor_sample_seconds = _positive_seconds(
+        old_final.get("sensor_sample_interval_s")
+        or old_final.get("sample_interval_s"),
+        LEGACY_SAMPLE_SECONDS,
+    )
     mode = normalise_rest_mode(requested_mode or old_final.get("rest_mode") or "auto")
 
     stage_rows = connection.execute(
         "SELECT timestamp,value FROM events WHERE session_id=? AND type='sleep_stage' "
         "ORDER BY timestamp,id", (session_id,),
     ).fetchall()
+    stage_values = [_json(row["value"]) for row in stage_rows]
+    stage_sample_seconds = _stage_cadence(stage_values, sensor_sample_seconds)
     annotation_rows = connection.execute(
         "SELECT value FROM events WHERE session_id=? AND type='sleep_stage_annotation' "
         "ORDER BY timestamp,id", (session_id,),
@@ -89,11 +143,13 @@ def _rebuild(connection: sqlite3.Connection, session: sqlite3.Row,
     waso_rounds = 0
     asleep = False
     sleep_started = False
-    for row in stage_rows:
-        value = _json(row["value"])
+    for row, parsed_value in zip(stage_rows, stage_values):
+        value = parsed_value
         value, annotation = apply_annotations(
             value, row["timestamp"], annotations,
-            sample_interval_s=float(value.get("sample_interval_s") or sample_seconds),
+            sample_interval_s=_positive_seconds(
+                value.get("sample_interval_s"), stage_sample_seconds,
+            ),
         )
         if annotation is not None:
             annotated_rounds += 1
@@ -120,22 +176,22 @@ def _rebuild(connection: sqlite3.Connection, session: sqlite3.Row,
                 asleep = False
         auxiliary = ((value.get("metrics") or {}).get("auxiliary_evidence") or {})
         acoustic = auxiliary.get("acoustic") or {}
-        stage_by_bucket[int(when.timestamp() // sample_seconds)] = {
+        stage_by_bucket[int((when - start).total_seconds() // stage_sample_seconds)] = {
             "sleep": stage,
             "sleep_confidence": value.get("confidence"),
             "acoustic_corroborated": bool(acoustic.get("corroborated")),
         }
 
     timeline = connection.execute(
-        "SELECT timestamp,temperature,humidity,co2,lux,sound,heart_rate,"
-        "respiration_rate,bed_status FROM timeline WHERE session_id=? ORDER BY timestamp,id",
+        f"SELECT {_timeline_projection(connection)} FROM timeline "
+        "WHERE session_id=? ORDER BY timestamp,id",
         (session_id,),
     ).fetchall()
     canonical_bed_labels = debounced_bed_status_labels(
         [row["bed_status"] for row in timeline])
     raw_bed_status_counts: Dict[str, int] = {}
     canonical_bed_status_counts: Dict[str, int] = {}
-    samples = []
+    timeline_buckets: Dict[int, list[tuple[sqlite3.Row, str | None]]] = {}
     for row, canonical_bed in zip(timeline, canonical_bed_labels):
         when = _timestamp(row["timestamp"])
         raw_bed = str(row["bed_status"] or "")
@@ -145,19 +201,49 @@ def _rebuild(connection: sqlite3.Connection, session: sqlite3.Row,
             canonical_bed_status_counts[canonical_bed] = (
                 canonical_bed_status_counts.get(canonical_bed, 0) + 1
             )
-        samples.append({
-            "t": when.timestamp(), "temp": row["temperature"], "hum": row["humidity"],
-            "co2": row["co2"], "lux": row["lux"], "dba": row["sound"],
-            "hr": row["heart_rate"], "rr": row["respiration_rate"],
-            # Report/quality functions apply the shared debounce helper and
-            # retain the rejected count for Admin audit. User history is
-            # canonicalised independently by the read API.
-            "bed": raw_bed,
-            **stage_by_bucket.get(int(when.timestamp() // sample_seconds), {}),
-        })
+        bucket = int((when - start).total_seconds() // stage_sample_seconds)
+        timeline_buckets.setdefault(bucket, []).append((row, canonical_bed))
+
+    # A report sample must share the same cadence as the derived Sleep State.
+    # Aggregating the 10-second Timeline into each 30-second state epoch avoids
+    # overstating coverage by 3x during historical replay.
+    samples = []
+    numeric = {
+        "temp": "temperature", "hum": "humidity", "co2": "co2",
+        "lux": "lux", "dba": "sound", "hr": "heart_rate",
+        "rr": "respiration_rate", "pm2_5": "pm2_5", "voc": "voc_index",
+    }
+    for bucket in sorted(timeline_buckets):
+        selected = timeline_buckets[bucket]
+        sample: Dict[str, Any] = {
+            "t": start.timestamp() + (bucket + 1) * stage_sample_seconds,
+            "_source_rows": len(selected),
+            "_paired_hr_rr_rows": sum(
+                bool(
+                    filter_vital_values(
+                        [row["heart_rate"]], HR_SANITY_RANGE_BPM
+                    )
+                    and filter_vital_values(
+                        [row["respiration_rate"]], RR_SANITY_RANGE_PER_MIN
+                    )
+                )
+                for row, _ in selected
+            ),
+            "bed": next(
+                (bed for _, bed in reversed(selected) if bed), None
+            ),
+            **stage_by_bucket.get(bucket, {}),
+        }
+        for target, source in numeric.items():
+            values = [
+                float(row[source]) for row, _ in selected
+                if isinstance(row[source], (int, float))
+                and math.isfinite(float(row[source]))
+            ]
+            sample[target] = statistics.median(values) if values else None
+        samples.append(sample)
 
     duration_s = max(0.0, float(session["duration"] or 0.0))
-    start = _timestamp(session["start_time"])
     total_sleep = sum(counts[stage] for stage in SLEEP_STAGES)
     total_scored = total_sleep + counts["wake"]
     night = dict(old_final.get("night_summary") or {})
@@ -167,8 +253,8 @@ def _rebuild(connection: sqlite3.Connection, session: sqlite3.Row,
             if first_sleep_at else None
         ),
         "awakenings": awakenings,
-        "waso_proxy_s": round(waso_rounds * sample_seconds, 1),
-        "estimated_sleep_s": round(total_sleep * sample_seconds, 1),
+        "waso_proxy_s": round(waso_rounds * stage_sample_seconds, 1),
+        "estimated_sleep_s": round(total_sleep * stage_sample_seconds, 1),
         "sleep_efficiency": round(total_sleep / total_scored, 3) if total_scored else None,
         "deep_ratio": round(counts["n3"] / total_sleep, 3) if total_sleep else None,
         "rem_ratio": round(counts["rem"] / total_sleep, 3) if total_sleep else None,
@@ -176,21 +262,21 @@ def _rebuild(connection: sqlite3.Connection, session: sqlite3.Row,
     quality = build_sleep_quality(
         duration_s, night, counts, completed=True, rest_mode=mode,
         stage_sequence=sequence, sensor_samples=samples,
-        sample_interval_s=sample_seconds,
+        sample_interval_s=stage_sample_seconds,
     )
     night["sleep_quality"] = quality
     night["wellness_score"] = quality.get("score")
     report = build_session_report(
         duration_s, samples, night, counts, quality,
         rest_mode=mode,
-        sample_interval_s=sample_seconds, estimator_version=estimator_version,
+        sample_interval_s=stage_sample_seconds, estimator_version=estimator_version,
         completed=True,
         timeline_schema_version=int(old_final.get("timeline_schema_version") or 3),
     )
     terminal_occupancy = terminal_occupancy_timeline(
         timeline,
         session_end=session["end_time"],
-        sample_interval_s=sample_seconds,
+        sample_interval_s=sensor_sample_seconds,
     )
     now = datetime.now(timezone.utc).isoformat()
     previous_quality = (old_final.get("night_summary") or {}).get("sleep_quality")
@@ -205,7 +291,8 @@ def _rebuild(connection: sqlite3.Connection, session: sqlite3.Row,
         "sleep_transition_policy": ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
         "sleep_g2_ontology": SLEEP_G2_ONTOLOGY_VERSION,
         "rest_mode": mode,
-        "sample_interval_s": sample_seconds,
+        "sample_interval_s": stage_sample_seconds,
+        "sensor_sample_interval_s": sensor_sample_seconds,
         "bed_status_counts": canonical_bed_status_counts,
         "terminal_occupancy_timeline": terminal_occupancy,
         "night_summary": night,
@@ -237,7 +324,12 @@ def _rebuild(connection: sqlite3.Connection, session: sqlite3.Row,
         "audit": audit,
         "old_score": (previous_quality or {}).get("score"),
         "new_score": quality.get("score"),
+        "score_title": quality.get("score_title"),
+        "estimated_sleep_s": quality.get("estimated_sleep_s"),
+        "actual_scored_s": quality.get("actual_scored_s"),
         "rest_mode": quality.get("rest_mode"),
+        "quality": quality,
+        "report": report,
         "rounds": total_scored,
         "counts": counts,
         "sleep_stage_annotations_used": len(annotations),
@@ -269,8 +361,9 @@ def rescore(data_dir: Path, session_ids: list[str] | None, *,
         for session in sessions:
             rebuilt = _rebuild(connection, session, requested_mode)
             results.append({key: rebuilt[key] for key in (
-                "session_id", "old_score", "new_score", "rest_mode", "rounds", "counts",
-                "sleep_stage_annotations_used", "annotated_rounds")})
+                "session_id", "old_score", "new_score", "score_title",
+                "estimated_sleep_s", "actual_scored_s", "rest_mode", "rounds", "counts",
+                "quality", "report", "sleep_stage_annotations_used", "annotated_rounds")})
             if not apply:
                 continue
             connection.execute("BEGIN IMMEDIATE")
@@ -301,7 +394,8 @@ def main() -> None:
     parser.add_argument("--session-id", action="append", dest="session_ids")
     parser.add_argument("--all", action="store_true", help="Rescore every completed Session")
     parser.add_argument("--rest-mode", choices=(
-        "auto", "short_nap", "cycle_nap", "shift_rest", "jet_lag", "overnight"))
+        "auto", "sleep", "nap_recovery", "short_nap", "cycle_nap",
+        "shift_rest", "jet_lag", "overnight"))
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
     if not args.all and not args.session_ids:

@@ -122,7 +122,7 @@ Browser ─▶ POST /api/{door,pulse,output,music,labels,session} ─▶ GPIO / 
 
 เวอร์ชัน runtime, Rest Mode, สูตรคะแนนและ closure checklist ดูที่
 [ZEEP Sleep System Current](../docs/zeep-sleep-system-current.md) และหลักฐานของ
-ตัวประมาณดูที่ [ZEEP Sleep-State Baseline v1.5](../docs/zeep-sleep-state-baseline-v1.0.md):
+ตัวประมาณดูที่ [ZEEP Sleep-State Baseline v1.8](../docs/zeep-sleep-state-baseline-v1.0.md):
 Session/cycle เริ่มที่ Wake, ต้องผ่าน N1 ก่อน N2/N3/REM; N3 ไป REM ได้หลัง
 dwell/hysteresis แต่ REM ไป N3 ต้องผ่าน N2 กติกานี้เป็น ZEEP continuity guard ไม่ใช่ AASM scoring rule;
 G2 primary ontology แก้เป็น `W / N1 / N2 / N3 / REM` แบบ one-to-one กับ PSG;
@@ -375,8 +375,9 @@ HR/RR เป็นค่า directional จาก sensor (pre-G2) ไม่ใ�
 ## Sleep State (est.) — internal telemetry
 
 แถบในการ์ด BCG รับ Sensor frame ทุก 10 วินาที สร้าง evidence ทุก 30 วินาที
-จาก rolling 6 ชุด (60 วินาที; `bcg-audio-bed-5state-v1.20-sleep-onset-guard`)
-และยืนยัน State เมื่อ candidate เดิมต่อเนื่อง 2 epoch/60 วินาที; EMA เป็น continuity หลัก
+จาก rolling 6 ชุด (60 วินาที; candidate `bcg-audio-bed-5state-v1.23-wellness-longitudinal`)
+และยืนยัน State เมื่อ candidate เดิมต่อเนื่องตาม target: W/N1/N3/REM ใช้
+2 epoch/60 วินาที ส่วน N2 ใช้ 4 epoch/120 วินาที; EMA เป็น continuity หลัก
 ของ W/N1/N2/REM ส่วน N3 ที่ชนะและผ่าน physiology gate ใช้หลักฐานปัจจุบันก่อน EMA
 เพื่อไม่ให้การกรองซ้ำกด N3 ที่มีหลักฐานครบจนหายไป ช่วง 5 นาทีแรกคง W เพื่อเก็บ
 Awake/settling evidence และจะเข้า N1 ได้เมื่อเตียงนิ่งพร้อม HR/RR ลดลงต่อเนื่อง
@@ -396,21 +397,21 @@ Awake/settling evidence และจะเข้า N1 ได้เมื่อ�
 **กรอบวินัย:** N1/N2/N3/REM บนหน้าจอเป็น **proxy ไม่ใช่ EEG/EOG/EMG staging** —
 คลาสที่บันทึกคือ `wake/n1/n2/n3/rem` พร้อม estimator/evidence version; G2 primary
 เปรียบเทียบ W/N1/N2/N3/REM แบบ one-to-one ส่วนการยุบ N1/N2/N3 เป็น NREM เป็น
-secondary robustness analysis ตาม [ZEEP Sleep-State Baseline v1.5](../docs/zeep-sleep-state-baseline-v1.0.md)
+secondary robustness analysis ตาม [ZEEP Sleep-State Baseline v1.8](../docs/zeep-sleep-state-baseline-v1.0.md)
 **ห้ามใช้เป็นเงื่อนไขควบคุมอุปกรณ์** · ทุก record ติด `sleep_estimator` version
 เพื่อ provenance · แอปผู้บริโภคยังห้ามแสดง sleep state จนผ่าน G2
 
 ## AI Adaptive — Personal Baseline (เรียนรู้ 3–7 คืนแรก)
 
-ระบบไม่ใช้ตัวเลขตายตัวกับทุกคน: หลังผู้ใช้บันทึกการนอนครบ **3 คืน**
-(คืนละ ≥20 นาที, ใช้ล่าสุดสูงสุด 7 คืนแบบ rolling) ระบบจะคำนวณค่าเฉพาะบุคคล
-จากข้อมูลของเขาเองใน SQLite:
+หลังผู้ใช้มี Overnight ที่เข้าเกณฑ์ครบ **3 Session** (เริ่มตั้งแต่ 1 ก.ย. 2569,
+แต่ละ Session >25 นาที, ตรวจพบ sleep ≥20 นาที และใช้ล่าสุดสูงสุด 7 Session)
+ระบบจะสรุปบริบทเฉพาะบุคคลจากข้อมูลของเขาเองใน SQLite:
 
 - Awake HR baseline (ช่วงขยับ/ช่วงแรกหลังขึ้นเตียง) · Sleeping median HR/RR ·
   Lowest stable HR/RR (p10) · ความแปรปรวน HR ปกติ (rolling CV p25/median/p75) ·
   Movement baseline · เวลาที่มักเข้านอน/ตื่น
-- ค่าเหล่านี้ถูกใช้ **เลื่อนช่วง HR/RR ของ staging engine** (Wake/N1/N2/N3/REM)
-  จาก age/gender default มาหาตัวจริงของผู้ใช้ (จำกัดการเลื่อน ±15 bpm / ±4 rr)
+- ค่าเหล่านี้ใช้เป็น **บริบทพฤติกรรมและคำแนะนำหลัง Session**; รุ่น pilot ไม่ให้
+  ผลทำนายเก่าย้อนกลับไปเลื่อนช่วง HR/RR ของ staging engine เพื่อป้องกัน feedback loop
 - แผง **AI Adaptive** ในการ์ดประวัติแสดงสถานะการเรียนรู้ (n/3 คืน) +
   คำแนะนำจากข้อมูลของเขาเอง · `GET /api/baseline/{username}`
 - Baseline อัปเดตอัตโนมัติหลัง logout ทุกครั้ง · เก็บที่ `data/baselines.json`

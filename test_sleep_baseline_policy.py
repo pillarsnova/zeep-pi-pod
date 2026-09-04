@@ -123,6 +123,30 @@ class SleepClassificationGateTests(unittest.TestCase):
             result["sleep_evidence"]["sleep_onset_gate"]["observation_complete"]
         )
 
+    def test_pending_transition_result_uses_defined_candidate(self):
+        """A held 60-second transition must return telemetry, not NameError."""
+        self.set_session(active=True, recording=True)
+        started = time.time() - 10 * 60.0
+        with zeep.state_lock:
+            zeep.state["session"]["started_at"] = started
+        with zeep.sleep_path_lock:
+            zeep._reset_sleep_stage_path("gate-test")
+            zeep._sleep_stage_path["last"] = "wake"
+            zeep._sleep_stage_path["stage_since"] = started
+            zeep._sleep_stage_path["awake_vital_pairs"] = [
+                (started + index * 10.0, 76.0, 18.0) for index in range(6)
+            ]
+            zeep._sleep_stage_path["awake_hr_reference"] = 76.0
+            zeep._sleep_stage_path["awake_rr_reference"] = 18.0
+        for _ in range(6):
+            self.add_frame(hr=62.0, rr=15.0)
+
+        result = zeep.estimate_sleep_state()
+
+        self.assertIn(result["raw_candidate"], {"wake", "n1"})
+        self.assertIn("pending_state", result["confirmation"])
+        self.assertNotEqual(result["data_status"], "error")
+
 
 class SleepTransitionPolicyTests(unittest.TestCase):
     def setUp(self):
@@ -154,23 +178,23 @@ class SleepTransitionPolicyTests(unittest.TestCase):
         self.assert_allowed({"wake", "n1"}, {"n2", "n3", "rem"})
         for blocked in ("n2", "n3", "rem"):
             self.assertEqual(
-                zeep._transition_fallback_state(blocked, "wake"), "n1")
+                zeep._transition_fallback_state(blocked, "wake"), "wake")
 
     def test_n1_can_enter_guarded_rem_but_not_n3(self):
         self.apply("wake", "n1")
         self.assert_allowed({"wake", "n1", "n2", "rem"}, {"n3"})
-        self.assertEqual(zeep._transition_fallback_state("n3", "n1"), "n2")
+        self.assertEqual(zeep._transition_fallback_state("n3", "n1"), "n1")
 
     def test_n2_can_enter_n3_or_rem(self):
         self.apply("wake", "n1", "n2")
         self.assert_allowed({"n1", "n2", "n3", "rem"}, {"wake"})
-        self.assertEqual(zeep._transition_fallback_state("wake", "n2"), "n1")
+        self.assertEqual(zeep._transition_fallback_state("wake", "n2"), "n2")
         self.assertTrue(zeep._transition_allowed("wake", strong_wake=True)[0])
 
     def test_n3_can_enter_rem_and_rem_can_wake_naturally(self):
         self.apply("wake", "n1", "n2", "n3")
         self.assert_allowed({"n3", "n2", "rem"}, {"wake", "n1"})
-        self.assertEqual(zeep._transition_fallback_state("wake", "n3"), "n2")
+        self.assertEqual(zeep._transition_fallback_state("wake", "n3"), "n3")
         self.assertTrue(zeep._transition_allowed("wake", strong_wake=True)[0])
 
         with zeep.sleep_path_lock:
@@ -194,7 +218,7 @@ class SleepTransitionPolicyTests(unittest.TestCase):
     def test_wake_resets_n1_gate_for_the_next_cycle(self):
         self.apply("wake", "n1", "n3", "wake")
         self.assert_allowed({"wake", "n1"}, {"n2", "n3", "rem"})
-        self.assertEqual(zeep._transition_fallback_state("n3", "wake"), "n1")
+        self.assertEqual(zeep._transition_fallback_state("n3", "wake"), "wake")
 
     def test_n1_gate_persists_for_the_whole_cycle_not_only_recent_history(self):
         self.apply("wake", "n1", "n2", "rem", "n2", "rem", "n2", "rem", "n2", "n3")
@@ -202,7 +226,7 @@ class SleepTransitionPolicyTests(unittest.TestCase):
             self.assertNotIn("n1", zeep._sleep_stage_path["seen"])
             self.assertTrue(zeep._sleep_stage_path["cycle_has_n1"])
         self.assertTrue(zeep._transition_allowed("n2")[0])
-        self.assertEqual(zeep._transition_fallback_state("n1", "n3"), "n2")
+        self.assertEqual(zeep._transition_fallback_state("n1", "n3"), "n3")
 
     def test_transition_requires_two_thirty_second_evidence_epochs(self):
         with zeep.sleep_path_lock:
@@ -214,6 +238,15 @@ class SleepTransitionPolicyTests(unittest.TestCase):
         self.assertEqual(stage, "n1")
         self.assertFalse(meta["held"])
         self.assertEqual(meta["confirmation_seconds"], 60.0)
+
+    def test_n2_transition_requires_four_evidence_epochs_and_reports_120_seconds(self):
+        with zeep.sleep_path_lock:
+            zeep._apply_stage_to_path("n1", now=0.0)
+        for index, now in enumerate((30.0, 60.0, 90.0, 120.0), start=1):
+            stage, meta = zeep._stabilize_sleep_stage("n2", now=now)
+            self.assertEqual(meta["required_ticks"], 4)
+            self.assertEqual(meta["confirmation_seconds"], 120.0)
+            self.assertEqual(stage, "n2" if index == 4 else "n1")
 
 
 class BaselineProximityTests(unittest.TestCase):
@@ -312,6 +345,22 @@ class SleepProbabilityStabilityTests(unittest.TestCase):
         self.assertEqual(candidate, "n2")
         self.assertFalse(metadata["gated_n3_current_evidence_override"])
         self.assertEqual(metadata["candidate_source"], "ema_probability")
+
+    def test_ema_cannot_start_transition_when_current_gate_is_closed(self):
+        candidate, metadata = zeep.candidate_from_stage_evidence(
+            {"wake": 0.10, "n1": 0.10, "n2": 0.60, "n3": 0.10, "rem": 0.10},
+            {"wake": 0.10, "n1": 0.10, "n2": 0.55, "n3": 0.10, "rem": 0.15},
+            "n1",
+            switch_margin=zeep.SLEEP_PROBABILITY_SWITCH_MARGIN,
+            n3_gate=False,
+            sleep_onset_gate_passed=True,
+            eligible_states={
+                "wake": True, "n1": True, "n2": False,
+                "n3": False, "rem": False,
+            },
+        )
+        self.assertEqual(candidate, "n1")
+        self.assertTrue(metadata["closed_gate_transition_prevented"])
 
     def test_n3_evidence_still_needs_two_confirmation_epochs(self):
         with zeep.sleep_path_lock:

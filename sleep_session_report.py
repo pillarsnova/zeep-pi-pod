@@ -15,7 +15,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, Optional
 
-from sleep_signal_features import bed_exit_event_summary
+from sleep_signal_features import (
+    HR_SANITY_RANGE_BPM,
+    RR_SANITY_RANGE_PER_MIN,
+    bed_exit_event_summary,
+    filter_vital_values,
+)
 from sleep_system_policy import (
     ENVIRONMENT_ACCEPTABLE_MIN_LEVEL,
     ENVIRONMENT_CONTEXT_CRITERIA,
@@ -170,20 +175,24 @@ def _resolve_rest_mode(
     if requested_mode in REST_SESSION_GROUPS:
         group = requested_mode
     elif requested_mode == "auto":
-        group = _SLEEP_MODE_GROUPS.get(resolved, resolved if resolved in _AWAKE_REST_MODES else "general_rest")
+        # ``auto`` is retained only as a legacy input.  Product reporting has
+        # exactly two public outcomes: long sleep or daytime recovery.
+        group = "sleep" if resolved == "overnight" else "nap_recovery"
     else:
         group = _SLEEP_MODE_GROUPS.get(resolved, "nap_recovery")
     group_policy = REST_SESSION_GROUPS.get(group, {
         "label": "พักผ่อนทั่วไป", "score_title": "คะแนนการพัก",
+        "score_scope": "ค่าประเมินการพักจาก Sensor",
         "description": "พักใน ZEEP ตามข้อมูลที่บันทึกได้",
     })
     return {
         "requested": requested_mode,
         "resolved": resolved,
         "group": group,
-        "label": group_policy["label"] if requested_mode in REST_SESSION_GROUPS else REST_MODE_LABELS[resolved],
+        "label": group_policy["label"],
         "resolved_label": REST_MODE_LABELS[resolved],
         "score_title": group_policy["score_title"],
+        "score_scope": group_policy.get("score_scope"),
         "description": group_policy["description"],
         "sleep_required": bool(group_policy.get("sleep_required", False)),
         "sleep_detected": sleep_detected,
@@ -296,6 +305,7 @@ def _build_awake_rest_quality(
     group = mode.get("group") or mode.get("resolved") or "general_rest"
     policy = REST_SESSION_GROUPS.get(group, {
         "label": "พักผ่อนทั่วไป", "score_title": "คะแนนการพัก",
+        "score_scope": "ค่าประเมินการพักจาก Sensor",
         "description": "พักใน ZEEP ตามข้อมูลที่บันทึกได้",
     })
     # Legacy callers may only have aggregate Wake counts.  Without the raw
@@ -309,11 +319,11 @@ def _build_awake_rest_quality(
 
     hr = [value for value in _values(rows, "hr") if 30 <= value <= 220]
     rr = [value for value in _values(rows, "rr") if 4 <= value <= 60]
+    hr_regularity = _regularity(hr, soft_cv=0.12)
+    rr_regularity = _regularity(rr, soft_cv=0.18)
     regularity_parts = [
-        value for value in (
-            _regularity(hr, soft_cv=0.12),
-            _regularity(rr, soft_cv=0.18),
-        ) if value is not None
+        value for value in (hr_regularity, rr_regularity)
+        if value is not None
     ]
     settling_parts = [
         value for value in (
@@ -366,6 +376,23 @@ def _build_awake_rest_quality(
     recorded_s = len(rows) * interval
     state_s = sum(counts.values()) * interval
     coverage_ratio = max(0.0, min(1.0, max(recorded_s, state_s) / max(1.0, duration)))
+    source_vital_samples = sum(
+        max(1, int(_number(row.get("_source_rows")) or 1)) for row in rows
+    )
+    paired_vital_samples = sum(
+        max(0, int(_number(row.get("_paired_hr_rr_rows")) or 0))
+        if "_paired_hr_rr_rows" in row else int(
+            isinstance(row.get("hr"), (int, float))
+            and 30 <= float(row["hr"]) <= 220
+            and isinstance(row.get("rr"), (int, float))
+            and 4 <= float(row["rr"]) <= 60
+        )
+        for row in rows
+    )
+    paired_vital_ratio = (
+        paired_vital_samples / source_vital_samples
+        if source_vital_samples else 0.0
+    )
     coverage_points = 0.0 if no_sensor_evidence else round(10.0 * coverage_ratio, 1)
     component_points = {
         "goal_duration": duration_points,
@@ -402,10 +429,34 @@ def _build_awake_rest_quality(
         "data_coverage": "ข้อมูล Sensor ยังครอบคลุม Session ไม่เพียงพอ",
     }
     sleep_s = sum(counts[stage] for stage in SLEEP_STAGES) * interval
+    score_releasable = bool(
+        not no_sensor_evidence
+        and coverage_ratio >= 0.80
+        and paired_vital_samples >= 6
+        and paired_vital_ratio >= 0.80
+        and hr_regularity is not None
+        and rr_regularity is not None
+    )
     return {
-        "available": True,
-        "score": score,
+        "available": score_releasable,
+        "score": score if score_releasable else None,
+        "engineering_shadow_score": score,
+        "score_releasable": score_releasable,
+        "release_requirements": {
+            "minimum_coverage_pct": 80,
+            "minimum_paired_hr_rr_coverage_pct": 80,
+            "minimum_paired_samples": 6,
+            "paired_hr_rr_required": True,
+            "passed": score_releasable,
+        },
+        "reason": (
+            None if score_releasable else
+            "ข้อมูล HR/RR หรือความครอบคลุมของ Session ยังไม่พอสำหรับเผยแพร่ Recovery Score"
+        ),
         "score_title": policy["score_title"],
+        "score_scope": policy.get("score_scope"),
+        "validation_status": "preliminary_wellness_estimate",
+        "clinical_validated": False,
         "quality_type": "rest_goal",
         "session_character": "hybrid" if sleep_s > 0 else "awake_rest",
         "sleep_detected": sleep_s > 0,
@@ -423,11 +474,20 @@ def _build_awake_rest_quality(
             "basis": f"ZEEP Wellness target สำหรับ{policy['label']}",
         },
         "physiology": {
-            "available": regularity is not None,
+            "available": hr_regularity is not None and rr_regularity is not None,
             "heart_rate_average": round(_average(hr), 1) if hr else None,
             "respiration_average": round(_average(rr), 1) if rr else None,
             "regularity_factor": round(regularity, 3) if regularity is not None else None,
+            "heart_rate_regularity_factor": (
+                round(hr_regularity, 3) if hr_regularity is not None else None
+            ),
+            "respiration_regularity_factor": (
+                round(rr_regularity, 3) if rr_regularity is not None else None
+            ),
             "settling_factor": round(settling, 3) if settling is not None else None,
+            "paired_hr_rr_samples": paired_vital_samples,
+            "source_sensor_samples": source_vital_samples,
+            "paired_hr_rr_coverage_pct": round(paired_vital_ratio * 100.0, 1),
             "method": "ความนิ่งและแนวโน้ม HR/RR ระดับ Sample; ไม่ใช่ True HRV/RMSSD/SDNN",
         },
         "body_response": {
@@ -463,7 +523,7 @@ def _build_awake_rest_quality(
         "score_basis": "เวลาพัก 20 + การตอบสนอง HR/RR 30 + ความต่อเนื่อง 20 + สภาพแวดล้อม 20 + ข้อมูล 10",
         "version": SLEEP_QUALITY_VERSION,
         "outcome_interpretation": "Nap & Refresh ไม่บังคับให้หลับหรือมี N3/REM; ความสดชื่นจริงใช้คำตอบหลัง Session ประกอบ",
-        "disclaimer": "คะแนน ZEEP Wellness จาก Sensor ไม่ใช่การวินิจฉัย การรักษา หรือผล AASM/PSG",
+        "disclaimer": "Recovery Score เป็นการประเมิน ZEEP Wellness จาก Sensor ไม่ใช่การวินิจฉัย การรักษา หรือผล AASM/PSG",
     }
 
 
@@ -785,9 +845,29 @@ def build_sleep_quality(
     actual_scored_s = total_scored_samples * interval
     estimated_sleep_s = total_sleep_samples * interval
     rows = list(sensor_samples or [])
+    source_vital_rows = 0
+    paired_vital_rows = 0
+    for row in rows:
+        source_rows = max(1, int(_number(row.get("_source_rows")) or 1))
+        source_vital_rows += source_rows
+        explicit_paired = _number(row.get("_paired_hr_rr_rows"))
+        if explicit_paired is not None:
+            paired_vital_rows += max(0, min(source_rows, int(explicit_paired)))
+            continue
+        if (
+            filter_vital_values([row.get("hr")], HR_SANITY_RANGE_BPM)
+            and filter_vital_values([row.get("rr")], RR_SANITY_RANGE_PER_MIN)
+        ):
+            paired_vital_rows += source_rows
+    paired_vital_ratio = (
+        paired_vital_rows / source_vital_rows if source_vital_rows else 0.0
+    )
     mode = _resolve_rest_mode(rest_mode, actual_scored_s, estimated_sleep_s)
     mode["protocol_status"] = _protocol_status(mode, duration)
-    if mode["resolved"] in _AWAKE_REST_MODES:
+    # Nap & Refresh always uses Recovery Score, whether the Session remained
+    # awake, contained N1/N2, or became a short nap. Sleep is an optional
+    # observation and must not switch the user onto Overnight architecture.
+    if mode.get("group") == "nap_recovery" or mode["resolved"] in _AWAKE_REST_MODES:
         if not rows and total_scored_samples <= 0:
             unavailable["reason"] = "ไม่มีข้อมูล Sensor เพียงพอสำหรับประเมินการพัก"
             return unavailable
@@ -890,7 +970,7 @@ def build_sleep_quality(
     } if nap_mode else {
         "sleep_opportunity": "หลับไวและเวลาพัก",
         "sleep_stability": "หลับดีและต่อเนื่อง",
-        "restorative_architecture": "หลับลึกและฟื้นฟู",
+        "restorative_architecture": "โครงสร้าง N2/N3/REM",
         "cycle_expression": "รอบการนอนที่ตรวจพบ",
         "data_coverage": "ความครบของข้อมูล",
     })
@@ -922,22 +1002,48 @@ def build_sleep_quality(
     elif latency["available"] and latency["points"] < 3.0:
         insight = "ใช้เวลาหลับนาน ควรปรับช่วงเตรียมตัวและสภาพแวดล้อมก่อนพัก"
     elif duration_points < 10.5:
-        insight = f"เวลาหลับยังต่ำกว่าเป้าหมายของ{mode['label']}"
+        insight = f"เวลาหลับยังต่ำกว่าเป้าหมายของ {mode['label']}"
     elif stability_points < 21.0:
         insight = "พบช่วงตื่นมากเมื่อเทียบกับเวลาที่บันทึก"
     elif continuity_points < 7.0:
         insight = "พบ Wake หรือ BCG disturbance proxy หลายครั้งใน Session"
     elif architecture["total"] < 18.0:
-        insight = f"สัดส่วนการฟื้นฟูของ{mode['label']}ยังไม่สมดุลในข้อมูลที่บันทึกได้"
+        insight = f"สัดส่วนการฟื้นฟูของ {mode['label']} ยังไม่สมดุลในข้อมูลที่บันทึกได้"
     elif cycle_points < 9.0:
         insight = "รอบการนอนที่ตรวจพบยังไม่เต็มตามโอกาสการพักครั้งนี้"
     else:
-        insight = f"หลับไว ความต่อเนื่อง และการฟื้นฟูของ{mode['label']}โดยรวมอยู่ในเกณฑ์ดี"
+        insight = f"หลับไว ความต่อเนื่อง และการฟื้นฟูของ {mode['label']} โดยรวมอยู่ในเกณฑ์ดี"
 
+    score_releasable = bool(
+        coverage_ratio >= 0.80
+        and estimated_sleep_s > 0
+        and paired_vital_rows >= 6
+        and paired_vital_ratio >= 0.80
+    )
     return {
-        "available": True,
-        "score": score,
+        "available": score_releasable,
+        "score": score if score_releasable else None,
+        "engineering_shadow_score": score,
+        "score_releasable": score_releasable,
+        "release_requirements": {
+            "minimum_confirmed_stage_coverage_pct": 80,
+            "confirmed_sleep_required": True,
+            "minimum_paired_hr_rr_coverage_pct": 80,
+            "minimum_paired_samples": 6,
+            "paired_hr_rr_required": True,
+            "paired_hr_rr_rows": paired_vital_rows,
+            "source_vital_rows": source_vital_rows,
+            "paired_hr_rr_coverage_pct": round(paired_vital_ratio * 100.0, 1),
+            "passed": score_releasable,
+        },
+        "reason": (
+            None if score_releasable else
+            "Sleep State หรือข้อมูล HR/RR ที่จับคู่กันยังไม่ครอบคลุมอย่างน้อย 80% จึงยังไม่เผยแพร่ Sleep Score"
+        ),
         "score_title": mode.get("score_title") or "คุณภาพการนอน",
+        "score_scope": mode.get("score_scope") or "ค่าประเมินการนอนจาก Sensor",
+        "validation_status": "preliminary_wellness_estimate",
+        "clinical_validated": False,
         "quality_type": "sleep",
         "session_character": "sleep",
         "sleep_detected": estimated_sleep_s > 0,
@@ -994,11 +1100,75 @@ def build_sleep_quality(
         ),
         "version": SLEEP_QUALITY_VERSION,
         "outcome_interpretation": (
-            "Nap & Refresh ไม่บังคับ N3/REM; ความสดชื่นจริงใช้คำตอบหลัง Session ประกอบ"
+            "Nap & Refresh ไม่บังคับ N3/REM; Recovery Score สะท้อนสัญญาณสนับสนุนการฟื้นตัว และต้องอ่านร่วมกับคำตอบก่อน–หลัง Session"
             if nap_mode else
             "ความสดชื่นหลังตื่นต้องใช้คำตอบหลัง Session ประกอบ"
         ),
-        "disclaimer": "คะแนน ZEEP Wellness จาก BCG/Sensor ไม่ใช่ PSG หรือผลวินิจฉัย",
+        "disclaimer": (
+            f"{mode.get('score_title') or 'Sleep Score'} เป็นการประเมิน ZEEP Wellness "
+            "จาก BCG/Sensor ไม่ใช่ PSG หรือผลวินิจฉัย"
+        ),
+    }
+
+
+def _post_session_guidance(
+    quality: Dict[str, Any],
+    findings: list[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Return practical, non-diagnostic guidance for the next activity.
+
+    Advice is intentionally derived from the selected Session goal, released
+    wellness score and explanatory environment findings. It never changes a
+    Sleep State and it never claims readiness from Sensor data alone.
+    """
+    mode = quality.get("rest_mode") or {}
+    group = str(mode.get("group") or mode.get("requested") or "nap_recovery")
+    score = _number(quality.get("score"))
+    released = bool(quality.get("available") and score is not None)
+    if not released:
+        primary = (
+            "ผล Sensor ยังไม่ครบพอสำหรับสรุปคะแนน ให้ใช้ความรู้สึกหลังพักประกอบก่อนทำกิจกรรมถัดไป"
+        )
+    elif group == "sleep" and score >= 85:
+        primary = "เริ่มเช้าวันใหม่ตามปกติ และบันทึกความสดชื่นเพื่อเทียบกับ Sleep Score"
+    elif group == "sleep" and score >= 70:
+        primary = "ให้เวลาร่างกายตื่นตัว ดื่มน้ำ รับแสงธรรมชาติ และเช็กความง่วงก่อนเริ่มงาน"
+    elif group == "sleep":
+        primary = "เริ่มกิจกรรมแบบค่อยเป็นค่อยไป และหลีกเลี่ยงงานเสี่ยงหากยังง่วงมาก"
+    elif score >= 85:
+        primary = "พักปรับตัวสั้น ๆ แล้วกลับสู่กิจกรรม พร้อมบันทึกความสดชื่นหลัง Nap & Refresh"
+    elif score >= 70:
+        primary = "ลุกขยับเบา ๆ ดื่มน้ำ และประเมินพลังงานของตนเองก่อนทำกิจกรรมถัดไป"
+    else:
+        primary = "ให้เวลาปรับตัว 5–10 นาที รับแสงหรือขยับเบา ๆ แล้วประเมินความพร้อมอีกครั้ง"
+
+    environment_action = next(
+        (
+            item.get("action") for item in findings
+            if item.get("decision") in {"required", "optimise", "sensor_check"}
+            and item.get("action")
+        ),
+        None,
+    )
+    next_session = (
+        f"ครั้งถัดไป: {environment_action}"
+        if environment_action else
+        "ครั้งถัดไป: รักษาการตั้งค่าที่สบายและตอบแบบประเมินหลังพักเพื่อเพิ่มบริบทส่วนบุคคล"
+    )
+    return {
+        "primary": primary,
+        "next_session": next_session,
+        "self_check": (
+            "ก่อนขับรถ ใช้เครื่องจักร หรือทำกิจกรรมเสี่ยง ให้ยึดความตื่นตัวจริงของตนเอง ไม่ใช้คะแนนแทนการตัดสินใจ"
+        ),
+        "mode": group,
+        "score_used": int(score) if released else None,
+        "score_released": released,
+        "basis": (
+            "ZEEP Wellness & Longevity · Sensor + เป้าหมายการพัก + สภาพแวดล้อม; "
+            "ควรอ่านร่วมกับ self-report หลังพัก"
+        ),
+        "medical_diagnosis": False,
     }
 
 
@@ -1305,9 +1475,12 @@ def build_session_report(
 
     bed = _bed_events(rows)
     insight = quality.get("insight") or "สรุปจากข้อมูลที่ระบบบันทึกได้ใน Session นี้"
+    post_session_guidance = _post_session_guidance(quality, findings)
     return {
         "available": bool(duration > 0 and (rows or scored_count)),
         "version": SESSION_REPORT_VERSION,
+        "product_positioning": "ZEEP Wellness & Longevity",
+        "intended_use": "wellness_sleep_and_recovery_estimation_not_diagnosis",
         "timeline_schema_version": timeline_schema_version,
         "estimator_version": estimator_version,
         "headline": quality.get("level") or ("ข้อมูลพร้อมสรุป" if scored_count else "ข้อมูลไม่พอ"),
@@ -1334,6 +1507,7 @@ def build_session_report(
         "environment": environment,
         "environment_assessment": environment_assessment,
         "findings": findings,
+        "post_session_guidance": post_session_guidance,
         "data_quality": {
             "level": data_level,
             "label": data_label,

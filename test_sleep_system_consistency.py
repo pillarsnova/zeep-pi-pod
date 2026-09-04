@@ -116,6 +116,7 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         manifest = policy.sleep_policy_snapshot()["personal_baseline_learning"]
         self.assertTrue(manifest["awake_rest_sessions_excluded"])
         self.assertEqual(manifest["quality_type_required"], "sleep")
+        self.assertFalse(manifest["direct_stage_influence_enabled"])
 
     def test_report_uses_current_versions_and_aasm_seven_hour_target(self):
         self.assertEqual(report.SLEEP_QUALITY_VERSION, policy.SLEEP_QUALITY_VERSION)
@@ -141,6 +142,7 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertEqual(snapshot["runtime"]["evidence_epoch_seconds"], 30.0)
         self.assertEqual(snapshot["runtime"]["evidence_sensor_frames"], 3)
         self.assertEqual(snapshot["runtime"]["confirmation_seconds"], 60.0)
+        self.assertEqual(snapshot["runtime"]["confirmation_seconds_by_target"]["n2"], 120.0)
         self.assertEqual(snapshot["runtime"]["confirmation_epochs"], 2)
         self.assertTrue(snapshot["runtime"]["evidence_and_confirmed_state_separate"])
         self.assertEqual(snapshot["runtime"]["rolling_window_frames"], 6)
@@ -156,46 +158,31 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         )
         self.assertFalse(snapshot["claim_boundary"]["aasm_psg_equivalent"])
         self.assertFalse(snapshot["claim_boundary"]["actuator_trigger"])
-        self.assertEqual(snapshot["probability_filter"], {
-            "method": "ema_after_60s_rolling_features",
-            "alpha": 0.20,
-            "candidate_switch_margin": 0.05,
-            "candidate_source": "ema_with_gated_n3_current_evidence_override",
-            "ema_role": "default_candidate_stability_and_display",
-            "n3_current_evidence_override_requires_gate": True,
-            "display_winner_margin": 0.01,
-            "instant_strong_wake_bypass": False,
-            "strong_wake_still_requires_confirmation": True,
-        })
-        self.assertEqual(snapshot["classification_gate"], {
-            "active_session_required": True,
-            "recording_phase_required": True,
-            "confirmed_occupied_bed_required": True,
-            "fresh_current_hr_required": True,
-            "fresh_current_rr_required": True,
-            "inactive_probabilities_zero": True,
-            "inactive_stage_persistence": False,
-            "hold_last_stage_when_inactive": False,
-            "evidence_event_type": "sleep_stage_evidence",
-            "confirmed_state_event_type": "sleep_stage",
-        })
-        self.assertEqual(snapshot["cadence"], {
-            "sensor_sample_seconds": 10.0,
-            "sensor_frames_per_evidence_epoch": 3,
-            "evidence_epoch_seconds": 30.0,
-            "confirmation_epochs": 2,
-            "confirmation_seconds": 60.0,
-            "evidence_and_confirmed_state_separate": True,
-            "safety_supervisor_seconds": 1.0,
-        })
+        probability = snapshot["probability_filter"]
+        self.assertEqual(probability["alpha"], 0.20)
+        self.assertEqual(probability["minimum_winner"], 0.45)
+        self.assertEqual(probability["minimum_margin"], 0.08)
+        self.assertEqual(probability["n3_gated_minimum_winner"], 0.45)
+        self.assertEqual(probability["n3_gated_minimum_margin"], 0.08)
+        gate = snapshot["classification_gate"]
+        self.assertTrue(gate["active_session_required"])
+        self.assertTrue(gate["hr_rr_same_packet_required"])
+        self.assertEqual(gate["minimum_paired_window_coverage"], 0.80)
+        self.assertEqual(gate["minimum_packets_per_10s_bucket"], 8)
+        self.assertEqual(gate["minimum_waveform_sample_coverage"], 0.80)
+        cadence = snapshot["cadence"]
+        self.assertEqual(cadence["sensor_sample_seconds"], 10.0)
+        self.assertEqual(cadence["evidence_epoch_seconds"], 30.0)
+        self.assertEqual(cadence["confirmation_seconds"], 60.0)
+        self.assertEqual(cadence["confirmation_seconds_range"], [60.0, 120.0])
 
     def test_sleep_stage_meanings_are_consistent_across_policy_and_ui(self):
         expected = {
             "wake": ("W", "ตื่น", "ช่วงที่ระบบประเมินว่ายังตื่นหรือกลับเข้าสู่สถานะตื่น"),
             "n1": ("N1", "หลับตื้น / เคลิ้มหลับ", "เริ่มเข้าสู่การนอน ร่างกายผ่อนคลาย และปลุกให้ตื่นได้ง่าย"),
             "n2": ("N2", "หลับสนิทขึ้น / หลับตื้นต่อเนื่อง", "หัวใจและการหายใจช้าลง ร่างกายเข้าสู่การนอนที่ต่อเนื่องขึ้น"),
-            "n3": ("N3", "หลับลึก / ร่างกายซ่อมแซมส่วนที่สึกหรอ", "ระยะที่หลับลึกที่สุดและสัมพันธ์กับกระบวนการฟื้นฟูร่างกาย"),
-            "rem": ("REM", "หลับฝัน / สมองจัดระเบียบความจำ", "สมองทำงานมากขึ้น มักเกิดความฝัน และเกี่ยวข้องกับความจำและอารมณ์"),
+            "n3": ("N3", "หลับลึก", "รูปแบบ BCG/HR/RR ที่สอดคล้องกับ N3; ตามสรีรวิทยาการนอน N3 เชื่อมโยงกับการฟื้นฟู แต่ ZEEP ไม่ได้วัดการซ่อมแซมโดยตรง"),
+            "rem": ("REM", "ระยะ REM", "รูปแบบ BCG/HR/RR ที่สอดคล้องกับ REM; ตามสรีรวิทยา REM สัมพันธ์กับความฝันและความจำ แต่ ZEEP ไม่ได้วัดความฝันหรือความจำโดยตรง"),
         }
         ui = (PI5_ROOT / "static" / "index.html").read_text(encoding="utf-8")
         snapshot = policy.sleep_policy_snapshot()

@@ -129,6 +129,7 @@ from smart_response import (
     evaluate_smart_response,
 )
 from sleep_signal_features import (
+    BCG_SAMPLE_RATE_HZ,
     HR_SANITY_RANGE_BPM,
     RR_SANITY_RANGE_PER_MIN,
     arousal_proxy_evidence,
@@ -145,7 +146,9 @@ from sleep_signal_features import (
 from sleep_stage_scoring import (
     align_probabilities_to_emitted_stage,
     candidate_from_stage_evidence,
+    evidence_candidate_with_abstention,
     score_sleep_evidence,
+    softmax_stage_evidence,
     smooth_stage_probabilities,
     stable_probability_candidate,
 )
@@ -156,16 +159,42 @@ from sleep_session_report import (
     normalise_rest_mode,
 )
 from sleep_system_policy import (
+    AGE_GROUP_DEFAULT_AGE,
+    AGE_SLEEP_BASELINES,
     ENVIRONMENT_CONTEXT_POLICY_VERSION,
+    GENDER_BASELINE_ADJUSTMENTS,
+    PERSONAL_BASELINE_LEARNING_START_UTC,
     SESSION_REPORT_VERSION,
+    SLEEP_QUALITY_VERSION,
     SLEEP_ALLOWED_TRANSITIONS,
     SLEEP_ESTIMATOR_VERSION,
     SLEEP_EVIDENCE_VERSION,
+    SLEEP_STAGE_CONFIRMATION_SECONDS,
     SLEEP_G2_ONTOLOGY_VERSION,
     SLEEP_DISPLAY_WINNER_MARGIN,
+    SLEEP_DEFAULT_ACOUSTIC_DISTURBANCE_DBA,
+    SLEEP_DEFAULT_ACOUSTIC_MIN_COVERAGE,
+    SLEEP_DEFAULT_ACOUSTIC_WAKE_SUPPORT_MAX,
+    SLEEP_DEFAULT_BASELINE_HR_WEIGHT,
+    SLEEP_DEFAULT_BASELINE_RR_WEIGHT,
+    SLEEP_DEFAULT_HR_CV_DEEP,
+    SLEEP_DEFAULT_HR_CV_REM,
+    SLEEP_DEFAULT_MOVE_DEEP_RATIO,
+    SLEEP_DEFAULT_MOVE_WAKE_RATIO,
+    SLEEP_DEFAULT_N2_RR_CONFLICT_SUPPORT,
+    SLEEP_DEFAULT_N3_RR_CONFLICT_PENALTY,
     SLEEP_CONFIRMATION_SECONDS,
     SLEEP_CONFIRM_EPOCHS,
+    SLEEP_CONTEXT_RESET_GAP_SECONDS,
     SLEEP_EVIDENCE_EPOCH_SECONDS,
+    SLEEP_EVIDENCE_MIN_MARGIN,
+    SLEEP_EVIDENCE_MIN_WINNER,
+    SLEEP_LONG_CONTEXT_SECONDS,
+    SLEEP_BUCKET_MIN_BCG_PACKETS,
+    SLEEP_MIN_PAIRED_VITAL_COVERAGE,
+    SLEEP_MIN_WAVEFORM_COVERAGE,
+    SLEEP_N3_GATED_MIN_MARGIN,
+    SLEEP_N3_GATED_MIN_WINNER,
     SLEEP_PROBABILITY_EMA_ALPHA,
     SLEEP_PROBABILITY_SWITCH_MARGIN,
     SLEEP_ONSET_INITIAL_WAKE_SUPPORT,
@@ -173,16 +202,21 @@ from sleep_system_policy import (
     SLEEP_ONSET_MAX_MOVEMENT_RATIO,
     SLEEP_ONSET_MAX_RR_RISE_PER_MIN,
     SLEEP_ONSET_MIN_DOWNWARD_TRANSITION,
+    SLEEP_ONSET_MIN_RELATIVE_SLEEP_SUPPORT,
     SLEEP_ONSET_MIN_OBSERVATION_SECONDS,
     SLEEP_SENSOR_FRAMES_PER_EPOCH,
     SLEEP_SENSOR_SAMPLE_SECONDS,
+    SLEEP_SCORE_SOFTMAX_TEMPERATURE,
     SLEEP_STAGE_CONFIRM_TICKS,
     SLEEP_STAGE_MIN_DWELL_SECONDS,
+    PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED,
     TERMINAL_WAKE_POLICY_VERSION,
     ZEEP_SLEEP_BASELINE_VERSION,
     ZEEP_SLEEP_STATES,
     ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
+    age_group as _age_group,
     assess_environment_values,
+    gender_adjusted_baseline as _gender_adjusted_baseline,
     sleep_policy_snapshot,
 )
 
@@ -295,33 +329,40 @@ SLEEP_MIN_FRAMES = max(1, int(os.getenv(
     str(math.ceil(SLEEP_WINDOW_SECONDS / SLEEP_SAMPLE_SECONDS)),
 )))
 # Fraction of "Moving" frames in the window at/above which we call Wake.
-SLEEP_MOVE_WAKE_RATIO = float(os.getenv("SLEEP_MOVE_WAKE_RATIO", "0.15"))
+SLEEP_MOVE_WAKE_RATIO = float(os.getenv(
+    "SLEEP_MOVE_WAKE_RATIO", str(SLEEP_DEFAULT_MOVE_WAKE_RATIO)))
 # Legacy/personal calibration thresholds for the coefficient of variation of
 # fixed-cadence HR summaries. This is explicitly NOT RMSSD/SDNN or ECG HRV. v1.8
 # keeps it as a weak proxy and does not introduce a beat detector.
-SLEEP_HR_CV_REM = float(os.getenv("SLEEP_HR_CV_REM", "0.06"))
+SLEEP_HR_CV_REM = float(os.getenv("SLEEP_HR_CV_REM", str(SLEEP_DEFAULT_HR_CV_REM)))
 # NREM depth proxy (NOT AASM N1/N2/N3 — those are EEG-defined and PSG-only).
 # The five output labels now map one-to-one to the amended five-class G2
 # validation ontology, but remain exploratory until paired-PSG validation.
-SLEEP_HR_CV_DEEP = float(os.getenv("SLEEP_HR_CV_DEEP", "0.025"))
-SLEEP_MOVE_DEEP_RATIO = float(os.getenv("SLEEP_MOVE_DEEP_RATIO", "0.05"))
+SLEEP_HR_CV_DEEP = float(os.getenv(
+    "SLEEP_HR_CV_DEEP", str(SLEEP_DEFAULT_HR_CV_DEEP)))
+SLEEP_MOVE_DEEP_RATIO = float(os.getenv(
+    "SLEEP_MOVE_DEEP_RATIO", str(SLEEP_DEFAULT_MOVE_DEEP_RATIO)))
 # Baseline fit keeps 10% of the score budget for movement/variability/timing.
 # RR is raised slightly from 0.35 to 0.40 after the Pod produced excessive N3
 # while measured RR remained closer to its N2 range. These are versioned ZEEP
 # engineering weights, not AASM scoring coefficients.
-SLEEP_BASELINE_HR_WEIGHT = float(os.getenv("SLEEP_BASELINE_HR_WEIGHT", "0.50"))
-SLEEP_BASELINE_RR_WEIGHT = float(os.getenv("SLEEP_BASELINE_RR_WEIGHT", "0.40"))
-SLEEP_N3_RR_CONFLICT_PENALTY = float(os.getenv("SLEEP_N3_RR_CONFLICT_PENALTY", "1.20"))
-SLEEP_N2_RR_CONFLICT_SUPPORT = float(os.getenv("SLEEP_N2_RR_CONFLICT_SUPPORT", "0.30"))
+SLEEP_BASELINE_HR_WEIGHT = float(os.getenv(
+    "SLEEP_BASELINE_HR_WEIGHT", str(SLEEP_DEFAULT_BASELINE_HR_WEIGHT)))
+SLEEP_BASELINE_RR_WEIGHT = float(os.getenv(
+    "SLEEP_BASELINE_RR_WEIGHT", str(SLEEP_DEFAULT_BASELINE_RR_WEIGHT)))
+SLEEP_N3_RR_CONFLICT_PENALTY = float(os.getenv(
+    "SLEEP_N3_RR_CONFLICT_PENALTY", str(SLEEP_DEFAULT_N3_RR_CONFLICT_PENALTY)))
+SLEEP_N2_RR_CONFLICT_SUPPORT = float(os.getenv(
+    "SLEEP_N2_RR_CONFLICT_SUPPORT", str(SLEEP_DEFAULT_N2_RR_CONFLICT_SUPPORT)))
 # A microphone event can support Wake only when the same rolling window also
 # contains BCG amplitude change or bed motion.  Continuous background sound,
 # air quality and comfort telemetry never create a stage by themselves.
 SLEEP_ACOUSTIC_DISTURBANCE_DBA = float(
-    os.getenv("SLEEP_ACOUSTIC_DISTURBANCE_DBA", "55"))
+    os.getenv("SLEEP_ACOUSTIC_DISTURBANCE_DBA", str(SLEEP_DEFAULT_ACOUSTIC_DISTURBANCE_DBA)))
 SLEEP_ACOUSTIC_MIN_COVERAGE = float(
-    os.getenv("SLEEP_ACOUSTIC_MIN_COVERAGE", "0.50"))
+    os.getenv("SLEEP_ACOUSTIC_MIN_COVERAGE", str(SLEEP_DEFAULT_ACOUSTIC_MIN_COVERAGE)))
 SLEEP_ACOUSTIC_WAKE_SUPPORT_MAX = float(
-    os.getenv("SLEEP_ACOUSTIC_WAKE_SUPPORT_MAX", "0.35"))
+    os.getenv("SLEEP_ACOUSTIC_WAKE_SUPPORT_MAX", str(SLEEP_DEFAULT_ACOUSTIC_WAKE_SUPPORT_MAX)))
 if SLEEP_BASELINE_HR_WEIGHT < 0 or SLEEP_BASELINE_RR_WEIGHT < 0:
     raise RuntimeError("Sleep baseline weights must not be negative")
 if SLEEP_BASELINE_HR_WEIGHT + SLEEP_BASELINE_RR_WEIGHT <= 0:
@@ -571,67 +612,6 @@ GENDERS = ("male", "female", "other", "unspecified")
 POD_ID = pod_id_from_env()
 OCCUPANCY_LEASE_SECONDS = max(15, int(os.getenv("OCCUPANCY_LEASE_SECONDS", "45")))
 OCCUPANCY_RENEW_SECONDS = max(5, int(os.getenv("OCCUPANCY_RENEW_SECONDS", "10")))
-
-# Directional starting baselines used only until a personal baseline is
-# available. The ranges intentionally overlap; scoring also uses movement,
-# variability, time in session and transition context.
-AGE_SLEEP_BASELINES = {
-    "18-29": {
-        "wake": {"hr": (65, 88), "rr": (13, 20)}, "n1": {"hr": (61, 80), "rr": (12, 18)},
-        "n2": {"hr": (56, 74), "rr": (11, 17)}, "n3": {"hr": (50, 67), "rr": (10, 16)},
-        "rem": {"hr": (59, 84), "rr": (12, 20)},
-    },
-    "30-44": {
-        "wake": {"hr": (66, 90), "rr": (13, 20)}, "n1": {"hr": (62, 81), "rr": (12, 18)},
-        "n2": {"hr": (57, 75), "rr": (11, 17)}, "n3": {"hr": (51, 68), "rr": (10, 16)},
-        "rem": {"hr": (60, 86), "rr": (12, 20)},
-    },
-    "45-59": {
-        "wake": {"hr": (67, 92), "rr": (13, 21)}, "n1": {"hr": (63, 83), "rr": (12, 19)},
-        "n2": {"hr": (58, 77), "rr": (11, 18)}, "n3": {"hr": (52, 70), "rr": (10, 17)},
-        "rem": {"hr": (61, 88), "rr": (12, 21)},
-    },
-    "60+": {
-        "wake": {"hr": (68, 94), "rr": (13, 21)}, "n1": {"hr": (64, 85), "rr": (12, 19)},
-        "n2": {"hr": (59, 79), "rr": (11, 18)}, "n3": {"hr": (53, 72), "rr": (10, 17)},
-        "rem": {"hr": (62, 90), "rr": (12, 21)},
-    },
-}
-AGE_GROUP_DEFAULT_AGE = {"18-29": 24, "30-44": 37, "45-59": 52, "60+": 65}
-GENDER_BASELINE_ADJUSTMENTS = {
-    # Conservative ZEEP Wellness priors. Literature supports sex-related HRV
-    # direction, but not universal stage-specific HR/RR cut-offs.
-    "male": {"label": "ชาย", "hr_offset": 0, "rr_offset": 0, "rem_variability_weight": 1.10,
-             "note": "REM sympathetic/HR variability weighting สูงขึ้นเล็กน้อย"},
-    "female": {"label": "หญิง", "hr_offset": 2, "rr_offset": 0, "rem_variability_weight": 1.00,
-               "note": "HR starting range +2 BPM; RR คงเดิม"},
-    "other": {"label": "อื่น ๆ", "hr_offset": 0, "rr_offset": 0, "rem_variability_weight": 1.00,
-              "note": "ใช้ neutral baseline จนมี Personal Baseline"},
-    "unspecified": {"label": "ไม่ระบุ", "hr_offset": 0, "rr_offset": 0, "rem_variability_weight": 1.00,
-                    "note": "ใช้ neutral baseline จนมี Personal Baseline"},
-}
-
-
-def _gender_adjusted_baseline(age_group: str, gender: Optional[str]):
-    adjustment = GENDER_BASELINE_ADJUSTMENTS.get(gender or "unspecified",
-                                                  GENDER_BASELINE_ADJUSTMENTS["unspecified"])
-    adjusted = {}
-    for stage, ranges in AGE_SLEEP_BASELINES[age_group].items():
-        adjusted[stage] = {
-            "hr": tuple(x + adjustment["hr_offset"] for x in ranges["hr"]),
-            "rr": tuple(x + adjustment["rr_offset"] for x in ranges["rr"]),
-        }
-    return adjusted, adjustment
-
-
-def _age_group(age: Optional[int]) -> str:
-    if age is None or age < 30:
-        return "18-29"
-    if age < 45:
-        return "30-44"
-    if age < 60:
-        return "45-59"
-    return "60+"
 
 BCG_PORT = os.getenv("BCG_PORT", "/dev/ttyUSB_HRB")
 BCG_BAUD = int(os.getenv("BCG_BAUD", "115200"))
@@ -1748,7 +1728,9 @@ _sleep_stage_path = {
     "session_id": None, "seen": [], "last": None, "stage_since": None,
     "candidate": None, "candidate_ticks": 0, "cycle_has_n1": False,
     "sensor_tick_count": 0, "last_evidence_epoch_s": None,
-    "last_evidence_result": None,
+    "last_evidence_result": None, "awake_vital_pairs": [],
+    "awake_hr_reference": None, "awake_rr_reference": None,
+    "sleep_onset_at": None, "last_valid_frame_t": None,
 }
 _analysis_frame: Optional[Dict[str, Any]] = None
 
@@ -1848,8 +1830,102 @@ def _reset_sleep_stage_path(session_id: Optional[str]) -> None:
         "stage_since": None, "candidate": None, "candidate_ticks": 0,
         "cycle_has_n1": False, "probability_ema": None,
         "sensor_tick_count": 0, "last_evidence_epoch_s": None,
-        "last_evidence_result": None,
+        "last_evidence_result": None, "awake_vital_pairs": [],
+        "awake_hr_reference": None, "awake_rr_reference": None,
+        "sleep_onset_at": None, "last_valid_frame_t": None,
     })
+
+
+def _median(values: List[float]) -> Optional[float]:
+    ordered = sorted(float(value) for value in values if math.isfinite(float(value)))
+    if not ordered:
+        return None
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2.0
+
+
+def _upper_quartile(values: List[float]) -> Optional[float]:
+    """Robust high reference for the pre-onset within-Session physiology."""
+    ordered = sorted(float(value) for value in values if math.isfinite(float(value)))
+    if not ordered:
+        return None
+    return ordered[min(len(ordered) - 1, int(round((len(ordered) - 1) * 0.75)))]
+
+
+def _update_sleep_session_context(
+    frames: List[Dict[str, Any]], *, now: float, session_started: Optional[float],
+) -> Dict[str, Any]:
+    """Maintain prior-only awake references and reset continuity after gaps.
+
+    Confirmed pre-onset frames form a within-Session settling reference; they
+    are not ground-truth Wake labels.  The upper quartile is used because the
+    first few packets can arrive after the occupant has already relaxed and a
+    low first-packet median would otherwise trap the path in Wake all night.
+    Historical behaviour may describe
+    expected onset/time-of-day, but never overwrites these observed HR/RR
+    references or directly selects a Sleep State.
+    """
+    valid = [
+        frame for frame in frames
+        if frame.get("bcg_valid")
+        and isinstance(frame.get("hr"), (int, float))
+        and isinstance(frame.get("rr"), (int, float))
+        and isinstance(frame.get("t"), (int, float))
+    ]
+    with sleep_path_lock:
+        latest_t = float(valid[-1]["t"]) if valid else None
+        previous_t = _sleep_stage_path.get("last_valid_frame_t")
+        gap_reset = bool(
+            latest_t is not None
+            and isinstance(previous_t, (int, float))
+            and latest_t - float(previous_t) >= SLEEP_CONTEXT_RESET_GAP_SECONDS
+        )
+        if gap_reset:
+            _sleep_stage_path["candidate"] = None
+            _sleep_stage_path["candidate_ticks"] = 0
+            _sleep_stage_path["probability_ema"] = None
+            _sleep_stage_path["last_evidence_result"] = None
+            _sleep_stage_path["last"] = None
+            _sleep_stage_path["seen"] = []
+            _sleep_stage_path["cycle_has_n1"] = False
+            _sleep_stage_path["sleep_onset_at"] = None
+        if latest_t is not None:
+            _sleep_stage_path["last_valid_frame_t"] = latest_t
+
+        references = list(_sleep_stage_path.get("awake_vital_pairs") or [])
+        known_times = {item[0] for item in references if len(item) == 3}
+        sleep_onset_at = _sleep_stage_path.get("sleep_onset_at")
+        for frame in valid:
+            timestamp = float(frame["t"])
+            if sleep_onset_at is not None:
+                continue
+            if timestamp not in known_times:
+                references.append((timestamp, float(frame["hr"]), float(frame["rr"])))
+                known_times.add(timestamp)
+        # Two hours covers delayed sleep onset without unbounded memory. The
+        # high quantile remains robust to a short low-valued startup window.
+        references = sorted(references, key=lambda item: item[0])[-720:]
+        _sleep_stage_path["awake_vital_pairs"] = references
+        if len(references) >= 6:
+            _sleep_stage_path["awake_hr_reference"] = _upper_quartile(
+                [item[1] for item in references]
+            )
+            _sleep_stage_path["awake_rr_reference"] = _upper_quartile(
+                [item[2] for item in references]
+            )
+        return {
+            "awake_hr_reference": _sleep_stage_path.get("awake_hr_reference"),
+            "awake_rr_reference": _sleep_stage_path.get("awake_rr_reference"),
+            "awake_reference_pairs": len(references),
+            "sleep_onset_established": sleep_onset_at is not None,
+            "sleep_elapsed_min": (
+                max(0.0, (now - float(sleep_onset_at)) / 60.0)
+                if isinstance(sleep_onset_at, (int, float)) else 0.0
+            ),
+            "gap_reset": gap_reset,
+        }
 
 
 def _advance_sleep_evidence_clock(session_id: Optional[str]) -> Dict[str, Any]:
@@ -1898,8 +1974,13 @@ def _apply_stage_to_path(stage: str, now: Optional[float] = None) -> None:
     if stage == "wake":
         seen.clear()
         _sleep_stage_path["cycle_has_n1"] = False
+        # Preserve the first Session onset across a brief Wake. A new N1 is
+        # still required before deeper stages, while a signal/off-bed reset
+        # continues to clear the complete Session context.
     elif stage == "n1":
         _sleep_stage_path["cycle_has_n1"] = True
+        if _sleep_stage_path.get("sleep_onset_at") is None:
+            _sleep_stage_path["sleep_onset_at"] = now
     if _sleep_stage_path["last"] != stage:
         seen.append(stage)
         del seen[:-8]
@@ -1921,7 +2002,7 @@ def _sleep_decision_provenance() -> Dict[str, str]:
 
 
 def _persist_sleep_stage_evidence(
-    candidate: str,
+    candidate: Optional[str],
     probabilities: Dict[str, float],
     reason: str,
     *,
@@ -2004,7 +2085,11 @@ def _commit_sleep_stage(stage: str, probabilities: Dict[str, float], reason: str
                 "sample_count": sample_count,
                 "sensor_sample_interval_s": SLEEP_SAMPLE_SECONDS,
                 "sample_interval_s": SLEEP_EVIDENCE_EPOCH_SECONDS,
-                "confirmation_seconds": SLEEP_CONFIRMATION_SECONDS,
+                "confirmation_seconds": float((confirmation or {}).get(
+                    "confirmation_seconds",
+                    SLEEP_STAGE_CONFIRMATION_SECONDS.get(
+                        stage, SLEEP_CONFIRMATION_SECONDS),
+                )),
                 "confirmation": confirmation or {},
                 "decision_kind": "confirmed_state",
                 "state_changed": changed,
@@ -2044,30 +2129,14 @@ def _transition_allowed(candidate: str, *, strong_wake: bool = False) -> tuple[b
 
 
 def _transition_fallback_state(blocked: str, previous: Optional[str]) -> str:
-    """Return the bridge state when a noisy candidate violates the path.
+    """Hold the last confirmed state; never fabricate a bridge label.
 
-    A fresh cycle first emits WAKE.  Once WAKE is established, a direct
-    N2/N3/REM candidate is bridged through N1 instead of holding WAKE forever.
-    This guarantees the visible Wake -> N1 ordering without inventing a later
-    deep/REM label.  It remains an engineering continuity policy, not AASM.
+    The older resolver inserted N1 or N2 merely to make an otherwise blocked
+    path look natural.  That changes a transition prior into physiological
+    evidence.  v1.13 keeps the candidate in the Evidence stream and waits for
+    real evidence for the allowed next state.
     """
-    with sleep_path_lock:
-        cycle_has_n1 = bool(_sleep_stage_path.get("cycle_has_n1"))
-    if previous is None:
-        return "wake"
-    if previous == "wake" and blocked in {"n2", "n3", "rem"}:
-        return "n1"
-    if blocked in {"n2", "n3", "rem"} and not cycle_has_n1:
-        return "n1"
-    if previous == "n1" and blocked == "n3":
-        return "n2"
-    if previous == "n2" and blocked == "wake":
-        return "n1"
-    if previous == "n3" and blocked in {"wake", "n1"}:
-        return "n2"
-    if previous == "rem" and blocked == "n3":
-        return "n2"
-    if previous in ZEEP_SLEEP_STATES and previous != blocked:
+    if previous in ZEEP_SLEEP_STATES:
         return previous
     return "wake"
 
@@ -2079,16 +2148,35 @@ def _stabilize_sleep_stage(candidate: str, *, now: float,
     The resolver works in 30-second evidence epochs. It models plausible
     continuity and requires two consecutive epochs before changing a confirmed
     state. Strong Wake opens the transition path but does not bypass the
-    60-second confirmation; occupancy and safety remain separate fast paths.
+    target-specific 60–120 second confirmation; occupancy and safety remain
+    separate fast paths.
     """
     allowed, previous = _transition_allowed(candidate, strong_wake=strong_wake)
     target = candidate if allowed else _transition_fallback_state(candidate, previous)
     guard: Dict[str, Any] = {
-        "raw_candidate": candidate, "bridge_state": target if target != candidate else None,
+        "raw_candidate": candidate, "bridge_state": None,
+        "blocked_candidate": candidate if not allowed else None,
+        "transition_allowed": allowed,
         "previous_state": previous, "strong_wake_override": strong_wake,
         "policy": ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
     }
     with sleep_path_lock:
+        if not allowed:
+            _sleep_stage_path["candidate"] = None
+            _sleep_stage_path["candidate_ticks"] = 0
+            guard.update({
+                "required_ticks": 0,
+                "candidate_ticks": 0,
+                "candidate_epochs": 0,
+                "required_epochs": 0,
+                "confirmation_seconds": SLEEP_STAGE_CONFIRMATION_SECONDS.get(
+                    target, SLEEP_CONFIRMATION_SECONDS),
+                "held": True,
+                "confirmation_complete": False,
+                "confirmed_state": None,
+                "decision": "blocked_transition_abstain",
+            })
+            return (previous or "wake"), guard
         if previous is None:
             if _sleep_stage_path.get("candidate") == target:
                 _sleep_stage_path["candidate_ticks"] += 1
@@ -2103,7 +2191,8 @@ def _stabilize_sleep_stage(candidate: str, *, now: float,
                 "candidate_ticks": ticks,
                 "candidate_epochs": ticks,
                 "required_epochs": required,
-                "confirmation_seconds": SLEEP_CONFIRMATION_SECONDS,
+                "confirmation_seconds": SLEEP_STAGE_CONFIRMATION_SECONDS.get(
+                    target, SLEEP_CONFIRMATION_SECONDS),
                 "held": held,
                 "confirmation_complete": not held,
                 "confirmed_state": None if held else target,
@@ -2117,7 +2206,8 @@ def _stabilize_sleep_stage(candidate: str, *, now: float,
                 "candidate_ticks": SLEEP_CONFIRM_EPOCHS,
                 "candidate_epochs": SLEEP_CONFIRM_EPOCHS,
                 "required_epochs": SLEEP_CONFIRM_EPOCHS,
-                "confirmation_seconds": SLEEP_CONFIRMATION_SECONDS,
+                "confirmation_seconds": SLEEP_STAGE_CONFIRMATION_SECONDS.get(
+                    previous, SLEEP_CONFIRMATION_SECONDS),
                 "held": False,
                 "confirmation_complete": True,
                 "confirmed_state": previous,
@@ -2138,7 +2228,8 @@ def _stabilize_sleep_stage(candidate: str, *, now: float,
         guard.update({
             "required_ticks": required, "candidate_ticks": ticks,
             "candidate_epochs": ticks, "required_epochs": required,
-            "confirmation_seconds": SLEEP_CONFIRMATION_SECONDS,
+            "confirmation_seconds": SLEEP_STAGE_CONFIRMATION_SECONDS.get(
+                target, SLEEP_CONFIRMATION_SECONDS),
             "dwell_s": round(dwell_s, 1), "minimum_dwell_s": min_dwell_s,
             "held": held, "confirmation_complete": not held,
             "confirmed_state": previous if held else target,
@@ -2734,12 +2825,57 @@ def _sleep_quality_summary(
     )
 
 
+def _released_historical_quality(
+    final_summary: Dict[str, Any],
+    quality: Any,
+) -> Dict[str, Any]:
+    """Expose only a persisted result from the current reviewed pipeline.
+
+    Pre-cutover data is filtered at the query. Post-cutover Sessions that did
+    not pass the current replay/promotion gate remain auditable in SQLite but
+    must not leak a legacy score beside current Sleep/Recovery Scores.
+    """
+    report = final_summary.get("session_report") or {}
+    if (
+        isinstance(quality, dict)
+        and quality.get("version") == SLEEP_QUALITY_VERSION
+        and isinstance(report, dict)
+        and report.get("version") == SESSION_REPORT_VERSION
+    ):
+        return quality
+    requested = normalise_rest_mode(final_summary.get("rest_mode") or "auto")
+    sleep_mode = requested in {"sleep", "overnight"}
+    return {
+        "available": False,
+        "score": None,
+        "score_releasable": False,
+        "score_title": "Sleep Score" if sleep_mode else "Recovery Score",
+        "score_scope": (
+            "ค่าประเมินการนอนจาก Sensor" if sleep_mode
+            else "คะแนนสนับสนุนการฟื้นตัวจาก Sensor"
+        ),
+        "level": "รอตรวจคุณภาพข้อมูล",
+        "level_key": "unavailable",
+        "reason": "ผลเดิมยังไม่ผ่าน Gate ของรุ่นปัจจุบัน จึงไม่เผยแพร่คะแนน",
+        "version": SLEEP_QUALITY_VERSION,
+        "validation_status": "pending_current_pipeline_review",
+        "clinical_validated": False,
+        "legacy_result_hidden": True,
+    }
+
+
 def estimate_sleep_state() -> Dict[str, Any]:
     """Five-state wellness estimate with explainable probabilities."""
     now = time.time()
     with history_lock:
-        # Rolling context: publish every 10 s; confidence stabilizes at 6 frames.
-        frames = list(sleep_feature_history)[-SLEEP_MIN_FRAMES:]
+        # Current stage morphology uses 60 s; onset/transition direction uses
+        # up to 270 s so a single noisy 10-second frame cannot manufacture N1.
+        long_frame_count = max(
+            SLEEP_MIN_FRAMES,
+            int(math.ceil(SLEEP_LONG_CONTEXT_SECONDS / SLEEP_SAMPLE_SECONDS)),
+        )
+        context_frames = list(sleep_feature_history)[-long_frame_count:]
+        frames = context_frames[-SLEEP_MIN_FRAMES:]
     with state_lock:
         age = state["session"].get("age")
         selected_age_group = state["session"].get("age_group")
@@ -2757,11 +2893,26 @@ def estimate_sleep_state() -> Dict[str, Any]:
     with state_lock:
         _account_key = state["session"].get("account_key")
     personal_meta = {"source": "age_gender_default", "status": "no_session"}
+    proposed_personal_baseline = None
     if _account_key:
-        baseline, personal_meta = baselines.personalize_baseline(
+        proposed_personal_baseline, personal_meta = baselines.personalize_baseline(
             _account_key, baseline)
-    personal_thresholds = baselines.thresholds_for(
-        _account_key) if _account_key else None
+        personal_meta = {
+            **personal_meta,
+            "direct_stage_influence": PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED,
+            "candidate_available": proposed_personal_baseline != baseline,
+        }
+    personal_behaviour = (
+        baselines.behaviour_context(_account_key, rest_mode)
+        if _account_key else {
+            "status": "no_session", "sessions_used": 0,
+            "direct_stage_influence": False,
+        }
+    )
+    personal_thresholds = (
+        baselines.thresholds_for(_account_key)
+        if _account_key and PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED else None
+    )
     cv_deep_threshold = float((personal_thresholds or {}).get(
         "cv_deep", SLEEP_HR_CV_DEEP))
     cv_rem_threshold = float((personal_thresholds or {}).get(
@@ -2795,6 +2946,8 @@ def estimate_sleep_state() -> Dict[str, Any]:
         "gender_adjustment": gender_adjustment,
         "baseline": baseline,
         "personal_baseline": personal_meta,
+        "personal_baseline_candidate": proposed_personal_baseline,
+        "personal_behaviour": personal_behaviour,
         "variability_thresholds": {
             "cv_deep": cv_deep_threshold,
             "cv_rem": cv_rem_threshold,
@@ -2815,7 +2968,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
                 "heart_rate_summary_cv", "respiration_rate_cv",
                 "hr_rr_trend", "bcg_respiratory_regularity",
                 "bcg_fast_amplitude_stability", "elapsed_time",
-                "transition_path", "age_gender_baseline", "personal_baseline",
+                "transition_path", "age_gender_baseline",
             ],
             "corroborating_inputs": [
                 "sph0645_acoustic_disturbance", "bed_status_weak_breathing",
@@ -2832,6 +2985,9 @@ def estimate_sleep_state() -> Dict[str, Any]:
                 "pm2_5", "voc_index",
             ],
             "environment_direct_stage_influence": False,
+            "personal_history_direct_stage_influence": (
+                PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED
+            ),
             "acoustic_requires_bcg_or_motion_corroboration": True,
             "intended_use": "exploratory_wellness_telemetry",
             "actuator_trigger": False,
@@ -2942,20 +3098,56 @@ def estimate_sleep_state() -> Dict[str, Any]:
         "invalid_hr_buckets": len([value for value in raw_hrs if value is not None]) - len(hrs),
         "invalid_rr_buckets": len([value for value in raw_rrs if value is not None]) - len(rrs),
         "average_clip_percent": round(sum(clip_values) / len(clip_values) * 100, 2) if clip_values else None,
+        "minimum_paired_vital_coverage": SLEEP_MIN_PAIRED_VITAL_COVERAGE,
     }
     if not hrs or not rrs:
         return suspend_classification(
             "HR/RR อยู่นอกช่วงตรวจสอบหรือไม่มีข้อมูล · ไม่ประเมิน Sleep State",
             "invalid_or_missing_vitals",
         )
+    if 1.0 - missing_ratio < SLEEP_MIN_PAIRED_VITAL_COVERAGE:
+        return suspend_classification(
+            "คู่ HR/RR ในหน้าต่างปัจจุบันไม่ต่อเนื่องพอ · ไม่ประเมิน Sleep State",
+            "insufficient_paired_vital_coverage",
+        )
     mean_hr = sum(hrs) / len(hrs)
     mean_rr = sum(rrs) / len(rrs)
+    session_context = _update_sleep_session_context(
+        context_frames, now=now, session_started=session_started,
+    )
+    with sleep_path_lock:
+        previous_valid_stage = _sleep_stage_path.get("last")
+    current_stage_for_scoring = (
+        previous_valid_stage if previous_valid_stage in ZEEP_SLEEP_STATES
+        else "wake"
+    )
     summary_signal = summary_features(hrs, rrs, SLEEP_SAMPLE_SECONDS)
+    long_valid_bcg = [frame for frame in context_frames if frame.get("bcg_valid")]
+    long_summary_signal = summary_features(
+        [frame.get("hr") for frame in long_valid_bcg],
+        [frame.get("rr") for frame in long_valid_bcg],
+        SLEEP_SAMPLE_SECONDS,
+    )
     hr_cv = float(summary_signal.get("hr_cv") or 0.0)
     rr_cv = float(summary_signal.get("rr_cv") or 0.0)
     raw_window = [sample for frame in valid_bcg
                   for sample in (frame.get("bcg_samples") or [])]
     waveform_signal = waveform_features(raw_window)
+    expected_waveform_samples = max(
+        1.0, BCG_SAMPLE_RATE_HZ * SLEEP_WINDOW_SECONDS
+    )
+    waveform_coverage = min(1.0, len(raw_window) / expected_waveform_samples)
+    waveform_signal["waveform_sample_coverage"] = round(
+        waveform_coverage, 4
+    )
+    waveform_signal["minimum_waveform_sample_coverage"] = (
+        SLEEP_MIN_WAVEFORM_COVERAGE
+    )
+    if waveform_coverage < SLEEP_MIN_WAVEFORM_COVERAGE:
+        waveform_signal["waveform_available"] = False
+        waveform_signal["waveform_rejection_reason"] = (
+            "insufficient_sample_coverage"
+        )
     result["signal_quality"].update({
         "bcg_baseline_drift_ratio": waveform_signal.get("bcg_baseline_drift_ratio"),
         "bcg_baseline_drift_flag": waveform_signal.get("bcg_baseline_drift_flag", False),
@@ -3017,6 +3209,14 @@ def estimate_sleep_state() -> Dict[str, Any]:
                 * 100.0, 1),
         }
     scoring_metrics = {
+        "mean_hr": mean_hr,
+        "mean_rr": mean_rr,
+        "awake_hr_reference": session_context["awake_hr_reference"],
+        "awake_rr_reference": session_context["awake_rr_reference"],
+        "awake_reference_pairs": session_context["awake_reference_pairs"],
+        "sleep_onset_established": session_context["sleep_onset_established"],
+        "sleep_elapsed_min": session_context["sleep_elapsed_min"],
+        "current_stage": current_stage_for_scoring,
         "hr_cv": hr_cv,
         "rr_cv": rr_cv,
         "movement_ratio": move_ratio,
@@ -3027,6 +3227,8 @@ def estimate_sleep_state() -> Dict[str, Any]:
             "corroborated_acoustic_wake_support"],
         **summary_signal,
         **waveform_signal,
+        "hr_slope_bpm_per_min": long_summary_signal.get("hr_slope_bpm_per_min"),
+        "rr_slope_per_min": long_summary_signal.get("rr_slope_per_min"),
     }
     arousal_proxy = arousal_proxy_evidence(scoring_metrics, SLEEP_MOVE_WAKE_RATIO)
     scores, sleep_evidence = score_sleep_evidence(
@@ -3043,9 +3245,12 @@ def estimate_sleep_state() -> Dict[str, Any]:
         onset_min_observation_minutes=SLEEP_ONSET_MIN_OBSERVATION_SECONDS / 60.0,
         onset_max_movement_ratio=SLEEP_ONSET_MAX_MOVEMENT_RATIO,
         onset_min_downward_transition=SLEEP_ONSET_MIN_DOWNWARD_TRANSITION,
+        onset_min_relative_sleep_support=SLEEP_ONSET_MIN_RELATIVE_SLEEP_SUPPORT,
         onset_max_hr_rise_bpm_per_min=SLEEP_ONSET_MAX_HR_RISE_BPM_PER_MIN,
         onset_max_rr_rise_per_min=SLEEP_ONSET_MAX_RR_RISE_PER_MIN,
         onset_initial_wake_support=SLEEP_ONSET_INITIAL_WAKE_SUPPORT,
+        deep_cv_threshold=cv_deep_threshold,
+        rem_cv_threshold=cv_rem_threshold,
     )
     rr_stage_guard = {
         "conflict": sleep_evidence["n3_rr_conflict"],
@@ -3053,11 +3258,28 @@ def estimate_sleep_state() -> Dict[str, Any]:
         "n2_support": sleep_evidence["n3_rr_conflict"] * SLEEP_N2_RR_CONFLICT_SUPPORT,
     }
 
-    max_score = max(scores.values())
-    weights = {k: math.exp((v - max_score) * 1.8) for k, v in scores.items()}
-    total = sum(weights.values())
-    raw_probabilities = {k: weights[k] / total for k in weights}
+    raw_probabilities = softmax_stage_evidence(
+        scores, temperature=SLEEP_SCORE_SOFTMAX_TEMPERATURE,
+        eligible_states={
+            "wake": sleep_evidence["wake_gate"],
+            "n1": sleep_evidence["n1_gate"],
+            "n2": sleep_evidence["n2_gate"],
+            "n3": sleep_evidence["n3_gate"],
+            "rem": sleep_evidence["rem_gate"],
+        },
+    )
     instant_candidate = max(raw_probabilities, key=raw_probabilities.get)
+    accepted_instant_candidate, evidence_quality = (
+        evidence_candidate_with_abstention(
+            raw_probabilities,
+            minimum_winner=SLEEP_EVIDENCE_MIN_WINNER,
+            minimum_margin=SLEEP_EVIDENCE_MIN_MARGIN,
+            gated_stage_thresholds=(
+                {"n3": (SLEEP_N3_GATED_MIN_WINNER, SLEEP_N3_GATED_MIN_MARGIN)}
+                if sleep_evidence["n3_gate"] else None
+            ),
+        )
+    )
     with sleep_path_lock:
         smoothed_probabilities = smooth_stage_probabilities(
             _sleep_stage_path.get("probability_ema"),
@@ -3071,16 +3293,31 @@ def estimate_sleep_state() -> Dict[str, Any]:
     # below still requires two consecutive epochs before changing state. This
     # removes the duplicate history lock that previously suppressed valid N3
     # without making Wake/N1/N2/REM more reactive.
-    evidence_candidate, probability_transition = candidate_from_stage_evidence(
-        raw_probabilities,
-        smoothed_probabilities,
-        probability_current_stage,
-        switch_margin=SLEEP_PROBABILITY_SWITCH_MARGIN,
-        n3_gate=bool(sleep_evidence["n3_gate"]),
-        sleep_onset_gate_passed=bool(
-            sleep_evidence["sleep_onset_gate"]["passed"]
-        ),
-    )
+    evidence_candidate = None
+    probability_transition: Dict[str, Any] = {
+        "candidate_source": "abstain",
+        "evidence_quality": evidence_quality,
+    }
+    if accepted_instant_candidate is not None:
+        evidence_candidate, probability_transition = candidate_from_stage_evidence(
+            raw_probabilities,
+            smoothed_probabilities,
+            probability_current_stage,
+            switch_margin=SLEEP_PROBABILITY_SWITCH_MARGIN,
+            n3_gate=bool(sleep_evidence["n3_gate"]),
+            sleep_onset_gate_passed=bool(
+                sleep_evidence["sleep_onset_gate"]["passed"]
+                or sleep_evidence["sleep_onset_established"]
+            ),
+            eligible_states={
+                "wake": sleep_evidence["wake_gate"],
+                "n1": sleep_evidence["n1_gate"],
+                "n2": sleep_evidence["n2_gate"],
+                "n3": sleep_evidence["n3_gate"],
+                "rem": sleep_evidence["rem_gate"],
+            },
+        )
+        probability_transition["evidence_quality"] = evidence_quality
     # A position change or blanket adjustment is sleep-compatible movement.
     # Only the shared, physiology-corroborated movement rule may bypass the
     # normal N2/N3/REM -> N1 -> Wake progression.
@@ -3088,17 +3325,32 @@ def estimate_sleep_state() -> Dict[str, Any]:
         instant_candidate == "wake"
         and sleep_evidence["movement"]["strong_wake"]
     )
-    raw_candidate = "wake" if strong_wake else evidence_candidate
-    selected, transition_meta = _stabilize_sleep_stage(
-        raw_candidate, now=now, strong_wake=strong_wake)
+    decision_candidate = "wake" if strong_wake else evidence_candidate
+    if decision_candidate is None:
+        with sleep_path_lock:
+            _sleep_stage_path["candidate"] = None
+            _sleep_stage_path["candidate_ticks"] = 0
+        selected = None
+        transition_meta = {
+            "raw_candidate": None,
+            "previous_state": probability_current_stage,
+            "held": True,
+            "confirmation_complete": False,
+            "confirmed_state": None,
+            "decision": "abstain",
+            "policy": ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
+        }
+    else:
+        selected, transition_meta = _stabilize_sleep_stage(
+            decision_candidate, now=now, strong_wake=strong_wake)
 
     # Evidence probabilities deliberately remain independent from the
     # confirmed state. A pending challenger can therefore be inspected without
     # rewriting the probability distribution to make the held state win.
     probabilities = {k: round(v, 4) for k, v in smoothed_probabilities.items()}
     rounding_delta = round(1.0 - sum(probabilities.values()), 4)
-    probabilities[raw_candidate] = round(
-        probabilities[raw_candidate] + rounding_delta, 4)
+    probabilities[instant_candidate] = round(
+        probabilities[instant_candidate] + rounding_delta, 4)
     confirmed_state = transition_meta.get("confirmed_state")
     if confirmed_state not in ZEEP_SLEEP_STATES:
         confirmed_state = None
@@ -3119,15 +3371,20 @@ def estimate_sleep_state() -> Dict[str, Any]:
         bridge = transition_meta.get("bridge_state")
         pending = transition_meta.get("candidate_ticks", 0)
         required = transition_meta.get("required_ticks", 1)
-        transition_guard = (
-            f"{raw_candidate.upper()} → {(bridge or selected).upper()} ตามลำดับธรรมชาติ; "
-            f"ยืนยัน {pending}/{required} รอบ"
-        )
-    top = probabilities[raw_candidate]
+        source = transition_meta.get("raw_candidate") or decision_candidate
+        target = bridge or selected or previous_state
+        if source and target:
+            transition_guard = (
+                f"{str(source).upper()} → {str(target).upper()} ตามลำดับธรรมชาติ; "
+                f"ยืนยัน {pending}/{required} รอบ"
+            )
+    top = probabilities[instant_candidate]
     confidence = "high" if top >= 0.72 else "medium" if top >= 0.48 else "low"
     if transition_guard:
         # A bridge label preserves continuity but is not direct physiological
         # evidence for that stage, so never present it with high confidence.
+        confidence = "low"
+    if decision_candidate is None:
         confidence = "low"
     # A result is available from the first bucket, but a full rolling baseline
     # window is required before it can be labelled non-provisional.
@@ -3160,6 +3417,10 @@ def estimate_sleep_state() -> Dict[str, Any]:
             f"RR ใกล้ N2 มากกว่า N3 {rr_stage_guard['conflict']*100:.0f}%")
     if transition_guard:
         reason_bits.append(transition_guard)
+    if decision_candidate is None:
+        reason_bits.append(
+            "หลักฐานยังใกล้กันเกินไป · เก็บ Evidence แต่ไม่ยืนยัน Sleep State"
+        )
     if probability_transition.get("sleep_onset_guard_held"):
         onset = sleep_evidence["sleep_onset_gate"]
         if not onset["observation_complete"]:
@@ -3181,11 +3442,11 @@ def estimate_sleep_state() -> Dict[str, Any]:
         reason_bits.append("Bed Status พบ weak-breathing context")
     if auxiliary_evidence["bed_status"]["snoring_frames"]:
         reason_bits.append("Bed Status พบ snoring context")
-    if raw_candidate == "wake": reason_bits.append("หลักฐานใกล้ Awake baseline เด่นที่สุด")
-    elif raw_candidate == "n1": reason_bits.append("หลักฐานกำลังลดจาก Awake baseline และอยู่ในช่วงเปลี่ยนผ่าน")
-    elif raw_candidate == "n2": reason_bits.append("หลักฐาน HR/RR และ BCG คงที่ต่อเนื่อง")
-    elif raw_candidate == "n3": reason_bits.append("หลักฐาน HR/RR ต่ำ การหายใจสม่ำเสมอ และ N3 gate ผ่าน")
-    else: reason_bits.append("RR แปรปรวนบนเตียงที่นิ่งและ REM gate ผ่าน")
+    if decision_candidate == "wake": reason_bits.append("หลักฐานใกล้ Awake baseline เด่นที่สุด")
+    elif decision_candidate == "n1": reason_bits.append("หลักฐานกำลังลดจาก Awake baseline และอยู่ในช่วงเปลี่ยนผ่าน")
+    elif decision_candidate == "n2": reason_bits.append("หลักฐาน HR/RR และ BCG คงที่ต่อเนื่อง")
+    elif decision_candidate == "n3": reason_bits.append("หลักฐาน HR/RR ต่ำ การหายใจสม่ำเสมอ และ N3 gate ผ่าน")
+    elif decision_candidate == "rem": reason_bits.append("RR แปรปรวนบนเตียงที่นิ่งและ REM gate ผ่าน")
     if environment["lux"] is not None:
         reason_bits.append(f"แสงเฉลี่ย {environment['lux']:.0f} lux")
     if environment["sound_dba"] is not None:
@@ -3204,9 +3465,10 @@ def estimate_sleep_state() -> Dict[str, Any]:
             k: round(v, 4) for k, v in smoothed_probabilities.items()
         },
         "instant_candidate": instant_candidate,
-        "raw_candidate": raw_candidate,
-        "probability_winner": raw_candidate,
-        "winner_percent": round(probabilities[raw_candidate] * 100, 1),
+        "raw_candidate": decision_candidate,
+        "probability_winner": instant_candidate,
+        "winner_percent": round(probabilities[instant_candidate] * 100, 1),
+        "evidence_quality": evidence_quality,
         "provisional": provisional or confirmed_state is None,
         "data_status": "live" if confirmed_state else "confirming_state",
         "reason": " · ".join(reason_bits), "mean_hr": round(mean_hr, 1), "mean_rr": round(mean_rr, 1),
@@ -3227,6 +3489,11 @@ def estimate_sleep_state() -> Dict[str, Any]:
         },
         "rr_stage_guard": {k: round(v, 4) for k, v in rr_stage_guard.items()},
         "signal_features": {**summary_signal, **waveform_signal},
+        "long_context_features": {
+            **long_summary_signal,
+            "window_seconds": SLEEP_LONG_CONTEXT_SECONDS,
+            "valid_frames": len(long_valid_bcg),
+        },
         "sleep_evidence": sleep_evidence,
         "timing_priors": {
             "rem_gate": sleep_evidence["rem_gate"],
@@ -3234,7 +3501,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
             "sleep_onset_gate": sleep_evidence["sleep_onset_gate"],
         },
         "evidence": {
-            "candidate": raw_candidate,
+            "candidate": decision_candidate,
             "probabilities": probabilities,
             "confidence": confidence,
             "epoch_seconds": SLEEP_EVIDENCE_EPOCH_SECONDS,
@@ -3244,7 +3511,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
         "confirmation": {
             "confirmed_state": confirmed_state,
             "pending_state": (
-                raw_candidate if transition_meta.get("held") else None
+                decision_candidate if transition_meta.get("held") else None
             ),
             "candidate_epochs": transition_meta.get("candidate_epochs", 0),
             "required_epochs": transition_meta.get(
@@ -3281,7 +3548,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
     result["evidence"]["window_start"] = window_start
     result["evidence"]["window_end"] = window_end
     _persist_sleep_stage_evidence(
-        raw_candidate, probabilities, result["reason"], confidence=confidence,
+        decision_candidate, probabilities, result["reason"], confidence=confidence,
         metrics=decision_metrics,
         window_start=window_start,
         window_end=window_end,
@@ -4556,8 +4823,19 @@ def sensor_frame_sampler():
             h2 = dict(state["sensor"].get("sensorhub2") or {})
         raw_hr = [f.get("hr") for f in bcg_frames]
         raw_rr = [f.get("rr") for f in bcg_frames]
-        valid_hr = filter_vital_values(raw_hr, HR_SANITY_RANGE_BPM)
-        valid_rr = filter_vital_values(raw_rr, RR_SANITY_RANGE_PER_MIN)
+        # A physiological frame is valid only when HR and RR came from the
+        # same vendor packet.  Averaging two independently filtered lists can
+        # otherwise pair an old/invalid heart rate with a different breath.
+        paired_vitals = []
+        for bcg_frame in bcg_frames:
+            hr_values = filter_vital_values(
+                [bcg_frame.get("hr")], HR_SANITY_RANGE_BPM)
+            rr_values = filter_vital_values(
+                [bcg_frame.get("rr")], RR_SANITY_RANGE_PER_MIN)
+            if hr_values and rr_values:
+                paired_vitals.append((hr_values[0], rr_values[0]))
+        valid_hr = [pair[0] for pair in paired_vitals]
+        valid_rr = [pair[1] for pair in paired_vitals]
         statuses = [f.get("status") for f in bcg_frames if f.get("status") is not None]
         raw_points = [v for f in bcg_frames for v in (f.get("samples") or [])]
         clipped = sum(1 for v in raw_points if v in (-32768, 32767))
@@ -4618,6 +4896,13 @@ def sensor_frame_sampler():
             for key, device in (environment.get("devices") or {}).items()
         }
         esp_fresh = any(device_status.values())
+        paired_packet_coverage = (
+            len(paired_vitals) / len(bcg_frames) if bcg_frames else 0.0
+        )
+        bcg_bucket_valid = bool(
+            len(bcg_frames) >= SLEEP_BUCKET_MIN_BCG_PACKETS
+            and paired_packet_coverage >= SLEEP_MIN_PAIRED_VITAL_COVERAGE
+        )
         feature = {
             "t": bucket_end, "bucket_start": bucket_start,
             "status": bucket_status,
@@ -4636,7 +4921,10 @@ def sensor_frame_sampler():
             "clip_ratio": round(clip_ratio, 4) if clip_ratio is not None else None,
             # HR/RR/status are device summary bytes and remain usable even when
             # the raw waveform clips; clipping lowers confidence separately.
-            "bcg_valid": bool(bcg_frames and valid_hr and valid_rr),
+            "bcg_valid": bcg_bucket_valid,
+            "paired_vital_packets": len(paired_vitals),
+            "paired_vital_coverage": round(paired_packet_coverage, 4),
+            "minimum_bcg_packets": SLEEP_BUCKET_MIN_BCG_PACKETS,
             # Internal rolling waveform only. It is not copied into the public
             # analysis frame; the canonical raw record remains bcg.db.
             "bcg_samples": raw_points,
@@ -8076,6 +8364,7 @@ def sleep_policy_admin():
         "evidence_epoch_seconds": SLEEP_EVIDENCE_EPOCH_SECONDS,
         "evidence_sensor_frames": SLEEP_SENSOR_FRAMES_PER_EPOCH,
         "confirmation_seconds": SLEEP_CONFIRMATION_SECONDS,
+        "confirmation_seconds_by_target": dict(SLEEP_STAGE_CONFIRMATION_SECONDS),
         "confirmation_epochs": SLEEP_CONFIRM_EPOCHS,
         "evidence_and_confirmed_state_separate": True,
         "rolling_window_seconds": SLEEP_WINDOW_SECONDS,
@@ -8097,8 +8386,8 @@ def sleep_policy_admin():
         },
         "humidity_bias_percentage_points": HUMIDITY_RH_BIAS,
         "sound_display_transform": {
-            "formula": "round(abs(sound_dbfs), 1) * (1 - error_percent / 100)",
-            "error_percent": SOUND_DBFS_ERROR_PERCENT,
+            "formula": "round(abs(sound_dbfs), 1)",
+            "error_percent": 0.0,
         },
         "sensor_biases": dict(SENSOR_BIASES),
     }
@@ -8116,10 +8405,12 @@ def history_list(
     with profile_lock:
         history_profile = _load_profiles().get(key, {})
     records = database.read_sessions(
-        "SELECT * FROM sessions WHERE username_key=? ORDER BY start_time DESC LIMIT ?",
-        (key, limit))
+        "SELECT * FROM sessions WHERE username_key=? AND start_time>=? "
+        "ORDER BY start_time DESC LIMIT ?",
+        (key, PERSONAL_BASELINE_LEARNING_START_UTC, limit))
     total = database.read_sessions(
-        "SELECT COUNT(*) AS n FROM sessions WHERE username_key=?", (key,))[0]["n"]
+        "SELECT COUNT(*) AS n FROM sessions WHERE username_key=? AND start_time>=?",
+        (key, PERSONAL_BASELINE_LEARNING_START_UTC))[0]["n"]
     sessions = []
     for record in records:
         agg = database.read_sessions(
@@ -8136,14 +8427,15 @@ def history_list(
                 final_summary = {}
         night_summary = final_summary.get("night_summary") or {}
         sleep_quality = night_summary.get("sleep_quality")
-        if not isinstance(sleep_quality, dict):
-            sleep_quality = _sleep_quality_summary(
-                record["duration"], night_summary,
-                final_summary.get("sleep_state_counts") or {},
-                completed=bool(record["end_time"]),
-                rest_mode=final_summary.get("rest_mode") or "auto",
-            )
+        sleep_quality = _released_historical_quality(
+            final_summary, sleep_quality,
+        )
         session_report = final_summary.get("session_report")
+        if not (
+            isinstance(session_report, dict)
+            and session_report.get("version") == SESSION_REPORT_VERSION
+        ):
+            session_report = None
         health_reference = final_summary.get("health_reference")
         if not isinstance(health_reference, dict):
             health_reference = _health_reference_from_profile(history_profile)
@@ -8179,6 +8471,8 @@ def history_list(
         "health_reference": _health_reference_from_profile(history_profile),
         "sessions": sessions,
         "total": total,
+        "history_start_utc": PERSONAL_BASELINE_LEARNING_START_UTC,
+        "older_sessions_archived_from_product_results": True,
     }
 
 
@@ -8299,7 +8593,8 @@ def history_detail(
 ):
     key = _require_username_access(username, principal)
     rows = database.read_sessions(
-        "SELECT * FROM sessions WHERE username_key=? AND session_id=?", (key, session_id))
+        "SELECT * FROM sessions WHERE username_key=? AND session_id=? AND start_time>=?",
+        (key, session_id, PERSONAL_BASELINE_LEARNING_START_UTC))
     if not rows:
         raise HTTPException(404, "ไม่พบ session นี้")
     row = rows[0]
@@ -8450,18 +8745,9 @@ def history_detail(
         profile = _load_profiles().get(row["username_key"], {})
     night_summary = final_summary.get("night_summary") or {}
     sleep_quality = night_summary.get("sleep_quality")
-    if not isinstance(sleep_quality, dict):
-        sleep_quality = _sleep_quality_summary(
-            row["duration"], night_summary,
-            final_summary.get("sleep_state_counts") or {},
-            completed=bool(row["end_time"]),
-            rest_mode=final_summary.get("rest_mode") or "auto",
-            stage_sequence=[{
-                "state": point["state"], "metrics": point.get("metrics") or {}
-            } for point in stage_points],
-            sensor_samples=report_samples,
-            sample_interval_s=history_interval_s,
-        )
+    sleep_quality = _released_historical_quality(
+        final_summary, sleep_quality,
+    )
     persisted_session_report = final_summary.get("session_report")
     persisted_report_version = (
         persisted_session_report.get("version")

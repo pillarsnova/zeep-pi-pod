@@ -17,16 +17,49 @@ from sleep_system_policy import (
 )
 
 
-MAINTENANCE_CONTRACT_VERSION = "zeep-maintenance-tools-v1.0"
+MAINTENANCE_CONTRACT_VERSION = "zeep-maintenance-tools-v1.2"
 
 MAINTENANCE_TOOLS: dict[str, dict[str, Any]] = {
     "reclassify_sleep_history.py": {
         "group": "sleep_replay",
-        "purpose": "Replay historical stage evidence with the current canonical policy",
-        "writes": ["events.sleep_stage"],
+        "purpose": "Legacy event-level comparison only; historical apply is disabled",
+        "writes": [],
         "preserves": ["timeline", "raw_bcg"],
+        "default_mode": "audit_only",
+        "guard": "--apply refuses and directs operators to raw shadow replay",
+        "policy_version": SLEEP_HISTORY_BACKFILL_VERSION,
+    },
+    "audit_sleep_history_shadow.py": {
+        "group": "sleep_replay",
+        "purpose": (
+            "Deterministically replay raw BCG into 10-second frames, 30-second "
+            "evidence and confirmed five-state shadow results"
+        ),
+        "writes": ["explicit_output_manifest_only"],
+        "preserves": ["sessions.db", "bcg.db", "events", "timeline", "raw_bcg"],
+        "default_mode": "read_only",
+        "guard": (
+            "SQLite mode=ro + input hashes + no historical writeback without "
+            "independent reference labels and explicit approval"
+        ),
+        "policy_version": SLEEP_HISTORY_BACKFILL_VERSION,
+    },
+    "promote_sleep_history.py": {
+        "group": "derived_sleep_promotion",
+        "purpose": (
+            "Promote a hash-verified Raw-BCG replay after the pilot cutover "
+            "into versioned ZEEP wellness estimates"
+        ),
+        "writes": [
+            "events.sleep_stage", "events.sleep_stage_evidence",
+            "events.final_summary", "baselines.json",
+        ],
+        "preserves": ["timeline", "bcg.db", "raw_bcg", "profiles.json"],
         "default_mode": "dry_run",
-        "guard": "online SQLite backup before --apply",
+        "guard": (
+            "exact sessions/bcg SHA-256 + completed post-cutover Session + "
+            "Tier A with no manual-review flags + SQLite/baseline backup before --apply"
+        ),
         "policy_version": SLEEP_HISTORY_BACKFILL_VERSION,
     },
     "rescore_session_reports.py": {

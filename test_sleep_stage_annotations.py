@@ -82,7 +82,8 @@ class SleepStageAnnotationTests(unittest.TestCase):
                     id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT,
                     timestamp TEXT, temperature REAL, humidity REAL, co2 REAL,
                     lux REAL, sound REAL, heart_rate REAL,
-                    respiration_rate REAL, bed_status TEXT
+                    respiration_rate REAL, bed_status TEXT,
+                    pm2_5 REAL, voc_index REAL
                 );
             """)
             connection.execute(
@@ -122,6 +123,77 @@ class SleepStageAnnotationTests(unittest.TestCase):
             ).fetchall()
             connection.close()
             self.assertEqual(before, after)
+
+    def test_rescore_keeps_30_second_stage_cadence_separate_from_sensor_cadence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            data_dir = Path(temporary)
+            connection = sqlite3.connect(data_dir / "sessions.db")
+            connection.executescript("""
+                CREATE TABLE sessions (
+                    session_id TEXT PRIMARY KEY, user TEXT, username_key TEXT,
+                    start_time TEXT, end_time TEXT, duration REAL, gender TEXT
+                );
+                CREATE TABLE events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT,
+                    timestamp TEXT, type TEXT, value TEXT
+                );
+                CREATE TABLE timeline (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT,
+                    timestamp TEXT, temperature REAL, humidity REAL, co2 REAL,
+                    lux REAL, sound REAL, heart_rate REAL,
+                    respiration_rate REAL, bed_status TEXT,
+                    pm2_5 REAL, voc_index REAL
+                );
+            """)
+            connection.execute(
+                "INSERT INTO sessions VALUES (?,?,?,?,?,?,?)",
+                ("s30", "user", "user@example.com",
+                 "2026-09-01T00:00:00+00:00", "2026-09-01T00:02:00+00:00",
+                 120, None),
+            )
+            for second in (30, 60, 90, 120):
+                connection.execute(
+                    "INSERT INTO events(session_id,timestamp,type,value) VALUES (?,?,?,?)",
+                    ("s30", f"2026-09-01T00:{second // 60:02d}:{second % 60:02d}+00:00",
+                     "sleep_stage", json.dumps({
+                         "state": "n2", "sample_interval_s": 30,
+                         "estimator_version": "stable-30s-test", "metrics": {},
+                     })),
+                )
+            connection.execute(
+                "INSERT INTO events(session_id,timestamp,type,value) VALUES (?,?,?,?)",
+                ("s30", "2026-09-01T00:02:00+00:00", "final_summary",
+                 json.dumps({
+                     "rest_mode": "auto", "sample_interval_s": 10,
+                     "sensor_sample_interval_s": 10, "night_summary": {},
+                 })),
+            )
+            for second in range(10, 121, 10):
+                connection.execute(
+                    "INSERT INTO timeline(session_id,timestamp,temperature,humidity,co2,"
+                    "lux,sound,heart_rate,respiration_rate,bed_status,pm2_5,voc_index) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    ("s30", f"2026-09-01T00:{second // 60:02d}:{second % 60:02d}+00:00",
+                     24, 50, 700, 1, 35, 60, 13, "On bed", 5, 100),
+                )
+            connection.commit()
+            connection.close()
+
+            result = rescore(data_dir, ["s30"], requested_mode=None, apply=True)
+            self.assertEqual(result["sessions"][0]["rounds"], 4)
+            self.assertEqual(result["sessions"][0]["rest_mode"]["group"], "nap_recovery")
+            self.assertEqual(result["sessions"][0]["rest_mode"]["score_title"], "Recovery Score")
+            connection = sqlite3.connect(data_dir / "sessions.db")
+            final = json.loads(connection.execute(
+                "SELECT value FROM events WHERE type='final_summary'"
+            ).fetchone()[0])
+            connection.close()
+            self.assertEqual(final["sample_interval_s"], 30)
+            self.assertEqual(final["sensor_sample_interval_s"], 10)
+            self.assertEqual(final["night_summary"]["estimated_sleep_s"], 120)
+            self.assertEqual(
+                final["session_report"]["sleep"]["actual_scored_s"], 120,
+            )
 
 
 if __name__ == "__main__":

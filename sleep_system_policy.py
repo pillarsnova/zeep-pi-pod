@@ -13,21 +13,103 @@ from typing import Any
 
 
 # Every persisted decision/report carries these versions for provenance.
-SLEEP_PIPELINE_CONTRACT_VERSION = "zeep-sleep-health-pipeline-v1.4-onset-guard"
-SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.20-sleep-onset-guard"
-SLEEP_EVIDENCE_VERSION = "zeep-sleep-state-evidence-v2.1-onset-guard"
-ZEEP_SLEEP_BASELINE_VERSION = "zeep-sleep-state-baseline-v1.5"
-ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.12-sleep-onset-guard"
+SLEEP_PIPELINE_CONTRACT_VERSION = "zeep-sleep-health-pipeline-v1.7-wellness-longitudinal"
+SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.23-wellness-longitudinal"
+SLEEP_EVIDENCE_VERSION = "zeep-sleep-state-evidence-v3.2-respiratory-onset"
+ZEEP_SLEEP_BASELINE_VERSION = "zeep-sleep-state-baseline-v1.8-sep1-cutover"
+ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.13-no-bridge-labels"
 SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
-SLEEP_HISTORY_BACKFILL_VERSION = "zeep-sleep-history-reclass-v15-sleep-onset-guard"
-SESSION_REPORT_VERSION = "zeep-session-report-v9.3-two-pilot-modes"
-SLEEP_QUALITY_VERSION = "zeep-rest-quality-v7.0-two-pilot-modes"
+SLEEP_HISTORY_BACKFILL_VERSION = "zeep-sleep-history-reclass-v18-sep1-derived"
+SESSION_REPORT_VERSION = "zeep-session-report-v10.0-wellness-longevity"
+SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.0-wellness-longevity"
 ENVIRONMENT_CONTEXT_POLICY_VERSION = "zeep-environment-context-v2.0-mode-aware-fair-floor"
 TERMINAL_WAKE_POLICY_VERSION = "zeep-terminal-wake-boundary-v1.0"
 SLEEP_CLASSIFICATION_GAP_VERSION = "zeep-sleep-classification-gap-v1.0"
 
 
 ZEEP_SLEEP_STATES = ("wake", "n1", "n2", "n3", "rem")
+
+# Broad, overlapping population priors used until sufficient personal history
+# exists. They are engineering references for a contactless Wellness estimate,
+# not clinical Sleep Stage boundaries. Live and replay import this same table.
+AGE_SLEEP_BASELINES = {
+    "unspecified": {
+        "wake": {"hr": (65, 94), "rr": (13, 21)}, "n1": {"hr": (61, 85), "rr": (12, 19)},
+        "n2": {"hr": (56, 79), "rr": (11, 18)}, "n3": {"hr": (50, 72), "rr": (10, 17)},
+        "rem": {"hr": (59, 90), "rr": (12, 21)},
+    },
+    "18-29": {
+        "wake": {"hr": (65, 88), "rr": (13, 20)}, "n1": {"hr": (61, 80), "rr": (12, 18)},
+        "n2": {"hr": (56, 74), "rr": (11, 17)}, "n3": {"hr": (50, 67), "rr": (10, 16)},
+        "rem": {"hr": (59, 84), "rr": (12, 20)},
+    },
+    "30-44": {
+        "wake": {"hr": (66, 90), "rr": (13, 20)}, "n1": {"hr": (62, 81), "rr": (12, 18)},
+        "n2": {"hr": (57, 75), "rr": (11, 17)}, "n3": {"hr": (51, 68), "rr": (10, 16)},
+        "rem": {"hr": (60, 86), "rr": (12, 20)},
+    },
+    "45-59": {
+        "wake": {"hr": (67, 92), "rr": (13, 21)}, "n1": {"hr": (63, 83), "rr": (12, 19)},
+        "n2": {"hr": (58, 77), "rr": (11, 18)}, "n3": {"hr": (52, 70), "rr": (10, 17)},
+        "rem": {"hr": (61, 88), "rr": (12, 21)},
+    },
+    "60+": {
+        "wake": {"hr": (68, 94), "rr": (13, 21)}, "n1": {"hr": (64, 85), "rr": (12, 19)},
+        "n2": {"hr": (59, 79), "rr": (11, 18)}, "n3": {"hr": (53, 72), "rr": (10, 17)},
+        "rem": {"hr": (62, 90), "rr": (12, 21)},
+    },
+}
+AGE_GROUP_DEFAULT_AGE = {"18-29": 24, "30-44": 37, "45-59": 52, "60+": 65}
+GENDER_BASELINE_ADJUSTMENTS = {
+    "male": {"label": "ชาย", "hr_offset": 0, "rr_offset": 0,
+             "rem_variability_weight": 1.10,
+             "note": "REM sympathetic/HR variability weighting สูงขึ้นเล็กน้อย"},
+    "female": {"label": "หญิง", "hr_offset": 2, "rr_offset": 0,
+               "rem_variability_weight": 1.00,
+               "note": "HR starting range +2 BPM; RR คงเดิม"},
+    "other": {"label": "อื่น ๆ", "hr_offset": 0, "rr_offset": 0,
+              "rem_variability_weight": 1.00,
+              "note": "ใช้ neutral baseline จนมี Personal Baseline"},
+    "unspecified": {"label": "ไม่ระบุ", "hr_offset": 0, "rr_offset": 0,
+                    "rem_variability_weight": 1.00,
+                    "note": "ใช้ neutral baseline จนมี Personal Baseline"},
+}
+
+
+def age_group(age: Any) -> str:
+    """Map exact age to the shared ZEEP population-prior group."""
+    try:
+        value = int(age)
+    except (TypeError, ValueError):
+        return "unspecified"
+    if value < 30:
+        return "18-29"
+    if value < 45:
+        return "30-44"
+    if value < 60:
+        return "45-59"
+    return "60+"
+
+
+def gender_adjusted_baseline(
+    selected_age_group: str, gender: Any,
+) -> tuple[dict[str, dict[str, tuple[float, float]]], dict[str, Any]]:
+    """Return the shared broad HR/RR prior plus demographic provenance."""
+    group = selected_age_group if selected_age_group in AGE_SLEEP_BASELINES else "unspecified"
+    gender_key = str(gender or "unspecified").strip().lower()
+    adjustment = dict(GENDER_BASELINE_ADJUSTMENTS.get(
+        gender_key, GENDER_BASELINE_ADJUSTMENTS["unspecified"]
+    ))
+    adjusted = {}
+    for stage, ranges in AGE_SLEEP_BASELINES[group].items():
+        adjusted[stage] = {
+            "hr": tuple(float(value) + float(adjustment["hr_offset"])
+                        for value in ranges["hr"]),
+            "rr": tuple(float(value) + float(adjustment["rr_offset"])
+                        for value in ranges["rr"]),
+        }
+    adjustment.update({"gender_key": gender_key, "age_group": group})
+    return adjusted, adjustment
 
 # Canonical Thai presentation copy for every surface that explains a confirmed
 # Sleep State.  These labels describe ZEEP's five-state wellness estimate; they
@@ -50,13 +132,13 @@ SLEEP_STAGE_PRESENTATION = {
     },
     "n3": {
         "code": "N3",
-        "title": "หลับลึก / ร่างกายซ่อมแซมส่วนที่สึกหรอ",
-        "meaning": "ระยะที่หลับลึกที่สุดและสัมพันธ์กับกระบวนการฟื้นฟูร่างกาย",
+        "title": "หลับลึก",
+        "meaning": "รูปแบบ BCG/HR/RR ที่สอดคล้องกับ N3; ตามสรีรวิทยาการนอน N3 เชื่อมโยงกับการฟื้นฟู แต่ ZEEP ไม่ได้วัดการซ่อมแซมโดยตรง",
     },
     "rem": {
         "code": "REM",
-        "title": "หลับฝัน / สมองจัดระเบียบความจำ",
-        "meaning": "สมองทำงานมากขึ้น มักเกิดความฝัน และเกี่ยวข้องกับความจำและอารมณ์",
+        "title": "ระยะ REM",
+        "meaning": "รูปแบบ BCG/HR/RR ที่สอดคล้องกับ REM; ตามสรีรวิทยา REM สัมพันธ์กับความฝันและความจำ แต่ ZEEP ไม่ได้วัดความฝันหรือความจำโดยตรง",
     },
 }
 
@@ -98,14 +180,21 @@ SLEEP_PROHIBITED_TRANSITIONS = frozenset({
 SLEEP_SENSOR_SAMPLE_SECONDS = 10.0
 SLEEP_EVIDENCE_EPOCH_SECONDS = 30.0
 SLEEP_CONFIRMATION_SECONDS = 60.0
+SLEEP_LONG_CONTEXT_SECONDS = 270.0
 SLEEP_SENSOR_FRAMES_PER_EPOCH = 3
 SLEEP_CONFIRM_EPOCHS = 2
 SLEEP_STAGE_CONFIRM_TICKS = {
     "wake": SLEEP_CONFIRM_EPOCHS,
     "n1": SLEEP_CONFIRM_EPOCHS,
-    "n2": SLEEP_CONFIRM_EPOCHS,
+    # First/returning N2 evidence is deliberately required for two minutes.
+    # Stable physiology alone is not enough to separate N2 from quiet Wake.
+    "n2": 4,
     "n3": SLEEP_CONFIRM_EPOCHS,
     "rem": SLEEP_CONFIRM_EPOCHS,
+}
+SLEEP_STAGE_CONFIRMATION_SECONDS = {
+    stage: float(ticks) * SLEEP_EVIDENCE_EPOCH_SECONDS
+    for stage, ticks in SLEEP_STAGE_CONFIRM_TICKS.items()
 }
 SLEEP_STAGE_MIN_DWELL_SECONDS = {
     "wake": 10.0, "n1": 30.0, "n2": 60.0, "n3": 60.0, "rem": 60.0,
@@ -119,6 +208,11 @@ SLEEP_STAGE_MIN_DWELL_SECONDS = {
 SLEEP_ONSET_MIN_OBSERVATION_SECONDS = 5 * 60.0
 SLEEP_ONSET_MAX_MOVEMENT_RATIO = 0.15
 SLEEP_ONSET_MIN_DOWNWARD_TRANSITION = 0.20
+# A falling slope is observable only while the user is settling.  Once HR/RR
+# have reached a lower plateau the slope becomes flat even though the level
+# shift remains.  This gate accepts that sustained, session-relative change;
+# elapsed time by itself still cannot create N1.
+SLEEP_ONSET_MIN_RELATIVE_SLEEP_SUPPORT = 0.20
 SLEEP_ONSET_MAX_HR_RISE_BPM_PER_MIN = 0.50
 SLEEP_ONSET_MAX_RR_RISE_PER_MIN = 0.50
 SLEEP_ONSET_INITIAL_WAKE_SUPPORT = 0.75
@@ -133,16 +227,67 @@ SLEEP_ONSET_INITIAL_WAKE_SUPPORT = 0.75
 # AASM/PSG scoring criteria.
 SLEEP_PROBABILITY_EMA_ALPHA = 0.20
 SLEEP_PROBABILITY_SWITCH_MARGIN = 0.05
+# These are engineering abstention gates, not calibrated medical probabilities.
+# Evidence below either gate is retained for Admin inspection but cannot create
+# a new confirmed W/N1/N2/N3/REM label.
+# Evidence still abstains when stages are close, while two 30-second epochs
+# provide the second layer of confirmation.  The former 0.50/0.10 boundary
+# discarded too much valid multi-state evidence after sleep onset.
+SLEEP_EVIDENCE_MIN_WINNER = 0.45
+SLEEP_EVIDENCE_MIN_MARGIN = 0.08
+# N3 already passes the strict waveform, movement, variability, regularity and
+# session-relative drop gates before this specialised evidence boundary is
+# considered.  Requiring the generic five-state 50% winner after all of those
+# independent gates made valid N3 windows unreachable in historical replay.
+# Until paired reference validation is available, N3 uses the same conservative
+# ambiguity boundary as every other stage.  The previous 0.40/0.05 sensitivity
+# setting remains an offline experiment only; it must not be a live shortcut.
+SLEEP_N3_GATED_MIN_WINNER = SLEEP_EVIDENCE_MIN_WINNER
+SLEEP_N3_GATED_MIN_MARGIN = SLEEP_EVIDENCE_MIN_MARGIN
+# Temperature sharpens *relative engineering evidence* after every state's
+# features have been normalised to the same 0..1 budget.  The output remains an
+# evidence distribution and must not be described as a calibrated probability.
+SLEEP_SCORE_SOFTMAX_TEMPERATURE = 4.0
+SLEEP_CONTEXT_RESET_GAP_SECONDS = 60.0
+SLEEP_MIN_PAIRED_VITAL_COVERAGE = 0.80
+SLEEP_BUCKET_MIN_BCG_PACKETS = 8
+SLEEP_MIN_WAVEFORM_COVERAGE = 0.80
 SLEEP_DISPLAY_WINNER_MARGIN = 0.01
+
+# Canonical estimator defaults. A Pod may override these through environment
+# variables for a versioned field experiment, but replay records the effective
+# values explicitly and uses these defaults when no override is supplied.
+SLEEP_DEFAULT_BASELINE_HR_WEIGHT = 0.50
+SLEEP_DEFAULT_BASELINE_RR_WEIGHT = 0.40
+SLEEP_DEFAULT_N3_RR_CONFLICT_PENALTY = 1.20
+SLEEP_DEFAULT_N2_RR_CONFLICT_SUPPORT = 0.30
+SLEEP_DEFAULT_MOVE_WAKE_RATIO = 0.15
+SLEEP_DEFAULT_MOVE_DEEP_RATIO = 0.05
+SLEEP_DEFAULT_HR_CV_DEEP = 0.025
+SLEEP_DEFAULT_HR_CV_REM = 0.060
+SLEEP_DEFAULT_ACOUSTIC_DISTURBANCE_DBA = 55.0
+SLEEP_DEFAULT_ACOUSTIC_MIN_COVERAGE = 0.50
+SLEEP_DEFAULT_ACOUSTIC_WAKE_SUPPORT_MAX = 0.35
 
 # Personal physiology is learned only from completed Sessions that the current
 # versioned report classified as genuine sleep.  Stable HR/RR during meditation
 # or quiet awake rest must never be folded into the user's Sleep Baseline.
 PERSONAL_BASELINE_MIN_NIGHTS = 3
 PERSONAL_BASELINE_MAX_NIGHTS = 7
-PERSONAL_BASELINE_MIN_SESSION_SECONDS = 20 * 60
+PERSONAL_BASELINE_MIN_SESSION_SECONDS = 25 * 60
 PERSONAL_BASELINE_MIN_DETECTED_SLEEP_SECONDS = 20 * 60
 PERSONAL_BASELINE_MIN_HR_SAMPLES = 20
+# During the pilot, prior Sessions describe expected behaviour and confidence
+# only.  Direct personal influence is held until a frozen estimator is checked
+# against independent labels; this prevents model outputs training themselves.
+PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED = False
+# Product-data cutover requested for the new pilot.  2026-09-01 00:00 in
+# Asia/Bangkok equals 2026-08-31 17:00 UTC.  Older Sessions remain auditable,
+# but are excluded from every new personal/behaviour baseline. Raw BCG and
+# Sensor records are never deleted by this policy.
+PERSONAL_BASELINE_LEARNING_START_LOCAL_DATE = "2026-09-01"
+PERSONAL_BASELINE_LEARNING_START_TIMEZONE = "Asia/Bangkok"
+PERSONAL_BASELINE_LEARNING_START_UTC = "2026-08-31T17:00:00+00:00"
 
 
 # Mode-aware duration targets apply only to the 15-point duration term. The
@@ -161,13 +306,15 @@ REST_MODE_DURATION_TARGETS_S = {
 REST_SESSION_GROUPS = {
     "sleep": {
         "label": "Overnight Recovery",
-        "score_title": "คะแนน Overnight Recovery",
+        "score_title": "Sleep Score",
+        "score_scope": "ค่าประเมินการนอนจาก Sensor",
         "description": "พักค้างคืนอย่างน้อย 5 ชั่วโมง; คะแนนเวลาสำหรับผู้ใหญ่เต็มที่ 7 ชั่วโมง",
         "sleep_required": True,
     },
     "nap_recovery": {
         "label": "Nap & Refresh",
-        "score_title": "คะแนน Nap & Refresh",
+        "score_title": "Recovery Score",
+        "score_scope": "คะแนนสนับสนุนการฟื้นตัวจาก Sensor",
         "description": "พักระหว่างวันประมาณ 30 นาที จะหลับ พักสายตา หรือทำสมาธิก็ได้",
         "sleep_required": False,
     },
@@ -592,12 +739,19 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             list(edge) for edge in sorted(SLEEP_PROHIBITED_TRANSITIONS)
         ],
         "confirm_ticks": dict(SLEEP_STAGE_CONFIRM_TICKS),
+        "confirmation_seconds_by_target": dict(SLEEP_STAGE_CONFIRMATION_SECONDS),
         "cadence": {
             "sensor_sample_seconds": SLEEP_SENSOR_SAMPLE_SECONDS,
             "sensor_frames_per_evidence_epoch": SLEEP_SENSOR_FRAMES_PER_EPOCH,
             "evidence_epoch_seconds": SLEEP_EVIDENCE_EPOCH_SECONDS,
             "confirmation_epochs": SLEEP_CONFIRM_EPOCHS,
             "confirmation_seconds": SLEEP_CONFIRMATION_SECONDS,
+            "confirmation_seconds_range": [
+                min(SLEEP_STAGE_CONFIRMATION_SECONDS.values()),
+                max(SLEEP_STAGE_CONFIRMATION_SECONDS.values()),
+            ],
+            "long_transition_context_seconds": SLEEP_LONG_CONTEXT_SECONDS,
+            "reset_after_signal_gap_seconds": SLEEP_CONTEXT_RESET_GAP_SECONDS,
             "evidence_and_confirmed_state_separate": True,
             "safety_supervisor_seconds": 1.0,
         },
@@ -606,11 +760,15 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "minimum_observation_seconds": SLEEP_ONSET_MIN_OBSERVATION_SECONDS,
             "maximum_movement_ratio": SLEEP_ONSET_MAX_MOVEMENT_RATIO,
             "minimum_downward_transition": SLEEP_ONSET_MIN_DOWNWARD_TRANSITION,
+            "minimum_relative_sleep_support": SLEEP_ONSET_MIN_RELATIVE_SLEEP_SUPPORT,
             "maximum_hr_rise_bpm_per_min": SLEEP_ONSET_MAX_HR_RISE_BPM_PER_MIN,
             "maximum_rr_rise_per_min": SLEEP_ONSET_MAX_RR_RISE_PER_MIN,
             "initial_wake_score_support": SLEEP_ONSET_INITIAL_WAKE_SUPPORT,
             "confirmation_epochs_after_gate": SLEEP_CONFIRM_EPOCHS,
             "quiet_wake_defaults_to_wake": True,
+            "hr_drop_or_downward_trend_required": True,
+            "respiratory_regularity_is_supporting_evidence": True,
+            "rr_rate_drop_is_mandatory": False,
             "time_alone_can_create_n1": False,
             "engineering_guard_not_aasm_rule": True,
         },
@@ -618,12 +776,19 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "method": "ema_after_60s_rolling_features",
             "alpha": SLEEP_PROBABILITY_EMA_ALPHA,
             "candidate_switch_margin": SLEEP_PROBABILITY_SWITCH_MARGIN,
-            "candidate_source": "ema_with_gated_n3_current_evidence_override",
+            "candidate_source": "ema_with_gated_n1_onset_and_n3_current_evidence_override",
             "ema_role": "default_candidate_stability_and_display",
             "n3_current_evidence_override_requires_gate": True,
             "display_winner_margin": SLEEP_DISPLAY_WINNER_MARGIN,
             "instant_strong_wake_bypass": False,
             "strong_wake_still_requires_confirmation": True,
+            "score_budget_per_state": "0..1",
+            "softmax_temperature": SLEEP_SCORE_SOFTMAX_TEMPERATURE,
+            "minimum_winner": SLEEP_EVIDENCE_MIN_WINNER,
+            "minimum_margin": SLEEP_EVIDENCE_MIN_MARGIN,
+            "n3_gated_minimum_winner": SLEEP_N3_GATED_MIN_WINNER,
+            "n3_gated_minimum_margin": SLEEP_N3_GATED_MIN_MARGIN,
+            "ambiguous_evidence_action": "abstain_without_stage_persistence",
         },
         "personal_baseline_learning": {
             "completed_final_summary_required": True,
@@ -634,7 +799,14 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "minimum_valid_hr_samples": PERSONAL_BASELINE_MIN_HR_SAMPLES,
             "minimum_nights": PERSONAL_BASELINE_MIN_NIGHTS,
             "rolling_max_nights": PERSONAL_BASELINE_MAX_NIGHTS,
+            "learning_start_local_date": PERSONAL_BASELINE_LEARNING_START_LOCAL_DATE,
+            "learning_start_timezone": PERSONAL_BASELINE_LEARNING_START_TIMEZONE,
+            "learning_start_utc": PERSONAL_BASELINE_LEARNING_START_UTC,
             "awake_rest_sessions_excluded": True,
+            "direct_stage_influence_enabled": (
+                PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED
+            ),
+            "current_role": "report_and_confidence_context_only",
         },
         "strong_wake_override": True,
         "classification_gate": {
@@ -647,6 +819,11 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "confirmed_occupied_bed_required": True,
             "fresh_current_hr_required": True,
             "fresh_current_rr_required": True,
+            "hr_rr_same_packet_required": True,
+            "minimum_paired_window_coverage": SLEEP_MIN_PAIRED_VITAL_COVERAGE,
+            "minimum_packets_per_10s_bucket": SLEEP_BUCKET_MIN_BCG_PACKETS,
+            "minimum_waveform_sample_coverage": SLEEP_MIN_WAVEFORM_COVERAGE,
+            "waveform_required_for_n2_n3_rem": True,
             "inactive_probabilities_zero": True,
             "inactive_stage_persistence": False,
             "hold_last_stage_when_inactive": False,

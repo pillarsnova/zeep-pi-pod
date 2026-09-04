@@ -2,40 +2,42 @@
 
 > **Purpose:** เอกสารหลักฉบับเดียวของ Sleep State, Historical Replay, Sleep Score และ Session Report ที่ใช้งานจริงใน ZEEP Pod  
 > **Positioning:** Sleep Wellness · EEG-free exploratory telemetry · ไม่ใช่ PSG/การวินิจฉัย/คำสั่งรักษา  
-> **Status:** Implemented and regression-gated in repository · production activation must be verified after deployment · G2 paired-PSG validation open  
-> **Updated:** 2026-09-04
+> **Status:** Wellness release candidate · guarded derived-result replay/promotion · G2 paired-PSG validation open
+> **Updated:** 2026-09-05
 > **Code manifest:** [`pi5/sleep_system_policy.py`](../pi5/sleep_system_policy.py)  
-> **Related:** [Sleep-State Baseline v1.5](zeep-sleep-state-baseline-v1.0.md) · [AI Sleep-State](ai-sleep-state-and-assistant.md)
+> **Related:** [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.0.md) · [v1.23 Wellness Replay Review](sleep-estimator-v123-wellness-longitudinal-report-2026-09-05.md) · [AI Sleep-State](ai-sleep-state-and-assistant.md)
 
 ## TL;DR
 
-- ระบบเก็บ Sensor ทุก 10 วินาที สรุป `sleep_stage_evidence` ทุก 30 วินาที และเปลี่ยน `sleep_stage` ที่ยืนยันแล้วเมื่อหลักฐานต่อเนื่อง 2 epoch/60 วินาที **เฉพาะ** เมื่อมี Active Recording Session, ยืนยันผู้ใช้อยู่บนเตียง และรอบปัจจุบันมี HR+RR สดที่ผ่าน sanity; หากขาดข้อใดข้อหนึ่งจะแสดง `WAIT/OFF` โดย probability ทั้ง 5 เป็นศูนย์และไม่เขียน Sleep Stage ลง Timeline
-- Sleep-onset Guard คงสถานะ W อย่างน้อย 5 นาทีแรกเพื่อกัน Sensor acquisition/quiet wake ออกจาก N1; หลังจากนั้นต้องพบเตียงนิ่งและ HR/RR ลดลงต่อเนื่อง 2 evidence epochs จึงเริ่มลำดับ N1 ได้ เวลาเริ่ม Session หรือความนิ่งอย่างเดียวไม่ใช่หลักฐานการหลับ
+- ระบบเก็บ Sensor ทุก 10 วินาที สรุป `sleep_stage_evidence` ทุก 30 วินาที และเปลี่ยน `sleep_stage` ที่ยืนยันแล้วเมื่อหลักฐานต่อเนื่อง 2 epoch/60 วินาที (N2 ใช้ 4 epoch/120 วินาที) **เฉพาะ** เมื่อมี Active Recording Session, ยืนยันผู้ใช้อยู่บนเตียง และรอบปัจจุบันมี HR+RR สดที่ผ่าน sanity; หากขาดข้อใดข้อหนึ่งจะแสดง `WAIT/OFF` โดย probability ทั้ง 5 เป็นศูนย์และไม่เขียน Sleep Stage ลง Timeline
+- Sleep-onset Guard คง W อย่างน้อย 5 นาทีแรก; หลังจากนั้น N1 ต้องมีเตียงนิ่ง ไม่มี vital rise และ HR/RR แสดงการลดลงหรือ plateau ที่ต่ำกว่าช่วงตั้งต้นอย่างสอดคล้องกัน เวลาเพียงอย่างเดียวสร้าง N1 ไม่ได้
+- หลักฐานทั้ง 5 State ถูกปรับให้อยู่บนงบ 0..1 เท่ากัน; หากผู้ชนะ <45% หรือห่างอันดับสอง <8% ระบบจะ abstain และไม่สร้าง transition ใหม่; N3 ใช้เกณฑ์เดียวกันหลังผ่าน waveform/movement/CV/regularity/relative-drop gate
+- พฤติกรรมย้อนหลังเรียนรู้แยกตามบัญชีและ Rest Mode จากอย่างน้อย 3 Session ก่อนหน้า เช่น latency, ช่วงเวลา, ระยะเวลา และสิ่งแวดล้อมที่มักพบ; ใช้เป็น expectation/report/recommendation context เท่านั้น (`direct_stage_influence=false`) และใช้ข้อมูลอดีตแบบ forward-only ตั้งแต่ 1 ก.ย. 2569
 - BCG + Bed Status เป็นหลัก; SPH0645 ช่วยยืนยัน disturbance เมื่อตรงเวลากับ BCG/movement; Sensor อากาศอธิบายสิ่งรบกวนและ confidence เท่านั้น
 - Login ได้ก่อน แต่จะยังไม่สร้าง Session/Timeline จนกว่าอยู่บนเตียงครบ 20 วินาที และมี HR+RR สดในช่วง sanity ต่อเนื่อง 3 BCG packets ใหม่
 - การพลิกตัว ขยับแขนขา หรือขยับผ้าห่มขณะยังอยู่บนเตียงเป็น `sleep-compatible movement` และไม่เปลี่ยนเป็น Wake โดยลำพัง
 - เส้นทางหลักเริ่ม `Wake → N1 → N2`; ระบบเปิด `N1 → REM` แบบ SOREMP-like ที่ต้องผ่าน REM physiology gate, เปิด `N3 → REM` และเปิด `REM → Wake` เมื่อหลักฐานของ target ชนะ 2 epoch/60 วินาที
-- Session ที่พบการหลับใช้ Sleep Quality `20 + 30 + 30 + 15 + 5 = 100`; Session ที่พักขณะตื่นใช้ Rest Goal Score แยกต่างหาก
+- `Overnight Recovery` ใช้ `Sleep Score`; `Nap & Refresh` ใช้ `Recovery Score` ไม่ว่าจะหลับ พักสายตา หรือทำสมาธิ โดยคะแนนจะเผยแพร่ต่อเมื่อ coverage และ HR/RR ผ่านเกณฑ์
 - N3 ต่ำกว่า 3% ไม่ได้คะแนน N3, 3–10% ได้ตามสัดส่วน, ตั้งแต่ 10% ได้เต็มและ **ไม่หักเมื่อเกิน 20%**
 - Raw/Timeline เดิมไม่ถูกแก้โดยการคำนวณรายงานใหม่; Historical Replay และ Rescore มี version/audit แยก
 - ช่วงจบ Session แยก `Wake` ของมนุษย์ออกจาก `ไม่มีผู้ใช้งานบนเตียง → ออกจาก ZEEP → จบ Session`; สองสถานะหลังเป็น Occupancy และไม่ปนเปอร์เซ็นต์ Sleep Stage
 - รายงานไม่ซ่อนเวลาที่ไม่มี confirmed State: แสดง `WAIT` เมื่อ HR/RR/Sensor/confirmation ไม่ครบ และ `OFF` เมื่อ Bed Status สนับสนุนว่าไม่มีผู้ใช้งานบนเตียง โดยทุกช่วงถูกกันออกจาก Stage%, Score และ Baseline
 - สิ่งแวดล้อมใช้ 5 ระดับ `วิกฤต / แย่ / พอใช้ / ดี / ยอดเยี่ยม`; **พอใช้ขึ้นไปผ่านขั้นต่ำ**, วิกฤต/แย่ต้องแก้ไข, ดี/ยอดเยี่ยมให้รักษาค่า และแสง/เสียงเปลี่ยนกรอบตาม Rest Mode
-- Live, Replay, Report, Admin API, UI และเอกสารใช้ policy manifest เดียว และถูกตรวจร่วมกันด้วย `test_sleep_system_consistency.py`
+- ข้อมูลก่อน `2026-09-01 00:00 Asia/Bangkok` ถูกตัดออกจาก Product history, Baseline, Replay และ Score รุ่นใหม่ แต่ Raw/Audit ยังเก็บไว้โดยไม่แก้ไข; Derived result หลัง cutover เขียนได้เฉพาะ Tier A ที่ผ่าน replay manifest และ immutable-Raw hash guard
 
 ## 1. เวอร์ชันที่ใช้งานปัจจุบัน
 
 | ชั้นระบบ | Version |
 |---|---|
-| Health pipeline contract | `zeep-sleep-health-pipeline-v1.4-onset-guard` |
-| Live estimator | `bcg-audio-bed-5state-v1.20-sleep-onset-guard` |
-| Evidence definition | `zeep-sleep-state-evidence-v2.1-onset-guard` |
-| Baseline | `zeep-sleep-state-baseline-v1.5` |
-| Semi-Markov transition | `zeep-semimarkov-30s-v1.12-sleep-onset-guard` |
+| Health pipeline contract | `zeep-sleep-health-pipeline-v1.7-wellness-longitudinal` |
+| Live estimator candidate | `bcg-audio-bed-5state-v1.23-wellness-longitudinal` |
+| Evidence definition | `zeep-sleep-state-evidence-v3.2-respiratory-onset` |
+| Baseline | `zeep-sleep-state-baseline-v1.8-sep1-cutover` |
+| Semi-Markov transition | `zeep-semimarkov-30s-v1.13-no-bridge-labels` |
 | G2 ontology | `g2-aasm-5class-v1.0` |
-| Historical replay | `zeep-sleep-history-reclass-v15-sleep-onset-guard` |
-| Sleep / Rest quality | `zeep-rest-quality-v7.0-two-pilot-modes` |
-| Session report | `zeep-session-report-v9.3-two-pilot-modes` |
+| Historical replay | `zeep-sleep-history-reclass-v18-sep1-derived` |
+| Sleep / Recovery quality | `zeep-rest-quality-v8.0-wellness-longevity` |
+| Session report | `zeep-session-report-v10.0-wellness-longevity` |
 | Environment context | `zeep-environment-context-v2.0-mode-aware-fair-floor` |
 | Terminal Wake boundary | `zeep-terminal-wake-boundary-v1.0` |
 | Classification gap display | `zeep-sleep-classification-gap-v1.0` |
@@ -75,7 +77,7 @@ flowchart LR
     SO -->|"Yes"| G["Semi-Markov guard"]
     KW --> E30
     G --> E30["Persist evidence every 30 s"]
-    E30 --> C60["Confirm state after 2 epochs / 60 s"]
+    E30 --> C60["Confirm W/N1/N3/REM after 60 s; N2 after 120 s"]
     C60 --> D["Persist confirmed state every 30 s"]
     D --> R["Finalize Session"]
     R --> TW["Terminal W boundary (0 s, excluded from score)"]
@@ -93,8 +95,8 @@ flowchart LR
 | W | ตื่น | ระบบประเมินว่ายังตื่นหรือกลับเข้าสู่สถานะตื่น |
 | N1 | หลับตื้น / เคลิ้มหลับ | เริ่มเข้าสู่การนอน ร่างกายผ่อนคลาย และปลุกให้ตื่นได้ง่าย |
 | N2 | หลับสนิทขึ้น / หลับตื้นต่อเนื่อง | การนอนต่อเนื่องขึ้น โดยหัวใจและการหายใจมักช้าลง |
-| N3 | หลับลึก / ร่างกายซ่อมแซมส่วนที่สึกหรอ | ระยะหลับลึกที่สัมพันธ์กับกระบวนการฟื้นฟูร่างกาย |
-| REM | หลับฝัน / สมองจัดระเบียบความจำ | ระยะที่มักเกิดความฝันและเกี่ยวข้องกับความจำและอารมณ์ |
+| N3 | หลับลึก | รูปแบบ BCG/HR/RR ที่สอดคล้องกับ N3; N3 เชื่อมโยงกับการฟื้นฟู แต่ ZEEP ไม่ได้วัดการซ่อมแซมโดยตรง |
+| REM | ระยะ REM | รูปแบบ BCG/HR/RR ที่สอดคล้องกับ REM; ไม่ใช่การตรวจพบความฝันหรือการจัดระเบียบความจำโดยตรง |
 
 คำอธิบายนี้เป็นภาษาสื่อสารของ ZEEP; Stage ยังคงเป็นค่าประเมินจาก BCG/Sensor
 ไม่ใช่ผล PSG หรือการวินิจฉัยทางการแพทย์
@@ -117,10 +119,17 @@ BCG ที่อยู่ใต้เตียงไม่เห็น EEG จ�
 1. 5 นาทีแรกหลังเริ่ม Recording เป็นช่วง Awake/settling observation และคงผลเป็น W
 2. ตัดโบนัส N1 ที่เกิดจากเวลาช่วงต้น Session ออกทั้งหมด
 3. หลัง 5 นาที ต้องมี movement ต่ำกว่า 15%, ไม่มี sustained on-bed movement,
-   HR/RR ไม่กำลังเพิ่ม และ downward-transition ≥0.20
-4. Gate ต้องผ่านต่อเนื่องตาม Confirmation 2 epochs/60 วินาที จึงออกจาก W ไป N1
+   HR/RR ไม่กำลังเพิ่ม และผ่านอย่างน้อยหนึ่งเงื่อนไข:
+   downward-transition ≥0.20 หรือ session-relative support ≥0.20 โดย HR และ RR
+   ต้องสนับสนุนทิศทางเดียวกันใน candidate นี้
+4. Gate เปิดให้เสนอ N1; การเปลี่ยน W→N1 ยังต้องยืนยัน 2 epochs/60 วินาที
 5. Sensor acquisition drop ช่วงแรก, quiet wake, สมาธิ หรือการนอนนิ่งอย่างเดียว
    ไม่เพียงพอให้เป็น N1; ผลยังเป็น ZEEP Wellness estimate ไม่ใช่ AASM/PSG onset
+
+ผล Shadow Review วันที่ 2026-09-04 พบว่า mean RR ไม่จำเป็นต้องลดชัดเจนตอน
+sleep onset ในทุกคน การบังคับ RR-rate drop จึงอาจทำให้ W ยาวเกินจริง รุ่นถัดไปควร
+ใช้ respiration regularity เป็นหลักฐานสนับสนุนและให้ RR-rate drop เป็น soft feature;
+ก่อน validate ให้เรียกผลนี้ว่า `sleep-onset proxy` เท่านั้น
 
 หลักอ้างอิงด้านสุขภาพ: AASM ใช้ W/N1/N2/N3/R และต้องอาศัย EEG/EOG/chin EMG
 สำหรับการให้คะแนนจริง จึงใช้ชื่อชุดเดียวกันเป็น ontology เพื่อเทียบผลได้ แต่ ZEEP
@@ -137,7 +146,7 @@ accuracy ดู [AASM Scoring Manual](https://learn.aasm.org/AssetListing/The-AA
 - WebSocket/Control ตอบสนองได้ถี่กว่า 10 วินาที แต่ห้ามนำ Raw packet ระหว่าง frame มาแทนค่าที่แสดง; Raw ใช้เฉพาะ Admin Packet Inspector และ Safety supervisor ยังคงอ่านสดโดยไม่รอ UI
 - เฉพาะ Sleep State ใช้ 3 Sensor frames สร้าง Evidence epoch ทุก 30 วินาที
 - เป้าหมาย confidence ใช้ rolling 6 feature buckets = 60 วินาที
-- หลักฐาน (`candidate` + probability ทั้ง 5) แยกจากสถานะที่ยืนยันแล้ว (`confirmed_state`) และต้องชนะต่อเนื่อง 2 epoch = 60 วินาทีก่อนเปลี่ยน State
+- หลักฐาน (`candidate` + probability ทั้ง 5) แยกจากสถานะที่ยืนยันแล้ว (`confirmed_state`); W/N1/N3/REM ต้องชนะต่อเนื่อง 2 epoch = 60 วินาที ส่วน N2 ต้อง 4 epoch = 120 วินาที
 - Probability ทั้ง 5 ใช้ EMA `alpha=0.20` ต่อจาก rolling 60 วินาทีเป็น continuity หลักของ
   W/N1/N2/REM; เฉพาะ N3 ที่ชนะจากหลักฐานปัจจุบันอย่างน้อย 5 จุดเปอร์เซ็นต์และผ่าน
   N3 physiology gate เท่านั้นที่เสนอ candidate ก่อน EMA ได้ จากนั้น State Machine ยังต้องยืนยัน
@@ -191,11 +200,12 @@ accuracy ดู [AASM Scoring Manual](https://learn.aasm.org/AssetListing/The-AA
 |---|---|---|---|
 | Physiology / Sleep State | BCG, Bed Status, HR/RR สด, movement, อายุ/เพศ และ personal baseline ที่ผ่าน eligibility | ให้น้ำหนักหลักฐาน W/N1/N2/N3/REM และ confidence | Sensor อากาศห้ามสร้างหรือเปลี่ยน Stage |
 | Environment Context | Temp, RH, Lux, Sound, CO₂, PM2.5, VOC ตาม policy version และ Rest Mode | อธิบายสิ่งที่อาจรบกวน, สิ่งที่ต้องแก้ และสิ่งที่ควรรักษา | ไม่ใช่การวินิจฉัยและไม่แทน life-safety alarm |
-| Mode / Quality | วัตถุประสงค์ Session, เวลาจริง, continuity, architecture/proxy และ coverage | เลือก duration target และสูตร Sleep/Rest Score ให้เหมาะกับรูปแบบการพัก | ไม่ย้อนแก้ Raw BCG หรือ Stage decision เพื่อทำคะแนนให้ดีขึ้น |
+| Mode / Quality | วัตถุประสงค์ Session, เวลาจริง, continuity, architecture/proxy และ coverage | เลือก duration target และสูตร Sleep Score/Recovery Score ให้เหมาะกับรูปแบบการพัก | ไม่ย้อนแก้ Raw BCG หรือ Stage decision เพื่อทำคะแนนให้ดีขึ้น |
 
 Personal Physiology Baseline เริ่มจาก age/gender default แล้วจึงเรียนรู้เฉพาะ completed
-Session ที่เป็น `quality_type=sleep`, ตรวจพบการหลับอย่างน้อย 20 นาที, มี HR ที่ใช้ได้
-เพียงพอ และสะสมอย่างน้อย 3 คืน (rolling สูงสุด 7 คืน) การงีบที่สั้นเกินเกณฑ์,
+Session ต้องเริ่มตั้งแต่ 1 ก.ย. 2569, เป็น `quality_type=sleep`, ยาวมากกว่า 25 นาที,
+ตรวจพบการหลับอย่างน้อย 20 นาที, มี HR ที่ใช้ได้เพียงพอ และสะสมอย่างน้อย 3 Session
+(rolling สูงสุด 7 Session) การงีบ,
 สมาธิ, พักเฉย ๆ และ Session ที่ Sensor ไม่ครบไม่ถูกปนเข้า physiology baseline
 
 ### 2.6 Environment Context — ระดับที่ต้องแก้ไขและระดับที่คาดหวัง
@@ -225,10 +235,8 @@ Session ที่เป็น `quality_type=sleep`, ตรวจพบการ�
 
 | Mode | Lux: ยอดเยี่ยม / ดี / พอใช้ / แย่ | Sound dBA: ยอดเยี่ยม / ดี / พอใช้ / แย่ |
 |---|---|---|
-| นอนหลับ | ≤5 / ≤10 / ≤30 / ≤100 | <40 / ≤45 / ≤50 / ≤60 |
-| งีบพักผ่อน | ≤10 / ≤30 / ≤100 / ≤300 | <40 / ≤45 / ≤50 / ≤60 |
-| ผ่อนคลายและสมาธิ | ≤50 / ≤150 / ≤300 / ≤500 | <45 / ≤50 / ≤55 / ≤65 |
-| ฟื้นฟูและเตรียมพร้อม | ≤300 / ≤500 / ≤750 / ≤1,000 | <50 / ≤55 / ≤60 / ≤70 |
+| Overnight Recovery | ≤5 / ≤10 / ≤30 / ≤100 | <40 / ≤45 / ≤50 / ≤60 |
+| Nap & Refresh | ≤10 / ≤30 / ≤100 / ≤300 | <40 / ≤45 / ≤50 / ≤60 |
 
 Live Dashboard ประเมินจาก Sensor ที่ `live` ทุก 10 วินาที รายงานจบ Session ใช้
 90%-of-time floor เพื่อไม่ให้ transient packet เดียวลดทั้ง Session แต่ถ้ามีค่า Critical
@@ -266,7 +274,7 @@ stateDiagram-v2
 |---|---:|---:|
 | Wake | 2 evidence epochs / 60 s | Wake 10 s |
 | N1 | 2 evidence epochs / 60 s | N1 30 s |
-| N2 | 2 evidence epochs / 60 s | N2 60 s |
+| N2 | 4 evidence epochs / 120 s | N2 60 s |
 | N3 | 2 evidence epochs / 60 s | N3 60 s |
 | REM | 2 evidence epochs / 60 s | REM 60 s |
 
@@ -277,7 +285,7 @@ stateDiagram-v2
 3. N3 ไป REM ได้เมื่อผ่าน normal dwell/hysteresis จึงไม่บังคับ N2 ที่รอยต่อนี้
 4. REM ไป Wake, N1 หรือ N2 ได้ตามหลักฐานที่ยืนยันแล้ว; REM ไป N3 โดยตรงยัง bridge ผ่าน N2
 5. Wake ที่ไม่ชัดจาก N2/N3 ยังย้อนผ่าน N1/N2; strong-Wake เปิด transition path แต่ยังยืนยัน 2 epoch ส่วน bed-exit ที่ผ่าน event guard จะแสดง `OFF` ใน occupancy pipeline ทันทีโดยไม่สร้าง Wake จากเตียงว่าง
-6. Replay gate ปฏิเสธ transition ต้องห้าม, REM boundary ping-pong, invalid HR/RR และ sleep-to-Wake ที่ไม่มี proxy ใน window เดียวกันก่อนเขียนย้อนหลัง
+6. Replay gate ปฏิเสธ transition ต้องห้าม, REM boundary ping-pong, invalid HR/RR, transition เข้าสู่ State ที่ gate ปัจจุบันปิด และ sleep-to-Wake ที่ไม่มี proxy ใน window เดียวกัน; derived result เขียนย้อนหลังได้เฉพาะ Tier A ผ่าน `promote_sleep_history.py` โดยยืนยัน hash ว่า Timeline/Raw BCG ไม่เปลี่ยน
 
 ### 3.1 การพลิกตัวและกายวิภาคที่ระบบตีความได้
 
@@ -303,28 +311,28 @@ stateDiagram-v2
 physiology evidence ก่อนเสมอ การอนุญาต graph นี้ไม่ได้หมายความว่า BCG เทียบเท่า PSG
 ซึ่งยังต้องใช้ EEG/EOG/chin EMG จริง
 
-## 4. Sleep / Rest Quality v7.0
+## 4. Sleep / Recovery Quality v8.0
 
 ### 4.1 สมการภาพรวม
 
 `Sleep Score = Opportunity 20 + Stability 30 + Restorative 30 + Cycle 15 + Coverage 5`
 
-ระบบแยกคะแนนเป็นสองสายโดยไม่แก้ผล Sleep Stage ดิบ: เมื่อพบการหลับจึงใช้
-Sleep Quality ด้านล่าง หากไม่พบการหลับและมีข้อมูล Sensor ครบ ระบบใช้ Rest Goal
-Score ตามเป้าหมายที่เลือกแทน การไม่มี Raw Sensor จะไม่รับคะแนน duration ลอย ๆ
+ระบบแยกคะแนนตามเป้าหมายที่ผู้ใช้เลือกโดยไม่แก้ Raw หรือบิด Sleep Stage:
+`Overnight Recovery` ใช้ Sleep Score เท่านั้น ส่วน `Nap & Refresh` ใช้ Recovery Score
+เท่านั้น ไม่ว่าจะพบการหลับหรือยังตื่นพักอยู่ การไม่มีข้อมูล Sensor เพียงพอจะไม่เผยแพร่
+คะแนนจาก duration เพียงอย่างเดียว
 
 | Component | เต็ม | วิธีปัจจุบัน |
 |---|---:|---|
 | หลับไวและเวลาพัก | 20 | Duration 15 + latency 5 |
 | หลับดีและต่อเนื่อง | 30 | Efficiency 20 + Wake continuity 10 − BCG disturbance proxy สูงสุด 5 |
-| หลับลึกและฟื้นฟู | 30 | แสดงชื่อนี้เฉพาะ Overnight: N2 10 + N3 12 + REM 8 |
+| โครงสร้าง N2/N3/REM | 30 | แสดงเฉพาะ Overnight: N2 10 + N3 12 + REM 8; เป็น Signal estimate ไม่ใช่การวัดการฟื้นฟูโดยตรง |
 | รอบการนอนที่ตรวจพบ | 15 | Overnight ใช้ NREM→REM proxy เทียบจำนวนรอบที่คาด |
 | ความครบของข้อมูล | 5 | `scored seconds / wall-clock duration` |
 
-เมื่อ Nap & Refresh มีช่วงหลับ ระบบใช้สูตรเดิมแต่เปลี่ยนชื่อองค์ประกอบเป็น
-`เวลาและการเข้าสู่การพัก / ความต่อเนื่องของการพัก / รูปแบบการพักที่ตรวจพบ /
-การตอบสนองระหว่างพัก / ความครบของข้อมูล` และไม่บังคับ N3 หรือ REM ส่วนความสดชื่น
-จริงต้องใช้แบบประเมินหลัง Session ประกอบ ห้ามอนุมานจาก Sensor เพียงอย่างเดียว
+Nap & Refresh ใช้ Recovery Score: เวลา 20 + การตอบสนอง HR/RR 30 + ความนิ่ง 20 +
+สิ่งแวดล้อมสนับสนุน 20 + ความครบข้อมูล 10 ไม่บังคับให้หลับและไม่บังคับ N3/REM
+ส่วนความสดชื่นจริงต้องใช้แบบประเมินหลัง Session ประกอบ ห้ามอนุมานจาก Sensor เพียงอย่างเดียว
 
 ### 4.2 Rest Mode และ Duration target
 
@@ -350,8 +358,8 @@ compatibility สำหรับอ่านประวัติและ repla
 
 | เป้าหมายผู้ใช้ | ช่วงเวลา | ลักษณะการประเมิน |
 |---|---|---|
-| Nap & Refresh | ประมาณ 30 นาที; ช่วงแนะนำระบบ 25–35 นาที | อนุญาตทั้งหลับ พักสายตา และสมาธิ; ไม่บังคับ N3/REM หากไม่หลับใช้ Rest Goal Score จาก HR/RR, ความต่อเนื่อง, สภาพแวดล้อมและ coverage |
-| Overnight Recovery | ขั้นต่ำโหมด 5 ชม.; duration score เต็มที่ 7 ชม. | Sleep Quality จาก W/N1/N2/N3/REM, continuity, architecture, cycle proxy และ coverage |
+| Nap & Refresh | ประมาณ 30 นาที; ช่วงแนะนำระบบ 25–35 นาที | อนุญาตทั้งหลับ พักสายตา และสมาธิ; ใช้ Recovery Score จาก HR/RR, ความนิ่ง, สภาพแวดล้อมและ coverage |
+| Overnight Recovery | ขั้นต่ำโหมด 5 ชม.; duration score เต็มที่ 7 ชม. | Sleep Score จาก W/N1/N2/N3/REM, continuity, architecture, cycle proxy และ coverage |
 
 ค่าเก่า `relax_meditation`, `recovery_readiness`, `performance_prep` และ
 `physical_comfort` map เป็น `nap_recovery` ตอนอ่าน/สร้างรายงานโดยไม่แก้ Raw
@@ -359,7 +367,7 @@ record เดิม ทุกผลมี
 `protocol_status` เพื่อแยกเวลาที่แนะนำ, สั้นเกิน และเกินขอบเขตออกจากคะแนน
 สรีรวิทยา
 
-Rest Goal Score รวม `เวลา 20 + HR/RR 30 + ความนิ่ง 20 + สภาพแวดล้อม 20 +
+Recovery Score รวม `เวลา 20 + HR/RR 30 + ความนิ่ง 20 + สภาพแวดล้อม 20 +
 coverage 10` ค่าอากาศใช้สนับสนุนประสบการณ์และอธิบายคะแนนเท่านั้น ไม่ใช้กำหนด
 W/N1/N2/N3/REM ทั้งสองสายแสดง `score_title`, `quality_type`, เป้าหมาย และ version
 เพื่อให้ UI และประวัติไม่เรียกทุก Session ว่า “คุณภาพการนอน” อย่างไม่ถูกต้อง
@@ -380,7 +388,7 @@ W/N1/N2/N3/REM ทั้งสองสายแสดง `score_title`, `qualit
 - Cycle นับเมื่อมี accumulated NREM ≥45 นาทีก่อนเข้า REM และไม่เพิ่มหลายรอบจาก REM flicker
 - Arousal proxy ไม่ใช่ EEG cortical arousal และ Cycle proxy ไม่ใช่ AASM cycle count
 
-## 5. Session Report v9.1
+## 5. Session Report v10.0
 
 เมื่อจบ Session ระบบสร้างและ persist รายงานจากข้อมูลชุดเดียวกับ Timeline:
 
@@ -402,7 +410,9 @@ health record เดิม การแก้ derived record จริงยั�
 
 | เครื่องมือ | เปลี่ยนอะไร | ไม่เปลี่ยนอะไร |
 |---|---|---|
-| `reclassify_sleep_history.py` | Sleep State decision ที่มี raw/metrics เพียงพอ หลังผ่าน pre-apply audit | Raw BCG packet |
+| `audit_sleep_history_shadow.py` | อ่าน Raw/Timeline แบบ read-only เพื่อทดสอบ deterministic replay, quality tier, transition และคะแนน | Raw BCG, Timeline, Report และ DB ทุกชนิด |
+| `reclassify_sleep_history.py` | Legacy event comparison; ใช้ scorer/policy เดียวกันและมี dry-run/guard | Raw BCG และ Timeline |
+| `promote_sleep_history.py` | Promote เฉพาะ Tier A หลังตรวจ replay/code/input hash บน staging copy | Raw BCG และ Timeline; Tier B/Exclude |
 | `rescore_session_reports.py` | Derived `final_summary`, quality และ report | Raw BCG, Timeline, event ต้นฉบับ |
 | `trim_session.py` | ตัดข้อมูลตามคำสั่งผู้ดูแลพร้อม audit | ข้อมูลนอกช่วงที่สั่ง |
 
@@ -426,14 +436,14 @@ health record เดิม การแก้ derived record จริงยั�
 | Wake/N1/N2/N3/REM evidence | `pi5/sleep_stage_scoring.py` | Live/Replay consistency + baseline tests |
 | Live state + 10 s cadence | `pi5/app.py` | `test_sleep_baseline_policy.py` |
 | Shared scorer | `pi5/sleep_stage_scoring.py` | baseline/signal tests |
-| Adaptive baseline รายบุคคล | `pi5/personal.py` | เรียนรู้เฉพาะ completed `quality_type=sleep`, detected sleep ≥20 นาที; `test_personal_baseline_policy.py` |
-| Historical replay | `pi5/reclassify_sleep_history.py` | `test_reclassify_sleep_history.py` |
+| Adaptive baseline รายบุคคล | `pi5/personal.py` | หลัง cutover, Session >25 นาที, completed `quality_type=sleep`, detected sleep ≥20 นาที; ใช้ context-only; `test_personal_baseline_policy.py` |
+| Historical shadow replay | `pi5/audit_sleep_history_shadow.py` | `test_audit_sleep_history_shadow.py` |
 | Mode-aware score/report | `pi5/sleep_session_report.py` | `test_sleep_session_report.py` |
 | Derived report rescore | `pi5/rescore_session_reports.py` | dry-run + DB audit event |
 | Confirmed ground-truth annotation | `pi5/sleep_stage_annotations.py`, `pi5/annotate_sleep_stage.py` | original decision/Raw BCG immutable + annotation regression |
 | User/Admin rendering | `pi5/static/index.html` | consistency text check + browser smoke test |
 | Admin deployed-policy inspection | `GET /api/admin/sleep/policy` | Admin auth + snapshot equality test |
-| Detailed baseline rationale | `docs/zeep-sleep-state-baseline-v1.0.md` (legacy filename, content v1.5) | docs index + consistency test |
+| Detailed baseline rationale | `docs/zeep-sleep-state-baseline-v1.0.md` (legacy filename, content v1.8) | docs index + consistency test |
 
 ### 8.1 ความสอดคล้องของชั้นวิเคราะห์สุขภาพ
 
@@ -446,9 +456,9 @@ health record เดิม การแก้ derived record จริงยั�
 - `sleep_system_policy.py` เป็น manifest เดียวของ version, hard gate, transition,
   Rest Mode, scoring และ eligibility ของ Personal Baseline
 - `personal.py` เรียนรู้เฉพาะรายงานที่ยืนยันว่า `quality_type=sleep`,
-  `sleep_detected=true` และมีเวลาหลับที่ตรวจพบอย่างน้อย 20 นาที จึงไม่ปน Session
+  เริ่มหลัง cutover, ยาว >25 นาที, `sleep_detected=true` และมีเวลาหลับที่ตรวจพบอย่างน้อย 20 นาที จึงไม่ปน Session
   สมาธิ/พักเฉย ๆ เข้ากับ physiology baseline
-- `sleep_session_report.py` แยก Sleep Quality ออกจาก Rest Goal Score และไม่ใช้
+- `sleep_session_report.py` แยก Overnight Sleep Score ออกจาก Nap Recovery Score และไม่ใช้
   สภาพแวดล้อมย้อนหลังเพื่อเปลี่ยน Sleep State
 - `reclassify_sleep_history.py` เปลี่ยน derived stage เมื่อมีหลักฐานครบ;
   `rescore_session_reports.py` เปลี่ยนเฉพาะรายงาน ทั้งคู่ไม่แต่ง Raw BCG
@@ -473,7 +483,7 @@ systemctl is-active zeep-pod.service
 
 1. Admin เรียก `GET /api/admin/sleep/policy` แล้ว version ตรงตารางข้อ 1
 2. `/dashboard` และ `/sessions` ตอบ HTTP 200
-3. Session เขียน Sensor ทุก 10 วินาที, Evidence ทุก 30 วินาที, confirmed decision ทุก 30 วินาทีหลังยืนยัน 60 วินาที และ `final_summary` มี cadence/estimator/quality/report version; Active Session ที่ข้ามรุ่นต้องมี cadence segment 5→10 วินาทีและเวลารวมต้องไม่เปลี่ยนจากการ migrate
+3. Session เขียน Sensor ทุก 10 วินาที, Evidence ทุก 30 วินาที และ confirmed decision ทุก 30 วินาทีหลังหลักฐานต่อเนื่องครบ 60 วินาทีสำหรับ W/N1/N3/REM หรือ 120 วินาทีสำหรับ N2; `final_summary` ต้องมี cadence/estimator/quality/report version และ Active Session ที่ข้ามรุ่นต้องมี cadence segment 5→10 วินาทีโดยเวลารวมไม่เปลี่ยนจากการ migrate
 4. Historical Replay dry-run ต้องผ่าน transition, arousal proxy, smoothness และ sanity gates ก่อน apply
 5. ห้ามแก้คะแนนย้อนหลังโดยไม่มี audit และห้ามเปลี่ยน raw เพื่อให้ผลดูดีขึ้น
 
@@ -491,7 +501,7 @@ systemctl is-active zeep-pod.service
 
 คำสั่งต้องเริ่มด้วย dry-run และใช้ `--apply` หลังตรวจจำนวนรอบที่ได้รับผลเท่านั้น
 
-### 9.1 บันทึกการตรวจรับล่าสุด — 2026-08-27
+### 9.1 บันทึกการตรวจรับรุ่นก่อน cutover — เก็บเพื่อ Audit เท่านั้น
 
 | รายการตรวจ | ผลตรวจจริง |
 |---|---|
@@ -507,7 +517,7 @@ systemctl is-active zeep-pod.service
 | Backup ก่อน Apply | `/home/pod1/pi5/backup/sessions-pre-sleep-reclass-20260826-180708.db` |
 | Goal-aware regression | Sleep/Rest + policy consistency ผ่าน `21/21` tests |
 | Runtime activation | Service reload สำเร็จ; Session `s-20260826T215053Z-849f26` และ owner Login ถูก restore |
-| Responsive UI | ตรวจขนาด 1280×800 ไม่มี horizontal overflow และ Rest Goal ครบ 5 กลุ่ม |
+| Responsive UI | ตรวจขนาด 1280×800 ไม่มี horizontal overflow และผลแยก Sleep Score / Recovery Score |
 | Sleep-compatible movement release | Estimator v1.11 + Evidence v1.6; targeted regression บน Pi ผ่าน `32/32` |
 | One-time data cleanup | ลบ completed Session ที่ `<7,200 s` จำนวน 10 รายการ พร้อม Timeline 952, Event 924, BCG 82 epochs / 4,756 packets; active Session ถูก exclude |
 | Cleanup integrity/idempotency | `sessions.db=ok`, `bcg.db=ok`, orphan=0, rerun ตอบ `already_applied` |
@@ -534,10 +544,9 @@ systemctl is-active zeep-pod.service
 | Terminal Wake sequence | รายงานปิดลำดับเป็น `Sleep State สุดท้าย → W · ตื่น → Occupancy/END`; marker 0 s แยกจาก physiology และไม่เปลี่ยน Stage statistics/Score/Baseline |
 | Classification-gap visibility | ลำดับรายงานแสดง WAIT/OFF ทุกช่องว่างที่ยืนยัน State ไม่ได้ แทนการซ่อนเวลา; Raw Timeline/decision และคะแนนไม่ถูกแก้ |
 
-วันที่ 2026-08-27 ระบบโหลด `zeep-rest-quality-v5.0-goal-aware` และ
-`zeep-session-report-v8.0-rest-goal-aware` แล้ว การ reload ใช้ checkpoint เดิม:
-`resumed_after_restart`, `owner_login_restored=true`, ไม่มีการสร้าง Session ใหม่ และ
-public status กลับเป็น `occupied=true`, `ready=true` หลัง Sensor เชื่อมต่อครบ
+รายการในหัวข้อนี้เป็นหลักฐานทางวิศวกรรมของรุ่นก่อนวันที่ 1 ก.ย. 2569 ไม่ถูกใช้ใน
+Product history, Baseline, Replay หรือ Score รุ่นปัจจุบัน รายงานที่ผู้ใช้เห็นหลัง
+cutover ต้องเป็น `Sleep Score` หรือ `Recovery Score` ตามสัญญาสองโหมดเท่านั้น
 
 ### 9.2 One-time cleanup contract
 

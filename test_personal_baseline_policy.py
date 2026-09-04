@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from personal import BaselineStore, MIN_DETECTED_SLEEP_SECONDS
+from sleep_system_policy import PERSONAL_BASELINE_LEARNING_START_UTC
 
 
 class _DatabaseStub:
@@ -62,3 +63,26 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
         ))
         self.assertIsNone(store._night_metrics("micro-sleep-session"))
 
+    def test_behaviour_context_is_partitioned_by_mode_and_never_selects_stage(self):
+        store = self._store(_summary(
+            quality_type="sleep", sleep_detected=True,
+            estimated_sleep_s=MIN_DETECTED_SLEEP_SECONDS,
+        ))
+        store.data["person@example.com"] = {
+            "learning_cutoff": {"utc": PERSONAL_BASELINE_LEARNING_START_UTC},
+            "behaviour_by_mode": {
+                "sleep": {
+                    "status": "active",
+                    "sessions_used": 3,
+                    "expected_onset_minutes": 14.0,
+                    "direct_stage_influence": False,
+                },
+            },
+        }
+
+        sleep = store.behaviour_context("person@example.com", "overnight")
+        nap = store.behaviour_context("person@example.com", "nap_recovery")
+
+        self.assertEqual(sleep["expected_onset_minutes"], 14.0)
+        self.assertFalse(sleep["direct_stage_influence"])
+        self.assertEqual(nap["status"], "no_data")

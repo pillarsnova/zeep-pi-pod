@@ -1,9 +1,9 @@
-# ZEEP — Sleep-State Baseline v1.5
+# ZEEP — Sleep-State Baseline v1.8
 
 > **Purpose:** นิยาม input, baseline, transition policy, data quality และแผน PSG validation ของตัวประมาณสถานะการนอนใน Pod  
 > **Positioning:** Sleep Wellness · EEG-free exploratory telemetry · ไม่ใช่ผล PSG/การวินิจฉัย/ตัวสั่งอุปกรณ์  
-> **Status:** Engineering baseline frozen for implementation · G2 validation open  
-> **Version:** `zeep-sleep-state-baseline-v1.5` · **Transition:** `zeep-semimarkov-10s-v1.8-probability-hysteresis` · **Updated:** 2026-08-29
+> **Status:** Wellness release candidate · deterministic replay and guarded derived-result promotion required · paired-PSG G2 validation open
+> **Version:** `zeep-sleep-state-baseline-v1.8-sep1-cutover` · **Estimator:** `bcg-audio-bed-5state-v1.23-wellness-longitudinal` · **Transition:** `zeep-semimarkov-30s-v1.13-no-bridge-labels` · **Updated:** 2026-09-05
 > **Related:** [Current Sleep System](zeep-sleep-system-current.md) · [AI Sleep-State](ai-sleep-state-and-assistant.md) · [Evidence](sleep-wellness-evidence.md) · [Closed Loop](closed-loop-spec.md)
 
 ## TL;DR
@@ -14,7 +14,10 @@
 - ไม่มี Active Recording Session, ไม่ยืนยันผู้ใช้อยู่บนเตียง หรือรอบปัจจุบันไม่มี HR+RR สด = **ไม่ประเมิน Sleep Stage**; แสดง `WAIT/OFF`, probability ทั้ง 5 เป็นศูนย์ และไม่เขียน stage ลง Timeline
 - SPH0645 สนับสนุน Wake ได้เฉพาะเสียงรบกวนที่ time-aligned กับ BCG amplitude shift หรือ bed motion; เสียงดังอย่างเดียวไม่มีผลต่อ state
 - Sensor สิ่งแวดล้อม 7 ปัจจัยอธิบาย disturbance และปรับ confidence เท่านั้น ไม่มี direct stage weight
-- คำนวณทุก 10 วินาทีจาก rolling 6 ชุด (60 วินาที); ก่อนครบเป็น provisional/low confidence
+- Sensor frame ทุก 10 วินาที, Evidence epoch ทุก 30 วินาทีจาก rolling 60 วินาที และยืนยัน State 60/120 วินาทีตาม target; แนวโน้ม onset ใช้ context ได้ถึง 270 วินาที
+- 5 นาทีแรกสร้าง Session-relative Awake reference; N1 เริ่มได้เมื่อเตียงนิ่ง ไม่มี vital rise และ HR/RR แสดงการลดลงหรือคงอยู่ที่ plateau ที่ต่ำกว่าช่วงตั้งต้นอย่างสอดคล้องกัน เวลาเพียงอย่างเดียวสร้าง N1 ไม่ได้
+- พฤติกรรมย้อนหลังใช้เฉพาะ Session ก่อนหน้า ตั้งแต่ 1 ก.ย. 2569 แยกตามบัญชีและโหมด อย่างน้อย 3 Session และเป็น context/คำแนะนำเท่านั้น (`direct_stage_influence=false`); ห้ามข้อมูล Session ปัจจุบันหรืออนาคตย้อนมากำหนด State
+- หากหลักฐานสอง State ใกล้กัน ระบบเก็บ Evidence แต่ abstain ไม่เขียน W/N1/N2/N3/REM และ transition ที่ถูก block จะคง State เดิมโดยไม่แต่ง bridge label
 - `HR-CV` ในระบบเป็นความแปรปรวนของค่าเฉลี่ยต่อ analysis bucket 10 วินาที ไม่ใช่ RMSSD/SDNN; amplitude shift ของ BCG ไม่ใช่ EEG K-complex/spindle
 - G2 primary ontology คือ `W / N1 / N2 / N3 / REM`; 3-class collapse เป็น secondary analysis
 - transition guard เป็นกติกาของ ZEEP ไม่ใช่ AASM scoring rule; ต้องเทียบ PSG ก่อนยกระดับ claim
@@ -61,7 +64,7 @@ stateDiagram-v2
     N2 --> REM
     N3 --> N2
     N3 --> N3
-    N3 --> REM: REM evidence 5 ticks
+    N3 --> REM: guarded REM evidence 2 epochs / 60 s
     REM --> N1
     REM --> N2
     REM --> REM
@@ -73,11 +76,11 @@ stateDiagram-v2
 
 1. Session/cycle ใหม่ต้อง publish `Wake` ก่อนเสมอ
 2. หลัง `Wake` ไปได้เฉพาะ `Wake` หรือ `N1`
-3. หลัง N1 ไปได้เฉพาะ Wake/N1/N2; หลัง N2 ไป N1/N2/N3/REM ตามปกติ ส่วน Wake โดยตรงต้องมี strong-Wake proxy
-4. `N3 → REM` อนุญาตโดยตรงเมื่อ N3 ผ่าน minimum dwell 60 วินาทีและ candidate REM ชนะต่อเนื่อง 5 รอบ (50 วินาที); ไม่บังคับแทรก N2
+3. หลัง N1 ไปได้ Wake/N1/N2 และ REM แบบ rare/guarded; หลัง N2 ไป N1/N2/N3/REM ตามปกติ ส่วน Wake โดยตรงต้องมี strong-Wake proxy
+4. `N3 → REM` อนุญาตโดยตรงเมื่อ N3 ผ่าน minimum dwell 60 วินาทีและ candidate REM ชนะต่อเนื่อง 2 evidence epochs (60 วินาที); ไม่บังคับแทรก N2
 5. N2/N3/REM ที่จะ Wake แบบสัญญาณไม่ชัดต้องย้อน N1/N2 ก่อน
 6. bed-exit เป็น strong-Wake override หลังผ่าน event guard 3 รอบ; movement บนเตียงต้องต่อเนื่องและมี HR/RR rise + BCG shift ใน window เดียวกันจึงใช้ override ได้
-7. candidate ต้องชนะต่อเนื่อง 3–5 รอบ (30–50 วินาทีตาม state; Wake ที่ชัด 2 รอบ/20 วินาที) และผ่าน minimum engineering dwell ของ state ปัจจุบันก่อน commit เพื่อลดการสั่นทุก 10 วินาที
+7. candidate W/N1/N3/REM ต้องชนะต่อเนื่อง 2 evidence epochs (60 วินาที) ส่วน N2 ต้อง 4 epochs (120 วินาที) และผ่าน minimum engineering dwell ของ state ปัจจุบันก่อน commit
 8. เมื่อ commit `Wake` ถือว่าเริ่ม cycle ใหม่และ gate ของ N1 ถูก reset
 
 ข้อ 2–8 เป็น ZEEP engineering policy ไม่ใช่เส้นทางตายตัวทางสรีรวิทยา
@@ -88,10 +91,10 @@ stateDiagram-v2
 AASM ให้คะแนนจากหลักฐานในแต่ละ epoch ไม่ได้กำหนดว่า “ครบกี่นาทีต้องเปลี่ยน state”
 ZEEP จึงไม่ใช้ hard timer ทางการแพทย์ แต่ใช้เวลาเป็น soft prior:
 
-- N1 ต้องมีหลักฐานซ้ำ 30 วินาที; N1 คงขั้นต่ำเชิงวิศวกรรม 30 วินาทีก่อนลง N2
-- N2 ต้องมีหลักฐานซ้ำ 30 วินาทีและคงขั้นต่ำ 60 วินาทีก่อน N3/REM
-- N3 และ REM ต้องมีหลักฐานซ้ำ 50 วินาที และคง state เดิมขั้นต่ำ 60 วินาที
-- REM ก่อน 45 นาทีถูกลด prior ใน baseline v1.5; หลังจากนั้นเวลาเพิ่มคะแนนได้เฉพาะเมื่อ respiratory/movement gate ผ่านแล้ว
+- N1 ต้องมีหลักฐานต่อเนื่อง 60 วินาที; N1 คงขั้นต่ำเชิงวิศวกรรม 30 วินาทีก่อนลง N2
+- N2 ต้องมีหลักฐานต่อเนื่อง 120 วินาทีและคงขั้นต่ำ 60 วินาทีก่อน N3/REM
+- N3 และ REM ต้องมีหลักฐานต่อเนื่อง 60 วินาที และคง state เดิมขั้นต่ำ 60 วินาที
+- REM ก่อน 45 นาทีถูกลด prior; หลังจากนั้นเวลาเพิ่มคะแนนได้เฉพาะเมื่อ respiratory/movement gate ผ่านแล้ว
 - เพิ่ม prior N3 แบบอ่อนหลัง 5 นาทีและลดลงในช่วงปลายคืน
 - Bed-exit/physiology-corroborated sustained movement ไม่รอ dwell หรือ bridge; brief movement ไม่ใช่ Wake โดยลำพัง
 
@@ -116,24 +119,29 @@ ZEEP จึงไม่ใช้ hard timer ทางการแพทย์ �
 
 ### 3.2 Personal adaptive baseline
 
-เมื่อมีคืนที่ใช้ได้อย่างน้อย 3 คืน (สูงสุด 7 คืนล่าสุด) ระบบใช้ median ของผู้ใช้
-เพื่อเลื่อนช่วง HR/RR จาก population prior และเรียนรู้เกณฑ์ HR coefficient of
-variation (`cv_deep`, `cv_rem`) ของบุคคลนั้น ค่า personal จะ supersede ค่าเริ่มต้น
-แต่ยังคงเป็น proxy และต้อง freeze version ทุกครั้งที่นำไป validation
+เมื่อมี Overnight ที่ใช้ได้อย่างน้อย 3 Session (สูงสุด 7 Session ล่าสุด) ระบบสรุป
+median ของผู้ใช้สำหรับพฤติกรรม เช่น เวลาเริ่มพัก, onset proxy, ระยะเวลา, HR/RR
+ที่มักพบ และสภาพแวดล้อมที่สัมพันธ์กับประสบการณ์นั้น เพื่อนำไปอธิบายผลและสร้าง
+คำแนะนำครั้งถัดไปเท่านั้น ใน pilot นี้ผลที่โมเดลทำนายเองจะไม่ย้อนกลับไปเลื่อน
+ขอบ W/N1/N2/N3/REM (`direct_stage_influence=false`) เพราะจะเกิด feedback loop ได้
 
-คืนที่ใช้เรียนรู้ต้องยาวอย่างน้อย 20 นาทีและมี HR ที่ใช้ได้อย่างน้อย 20 ตัวอย่าง
-ข้อมูลไม่พอให้คง population prior พร้อมสถานะ `learning` แทนการเดาค่าใหม่
+Session ที่เข้า baseline ต้องเริ่มตั้งแต่ `2026-09-01 00:00 Asia/Bangkok`, จบสมบูรณ์,
+ยาวมากกว่า 25 นาที, เป็น `quality_type=sleep`, ตรวจพบการหลับอย่างน้อย 20 นาที
+และมี HR ที่ใช้ได้อย่างน้อย 20 ตัวอย่าง ข้อมูลก่อน cutover ยังคงเป็น Raw/Audit
+แต่ไม่ปรากฏในประวัติใหม่ ไม่ใช้ replay/scoring และไม่ใช้เรียนรู้ ผู้ใช้ที่ข้อมูลไม่พอ
+จะคง population prior พร้อมสถานะ `learning` แทนการสร้างค่าบุคคลขึ้นมาเอง
 
 ### 3.3 Live rolling context
 
 ระบบสร้าง feature bucket ทุก 10 วินาทีและใช้ล่าสุด 6 ชุด รวมเป้าหมาย 60 วินาที
-เพื่อจัดประเภทหนึ่งครั้งต่อรอบ 10 วินาที ก่อนครบ 6 ชุดยังแสดงสถานะได้แต่ติดป้าย
-`provisional` และ confidence ต่ำ
+เพื่อสร้างหลักฐานทุก 30 วินาที ก่อนข้อมูลครบยังแสดง `WAIT/provisional` และไม่เขียน
+confirmed Sleep State ลง Timeline
 
 หลังคำนวณหลักฐานจาก rolling 60 วินาที ระบบกรอง probability ด้วย EMA
 `alpha=0.20` เพื่อไม่ให้ bucket ใหม่เพียงชุดเดียวทำให้เปอร์เซ็นต์ทุก State กระโดด
 ผู้ท้าชิงต้องนำสถานะปัจจุบันอย่างน้อย 5 จุดเปอร์เซ็นต์ก่อนเข้าสู่ semi-Markov
-confirmation 3–5 รอบ ส่วน strong Wake/Bed Exit ยัง bypass ได้ทันที เปอร์เซ็นต์ที่
+confirmation 2 epochs/60 วินาที (N2 ใช้ 4 epochs/120 วินาที) ส่วน Bed Exit ยังใช้
+occupancy/safety path แยกต่างหาก เปอร์เซ็นต์ที่
 แสดงจึงมาจากหลักฐาน HR/RR + BCG + Baseline ชุดเดียวกับ State ปัจจุบัน
 
 ### 3.4 Min–Max proximity
@@ -165,7 +173,7 @@ physiology = 0.55×HR_proximity + 0.35×RR_proximity
 | Raw BCG | respiratory regularity, fast-amplitude CV, amplitude-shift ratio | แยก waveform ที่นิ่ง/ไม่เสถียรและลด false stage; ไม่ตีความเป็น K-complex/spindle |
 | เวลา | elapsed time ใน Session | prior ขนาดเล็กเพื่อไม่ให้ REM เด่นตั้งแต่ต้นคืน |
 | ลำดับ | transition path | บังคับ Wake/N1 gate และลด state jump จาก noise |
-| บุคคล | อายุ, profile และ personal baseline | ปรับ starting range; personal supersede เมื่อข้อมูลครบ |
+| บุคคล | อายุ/เพศจาก profile และ prior-only personal behaviour | อายุ/เพศเลือก starting prior; personal candidate ใช้รายงาน/คำแนะนำและยังไม่เปลี่ยน Stage ใน pilot |
 
 ระบบใช้ HR/RR/movement เป็นแกนเพราะงานขนาดใหญ่ที่เทียบกับ PSG พบว่าสัญญาณหัวใจ
 และการหายใจมีข้อมูลเกี่ยวกับ sleep state แต่ 5-class ยังได้ Cohen's κ ประมาณ
@@ -360,7 +368,8 @@ Wake โดยลำพัง การยืนยัน cortical arousal จ�
 - policy/version/transition graph กลาง: `pi5/sleep_system_policy.py`
 - estimator runtime: `pi5/app.py`
 - scoring และ Session report: `pi5/sleep_session_report.py`
-- historical replay: `pi5/reclassify_sleep_history.py`
+- raw shadow replay หลัก: `pi5/audit_sleep_history_shadow.py`
+- legacy event comparison (ปิด apply): `pi5/reclassify_sleep_history.py`
 - personal baseline: `pi5/personal.py`
 - G2 ontology/claims: `docs/ai-sleep-state-and-assistant.md`
 - evidence boundary: `docs/sleep-wellness-evidence.md`

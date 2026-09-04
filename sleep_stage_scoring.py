@@ -73,12 +73,82 @@ def smooth_stage_probabilities(
     return normalise_stage_probabilities(blended)
 
 
+def softmax_stage_evidence(
+    scores: Mapping[str, Any], *, temperature: float = 4.0,
+    eligible_states: Mapping[str, Any] | None = None,
+) -> dict[str, float]:
+    """Convert comparable 0..1 evidence budgets to a five-state distribution.
+
+    The result is engineering evidence, not a calibrated medical probability.
+    Keeping this conversion here guarantees that live and replay use the same
+    scale and avoids the old error where N2 had a larger bonus budget than the
+    other four states.
+    """
+    comparable = {
+        stage: _clamp(_finite(scores.get(stage), 0.0)) for stage in STAGES
+    }
+    eligible = {
+        stage: bool((eligible_states or {}).get(stage, True)) for stage in STAGES
+    }
+    if not any(eligible.values()):
+        return {stage: 0.0 for stage in STAGES}
+    peak = max(value for stage, value in comparable.items() if eligible[stage])
+    scale = max(0.1, _finite(temperature, 4.0))
+    weights = {
+        stage: (math.exp((value - peak) * scale) if eligible[stage] else 0.0)
+        for stage, value in comparable.items()
+    }
+    return normalise_stage_probabilities(weights)
+
+
+def evidence_candidate_with_abstention(
+    probabilities: Mapping[str, Any],
+    *,
+    minimum_winner: float,
+    minimum_margin: float,
+    gated_stage_thresholds: Mapping[str, tuple[float, float]] | None = None,
+) -> tuple[str | None, dict[str, Any]]:
+    """Return a candidate only when absolute evidence and separation pass.
+
+    Ambiguous evidence remains visible in the Admin evidence stream but must
+    not be converted into a W/N1/N2/N3/REM decision.  This is the explicit
+    abstention boundary required for a non-EEG wellness estimator.
+    """
+    values = normalise_stage_probabilities(probabilities)
+    ordered = sorted(STAGES, key=values.get, reverse=True)
+    winner, runner_up = ordered[0], ordered[1]
+    winner_value = values[winner]
+    margin = winner_value - values[runner_up]
+    threshold = _clamp(minimum_winner)
+    margin_threshold = max(0.0, _finite(minimum_margin, 0.0))
+    threshold_source = "general"
+    gated_threshold = (gated_stage_thresholds or {}).get(winner)
+    if gated_threshold is not None:
+        threshold = _clamp(gated_threshold[0])
+        margin_threshold = max(0.0, _finite(gated_threshold[1], 0.0))
+        threshold_source = f"{winner}_independent_gate"
+    passed = bool(winner_value >= threshold and margin >= margin_threshold)
+    return (winner if passed else None), {
+        "winner": winner,
+        "runner_up": runner_up,
+        "winner_value": round(winner_value, 4),
+        "runner_up_value": round(values[runner_up], 4),
+        "winner_margin": round(margin, 4),
+        "minimum_winner": round(threshold, 4),
+        "minimum_margin": round(margin_threshold, 4),
+        "threshold_source": threshold_source,
+        "passed": passed,
+        "decision": "candidate" if passed else "abstain",
+        "aasm_psg_probability": False,
+    }
+
+
 def stable_probability_candidate(
     probabilities: Mapping[str, Any],
     current_stage: str | None,
     *,
     switch_margin: float,
-) -> tuple[str, dict[str, Any]]:
+) -> tuple[str | None, dict[str, Any]]:
     """Keep the current state when a challenger wins by only a small margin."""
     values = normalise_stage_probabilities(probabilities)
     challenger = max(STAGES, key=values.get)
@@ -109,6 +179,7 @@ def candidate_from_stage_evidence(
     switch_margin: float,
     n3_gate: bool,
     sleep_onset_gate_passed: bool = True,
+    eligible_states: Mapping[str, Any] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Select a stable candidate without starving physiologically gated N3.
 
@@ -130,7 +201,18 @@ def candidate_from_stage_evidence(
         switch_margin=switch_margin,
     )
     gated_n3_override = bool(n3_gate and current_candidate == "n3")
-    candidate = current_candidate if gated_n3_override else ema_candidate
+    # Entry into N1 has already passed the explicit onset physiology gate.
+    # Let that current 30-second evidence reach the two-epoch confirmer instead
+    # of waiting for the Wake-heavy EMA to turn over. This fixes multi-hour
+    # missed onset without allowing elapsed time or a baseline range alone to
+    # create sleep.
+    gated_n1_onset_override = bool(
+        current_stage in {None, "wake"}
+        and sleep_onset_gate_passed
+        and current_candidate == "n1"
+    )
+    current_override = gated_n3_override or gated_n1_onset_override
+    candidate = current_candidate if current_override else ema_candidate
     onset_guard_held = bool(
         current_stage in {None, "wake"}
         and candidate != "wake"
@@ -138,18 +220,34 @@ def candidate_from_stage_evidence(
     )
     if onset_guard_held:
         candidate = "wake"
+    # EMA can retain a challenger after its current physiology gate closes.
+    # It may hold an already-confirmed state for temporal continuity, but it
+    # must never start a transition into a newly ineligible state.
+    candidate_gate_open = bool(
+        eligible_states is None or eligible_states.get(candidate, False)
+    )
+    closed_gate_transition_prevented = bool(
+        candidate not in {None, current_stage} and not candidate_gate_open
+    )
+    if closed_gate_transition_prevented:
+        candidate = current_stage if current_stage in STAGES else None
     metadata = dict(current_metadata if gated_n3_override else ema_metadata)
     metadata.update({
         "candidate_source": (
             "sleep_onset_guard"
             if onset_guard_held
             else (
+                "gated_n1_current_30s_evidence_before_ema"
+                if gated_n1_onset_override else
                 "gated_n3_current_30s_evidence_before_ema"
                 if gated_n3_override else "ema_probability"
             )
         ),
         "ema_role": "default_candidate_stability_and_display",
         "gated_n3_current_evidence_override": gated_n3_override,
+        "gated_n1_onset_current_evidence_override": gated_n1_onset_override,
+        "current_candidate_gate_open": candidate_gate_open,
+        "closed_gate_transition_prevented": closed_gate_transition_prevented,
         "n3_gate": bool(n3_gate),
         "sleep_onset_gate_passed": bool(sleep_onset_gate_passed),
         "sleep_onset_guard_held": onset_guard_held,
@@ -263,17 +361,24 @@ def score_sleep_evidence(
     onset_min_observation_minutes: float = 5.0,
     onset_max_movement_ratio: float = 0.15,
     onset_min_downward_transition: float = 0.20,
+    onset_min_relative_sleep_support: float = 0.20,
     onset_max_hr_rise_bpm_per_min: float = 0.50,
     onset_max_rr_rise_per_min: float = 0.50,
     onset_initial_wake_support: float = 0.75,
+    deep_cv_threshold: float = 0.025,
+    rem_cv_threshold: float = 0.060,
 ) -> tuple[dict[str, float], dict[str, Any]]:
-    """Return five class scores and an auditable evidence record.
+    """Return comparable five-state evidence budgets and an audit record.
 
-    ``hr_cv`` remains variation across fixed-cadence module HR summaries, not
-    RMSSD/SDNN.  It is therefore given only weak REM weight.  A REM candidate
-    must instead pass a conservative quiet-bed + respiratory-variability gate.
+    The hierarchy is deliberate: signal validity is handled by the caller,
+    then sleep/wake physiology gates stage-specific evidence, and only then may
+    the semi-Markov path confirm a label.  Population/personal ranges are weak
+    priors.  They cannot create N2/N3/REM without session-relative physiology.
+    ``hr_cv`` is fixed-cadence summary variation, not RMSSD/SDNN.
     """
-    scores = {stage: _finite(base_scores.get(stage), 0.0) for stage in STAGES}
+    baseline_fit = {
+        stage: _clamp(_finite(base_scores.get(stage), 0.0)) for stage in STAGES
+    }
     hr_cv = max(0.0, _finite(metrics.get("hr_cv"), 0.0))
     rr_cv = max(0.0, _finite(metrics.get("rr_cv"), 0.0))
     movement = _clamp(_finite(metrics.get("movement_ratio"), 0.0))
@@ -291,6 +396,15 @@ def score_sleep_evidence(
     waveform_available = bool(metrics.get("waveform_available"))
     drift_ratio = max(0.0, _finite(metrics.get("bcg_baseline_drift_ratio"), 0.0))
     drift_flag = bool(metrics.get("bcg_baseline_drift_flag"))
+    mean_hr = _optional_finite(metrics.get("mean_hr"))
+    mean_rr = _optional_finite(metrics.get("mean_rr"))
+    awake_hr = _optional_finite(metrics.get("awake_hr_reference"))
+    awake_rr = _optional_finite(metrics.get("awake_rr_reference"))
+    current_stage = str(metrics.get("current_stage") or "").casefold()
+    sleep_elapsed_min = max(
+        0.0, _finite(metrics.get("sleep_elapsed_min"), elapsed_min)
+    )
+    sleep_onset_established = bool(metrics.get("sleep_onset_established"))
     # SPH0645 may only corroborate a Wake-compatible BCG/bed event.  The
     # upstream feature builder keeps this at zero when sound is loud by itself;
     # bounding it again here prevents malformed telemetry from dominating the
@@ -301,9 +415,8 @@ def score_sleep_evidence(
         0.35,
     )
 
-    # Stabilization features separate transitional N1 from sustained N2.  The
-    # amplitude envelope is only a BCG quality/stability proxy; it is not a
-    # K-complex or spindle surrogate.
+    # Stabilisation separates transitional N1 from sustained N2.  The BCG
+    # envelope is a quality/stability proxy, never a K-complex/spindle claim.
     hr_stability = _clamp((0.045 - hr_cv) / 0.045)
     rr_stability = _clamp((0.060 - rr_cv) / 0.060)
     flat_hr_trend = _clamp(1.0 - abs(hr_slope) / 4.0)
@@ -319,6 +432,30 @@ def score_sleep_evidence(
     amplitude_instability = (_clamp((shift_ratio or 0.0) / 0.12)
                              if shift_ratio is not None else 0.0)
 
+    def proportional_drop(reference: float | None, current: float | None,
+                          full_scale: float) -> float:
+        if reference is None or current is None or reference <= 0:
+            return 0.0
+        return _clamp((reference - current) / (reference * full_scale))
+
+    def proportional_rise(reference: float | None, current: float | None,
+                          full_scale: float) -> float:
+        if reference is None or current is None or reference <= 0:
+            return 0.0
+        return _clamp((current - reference) / (reference * full_scale))
+
+    hr_drop = proportional_drop(awake_hr, mean_hr, 0.12)
+    rr_drop = proportional_drop(awake_rr, mean_rr, 0.18)
+    relative_sleep_support_weighted = 0.65 * hr_drop + 0.35 * rr_drop
+    # RR rate does not have to decrease at sleep onset in every person. Keep
+    # the concordant value for audit, but use HR transition plus respiratory
+    # pattern quality for the candidate gate. This remains a wellness proxy.
+    relative_sleep_support_concordant = min(hr_drop, rr_drop)
+    relative_sleep_support = relative_sleep_support_weighted
+    hr_rise = proportional_rise(awake_hr, mean_hr, 0.10)
+    rr_rise = proportional_rise(awake_rr, mean_rr, 0.15)
+    relative_wake_support = max(hr_rise, rr_rise)
+
     movement_evidence = sleep_movement_evidence(dict(metrics), move_wake_ratio)
     onset_evidence = sleep_onset_evidence(
         elapsed_min=elapsed_min,
@@ -332,27 +469,109 @@ def score_sleep_evidence(
         maximum_hr_rise_bpm_per_min=onset_max_hr_rise_bpm_per_min,
         maximum_rr_rise_per_min=onset_max_rr_rise_per_min,
     )
-    scores["wake"] += float(movement_evidence["wake_score_support"])
-    if not onset_evidence["observation_complete"]:
-        scores["wake"] += max(0.0, _finite(onset_initial_wake_support, 0.0))
+    # Sleep-onset evidence has two supported shapes: HR is currently trending
+    # down, or HR has reached a lower plateau. Both paths require a quiet bed,
+    # waveform evidence and a regular respiratory pattern. RR-rate decrease is
+    # retained as supporting evidence, never a mandatory gate.
+    minimum_relative_support = _clamp(onset_min_relative_sleep_support)
+    hr_downward_transition = _clamp(-hr_slope / 4.0)
+    respiratory_onset_support = bool(
+        waveform_available
+        and regularity is not None
+        and regularity >= 0.42
+        and rr_stability >= 0.35
+    )
+    trend_onset_passed = bool(
+        onset_evidence["observation_complete"]
+        and onset_evidence["quiet_bed"]
+        and onset_evidence["no_vital_rise"]
+        and hr_downward_transition >= onset_min_downward_transition
+        and respiratory_onset_support
+    )
+    level_shift_onset_passed = bool(
+        onset_evidence["observation_complete"]
+        and onset_evidence["quiet_bed"]
+        and onset_evidence["no_vital_rise"]
+        and hr_drop >= minimum_relative_support
+        and respiratory_onset_support
+    )
+    onset_evidence.update({
+        "trend_onset_passed": trend_onset_passed,
+        "level_shift_onset_passed": level_shift_onset_passed,
+        "relative_sleep_support": round(relative_sleep_support, 4),
+        "relative_sleep_support_weighted": round(
+            relative_sleep_support_weighted, 4
+        ),
+        "relative_sleep_support_concordant": round(
+            relative_sleep_support_concordant, 4
+        ),
+        "hr_downward_transition": round(hr_downward_transition, 4),
+        "respiratory_onset_support": respiratory_onset_support,
+        "respiratory_regularity": (
+            round(regularity, 4) if regularity is not None else None
+        ),
+        "rr_rate_drop_required": False,
+        "minimum_relative_sleep_support": round(minimum_relative_support, 4),
+        "passed": bool(trend_onset_passed or level_shift_onset_passed),
+        "accepted_path": (
+            "downward_trend" if trend_onset_passed
+            else "sustained_relative_drop" if level_shift_onset_passed
+            else None
+        ),
+    })
+    initial_wake = (
+        _clamp(onset_initial_wake_support)
+        if not onset_evidence["observation_complete"] else 0.0
+    )
     onset_transition_support = (
-        downward_transition * 0.45
+        max(
+            hr_downward_transition,
+            hr_drop * 0.80
+            if level_shift_onset_passed else 0.0,
+        )
         if onset_evidence["observation_complete"]
         and onset_evidence["quiet_bed"]
         and onset_evidence["no_vital_rise"]
         else 0.0
     )
-    scores["n1"] += (
-        onset_transition_support
-        + (1.0 - flat_trend) * 0.15
-        + amplitude_instability * 0.10
+    quiet_bed = bool(
+        movement_evidence.get("sleep_compatible")
+        and movement < move_wake_ratio
     )
-    scores["n2"] += (
-        hr_stability * 0.30
-        + rr_stability * 0.30
-        + flat_trend * 0.20
-        + respiratory_stability * 0.25
-        + amplitude_stability * 0.15
+    sleep_sequence_established = bool(
+        sleep_onset_established
+        or current_stage in {"n1", "n2", "n3", "rem"}
+    )
+    # A broad Wake baseline fit is not enough to wake a sleeping path: HR/RR
+    # ranges overlap heavily between quiet wakefulness and sleep. Once onset is
+    # established, require a relative autonomic rise or corroborated sustained
+    # movement before Wake may compete. Quiet position changes remain sleep-
+    # compatible and can transition through N1 instead.
+    wake_transition_gate = bool(
+        not sleep_sequence_established
+        or current_stage == "wake"
+        or movement_evidence.get("strong_wake")
+        or (
+            relative_wake_support >= 0.20
+            and (
+                hr_slope >= 0.15
+                or rr_slope >= 0.15
+                or amplitude_instability >= 0.60
+            )
+        )
+    )
+    n1_gate = bool(
+        quiet_bed and (
+            onset_evidence["passed"]
+            or sleep_sequence_established
+        )
+    )
+    n2_gate = bool(
+        quiet_bed
+        and waveform_available
+        and sleep_sequence_established
+        and current_stage in {"n1", "n2", "n3", "rem"}
+        and max(relative_sleep_support, hr_drop) >= 0.18
     )
 
     # N3 is deliberately gated: low HR/RR proximity alone cannot create it.
@@ -361,68 +580,139 @@ def score_sleep_evidence(
                          - _finite(hr_fits.get("n3"), 0.0))
     n3_rr_conflict = max(0.0, _finite(rr_fits.get("n2"), 0.0)
                          - _finite(rr_fits.get("n3"), 0.0))
+    deep_cv_limit = max(0.010, _finite(deep_cv_threshold, 0.025))
+    deep_rr_cv_limit = max(0.025, min(0.050, deep_cv_limit * 1.6))
     n3_gate = bool(
-        movement < move_deep_ratio
-        and hr_cv <= 0.020
-        and rr_cv <= 0.035
+        waveform_available
+        and not drift_flag
+        and current_stage in {"n2", "n3"}
+        and movement < move_deep_ratio
+        and hr_cv <= deep_cv_limit
+        and rr_cv <= deep_rr_cv_limit
         and regularity is not None
-        and regularity >= 0.65
+        and regularity >= 0.58
         and n3_hr_conflict < 0.08
+        and max(relative_sleep_support, hr_drop) >= 0.40
     )
-    scores["n3"] += (
-        hr_stability * 0.20
-        + rr_stability * 0.25
-        + respiratory_stability * 0.40
-        + amplitude_stability * 0.15
-        + (0.20 if movement < move_deep_ratio else 0.0)
-        + (0.15 if n3_gate else 0.0)
-        + min(max(elapsed_min - 5.0, 0.0) / 25.0, 1.0)
-          * max(0.0, 1.0 - elapsed_min / 180.0) * 0.20
-    )
-    # PSG evidence shows mean RR overlaps across NREM stages.  Keep the
-    # configured N2-vs-N3 RR counterweight, but attenuate it when the raw
-    # respiratory waveform is highly regular instead of making RR proximity a
-    # hard exclusion criterion.
-    scores["n3"] -= (
-        n3_rr_conflict * n3_rr_conflict_penalty
-        * (1.0 - 0.30 * respiratory_stability)
-    )
-    scores["n2"] += n3_rr_conflict * n2_rr_conflict_support
-    scores["n3"] -= n3_hr_conflict * 1.0
-    if not n3_gate:
-        scores["n3"] -= 1.10
-    if waveform_available and regularity is not None and regularity < 0.60:
-        scores["n3"] -= (0.60 - regularity) * 1.5
-    if shift_ratio is not None and shift_ratio > 0.12:
-        scores["n3"] -= min(0.5, (shift_ratio - 0.12) * 2.0)
 
     # REM receives no standalone time boost.  Time acts only after the current
     # window shows irregular breathing on a quiet bed.  True IBI-HRV remains
     # unavailable, so summary-bucket HR-CV has intentionally small influence.
     rr_irregularity = _clamp((rr_cv - 0.035) / 0.045)
     hr_summary_irregularity = _clamp((hr_cv - 0.025) / 0.055)
-    time_support = _clamp((elapsed_min - 45.0) / 45.0)
+    time_support = _clamp((sleep_elapsed_min - 45.0) / 45.0)
     respiratory_not_n3_like = (
-        respiratory_entropy is None or respiratory_entropy >= 0.40
+        respiratory_entropy is not None and respiratory_entropy >= 0.40
     )
+    rem_cv_limit = max(0.035, _finite(rem_cv_threshold, 0.060))
     rem_gate = bool(
-        elapsed_min >= 45.0
+        waveform_available
+        and not drift_flag
+        and sleep_sequence_established
+        and current_stage in {"n1", "n2", "n3", "rem"}
+        and sleep_elapsed_min >= 45.0
         and movement < move_deep_ratio
-        and rr_cv >= 0.040
+        and rr_cv >= max(0.040, rem_cv_limit * 0.75)
+        # REM-like respiratory irregularity without any concurrent HR-summary
+        # variability was frequently sensor noise/N2 in retrospective replay.
+        # This is a fixed-cadence proxy, not RMSSD/SDNN.
+        and hr_cv >= 0.015
         and respiratory_not_n3_like
-        and (shift_ratio is None or shift_ratio <= 0.15)
+        and shift_ratio is not None
+        and shift_ratio <= 0.15
     )
-    scores["rem"] += (
-        rr_irregularity * 0.85
-        + hr_summary_irregularity * 0.10 * rem_variability_weight
-        + (time_support * 0.25 if rem_gate else 0.0)
+    entropy_irregularity = (
+        _clamp((respiratory_entropy - 0.35) / 0.40)
+        if respiratory_entropy is not None else 0.0
     )
-    if not rem_gate:
-        scores["rem"] -= 1.35
-    if elapsed_min < 45.0:
-        scores["rem"] -= (45.0 - elapsed_min) / 45.0
 
-    scores["wake"] += acoustic_wake_support
+    # Every state receives the same 0..1 evidence budget.  A failed gate
+    # leaves only weak telemetry for W/N1 and zero candidate evidence for
+    # N2/N3/REM; it never receives a compensating default-stage bonus.
+    wake_motion = _clamp(
+        float(movement_evidence["wake_score_support"]) / 2.0
+    )
+    wake_score = (
+        0.30 * baseline_fit["wake"]
+        + 0.25 * wake_motion
+        + 0.20 * relative_wake_support
+        + 0.10 * (1.0 - flat_trend)
+        + 0.10 * initial_wake
+        + 0.05 * (acoustic_wake_support / 0.35 if acoustic_wake_support else 0.0)
+    )
+    n1_transition = max(
+        onset_transition_support,
+        relative_wake_support if current_stage in {"n2", "n3", "rem"} else 0.0,
+    )
+    if n1_gate and current_stage == "wake":
+        # Entry N1: the sustained level drop prevents a missed descending
+        # slope from trapping the path in Wake.
+        n1_score = (
+            0.25 * baseline_fit["n1"]
+            + 0.20 * n1_transition
+            + 0.25 * relative_sleep_support
+            + 0.15 * (1.0 - flat_trend)
+            + 0.15 * amplitude_instability
+        )
+        n1_phase = "entry_from_wake"
+    elif n1_gate:
+        # After onset, a low HR/RR plateau is evidence for sleep generally,
+        # not evidence that the user remains in N1.  Keeping the entry bonus
+        # active indefinitely was the source of N1-dominant overnight replay.
+        # Persistent N1 now requires transition/instability evidence; stable
+        # physiology can progress to the separately gated N2 candidate.
+        n1_score = (
+            0.25 * baseline_fit["n1"]
+            + 0.30 * n1_transition
+            + 0.25 * amplitude_instability
+            + 0.20 * (1.0 - (hr_stability + rr_stability) / 2.0)
+        )
+        n1_phase = "post_onset_transition"
+    else:
+        n1_score = 0.05 * baseline_fit["n1"]
+        n1_phase = "gate_closed"
+    n2_score = (
+        0.25 * baseline_fit["n2"]
+        + 0.20 * hr_stability
+        + 0.20 * rr_stability
+        + 0.15 * flat_trend
+        + 0.10 * respiratory_stability
+        + 0.05 * amplitude_stability
+        + 0.05 * relative_sleep_support
+    ) if n2_gate else 0.0
+    n3_score = (
+        0.15 * baseline_fit["n3"]
+        + 0.20 * hr_stability
+        + 0.15 * rr_stability
+        + 0.25 * respiratory_stability
+        + 0.10 * amplitude_stability
+        + 0.10 * relative_sleep_support
+        + 0.15  # reward only after every independent N3 gate has passed
+    ) if n3_gate else 0.0
+    if n3_gate:
+        n3_score -= min(
+            0.20,
+            n3_rr_conflict * n3_rr_conflict_penalty * 0.15
+            + n3_hr_conflict * 0.15,
+        )
+    n2_score += (
+        min(0.05, n3_rr_conflict * n2_rr_conflict_support * 0.10)
+        if n2_gate else 0.0
+    )
+    rem_score = (
+        0.20 * baseline_fit["rem"]
+        + 0.35 * rr_irregularity
+        + 0.10 * hr_summary_irregularity * rem_variability_weight
+        + 0.20 * entropy_irregularity
+        + 0.15 * time_support
+    ) if rem_gate else 0.0
+    scores = {
+        "wake": _clamp(wake_score),
+        "n1": _clamp(n1_score),
+        "n2": _clamp(n2_score),
+        "n3": _clamp(n3_score),
+        "rem": _clamp(rem_score),
+    }
 
     evidence = {
         "hr_stability": round(hr_stability, 4),
@@ -437,16 +727,40 @@ def score_sleep_evidence(
         "corroborated_acoustic_wake_support": round(acoustic_wake_support, 4),
         "movement": movement_evidence,
         "sleep_onset_gate": onset_evidence,
+        "sleep_onset_established": sleep_onset_established,
+        "sleep_sequence_established": sleep_sequence_established,
+        "wake_gate": wake_transition_gate,
+        "n1_gate": n1_gate,
+        "n2_gate": n2_gate,
         "n1_time_only_bonus_removed": True,
         "n1_transition_support": round(onset_transition_support, 4),
+        "n1_phase": n1_phase,
+        "n1_relative_drop_is_entry_only": True,
+        "awake_hr_reference": round(awake_hr, 2) if awake_hr is not None else None,
+        "awake_rr_reference": round(awake_rr, 2) if awake_rr is not None else None,
+        "hr_drop_support": round(hr_drop, 4),
+        "rr_drop_support": round(rr_drop, 4),
+        "relative_sleep_support": round(relative_sleep_support, 4),
+        "relative_sleep_support_weighted": round(
+            relative_sleep_support_weighted, 4
+        ),
+        "relative_sleep_support_concordant": round(
+            relative_sleep_support_concordant, 4
+        ),
+        "relative_wake_support": round(relative_wake_support, 4),
         "environment_direct_stage_influence": False,
         "n3_gate": n3_gate,
+        "n3_hr_cv_limit": round(deep_cv_limit, 4),
+        "n3_rr_cv_limit": round(deep_rr_cv_limit, 4),
         "n3_hr_conflict": round(n3_hr_conflict, 4),
         "n3_rr_conflict": round(n3_rr_conflict, 4),
         "rem_gate": rem_gate,
+        "rem_hr_cv_reference": round(rem_cv_limit, 4),
         "rem_rr_irregularity": round(rr_irregularity, 4),
         "rem_hr_summary_irregularity": round(hr_summary_irregularity, 4),
         "rem_time_support": round(time_support, 4),
+        "sleep_elapsed_min": round(sleep_elapsed_min, 2),
+        "comparable_score_budget": "0..1_each_state",
         "ibi_hrv_available": False,
         "hrv_note": "HR-CV is a fixed-cadence summary proxy; RMSSD/SDNN are not calculated",
         "k_complex_available": False,

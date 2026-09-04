@@ -49,6 +49,7 @@ from sleep_system_policy import (
     SLEEP_CONFIRMATION_SECONDS,
     SLEEP_CONFIRM_EPOCHS,
     SLEEP_HISTORY_BACKFILL_VERSION,
+    PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED,
     SLEEP_DISPLAY_WINNER_MARGIN,
     SLEEP_PROBABILITY_EMA_ALPHA,
     SLEEP_PROBABILITY_SWITCH_MARGIN,
@@ -60,6 +61,7 @@ from sleep_system_policy import (
     SLEEP_ONSET_MIN_OBSERVATION_SECONDS,
     SLEEP_PROHIBITED_TRANSITIONS,
     SLEEP_STAGE_CONFIRM_TICKS,
+    SLEEP_STAGE_CONFIRMATION_SECONDS,
     SLEEP_STAGE_MIN_DWELL_SECONDS,
     ZEEP_SLEEP_STATES,
     ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
@@ -246,35 +248,38 @@ class HistoricalStagePath:
 
     def _fallback(self, blocked: str) -> str:
         previous = self.last
-        if previous is None:
-            return "wake"
-        if previous == "wake" and blocked in {"n2", "n3", "rem"}:
-            return "n1"
-        if blocked in {"n2", "n3", "rem"} and not self.cycle_has_n1:
-            return "n1"
-        if previous == "n1" and blocked in {"n3", "rem"}:
-            return "n2"
-        if previous == "n2" and blocked == "wake":
-            return "n1"
-        if previous == "n3" and blocked in {"wake", "n1"}:
-            return "n2"
-        if previous == "rem" and blocked == "wake":
-            return "n1"
-        if previous == "rem" and blocked == "n3":
-            return "n2"
-        if previous in STAGES and previous != blocked:
+        if previous in STAGES:
             return previous
         return "wake"
 
     def stabilize(self, candidate: str, now: float, strong_wake: bool) -> tuple[str, dict[str, Any]]:
-        target = candidate if self._allowed(candidate, strong_wake) else self._fallback(candidate)
+        allowed = self._allowed(candidate, strong_wake)
+        target = candidate if allowed else self._fallback(candidate)
         meta: dict[str, Any] = {
             "raw_candidate": candidate,
-            "bridge_state": target if target != candidate else None,
+            "bridge_state": None,
+            "blocked_candidate": candidate if not allowed else None,
+            "transition_allowed": allowed,
             "previous_state": self.last,
             "strong_wake_override": strong_wake,
             "policy": ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
         }
+        if not allowed:
+            self.candidate = None
+            self.candidate_ticks = 0
+            meta.update({
+                "required_ticks": 0,
+                "candidate_ticks": 0,
+                "candidate_epochs": 0,
+                "required_epochs": 0,
+                "confirmation_seconds": SLEEP_STAGE_CONFIRMATION_SECONDS.get(
+                    target, SLEEP_CONFIRMATION_SECONDS),
+                "held": True,
+                "confirmation_complete": False,
+                "confirmed_state": None,
+                "decision": "blocked_transition_abstain",
+            })
+            return (self.last or "wake"), meta
         if self.last is None:
             if self.candidate == target:
                 self.candidate_ticks += 1
@@ -288,7 +293,8 @@ class HistoricalStagePath:
                 "candidate_ticks": self.candidate_ticks,
                 "candidate_epochs": self.candidate_ticks,
                 "required_epochs": required,
-                "confirmation_seconds": SLEEP_CONFIRMATION_SECONDS,
+                "confirmation_seconds": SLEEP_STAGE_CONFIRMATION_SECONDS.get(
+                    target, SLEEP_CONFIRMATION_SECONDS),
                 "held": held,
                 "confirmation_complete": not held,
                 "confirmed_state": None if held else target,
@@ -302,7 +308,8 @@ class HistoricalStagePath:
                 "candidate_ticks": SLEEP_CONFIRM_EPOCHS,
                 "candidate_epochs": SLEEP_CONFIRM_EPOCHS,
                 "required_epochs": SLEEP_CONFIRM_EPOCHS,
-                "confirmation_seconds": SLEEP_CONFIRMATION_SECONDS,
+                "confirmation_seconds": SLEEP_STAGE_CONFIRMATION_SECONDS.get(
+                    self.last, SLEEP_CONFIRMATION_SECONDS),
                 "held": False,
                 "confirmation_complete": True,
                 "confirmed_state": self.last,
@@ -322,7 +329,8 @@ class HistoricalStagePath:
             "candidate_ticks": self.candidate_ticks,
             "candidate_epochs": self.candidate_ticks,
             "required_epochs": required,
-            "confirmation_seconds": SLEEP_CONFIRMATION_SECONDS,
+            "confirmation_seconds": SLEEP_STAGE_CONFIRMATION_SECONDS.get(
+                target, SLEEP_CONFIRMATION_SECONDS),
             "dwell_s": round(dwell, 1),
             "minimum_dwell_s": self.minimum_dwell.get(self.last, 0.0),
             "held": held,
@@ -426,6 +434,13 @@ def rescore_event(
         sleep_onset_gate_passed=bool(
             evidence["sleep_onset_gate"]["passed"]
         ),
+        eligible_states={
+            "wake": evidence["wake_gate"],
+            "n1": evidence["n1_gate"],
+            "n2": evidence["n2_gate"],
+            "n3": evidence["n3_gate"],
+            "rem": evidence["rem_gate"],
+        },
     )
     strong_wake = bool(
         instant_candidate == "wake" and evidence["movement"]["strong_wake"]
@@ -741,6 +756,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    if args.apply:
+        raise SystemExit(
+            "Apply disabled: legacy event-driven replay cannot rebuild every "
+            "30-second epoch from Raw BCG. Run audit_sleep_history_shadow.py "
+            "and promote a versioned shadow run only after all gates pass."
+        )
     data_dir = args.data_dir.resolve()
     os.environ["DATA_DIR"] = str(data_dir)
     os.environ.setdefault("ZEEP_GPIO_ENABLED", "0")
@@ -808,8 +829,21 @@ def main() -> None:
     age = profile.get("age")
     age_group = profile.get("age_group") or zeep._age_group(age)
     baseline, gender_adjustment = zeep._gender_adjusted_baseline(age_group, session.get("gender"))
-    baseline, personal_meta = zeep.baselines.personalize_baseline(session["username_key"], baseline)
-    personal_thresholds = zeep.baselines.thresholds_for(session["username_key"]) or {}
+    personal_candidate, personal_meta = zeep.baselines.personalize_baseline(
+        session["username_key"], baseline
+    )
+    if PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED:
+        baseline = personal_candidate
+        personal_thresholds = (
+            zeep.baselines.thresholds_for(session["username_key"]) or {}
+        )
+    else:
+        personal_thresholds = {}
+        personal_meta = {
+            **personal_meta,
+            "direct_stage_influence": False,
+            "candidate_available": personal_candidate != baseline,
+        }
     cv_deep = float(personal_thresholds.get("cv_deep", zeep.SLEEP_HR_CV_DEEP))
     cv_rem = float(personal_thresholds.get("cv_rem", zeep.SLEEP_HR_CV_REM))
 

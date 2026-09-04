@@ -23,7 +23,10 @@ from sleep_signal_features import (
     terminal_wake_transition,
     waveform_features,
 )
-from sleep_stage_scoring import score_sleep_evidence
+from sleep_stage_scoring import (
+    evidence_candidate_with_abstention,
+    score_sleep_evidence,
+)
 
 
 class SignalFeatureTests(unittest.TestCase):
@@ -381,7 +384,18 @@ class ScoringGuardTests(unittest.TestCase):
             base_scores=fits,
             hr_fits=fits,
             rr_fits=fits,
-            metrics=metrics,
+            metrics={
+                "mean_hr": 58.0,
+                "mean_rr": 13.0,
+                "awake_hr_reference": 72.0,
+                "awake_rr_reference": 17.0,
+                "current_stage": "n2",
+                "sleep_onset_established": True,
+                "sleep_elapsed_min": elapsed,
+                "waveform_available": True,
+                "bcg_amplitude_shift_ratio": 0.05,
+                **metrics,
+            },
             elapsed_min=elapsed,
             rem_variability_weight=1.0,
             n3_rr_conflict_penalty=1.2,
@@ -426,7 +440,8 @@ class ScoringGuardTests(unittest.TestCase):
             **common,
             "corroborated_acoustic_wake_support": 999.0,
         })
-        self.assertAlmostEqual(supported["wake"] - baseline["wake"], 0.35)
+        self.assertGreater(supported["wake"], baseline["wake"])
+        self.assertLessEqual(supported["wake"] - baseline["wake"], 0.05)
         for stage in ("n1", "n2", "n3", "rem"):
             self.assertAlmostEqual(supported[stage], baseline[stage])
         self.assertEqual(evidence["corroborated_acoustic_wake_support"], 0.35)
@@ -450,6 +465,8 @@ class ScoringGuardTests(unittest.TestCase):
 
     def test_initial_acquisition_drop_cannot_create_n1(self):
         scores, evidence = self.score({
+            "current_stage": "wake",
+            "sleep_onset_established": False,
             "hr_cv": 0.0434,
             "rr_cv": 0.1035,
             "movement_ratio": 0.0,
@@ -466,9 +483,10 @@ class ScoringGuardTests(unittest.TestCase):
     def test_onset_needs_quiet_downward_evidence_after_observation(self):
         common = {
             "hr_cv": 0.03,
-            "rr_cv": 0.04,
+            "rr_cv": 0.035,
             "hr_slope_bpm_per_min": -2.0,
             "rr_slope_per_min": -0.5,
+            "resp_regularity": 0.60,
             "waveform_available": True,
         }
         _, quiet = self.score({**common, "movement_ratio": 0.0}, elapsed=6.0)
@@ -481,8 +499,46 @@ class ScoringGuardTests(unittest.TestCase):
         self.assertFalse(moving["sleep_onset_gate"]["passed"])
         self.assertFalse(moving["sleep_onset_gate"]["quiet_bed"])
 
+        _, flat_after_drop = self.score({
+            **common,
+            "movement_ratio": 0.0,
+            "hr_slope_bpm_per_min": 0.0,
+            "rr_slope_per_min": 0.0,
+            "awake_hr_reference": 72.0,
+            "mean_hr": 66.0,
+        }, elapsed=20.0)
+        self.assertTrue(flat_after_drop["sleep_onset_gate"]["passed"])
+        self.assertTrue(
+            flat_after_drop["sleep_onset_gate"]["level_shift_onset_passed"]
+        )
+        self.assertEqual(
+            flat_after_drop["sleep_onset_gate"]["accepted_path"],
+            "sustained_relative_drop",
+        )
+
+        _, hr_only_drop = self.score({
+            **common,
+            "mean_hr": 66.0,
+            "mean_rr": 18.0,
+            "movement_ratio": 0.0,
+            "hr_slope_bpm_per_min": 0.0,
+            "rr_slope_per_min": 0.0,
+        }, elapsed=20.0)
+        self.assertTrue(hr_only_drop["sleep_onset_gate"]["passed"])
+        self.assertGreater(
+            hr_only_drop["sleep_onset_gate"]["relative_sleep_support_weighted"],
+            hr_only_drop["sleep_onset_gate"]["minimum_relative_sleep_support"],
+        )
+        self.assertEqual(
+            hr_only_drop["sleep_onset_gate"]["relative_sleep_support_concordant"],
+            0.0,
+        )
+        self.assertFalse(hr_only_drop["sleep_onset_gate"]["rr_rate_drop_required"])
+
         _, flat_quiet_wake = self.score({
             **common,
+            "mean_hr": 72.0,
+            "mean_rr": 17.0,
             "movement_ratio": 0.0,
             "hr_slope_bpm_per_min": 0.0,
             "rr_slope_per_min": 0.0,
@@ -492,6 +548,40 @@ class ScoringGuardTests(unittest.TestCase):
             flat_quiet_wake["sleep_onset_gate"]["downward_transition"],
             flat_quiet_wake["sleep_onset_gate"]["minimum_downward_transition"],
         )
+        self.assertLess(
+            flat_quiet_wake["sleep_onset_gate"]["relative_sleep_support"],
+            flat_quiet_wake["sleep_onset_gate"]["minimum_relative_sleep_support"],
+        )
+
+    def test_gated_n3_has_specific_boundary_but_ambiguous_n2_still_abstains(self):
+        distribution = {
+            "wake": 0.05, "n1": 0.14, "n2": 0.35, "n3": 0.46, "rem": 0.0,
+        }
+        ordinary, ordinary_meta = evidence_candidate_with_abstention(
+            distribution, minimum_winner=0.50, minimum_margin=0.10,
+        )
+        gated, gated_meta = evidence_candidate_with_abstention(
+            distribution,
+            minimum_winner=0.50,
+            minimum_margin=0.10,
+            gated_stage_thresholds={"n3": (0.40, 0.05)},
+        )
+        self.assertIsNone(ordinary)
+        self.assertFalse(ordinary_meta["passed"])
+        self.assertEqual(gated, "n3")
+        self.assertEqual(gated_meta["threshold_source"], "n3_independent_gate")
+
+        n2_distribution = {
+            "wake": 0.05, "n1": 0.14, "n2": 0.46, "n3": 0.35, "rem": 0.0,
+        }
+        n2_candidate, n2_meta = evidence_candidate_with_abstention(
+            n2_distribution,
+            minimum_winner=0.50,
+            minimum_margin=0.10,
+            gated_stage_thresholds={"n3": (0.40, 0.05)},
+        )
+        self.assertIsNone(n2_candidate)
+        self.assertEqual(n2_meta["threshold_source"], "general")
 
 
 if __name__ == "__main__":

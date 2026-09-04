@@ -13,6 +13,8 @@ class MaintenanceRegistryTests(unittest.TestCase):
     def test_registry_covers_every_supported_tool_and_file_exists(self):
         expected = {
             "reclassify_sleep_history.py",
+            "audit_sleep_history_shadow.py",
+            "promote_sleep_history.py",
             "rescore_session_reports.py",
             "recalibrate_sound_history.py",
             "cleanup_short_sessions.py",
@@ -31,12 +33,15 @@ class MaintenanceRegistryTests(unittest.TestCase):
             with self.subTest(tool=filename):
                 self.assertTrue(spec["group"])
                 self.assertTrue(spec["purpose"])
-                self.assertTrue(spec["writes"])
+                self.assertIsInstance(spec["writes"], list)
                 self.assertTrue(spec["preserves"])
                 self.assertTrue(spec["guard"])
                 self.assertIn(
                     spec["default_mode"],
-                    {"dry_run", "refuse_without_confirmation"},
+                    {
+                        "audit_only", "dry_run", "read_only",
+                        "refuse_without_confirmation",
+                    },
                 )
 
     def test_no_browser_execution_is_exposed(self):

@@ -1320,7 +1320,7 @@
         <div class="bcg-help-grid">
           <div><strong>รอบรับข้อมูล</strong>บันทึกชุดคำนวณทุก 10 วินาที โดยยังอ่าน serial ทุก frame เพื่อไม่ให้ข้อมูลตกหล่น</div>
           <div><strong>Evidence epoch</strong>รวม Sensor 3 ชุดเป็นหลักฐานใหม่ทุก 30 วินาที โดยใช้ rolling context 6 ชุด/60 วินาที</div>
-          <div><strong>Confirmed State</strong>เปลี่ยนสถานะเมื่อ candidate เดิมชนะต่อเนื่อง 2 epoch/60 วินาที</div>
+          <div><strong>Confirmed State</strong>W/N1/N3/REM ใช้ 2 epoch/60 วินาที; N2 ใช้ 4 epoch/120 วินาที</div>
           <div><strong>Status 0</strong>On bed · อยู่บนเตียง</div>
           <div><strong>Status 1</strong>Get out of bed / Off bed · ออกจากเตียง</div>
           <div><strong>Status 2</strong>Moving · มีการเคลื่อนไหว</div>
@@ -1335,7 +1335,7 @@
           <div><strong>REM</strong>HR/RR variability เพิ่มขึ้น ขณะยัง On bed และให้น้ำหนักเพิ่มช่วงหลัง</div>
           <div><strong>REM Transition</strong>N1 → REM แบบ rare/SOREMP-like และ N2/N3 → REM ได้เมื่อหลักฐาน REM ชนะต่อเนื่อง 2 epoch/60 วินาที; REM → Wake ใช้ Wake evidence ระยะเดียวกัน ส่วนความง่วงหรือฝันกลางวันขณะตื่นไม่ใช่ REM</div>
           <div><strong>N3 Transition</strong>อนุญาตเมื่อรอบการนอนนี้เคยผ่าน N1 และ N2 มาก่อน; candidate ที่ข้ามลำดับจะถูก bridge ผ่าน N1/N2</div>
-          <div><strong>W · ตื่น Transition</strong>REM → Wake ได้ด้วย Wake evidence 2 epoch; N2/N3 ต้องมี Strong-Wake จึงเปิดทางตรง และทุก Sleep State ยังยืนยัน 60 วินาที</div>
+          <div><strong>W · ตื่น Transition</strong>REM → Wake ได้ด้วย Wake evidence 2 epoch; N2/N3 ต้องมี Strong-Wake จึงเปิดทางตรง โดย W/N1/N3/REM ยืนยัน 60 วินาทีและ N2 ยืนยัน 120 วินาที</div>
           <div><strong>Probability</strong>เป็นหลักฐานล่าสุดจาก HR, RR, Moving, Bed Status, อายุและเวลา อาจต่างจาก State ที่ยืนยันแล้วระหว่างรอยืนยัน</div>
         </div>
       </details>
@@ -1674,8 +1674,8 @@
           <div><b>W</b><strong>ตื่น</strong><span>ช่วงที่ระบบประเมินว่ายังตื่นหรือกลับเข้าสู่สถานะตื่น</span></div>
           <div><b>N1</b><strong>หลับตื้น / เคลิ้มหลับ</strong><span>เริ่มเข้าสู่การนอน ร่างกายผ่อนคลาย และปลุกให้ตื่นได้ง่าย</span></div>
           <div><b>N2</b><strong>หลับสนิทขึ้น / หลับตื้นต่อเนื่อง</strong><span>หัวใจและการหายใจช้าลง ร่างกายเข้าสู่การนอนที่ต่อเนื่องขึ้น</span></div>
-          <div><b>N3</b><strong>หลับลึก / ร่างกายซ่อมแซมส่วนที่สึกหรอ</strong><span>ระยะที่หลับลึกที่สุดและสัมพันธ์กับกระบวนการฟื้นฟูร่างกาย</span></div>
-          <div><b>REM</b><strong>หลับฝัน / สมองจัดระเบียบความจำ</strong><span>สมองทำงานมากขึ้น มักเกิดความฝัน และเกี่ยวข้องกับความจำและอารมณ์</span></div>
+          <div><b>N3</b><strong>หลับลึก</strong><span>รูปแบบ BCG/HR/RR ที่สอดคล้องกับ N3; เชื่อมโยงกับการฟื้นฟู แต่ไม่ได้วัดการซ่อมแซมโดยตรง</span></div>
+          <div><b>REM</b><strong>ระยะ REM</strong><span>รูปแบบ BCG/HR/RR ที่สอดคล้องกับ REM; ไม่ใช่การวัดความฝันหรือความจำโดยตรง</span></div>
         </div>
         <div class="stage-guide-note">ค่าบน ZEEP เป็นการประเมินจาก BCG และ Sensor ไม่ใช่ผล Sleep Stage จากการตรวจ PSG</div>
       </details>
@@ -2057,8 +2057,8 @@ const SLEEP_TH = {
   wake:       {code:'W',   title:'ตื่น',meaning:'ช่วงที่ระบบประเมินว่ายังตื่นหรือกลับเข้าสู่สถานะตื่น',label:'ตื่น',cls:'wake'},
   n1:         {code:'N1',  title:'หลับตื้น / เคลิ้มหลับ',meaning:'เริ่มเข้าสู่การนอน ร่างกายผ่อนคลาย และปลุกให้ตื่นได้ง่าย',label:'หลับตื้น',cls:'nrem'},
   n2:         {code:'N2',  title:'หลับสนิทขึ้น / หลับตื้นต่อเนื่อง',meaning:'หัวใจและการหายใจช้าลง ร่างกายเข้าสู่การนอนที่ต่อเนื่องขึ้น',label:'หลับสนิทขึ้น',cls:'nrem'},
-  n3:         {code:'N3',  title:'หลับลึก / ร่างกายซ่อมแซมส่วนที่สึกหรอ',meaning:'ระยะที่หลับลึกที่สุดและสัมพันธ์กับกระบวนการฟื้นฟูร่างกาย',label:'หลับลึก',cls:'deep'},
-  rem:        {code:'REM', title:'หลับฝัน / สมองจัดระเบียบความจำ',meaning:'สมองทำงานมากขึ้น มักเกิดความฝัน และเกี่ยวข้องกับความจำและอารมณ์',label:'หลับฝัน',cls:'rem'},
+  n3:         {code:'N3',  title:'หลับลึก',meaning:'รูปแบบ BCG/HR/RR ที่สอดคล้องกับ N3; เชื่อมโยงกับการฟื้นฟู แต่ไม่ได้วัดการซ่อมแซมโดยตรง',label:'หลับลึก',cls:'deep'},
+  rem:        {code:'REM', title:'ระยะ REM',meaning:'รูปแบบ BCG/HR/RR ที่สอดคล้องกับ REM; ไม่ใช่การวัดความฝันหรือความจำโดยตรง',label:'REM',cls:'rem'},
   // ``nrem`` is kept only for rendering old history. The live estimator never
   // emits a generic NREM because ZEEP's current ontology is W/N1/N2/N3/REM.
   nrem:       {code:'NREM', label:'หลับ · ข้อมูลเดิม',cls:'nrem'},
@@ -2085,6 +2085,7 @@ function renderSleepState(sl={},session={},bcg={}){
   const source = sl.classification_source === 'personal' ? 'Personal Baseline' : 'Age + Gender Baseline';
   const provisional = classificationActive&&sl.provisional ? ' · กำลังเรียนรู้' : '';
   const confirmProgress=`${confirmation.candidate_epochs||0}/${confirmation.required_epochs||2} epoch`;
+  const confirmationSeconds=(confirmation.required_epochs||2)*30;
   const classificationNote=classificationActive
     ? `${source}${provisional} · ยืนยัน ${meta.code} แล้ว · หลักฐานล่าสุด ${(evidenceCandidate||'--').toUpperCase()} · มั่นใจ ${confidenceTh[sl.confidence] || 'ต่ำ'}`
     : sl.evidence_active
@@ -2113,7 +2114,7 @@ function renderSleepState(sl={},session={},bcg={}){
   const progression=(sl.stage_progression||[]).map(x=>x.toUpperCase());
   const previous=sl.previous_state?sl.previous_state.toUpperCase():'ยังไม่มี';
   const supportLines = [
-    `Confirmed State ล่าสุด ${previous} · Evidence ${(evidenceCandidate||'--').toUpperCase()} ${confirmProgress} · ต้องต่อเนื่อง 60 วินาทีก่อนเปลี่ยน State`,
+    `Confirmed State ล่าสุด ${previous} · Evidence ${(evidenceCandidate||'--').toUpperCase()} ${confirmProgress} · ต้องต่อเนื่อง ${confirmationSeconds} วินาทีก่อนเปลี่ยน State`,
     `Evidence: ${sl.evidence_version || 'zeep-wellness-evidence'} · ใช้แนวโน้มและ variability ร่วมกัน ไม่ใช้ค่า HR/RR จุดเดียว`,
     `Gender Baseline · HR offset ${genderAdj.hr_offset>=0?'+':''}${genderAdj.hr_offset ?? 0} BPM · RR offset ${genderAdj.rr_offset>=0?'+':''}${genderAdj.rr_offset ?? 0} · REM variability ×${genderAdj.rem_variability_weight ?? 1} · ${genderAdj.note || 'neutral'}`,
     progression.length?`Timeline ล่าสุด: ${progression.join(' → ')}`:'',
@@ -5033,13 +5034,13 @@ function sleepQualityTone(q){
 
 function sleepQualityCompact(q, ended){
   if (!ended) return '<span class="hist-quality quality-unavailable"><strong>LIVE</strong><span><b>กำลังบันทึก</b><small>คุณภาพหลังจบ Session</small></span></span>';
-  const title=q?.score_title||(q?.quality_type==='rest_goal'?'คุณภาพการพัก':'คุณภาพการนอน');
+  const title=q?.score_title||(q?.quality_type==='rest_goal'?'Recovery Score':'Sleep Score');
   if (!q?.available) return `<span class="hist-quality quality-unavailable"><strong>—</strong><span><b>ข้อมูลไม่พอ</b><small>${title}</small></span></span>`;
   return `<span class="hist-quality quality-${sleepQualityTone(q)}"><strong>${q.score}</strong><span><b>${q.level}</b><small>${title}</small></span></span>`;
 }
 
 function renderSleepQuality(q, ended){
-  const scoreTitle=q?.score_title||(q?.quality_type==='rest_goal'?'คุณภาพการพัก':'คุณภาพการนอน');
+  const scoreTitle=q?.score_title||(q?.quality_type==='rest_goal'?'Recovery Score':'Sleep Score');
   if (!ended || !q?.available){
     const reason = !ended ? 'คะแนนจะแสดงเมื่อจบและบันทึก Session' : (q?.reason || 'ข้อมูล Sensor ไม่เพียงพอสำหรับประเมิน');
     return `<section class="sleep-quality-card quality-unavailable"><div class="sleep-quality-ring"><strong>—</strong><small>/100</small></div><div class="sleep-quality-copy"><span class="sleep-quality-eyebrow">${scoreTitle}</span><h3>ข้อมูลไม่พอ</h3><p>${reason}</p><small>ระบบไม่สร้างคะแนนเมื่อข้อมูล Sensor ไม่เพียงพอ</small></div></section>`;
@@ -5080,7 +5081,7 @@ function renderSleepQuality(q, ended){
     .filter(Boolean).map(([label,value])=>`<div><span>${label}</span><b>${value}</b></div>`).join('');
   return `<section class="sleep-quality-card quality-${sleepQualityTone(q)}" style="--quality-score:${q.score}">
     <div class="sleep-quality-ring"><strong>${q.score}</strong><small>/100</small></div>
-    <div class="sleep-quality-copy"><span class="sleep-quality-eyebrow">${scoreTitle} · ZEEP WELLNESS · SENSOR</span><h3>${q.level}</h3><p>จากข้อมูล Sensor: ${q.insight || ''}</p><div class="sleep-quality-metrics">${metrics}</div><small>${q.outcome_interpretation?`${q.outcome_interpretation} · `:''}${q.score_basis || ''} · ${q.disclaimer || 'ประเมินจาก BCG/Sensor ไม่ใช่ผลวินิจฉัยจาก PSG'}</small></div>
+    <div class="sleep-quality-copy"><span class="sleep-quality-eyebrow">${scoreTitle} · ZEEP WELLNESS · SENSOR</span><h3>${q.level}</h3><p>${q.score_scope || 'ค่าประเมินจาก Sensor'} · ${q.insight || ''}</p><div class="sleep-quality-metrics">${metrics}</div><small>${q.outcome_interpretation?`${q.outcome_interpretation} · `:''}${q.score_basis || ''} · ${q.disclaimer || 'ประเมินจาก BCG/Sensor ไม่ใช่ผลวินิจฉัยจาก PSG'}</small></div>
   </section>`;
 }
 
@@ -5183,6 +5184,11 @@ function renderSessionOverview(report){
   ].join('');
   const environmentAssessment=report.environment_assessment||{};
   const restMode=report.rest_mode||{},restModeGroup=restMode.group||restMode.resolved||'sleep';
+  const stageCoverage=Number(coverage.sleep_stage_pct)||0;
+  const stageReady=report.quality?.available===true&&stageCoverage>=80&&stages.length>0;
+  const stageSummary=stageReady
+    ? `<div class="stage-summary"><div class="report-subhead"><span>สัดส่วน Sleep Stage</span><small>เฉพาะ Sleep State ที่ยืนยันแล้ว</small></div><div class="stage-summary-content"><div class="stage-donut" style="--stage-ring:conic-gradient(${segments.join(',')})"><span><b>${fmtDur(sleep.estimated_sleep_s)}</b><small>Sensor ประเมินว่าหลับ</small></span></div><div class="stage-legend">${stageRows}</div></div></div>`
+    : `<div class="stage-summary"><div class="report-subhead"><span>สัดส่วน Sleep Stage</span><small>ยังไม่เผยแพร่</small></div><div class="flat-message warning"><span class="flat-icon">!</span><div><b>ข้อมูลยืนยันยังไม่ครบ</b><span>ต้องมี Sleep State coverage อย่างน้อย 80% จึงแสดงสัดส่วน · ปัจจุบัน ${stageCoverage.toFixed(0)}%</span></div></div></div>`;
   const disturbanceTitle=restModeGroup==='sleep'?'สิ่งที่อาจรบกวนการนอน':'สิ่งที่อาจรบกวนการพัก';
   const environmentStatus=`คาดหวังพอใช้ขึ้นไป · ${environmentAssessment.mode_label||restMode.label||'ตาม Mode'} · ${environmentAssessment.context_only===false?'':'ไม่กำหนด Sleep State'}`;
   const metrics=[
@@ -5193,13 +5199,16 @@ function renderSessionOverview(report){
   ].map(([icon,label,value])=>`<div class="session-key-metric"><i>${icon}</i><span><small>${label}</small><b>${value}</b></span></div>`).join('');
   const confidence=data.confidence_pct;
   const confidenceText=confidence?` · Confidence สูง ${confidence.high||0}% · กลาง ${confidence.medium||0}% · ต่ำ ${confidence.low||0}%`:'';
+  const guidance=report.post_session_guidance||{};
+  const guidanceHtml=guidance.primary?`<div class="report-context-note"><b>คำแนะนำหลังออกจาก ZEEP</b> · ${guidance.primary}${guidance.next_session?` · ${guidance.next_session}`:''}${guidance.self_check?`<br><b>เช็กความพร้อม</b> · ${guidance.self_check}`:''}</div>`:'';
   return `<section class="session-report-overview">
     <div class="session-report-head"><div><div class="sleep-quality-eyebrow">SESSION SUMMARY · ${report.version||''}</div><h3>Sensor ประเมินว่าหลับ ${fmtDur(sleep.estimated_sleep_s)}</h3></div><span class="report-data-badge ${data.level||'low'}">${data.label||'ข้อมูลจำกัด'}</span></div>
     <div class="session-key-metrics">${metrics}</div>
     <div class="session-report-body">
-      <div class="stage-summary"><div class="report-subhead"><span>สัดส่วน Sleep Stage</span><small>เฉพาะช่วงที่มี Sensor</small></div><div class="stage-summary-content"><div class="stage-donut" style="--stage-ring:conic-gradient(${segments.join(',')})"><span><b>${fmtDur(sleep.estimated_sleep_s)}</b><small>Sensor ประเมินว่าหลับ</small></span></div><div class="stage-legend">${stageRows}</div></div></div>
+      ${stageSummary}
       <div class="disturbance-summary"><div class="report-subhead"><span>${disturbanceTitle}</span><small>${environmentStatus}</small></div><div class="disturbance-list">${findings||'<div class="mini">ไม่มีข้อมูลเพียงพอ</div>'}</div></div>
     </div>
+    ${guidanceHtml}
     <div class="report-context-note">ใช้เวลาก่อนเริ่มหลับ ${sleep.sleep_onset_proxy_s==null?'--':fmtDur(sleep.sleep_onset_proxy_s)} · เข้าสู่ W · ตื่น ${sleep.wake_entries ?? sleep.awakenings ?? 0} ครั้ง · ${data.note||''} · Coverage: Recording ${coverage.recording_pct||0}% · BCG ${coverage.bcg_pct||0}% · Sleep Stage ${coverage.sleep_stage_pct||0}% · Environment ${coverage.environment_pct||0}%${confidenceText}</div>
   </section>`;
 }
@@ -5483,7 +5492,7 @@ function render(s, source='ws'){
       : 'คงค่าล่าสุด เนื่องจากไม่ได้รับค่าที่เป็นตัวเลขจาก sensor'
     : e.sound_value_limited
       ? `ค่าก่อนจำกัดช่วง ${e.sound_dba_est_unbounded ?? 'N/A'} dBA est. · ค่าสูงสุดที่แสดง 120`
-      : 'ค่าประเมินจาก SPH0645 · ปัด abs(raw dBFS) เป็น 1 ตำแหน่ง แล้วหัก 3%';
+      : 'ค่าประเมินจาก SPH0645 · ปัด abs(raw dBFS) เป็น 1 ตำแหน่ง · ไม่หักเปอร์เซ็นต์';
   const soundQuality=document.getElementById('soundQuality');
   soundQuality.textContent=espFallback
     ? `⚠ SPH0645 · ใช้ค่าล่าสุด (${espAgeText})`

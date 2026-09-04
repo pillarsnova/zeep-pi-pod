@@ -827,6 +827,10 @@ class RbacApiTests(unittest.TestCase):
         player.lock = threading.Lock()
         player.backend = "mpv"
         player.audio_device = None
+        player.music_dir = pod_app.MUSIC_DIR
+        player.max_volume = pod_app.MAX_VOLUME
+        player.state = pod_app.state
+        player.state_lock = pod_app.state_lock
         player.loop = False
         player.current_path = None
         player.queue_paths = []

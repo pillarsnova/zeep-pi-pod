@@ -1,5 +1,8 @@
 # ZEEP Pod — Pi5 Local Dashboard
 
+Code ownership, package boundaries and the incremental PEP 8 refactor are
+defined in [`docs/code-architecture.md`](docs/code-architecture.md).
+
 จอควบคุมภายในตู้ ZEEP Pod สำหรับ Raspberry Pi 5 — ธีม J.A.R.V.I.S. HUD
 ใช้งานผ่านแท็บเล็ต/เบราว์เซอร์บน Wi-Fi hotspot ของ Pi ได้โดย**ไม่ต้องมีอินเทอร์เน็ต**
 การเปลี่ยนแปลง production ใช้ branch `develop` และต้องผ่าน regression tests

@@ -12,14 +12,13 @@ import shutil
 import socket
 import struct
 import subprocess
-import tempfile
 import threading
 import time
 import uuid
 import secrets
 from collections import Counter, deque
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -83,6 +82,28 @@ from control_protocol import (
 )
 from database import DatabaseManager
 from api_v1 import create_api_v1_router
+from zeep_pod.identity.profile_fields import (
+    age_from_dob as _age_from_dob,
+    health_reference_from_profile as build_health_reference,
+    normalise_blood_group as _normalise_blood_group,
+    normalise_body_measurement as _normalise_body_measurement,
+    normalise_date_of_birth as _normalise_date_of_birth,
+    normalize_account_key as _normalize_account_key,
+    normalize_email as _normalize_email,
+    normalize_username as _normalize_username,
+    profile_value as _profile_value,
+    zeep_gender as _zeep_gender,
+    zeep_health_reference as _zeep_health_reference,
+)
+from zeep_pod.hardware.audio import AudioPlayer
+from zeep_pod.hardware.gpio import GPIOManager
+from zeep_pod.sessions.cadence import (
+    cadence_interval_at as _cadence_interval_at,
+    normalise_cadence_segments as _normalise_cadence_segments,
+    normalise_samples_for_report as _normalise_samples_for_report,
+    sample_interval_seconds as _sample_interval_seconds_impl,
+    timeline_sample_interval as _timeline_sample_interval,
+)
 from maintenance_registry import maintenance_contract_snapshot
 from migration import migrate_jsonl
 from personal import BaselineStore
@@ -221,15 +242,6 @@ from sleep_system_policy import (
     sleep_policy_snapshot,
 )
 
-
-try:
-    from gpiozero import OutputDevice
-    from gpiozero.pins.lgpio import LGPIOFactory
-    GPIO_AVAILABLE = True
-except Exception:
-    OutputDevice = None
-    LGPIOFactory = None
-    GPIO_AVAILABLE = False
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -478,143 +490,12 @@ if SESSION_SAMPLE_SECONDS <= 0:
 SESSION_SAMPLE_LIMIT = int(os.getenv("SESSION_SAMPLE_LIMIT", "12000"))
 
 
-def _sample_interval_seconds(value: Any, fallback: float = SESSION_SAMPLE_SECONDS) -> float:
-    """Return a sane persisted cadence without rewriting legacy Sessions."""
-    try:
-        interval = float(value)
-    except (TypeError, ValueError):
-        interval = float(fallback)
-    return interval if math.isfinite(interval) and interval > 0 else float(fallback)
-
-
-def _timeline_sample_interval(rows: List[Dict[str, Any]], fallback: float = 5.0) -> float:
-    """Infer old Session cadence from timestamps when no versioned value exists."""
-    timestamps: List[float] = []
-    for row in rows[:120]:
-        try:
-            timestamps.append(datetime.fromisoformat(str(row["timestamp"])).timestamp())
-        except (KeyError, TypeError, ValueError):
-            continue
-    gaps = sorted(
-        current - previous
-        for previous, current in zip(timestamps, timestamps[1:])
-        if 0.5 <= current - previous <= 60.0
-    )
-    if not gaps:
-        return _sample_interval_seconds(fallback, 5.0)
-    return round(gaps[len(gaps) // 2], 3)
-
-
-def _cadence_segment(
-    start_at_utc: Any,
-    sample_interval_s: Any,
-) -> Optional[Dict[str, Any]]:
-    """Return one validated, JSON-safe Session cadence segment."""
-    try:
-        start = datetime.fromisoformat(str(start_at_utc))
-    except (TypeError, ValueError):
-        return None
-    if start.tzinfo is None:
-        start = start.replace(tzinfo=timezone.utc)
-    return {
-        "start_at_utc": start.astimezone(timezone.utc).isoformat(),
-        "sample_interval_s": _sample_interval_seconds(sample_interval_s),
-    }
-
-
-def _normalise_cadence_segments(
-    raw_segments: Any,
-    *,
-    start_at_utc: Any,
-    fallback_interval_s: Any,
-) -> List[Dict[str, Any]]:
-    """Validate persisted cadence history and guarantee an initial segment."""
-    segments: List[Dict[str, Any]] = []
-    for raw in raw_segments if isinstance(raw_segments, list) else []:
-        if not isinstance(raw, dict):
-            continue
-        segment = _cadence_segment(
-            raw.get("start_at_utc"), raw.get("sample_interval_s"))
-        if segment is not None:
-            segments.append(segment)
-    segments.sort(key=lambda item: item["start_at_utc"])
-    if not segments:
-        initial = _cadence_segment(start_at_utc, fallback_interval_s)
-        if initial is not None:
-            segments.append(initial)
-    return segments
-
-
-def _cadence_interval_at(
-    epoch_s: Any,
-    segments: Any,
-    fallback_interval_s: Any,
+def _sample_interval_seconds(
+    value: Any,
+    fallback: float = SESSION_SAMPLE_SECONDS,
 ) -> float:
-    """Resolve the acquisition cadence that applied at a Timeline timestamp."""
-    interval = _sample_interval_seconds(fallback_interval_s)
-    try:
-        sample_epoch = float(epoch_s)
-    except (TypeError, ValueError):
-        return interval
-    for raw in segments if isinstance(segments, list) else []:
-        if not isinstance(raw, dict):
-            continue
-        try:
-            start_epoch = datetime.fromisoformat(
-                str(raw.get("start_at_utc"))).timestamp()
-        except (TypeError, ValueError):
-            continue
-        if sample_epoch + 0.001 < start_epoch:
-            break
-        interval = _sample_interval_seconds(
-            raw.get("sample_interval_s"), interval)
-    return interval
-
-
-def _normalise_samples_for_report(
-    samples: List[Dict[str, Any]],
-    fallback_interval_s: Any,
-) -> tuple[List[Dict[str, Any]], float, List[Dict[str, Any]]]:
-    """Convert mixed 5/10-second acquisition rows to equal-duration units.
-
-    Raw Timeline rows are never modified.  Report algorithms currently accept
-    one cadence, so a 10-second row is represented as two 5-second units when
-    the same Session also contains legacy 5-second rows.  This preserves TST,
-    WASO, stage proportions and time-weighted Sensor averages across a live
-    cadence migration without pretending that every raw row has equal weight.
-    """
-    if not samples:
-        interval = _sample_interval_seconds(fallback_interval_s)
-        return [], interval, []
-    intervals = [
-        _sample_interval_seconds(sample.get("sample_interval_s"), fallback_interval_s)
-        for sample in samples
-    ]
-    # Millisecond GCD keeps common production cadences (5/10/30 s) exact while
-    # avoiding floating-point ratio drift.
-    base_ms = max(100, int(round(intervals[0] * 1000)))
-    for interval in intervals[1:]:
-        base_ms = math.gcd(base_ms, max(100, int(round(interval * 1000))))
-    report_interval_s = base_ms / 1000.0
-    normalised: List[Dict[str, Any]] = []
-    summary: Dict[float, Dict[str, Any]] = {}
-    for sample, interval in zip(samples, intervals):
-        repeats = max(1, int(round(interval / report_interval_s)))
-        # Guard corrupt metadata from exploding report memory. Production
-        # 5/10-second segments require only one or two units.
-        repeats = min(repeats, 120)
-        for _ in range(repeats):
-            unit = dict(sample)
-            unit["sample_interval_s"] = report_interval_s
-            normalised.append(unit)
-        key = round(interval, 3)
-        bucket = summary.setdefault(key, {
-            "sample_interval_s": key, "raw_samples": 0, "covered_seconds": 0.0,
-        })
-        bucket["raw_samples"] += 1
-        bucket["covered_seconds"] = round(
-            float(bucket["covered_seconds"]) + interval, 3)
-    return normalised, report_interval_s, [summary[key] for key in sorted(summary)]
+    """Compatibility facade for the extracted Session cadence module."""
+    return _sample_interval_seconds_impl(value, fallback)
 # เริ่มนับ/บันทึกจริงเมื่อผู้ใช้นอนบนเตียงต่อเนื่องครบตามนี้ (ลุกก่อนครบ = รีเซ็ต)
 BED_START_SECONDS = float(os.getenv("BED_START_SECONDS", "20"))
 # A Session row/timeline must not start from bed status alone. Require fresh,
@@ -1143,366 +1024,18 @@ state: Dict[str, Any] = {
 }
 
 
-class GPIOManager:
-    """Real GPIO only — นโยบาย: ไม่มี mock ในระบบเด็ดขาด
-
-    ถ้าเชื่อมต่อฮาร์ดแวร์ไม่ได้ ทุกคำสั่งควบคุมต้อง fail พร้อมข้อความชัดเจน
-    และ UI ปิดปุ่ม — ห้ามจำลองว่าสั่งสำเร็จ"""
-
-    def __init__(self):
-        self.devices: Dict[str, Any] = {}
-        self.factory = None
-        self.error: Optional[str] = None
-        if not GPIO_AVAILABLE:
-            self.error = "GPIO เชื่อมต่อไม่ได้ (ไม่พบ gpiozero/lgpio ในเครื่องนี้)"
-            print(f"[GPIO] {self.error}")
-            return
-        attempts = max(1, int(os.getenv("GPIO_INIT_ATTEMPTS", "10")))
-        delay = max(0.1, float(os.getenv("GPIO_INIT_RETRY_SECONDS", "0.5")))
-        for attempt in range(1, attempts + 1):
-            try:
-                self.factory = LGPIOFactory(chip=0)
-                for name, pin in GPIO_PINS.items():
-                    self.devices[name] = OutputDevice(
-                        pin,
-                        active_high=True,
-                        initial_value=False,
-                        pin_factory=self.factory,
-                    )
-                self.error = None
-                print(f"[GPIO] connected: chip=0, outputs={len(self.devices)}")
-                return
-            except Exception as exc:
-                self.close()
-                self.error = f"GPIO เชื่อมต่อไม่ได้: {exc}"
-                if attempt < attempts and "busy" in str(exc).lower():
-                    print(f"[GPIO] busy; retry {attempt}/{attempts} in {delay}s")
-                    time.sleep(delay)
-                    continue
-                print(f"[GPIO] {self.error}")
-                return
-
-    def close(self):
-        for device in self.devices.values():
-            try:
-                device.close()
-            except Exception:
-                pass
-        self.devices = {}
-        if self.factory is not None:
-            try:
-                self.factory.close()
-            except Exception:
-                pass
-        self.factory = None
-
-    @property
-    def ready(self) -> bool:
-        return len(self.devices) == len(GPIO_PINS)
-
-    def require_ready(self):
-        if not self.ready:
-            raise HTTPException(503, self.error or "GPIO เชื่อมต่อไม่ได้")
-
-    def set(self, name: str, on: bool):
-        if name not in GPIO_PINS:
-            raise KeyError(name)
-        if not self.ready:
-            raise RuntimeError(self.error or "GPIO เชื่อมต่อไม่ได้")
-        device = self.devices[name]
-        device.on() if on else device.off()
-        with state_lock:
-            state["gpio"][name] = bool(on)
-
-    def all_off(self):
-        for name in GPIO_PINS:
-            try:
-                self.set(name, False)
-            except Exception:
-                pass
-
-    def shutdown(self):
-        self.all_off()
-        self.close()
-
-
-gpio = GPIOManager()
+gpio = GPIOManager(GPIO_PINS, state, state_lock)
 with state_lock:
     state["system"]["gpio_available"] = gpio.ready
     state["system"]["gpio_error"] = gpio.error
 
 
-class AudioPlayer:
-    """mpv on the Pi (IPC pause/volume/loop). Fallbacks for bench machines:
-    afplay (macOS) or ffplay (Linux/Windows with ffmpeg) — play/stop/loop only,
-    no pause, volume applies from the next track."""
-
-    def __init__(self):
-        self.proc: Optional[subprocess.Popen] = None
-        self.sock_path = os.path.join(tempfile.gettempdir(), "pi5_local_mpv.sock")
-        self.lock = threading.Lock()
-        self.backend = next(
-            (b for b in ("mpv", "afplay", "ffplay") if shutil.which(b)), None
-        )
-        self.audio_device = os.getenv("MPV_AUDIO_DEVICE", "").strip() or None
-        # Raspberry Pi exposes the installed USB adapter through this stable
-        # ALSA card-id symlink even if its numeric card index changes.
-        if self.backend == "mpv" and not self.audio_device:
-            if Path("/proc/asound/Device").exists():
-                self.audio_device = "alsa/plughw:CARD=Device,DEV=0"
-        self.loop = False
-        self.current_path: Optional[Path] = None
-        self.queue_paths: List[Path] = []
-        self.queue_index = 0
-        with state_lock:
-            state["system"]["player"] = self.backend
-            state["system"]["audio_device"] = self.audio_device
-
-    def _cleanup_socket(self):
-        try:
-            os.unlink(self.sock_path)
-        except FileNotFoundError:
-            pass
-
-    def _send(self, command):
-        try:
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-                s.settimeout(0.5)
-                s.connect(self.sock_path)
-                s.sendall((json.dumps({"command": command}) + "\n").encode())
-                return True
-        except Exception:
-            return False
-
-    def _send_commands(self, commands: List[List[Any]]) -> bool:
-        """Send ordered MPV IPC commands through one short-lived socket.
-
-        Reusing the active MPV process avoids releasing and reopening the USB
-        audio device every time a user changes tracks.  One socket write also
-        preserves command order: replace file, update loop mode, then unpause.
-        """
-        try:
-            payload = "".join(
-                json.dumps({"command": command}) + "\n" for command in commands
-            ).encode()
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-                s.settimeout(0.5)
-                s.connect(self.sock_path)
-                s.sendall(payload)
-            return True
-        except Exception:
-            return False
-
-    def _send_retry(self, command, attempts: int = 5, delay: float = 0.2) -> bool:
-        for _ in range(attempts):
-            if self._send(command):
-                return True
-            time.sleep(delay)
-        return False
-
-    def _spawn(self, file_path: Path, volume: int) -> subprocess.Popen:
-        if self.backend == "mpv":
-            cmd = [
-                "mpv", "--no-config", "--no-video", "--really-quiet",
-                f"--volume={volume}",
-                f"--loop-file={'inf' if self.loop else 'no'}",
-                f"--input-ipc-server={self.sock_path}",
-            ]
-            if self.audio_device:
-                cmd.append(f"--audio-device={self.audio_device}")
-            cmd.append(str(file_path))
-        elif self.backend == "afplay":
-            cmd = ["afplay", "-v", f"{max(0, min(100, volume)) / 100:.2f}",
-                   str(file_path)]
-        elif self.backend == "ffplay":
-            cmd = ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet",
-                   "-volume", str(max(0, min(100, volume)))]
-            if self.loop:
-                cmd += ["-loop", "0"]  # ffplay loops natively
-            cmd.append(str(file_path))
-        else:
-            raise RuntimeError(
-                "ไม่พบโปรแกรมเล่นเสียง — Pi/Linux: sudo apt install -y mpv · "
-                "macOS: brew install mpv · Windows: ติดตั้ง ffmpeg"
-            )
-        return subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
-                                stderr=subprocess.PIPE, text=True)
-
-    @staticmethod
-    def _process_error(proc: subprocess.Popen) -> str:
-        try:
-            detail = (proc.stderr.read() if proc.stderr else "").strip()
-        except Exception:
-            detail = ""
-        return detail[-1000:] or f"player exited with code {proc.returncode}"
-
-    def play(self, file_path: Path, loop: bool = False, queue: bool = False):
-        with self.lock:
-            self.loop = bool(loop)
-            if queue and not self.loop:
-                extensions = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".aac"}
-                ordered = sorted(
-                    path for path in MUSIC_DIR.iterdir()
-                    if path.is_file() and path.suffix.lower() in extensions
-                )
-                queue_paths = (ordered[ordered.index(file_path):]
-                               if file_path in ordered else [file_path])
-            else:
-                queue_paths = [file_path]
-
-            # Track changes use MPV's loadfile command instead of terminating
-            # the process. This keeps ALSA open and removes most of the silent
-            # gap that previously occurred between selection and playback.
-            active_mpv = (
-                self.backend == "mpv"
-                and self.proc is not None
-                and self.proc.poll() is None
-            )
-            if active_mpv and self._send_commands([
-                ["loadfile", str(file_path), "replace"],
-                ["set_property", "loop-file", "inf" if self.loop else "no"],
-                ["set_property", "pause", False],
-            ]):
-                self.current_path = file_path
-                self.queue_paths = queue_paths
-                self.queue_index = 0
-                with state_lock:
-                    state["music"].update({
-                        "playing": True, "paused": False,
-                        "track": file_path.name, "loop": self.loop,
-                        "mode": "repeat_one" if self.loop else "queue" if queue else "single",
-                        "queue_position": 1,
-                        "queue_length": len(self.queue_paths), "error": None,
-                    })
-                return
-
-            self._stop_locked()
-            self._cleanup_socket()
-            self.loop = bool(loop)
-            self.current_path = file_path
-            self.queue_paths = queue_paths
-            self.queue_index = 0
-            with state_lock:
-                volume = int(state["music"]["volume"])
-            self.proc = self._spawn(file_path, volume)
-            proc = self.proc
-            # mpv can spawn successfully and immediately exit when the audio
-            # output is unavailable. Surface that as an API error, not 200 OK.
-            time.sleep(0.2)
-            if proc.poll() is not None:
-                error = self._process_error(proc)
-                self.proc = None
-                self.current_path = None
-                with state_lock:
-                    state["music"].update({"playing": False, "paused": False,
-                                           "track": None, "loop": False,
-                                           "queue_position": 0, "queue_length": 0,
-                                           "error": error})
-                raise RuntimeError(error)
-            with state_lock:
-                state["music"].update({
-                    "playing": True, "paused": False,
-                    "track": file_path.name, "loop": self.loop,
-                    "mode": "repeat_one" if self.loop else "queue" if queue else "single",
-                    "queue_position": 1,
-                    "queue_length": len(self.queue_paths), "error": None,
-                })
-        threading.Thread(target=self._watch, args=(proc,), daemon=True).start()
-
-    def _watch(self, proc: subprocess.Popen):
-        """Clear playback state when a track ends; afplay loop = respawn."""
-        proc.wait()
-        error = self._process_error(proc) if proc.returncode else None
-        with self.lock:
-            if self.proc is not proc:
-                return  # superseded by a newer play()/stop()
-            if (self.backend == "afplay" and self.loop
-                    and self.current_path is not None
-                    and proc.returncode == 0):
-                with state_lock:
-                    volume = int(state["music"]["volume"])
-                self.proc = self._spawn(self.current_path, volume)
-                threading.Thread(target=self._watch, args=(self.proc,),
-                                 daemon=True).start()
-                return
-            if (not error and not self.loop
-                    and self.queue_index + 1 < len(self.queue_paths)):
-                # Continue locally even when the tablet/browser is closed. A
-                # manual stop supersedes this watcher through self.proc.
-                self.queue_index += 1
-                self.current_path = self.queue_paths[self.queue_index]
-                self._cleanup_socket()
-                with state_lock:
-                    volume = int(state["music"]["volume"])
-                self.proc = self._spawn(self.current_path, volume)
-                next_proc = self.proc
-                with state_lock:
-                    state["music"].update({
-                        "playing": True, "paused": False,
-                        "track": self.current_path.name, "loop": False,
-                        "mode": "queue", "queue_position": self.queue_index + 1,
-                        "queue_length": len(self.queue_paths), "error": None,
-                    })
-                threading.Thread(target=self._watch, args=(next_proc,),
-                                 daemon=True).start()
-                return
-            self.proc = None
-            self._cleanup_socket()
-            with state_lock:
-                state["music"].update({"playing": False, "paused": False,
-                                       "track": None, "loop": False,
-                                       "queue_position": 0, "queue_length": 0,
-                                       "error": error})
-            if error:
-                print(f"[MUSIC] player failed: {error}")
-
-    def _stop_locked(self):
-        self.loop = False
-        self.current_path = None
-        self.queue_paths = []
-        self.queue_index = 0
-        if self.proc and self.proc.poll() is None:
-            self.proc.terminate()
-            try:
-                self.proc.wait(timeout=1)
-            except subprocess.TimeoutExpired:
-                self.proc.kill()
-        self.proc = None
-        self._cleanup_socket()
-        with state_lock:
-            state["music"].update({"playing": False, "paused": False,
-                                   "track": None, "loop": False,
-                                   "queue_position": 0, "queue_length": 0})
-
-    def stop(self):
-        with self.lock:
-            self._stop_locked()
-
-    def pause_toggle(self) -> bool:
-        with self.lock:
-            with state_lock:
-                if not state["music"]["playing"]:
-                    return True
-                paused = not bool(state["music"]["paused"])
-            if self.backend != "mpv":
-                return False  # afplay has no pause control
-            if self._send_retry(["set_property", "pause", paused]):
-                with state_lock:
-                    state["music"]["paused"] = paused
-                return True
-            return False
-
-    def set_volume(self, volume: int):
-        volume = max(0, min(MAX_VOLUME, int(volume)))
-        with self.lock:
-            if self.backend == "mpv":
-                self._send(["set_property", "volume", volume])
-            # afplay: volume applies from the next track (no live control)
-        with state_lock:
-            state["music"]["volume"] = volume
-
-
-player = AudioPlayer()
+player = AudioPlayer(
+    music_dir=MUSIC_DIR,
+    max_volume=MAX_VOLUME,
+    state=state,
+    state_lock=state_lock,
+)
 music_command_lock = threading.Lock()
 # A fresh service start also presents a falling edge to connected legacy
 # tablets. Guard that first edge so a stale queue script cannot resurrect the
@@ -2858,167 +2391,9 @@ def _zeep_request(method: str, path: str, *, json_body: Optional[dict] = None,
     return body
 
 
-def _zeep_gender(raw: Any) -> str:
-    """gender ของโปรไฟล์ ZEEP (male/female/other) ตรงกับ GENDERS ของตู้อยู่แล้ว."""
-    gender = str(raw or "").strip().lower()
-    return gender if gender in GENDERS else "unspecified"
-
-
-def _age_from_dob(raw: Any) -> Optional[int]:
-    """อายุเต็มปีจาก dateOfBirth (ISO YYYY-MM-DD) ของโปรไฟล์ ZEEP."""
-    try:
-        dob = date.fromisoformat(str(raw or "").strip()[:10])
-    except ValueError:
-        return None
-    today = date.today()
-    age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
-    return age if 0 < age <= 120 else None
-
-
-def _profile_value(profile: Dict[str, Any], *keys: str) -> Any:
-    """Read one profile field across current and anticipated ZEEP envelopes.
-
-    The production API currently returns ``gender`` and ``dateOfBirth`` at the
-    top level.  Height/weight/blood group are deliberately accepted from a few
-    conventional aliases so the Pod does not need another data migration when
-    those optional fields are added to the account service.
-    """
-    scopes = [profile]
-    for container in ("profile", "healthProfile", "health_profile", "health"):
-        nested = profile.get(container)
-        if isinstance(nested, dict):
-            scopes.append(nested)
-    for scope in scopes:
-        for key in keys:
-            if key in scope and scope[key] not in (None, ""):
-                return scope[key]
-    return None
-
-
-def _normalise_date_of_birth(raw: Any) -> Optional[str]:
-    """Return an ISO date only when the upstream value is a real calendar date."""
-    try:
-        return date.fromisoformat(str(raw or "").strip()[:10]).isoformat()
-    except ValueError:
-        return None
-
-
-def _normalise_body_measurement(raw: Any, *, measurement: str) -> Optional[float]:
-    """Normalise optional health-reference measurements without inventing data."""
-    if raw is None or isinstance(raw, bool):
-        return None
-    try:
-        value = float(raw)
-    except (TypeError, ValueError):
-        return None
-    if not math.isfinite(value):
-        return None
-    if measurement == "height_cm":
-        # Some profile APIs expose a generic height field in metres.
-        if 0.8 <= value <= 2.5:
-            value *= 100.0
-        return round(value, 1) if 80.0 <= value <= 250.0 else None
-    if measurement == "weight_kg":
-        return round(value, 1) if 20.0 <= value <= 400.0 else None
-    return None
-
-
-def _normalise_blood_group(raw: Any) -> Optional[str]:
-    """Normalise ABO/Rh notation; unknown or unsupported values stay absent."""
-    value = str(raw or "").strip().upper().replace(" ", "_").replace("-", "_")
-    aliases = {
-        "A+": "A+", "A_POSITIVE": "A+", "APOSITIVE": "A+",
-        "A_": "A-", "A_NEGATIVE": "A-", "ANEGATIVE": "A-",
-        "B+": "B+", "B_POSITIVE": "B+", "BPOSITIVE": "B+",
-        "B_": "B-", "B_NEGATIVE": "B-", "BNEGATIVE": "B-",
-        "AB+": "AB+", "AB_POSITIVE": "AB+", "ABPOSITIVE": "AB+",
-        "AB_": "AB-", "AB_NEGATIVE": "AB-", "ABNEGATIVE": "AB-",
-        "O+": "O+", "O_POSITIVE": "O+", "OPOSITIVE": "O+",
-        "O_": "O-", "O_NEGATIVE": "O-", "ONEGATIVE": "O-",
-    }
-    return aliases.get(value)
-
-
 def _health_reference_from_profile(profile: Dict[str, Any]) -> Dict[str, Any]:
-    """Canonical, display-safe user facts for wellness context (not diagnosis)."""
-    age = profile.get("age")
-    date_of_birth = _normalise_date_of_birth(profile.get("date_of_birth"))
-    exact_age_known = bool(date_of_birth) or profile.get("age_is_estimated") is False
-    return {
-        "schema_version": 1,
-        "gender": profile.get("gender") or "unspecified",
-        "date_of_birth": date_of_birth,
-        "age_years": (
-            int(age)
-            if isinstance(age, int) and 0 < age <= 120
-            and exact_age_known else None
-        ),
-        "age_group": profile.get("age_group") or (_age_group(age) if age is not None else None),
-        "height_cm": _normalise_body_measurement(
-            profile.get("height_cm"), measurement="height_cm"),
-        "weight_kg": _normalise_body_measurement(
-            profile.get("weight_kg"), measurement="weight_kg"),
-        "blood_group": _normalise_blood_group(profile.get("blood_group")),
-        "source": profile.get("health_reference_source") or (
-            "zeep_profile"
-            if profile.get("zeep_public_id") or profile.get("zeep_email")
-            else "local_profile"
-        ),
-        "refresh_status": profile.get("health_reference_refresh_status"),
-        "updated_at_utc": profile.get("health_reference_updated_at_utc"),
-        "intended_use": "health_reference_only",
-    }
-
-
-def _zeep_health_reference(me: Dict[str, Any]) -> Dict[str, Any]:
-    """Extract only health-reference fields actually present in the ZEEP profile."""
-    dob = _normalise_date_of_birth(
-        _profile_value(me, "dateOfBirth", "date_of_birth", "birthDate", "birth_date"))
-    gender = _zeep_gender(_profile_value(me, "gender", "sex"))
-    return {
-        "schema_version": 1,
-        "gender": gender,
-        "date_of_birth": dob,
-        "age_years": _age_from_dob(dob),
-        "height_cm": _normalise_body_measurement(
-            _profile_value(me, "heightCm", "height_cm", "height"),
-            measurement="height_cm",
-        ),
-        "weight_kg": _normalise_body_measurement(
-            _profile_value(me, "weightKg", "weight_kg", "weight"),
-            measurement="weight_kg",
-        ),
-        "blood_group": _normalise_blood_group(
-            _profile_value(me, "bloodGroup", "blood_group", "bloodType", "blood_type")),
-        "source": "zeep_profile",
-    }
-
-
-def _normalize_username(raw: str) -> str:
-    name = " ".join((raw or "").split())[:40]
-    if len(name) < 2:
-        raise HTTPException(422, "username ต้องยาวอย่างน้อย 2 ตัวอักษร")
-    return name
-
-
-def _normalize_email(raw: str) -> str:
-    """Return the canonical case-insensitive ZEEP account email."""
-    email = (raw or "").strip().casefold()
-    local, separator, domain = email.partition("@")
-    if (
-        not separator or not local or not domain or "." not in domain
-        or any(char.isspace() for char in email) or len(email) > 254
-    ):
-        raise HTTPException(422, "บัญชี ZEEP ต้องมี Email ที่ถูกต้องสำหรับผูกประวัติ")
-    return email
-
-
-def _normalize_account_key(raw: str) -> str:
-    """Normalize email-backed ZEEP keys and legacy/local username keys."""
-    value = (raw or "").strip()
-    if "@" in value:
-        return _normalize_email(value)
-    return _normalize_username(value).casefold()
+    """Compatibility facade for normalized, display-safe health facts."""
+    return build_health_reference(profile, age_group_for=_age_group)
 
 
 def _load_profiles() -> Dict[str, Any]:

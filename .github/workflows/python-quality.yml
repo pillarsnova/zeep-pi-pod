@@ -1,0 +1,41 @@
+name: Python architecture and style
+
+on:
+  pull_request:
+    paths:
+      - "**.py"
+      - "pyproject.toml"
+      - "requirements-dev.txt"
+      - ".github/workflows/python-quality.yml"
+  push:
+    branches: [develop]
+    paths:
+      - "**.py"
+      - "pyproject.toml"
+      - "requirements-dev.txt"
+      - ".github/workflows/python-quality.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install runtime and quality dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
+      - name: Check extracted package style
+        run: |
+          ruff check zeep_pod
+          ruff format --check zeep_pod
+      - name: Check architecture boundaries
+        run: python -m unittest -v test_modular_architecture.py
+      - name: Run regression suite
+        run: python -m unittest discover -q
+

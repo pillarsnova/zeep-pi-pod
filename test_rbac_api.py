@@ -506,6 +506,93 @@ class RbacApiTests(unittest.TestCase):
             user.post("/api/auth/logout", headers=csrf(user))
             pod_app._authenticate_zeep_account = original
 
+    def test_restart_immediately_restores_last_sensor_values_as_stale(self) -> None:
+        """Restart continuity shows values immediately without forging Live data."""
+        now = time.time()
+        session_id = "restart-sensor-frame-test"
+        devices = {
+            key: {
+                "model": model, "status": "live", "source": "test",
+                "source_label": "Test Sensor", "data_age_s": 0.0,
+                "invalid_values": {},
+            }
+            for key, model in {
+                "sht3x_dis": "SHT3x-DIS", "opt3001": "OPT3001",
+                "sph0645": "SPH0645", "mhz19c": "MH-Z19C",
+                "pms7003": "PMS7003", "sgp40": "SGP40",
+            }.items()
+        }
+        frame = {
+            "sequence": int(now // pod_app.SLEEP_SAMPLE_SECONDS),
+            "timestamp": pod_app.datetime.fromtimestamp(
+                now, pod_app.timezone.utc).isoformat(),
+            "epoch_s": now,
+            "refresh_s": pod_app.SLEEP_SAMPLE_SECONDS,
+            "source": "pi_local_sensor_tick",
+            "session_id": session_id,
+            "environment": {
+                "temperature_c": 23.4, "humidity_rh": 51.2, "lux": 0.0,
+                "sound_dba_est": 37.5, "co2_ppm": 812.0,
+                "pm2_5_ug_m3": 4.0, "voc_index": 103.0,
+                "devices": devices, "live_count": 6, "total_count": 6,
+                "status": "live",
+            },
+            "bcg": {
+                "status_code": 0, "status_text": "On bed",
+                "heart_rate_bpm": 61.0, "respiration_rate": 14.2,
+                "analysis_valid": True,
+            },
+            # A saved stage is useful only as audit history. It must not become
+            # the current post-restart stage before fresh 30/60-second evidence.
+            "sleep": {"state": "n3", "confirmed_state": "n3",
+                      "classification_active": True},
+        }
+        with pod_app.state_lock:
+            original_session = copy.deepcopy(pod_app.state["session"])
+        with pod_app.session_lock:
+            original_active = pod_app._active_session
+            pod_app._active_session = None
+        with pod_app.analysis_frame_lock:
+            original_frame = pod_app._analysis_frame
+            pod_app._analysis_frame = None
+        original_sleep_cache = copy.deepcopy(pod_app._sleep_cache)
+        try:
+            with pod_app.state_lock:
+                pod_app.state["session"].update({
+                    "active": True, "recording": True,
+                    "session_id": session_id,
+                })
+            self.assertTrue(pod_app._persist_last_sensor_frame(frame))
+            self.assertTrue(pod_app._restore_latest_sensor_frame())
+            with patch.object(pod_app, "system_health_cached", return_value={}):
+                restored = pod_app.snapshot()
+            environment = restored["sensor"]["environment"]
+            self.assertEqual(environment["temperature_c"], 23.4)
+            self.assertEqual(environment["co2_ppm"], 812.0)
+            self.assertEqual(environment["devices"]["sht3x_dis"]["status"], "stale")
+            self.assertEqual(environment["live_count"], 0)
+            temp = next(
+                item for item in environment["assessment"]["evaluations"]
+                if item["key"] == "temperature"
+            )
+            self.assertEqual(temp["display"], "23.4 °C")
+            self.assertEqual(temp["status"], "unavailable")
+            self.assertTrue(restored["sensor_frame"]["restored_after_restart"])
+            self.assertEqual(restored["sensor"]["bcg"]["heart_rate_bpm"], 61.0)
+            self.assertFalse(restored["sensor"]["bcg"]["analysis_valid"])
+            self.assertFalse(restored["sleep"]["classification_active"])
+            self.assertIsNone(restored["sleep"]["confirmed_state"])
+        finally:
+            pod_app.LAST_SENSOR_FRAME_PATH.unlink(missing_ok=True)
+            with pod_app.state_lock:
+                pod_app.state["session"] = original_session
+            with pod_app.session_lock:
+                pod_app._active_session = original_active
+            with pod_app.analysis_frame_lock:
+                pod_app._analysis_frame = original_frame
+            pod_app._sleep_cache.clear()
+            pod_app._sleep_cache.update(original_sleep_cache)
+
     def test_admin_can_end_or_kick_current_occupant(self) -> None:
         """Both Admin actions persist first; kick uses the broader revocation scope."""
         original = pod_app._authenticate_zeep_account

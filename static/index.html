@@ -2744,7 +2744,7 @@ function renderAdminAtmosphere(result){
   const levels=Array.isArray(result.levels)&&result.levels.length?result.levels:dashboardAtmosphereLevels;
   guide.innerHTML=[...levels].reverse().map(level=>`<article class="atmosphere-guide-${level.key}${level.key===result.key?' active':''}"><span>${level.symbol}</span><div><b>${level.label} · ${level.english}</b><small>${level.description||level.principle||''}</small></div></article>`).join('');
   criteria.innerHTML=required.map(metric=>{
-    if(metric.status!=='live')return `<article class="admin-criterion unavailable"><div><b>${metric.name}</b><span>${metric.source} · ${metric.deviceStatus}</span></div><strong>--</strong><small>เป้าหมาย ${metric.target}<br>${metric.principle}<br><em>${metric.bands}</em><br>ตรวจ Sensor และ freshness</small></article>`;
+    if(metric.status!=='live')return `<article class="admin-criterion unavailable"><div><b>${metric.name}</b><span>${metric.source} · ${metric.deviceStatus}</span></div><strong>${metric.display||'--'}</strong><small>เป้าหมาย ${metric.target}<br>${metric.principle}<br><em>${metric.bands}</em><br>${metric.deviceStatus==='stale'?'ค่าล่าสุดก่อน Restart · รอข้อมูลสด':'ตรวจ Sensor และ freshness'}</small></article>`;
     return `<article class="admin-criterion criterion-${metric.level.key}"><div><b>${metric.name}</b><span>${metric.source} · ${metric.level.label}</span></div><strong>${metric.display}</strong><small>ผ่านขั้นต่ำ ${metric.expected_floor||metric.target}<br>เป้าหมายสูงสุด ${metric.target}<br>${metric.principle}</small></article>`;
   }).join('')||'<div class="admin-atmosphere-success"><span>✓</span><div><b>ผ่านขั้นต่ำพอใช้ขึ้นไปครบทุกเกณฑ์</b><small>ไม่มีค่าที่ต้องแก้ไข · ระดับพอใช้ยังแสดงเป็นข้อเสนอให้ปรับเพิ่มด้านล่าง</small></div></div>';
   const policyCriteria=Array.isArray(result.criteria)&&result.criteria.length?result.criteria:evaluations;
@@ -2844,6 +2844,7 @@ function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
   const stage=SLEEP_TH[stageKey]||SLEEP_TH.no_data;
   const baseline=(sleep.baseline||sleep.age_baseline||{})[stageKey]||{};
   const live=!!bcg.connected&&!bcg.stale;
+  const restored=bcg.restored_after_restart===true;
   const onBed=live&&[0,2,3,5].includes(Number(bcg.status_code));
   const rawHr=bcg.heart_rate_bpm,rawRr=bcg.respiration_rate;
   const hr=Number(rawHr),rr=Number(rawRr);
@@ -2851,22 +2852,24 @@ function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
   // contract so an empty vital can never be described as a real 0 reading.
   const hrValid=onBed&&rawHr!==null&&rawHr!==undefined&&rawHr!==''&&Number.isFinite(hr);
   const rrValid=onBed&&rawRr!==null&&rawRr!==undefined&&rawRr!==''&&Number.isFinite(rr);
+  const hrRestored=restored&&rawHr!==null&&rawHr!==undefined&&rawHr!==''&&Number.isFinite(hr);
+  const rrRestored=restored&&rawRr!==null&&rawRr!==undefined&&rawRr!==''&&Number.isFinite(rr);
   const stageTone=stageKey?'info':'unknown';
   const source=sleep.classification_source==='personal'?'Baseline ส่วนบุคคล':'Baseline อายุและเพศ';
   const confidence=({high:'สูง',medium:'ปานกลาง',low:'ต่ำ'})[sleep.confidence]||'ไม่ระบุ';
   const bedLabel=BCG_STATUS_TH[bcg.status_code]||bcg.status_text||'รอสัญญาณจากเตียง';
   bioRoot.innerHTML=[
     adminExplanationRow({
-      tone:hrValid?adminBaselineTone(hr,baseline.hr):'unknown',icon:'hr',title:'ชีพจร',value:hrValid?`${hr.toFixed(1)} ครั้ง/นาที`:'--',
-      status:hrValid?(adminBaselineTone(hr,baseline.hr)==='good'?'ใน Baseline':'นอก Baseline'):'รอข้อมูล',
-      summary:hrValid?adminBaselineComparison(hr,baseline.hr,'ครั้ง/นาที'):(onBed?'ยังคำนวณชีพจรไม่ได้':'ไม่มีสัญญาณผู้ใช้งานบนเตียง'),
-      detail:hrValid?`ค่าประมาณจาก BCG${bcg.heart_rate_held?' · เป็นค่าล่าสุดที่คงไว้ระหว่างตรวจคุณภาพสัญญาณ':''}; ใช้ดูแนวโน้มและเทียบ ${source} ไม่ใช้ค่าเดียวสรุปการฟื้นตัว`:'ตรวจสถานะเตียง ตำแหน่งผู้ใช้ และคุณภาพสัญญาณ BCG',
+      tone:hrValid?adminBaselineTone(hr,baseline.hr):'unknown',icon:'hr',title:'ชีพจร',value:(hrValid||hrRestored)?`${hr.toFixed(1)} ครั้ง/นาที`:'--',
+      status:hrRestored?'ก่อน Restart':hrValid?(adminBaselineTone(hr,baseline.hr)==='good'?'ใน Baseline':'นอก Baseline'):'รอข้อมูล',
+      summary:hrRestored?'แสดงค่าล่าสุดเพื่อความต่อเนื่อง · ยังไม่เทียบ Baseline':hrValid?adminBaselineComparison(hr,baseline.hr,'ครั้ง/นาที'):(onBed?'ยังคำนวณชีพจรไม่ได้':'ไม่มีสัญญาณผู้ใช้งานบนเตียง'),
+      detail:hrRestored?'รอ BCG packet สดก่อนนำกลับไปวิเคราะห์':hrValid?`ค่าประมาณจาก BCG${bcg.heart_rate_held?' · เป็นค่าล่าสุดที่คงไว้ระหว่างตรวจคุณภาพสัญญาณ':''}; ใช้ดูแนวโน้มและเทียบ ${source} ไม่ใช้ค่าเดียวสรุปการฟื้นตัว`:'ตรวจสถานะเตียง ตำแหน่งผู้ใช้ และคุณภาพสัญญาณ BCG',
     }),
     adminExplanationRow({
-      tone:rrValid?adminBaselineTone(rr,baseline.rr):'unknown',icon:'rr',title:'อัตราการหายใจ',value:rrValid?`${rr.toFixed(1)} ครั้ง/นาที`:'--',
-      status:rrValid?(adminBaselineTone(rr,baseline.rr)==='good'?'ใน Baseline':'นอก Baseline'):'รอข้อมูล',
-      summary:rrValid?adminBaselineComparison(rr,baseline.rr,'ครั้ง/นาที'):(onBed?'ยังคำนวณอัตราการหายใจไม่ได้':'ไม่มีสัญญาณผู้ใช้งานบนเตียง'),
-      detail:rrValid?`ค่าประมาณจาก BCG${bcg.respiration_held?' · เป็นค่าล่าสุดที่คงไว้ระหว่างตรวจคุณภาพสัญญาณ':''}; พิจารณาความนิ่งและแนวโน้มร่วมกับ HR/Movement`:'ยังไม่ใช้เป็นหลักฐาน Sleep Stage จนกว่า HR และ RR จะผ่าน Data-quality gate',
+      tone:rrValid?adminBaselineTone(rr,baseline.rr):'unknown',icon:'rr',title:'อัตราการหายใจ',value:(rrValid||rrRestored)?`${rr.toFixed(1)} ครั้ง/นาที`:'--',
+      status:rrRestored?'ก่อน Restart':rrValid?(adminBaselineTone(rr,baseline.rr)==='good'?'ใน Baseline':'นอก Baseline'):'รอข้อมูล',
+      summary:rrRestored?'แสดงค่าล่าสุดเพื่อความต่อเนื่อง · ยังไม่เทียบ Baseline':rrValid?adminBaselineComparison(rr,baseline.rr,'ครั้ง/นาที'):(onBed?'ยังคำนวณอัตราการหายใจไม่ได้':'ไม่มีสัญญาณผู้ใช้งานบนเตียง'),
+      detail:rrRestored?'รอ BCG packet สดก่อนนำกลับไปวิเคราะห์':rrValid?`ค่าประมาณจาก BCG${bcg.respiration_held?' · เป็นค่าล่าสุดที่คงไว้ระหว่างตรวจคุณภาพสัญญาณ':''}; พิจารณาความนิ่งและแนวโน้มร่วมกับ HR/Movement`:'ยังไม่ใช้เป็นหลักฐาน Sleep Stage จนกว่า HR และ RR จะผ่าน Data-quality gate',
     }),
     adminExplanationRow({
       tone:stageTone,icon:'sleep',title:'สถานะการนอน',value:stageKey?`${stage.code} · ${stage.label}`:'รอยืนยัน',status:stageKey?'ยืนยันแล้ว':'รอหลักฐาน',
@@ -2879,10 +2882,11 @@ function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
   const evaluations=Array.isArray(result.evaluations)?result.evaluations:[];
   environmentRoot.innerHTML=evaluations.length?evaluations.map(metric=>{
     const available=metric.status==='live'&&metric.level;
+    const restored=metric.status!=='live'&&metric.deviceStatus==='stale'&&metric.value!==null&&metric.value!==undefined;
     const tone=available?(metric.level.key||'unknown'):'unknown';
-    const levelLabel=available?(metric.level.label||ADMIN_LEVEL_COPY[tone]||tone):'ไม่มีข้อมูล Live';
-    const summary=available?(ADMIN_EXPLANATION_CONTEXT[metric.id||metric.key]||metric.principle||'ใช้ประกอบการประเมินสภาพแวดล้อมของ ZEEP'):`ตรวจ ${metric.source||metric.name} และ freshness ก่อนแปลผล`;
-    const action=available?(metric.recommendation||'รักษาการตั้งค่าปัจจุบัน'):'ไม่ใช้ค่าค้างแทนค่าปัจจุบัน';
+    const levelLabel=available?(metric.level.label||ADMIN_LEVEL_COPY[tone]||tone):restored?'ก่อน Restart':'ไม่มีข้อมูล Live';
+    const summary=available?(ADMIN_EXPLANATION_CONTEXT[metric.id||metric.key]||metric.principle||'ใช้ประกอบการประเมินสภาพแวดล้อมของ ZEEP'):restored?'แสดงค่าล่าสุดเพื่อความต่อเนื่อง · ยังไม่จัดระดับ':`ตรวจ ${metric.source||metric.name} และ freshness ก่อนแปลผล`;
+    const action=available?(metric.recommendation||'รักษาการตั้งค่าปัจจุบัน'):restored?'รอ Sensor packet สดก่อนประเมิน':'ไม่ใช้ค่าค้างแทนค่าปัจจุบัน';
     const display=(metric.id||metric.key)==='sound'&&metric.display
       ? String(metric.display).replace(/\bdBA\b(?! est\.)/,'dBA est.')
       : metric.display||'--';
@@ -2903,13 +2907,13 @@ function renderSimpleDashboard(state={},environment={},bcg={},session={}){
     : 'เลือกผู้ใช้งานเพื่อเริ่มติดตามสุขภาพและสภาพแวดล้อม';
   const badge=document.getElementById('dashSessionBadge');
   badge.textContent=recording?'● RECORDING':active?'WAITING FOR VITALS':'NO SESSION';badge.classList.toggle('live',recording);
-  const bcgLive=!!bcg.connected&&!bcg.stale,bcgStatus=Number(bcg.status_code);
+  const bcgLive=!!bcg.connected&&!bcg.stale,bcgStatus=Number(bcg.status_code),bcgRestored=bcg.restored_after_restart===true;
   const personOnBed=bcgLive&&[0,2,3,5].includes(bcgStatus);
   const vitalFallbackNote=!bcgLive?'รอสัญญาณ BCG':bcgStatus===1?'ไม่พบผู้ใช้งานบนเตียง':personOnBed?'กำลังวิเคราะห์สัญญาณ':'รอข้อมูลจาก Sensor';
   document.getElementById('dashHr').textContent=bcg.heart_rate_bpm??(personOnBed?'…':'--');
   document.getElementById('dashRr').textContent=bcg.respiration_rate==null?(personOnBed?'…':'--'):Number(bcg.respiration_rate).toFixed(1);
-  document.getElementById('dashHrNote').textContent=bcg.heart_rate_bpm==null?vitalFallbackNote:(bcg.heart_rate_held?'ค่าล่าสุด · กำลังวิเคราะห์':'ครั้ง/นาที');
-  document.getElementById('dashRrNote').textContent=bcg.respiration_rate==null?vitalFallbackNote:(bcg.respiration_held?'ค่าล่าสุด · กำลังวิเคราะห์':'ครั้ง/นาที');
+  document.getElementById('dashHrNote').textContent=bcg.heart_rate_bpm==null?vitalFallbackNote:bcgRestored?'ค่าล่าสุดก่อน Restart · รอ BCG สด':(bcg.heart_rate_held?'ค่าล่าสุด · กำลังวิเคราะห์':'ครั้ง/นาที');
+  document.getElementById('dashRrNote').textContent=bcg.respiration_rate==null?vitalFallbackNote:bcgRestored?'ค่าล่าสุดก่อน Restart · รอ BCG สด':(bcg.respiration_held?'ค่าล่าสุด · กำลังวิเคราะห์':'ครั้ง/นาที');
   const bedShort=({0:'ON BED',1:'OFF BED',2:'MOVING',3:'WEAK',4:'OBJECT',5:'SNORING'})[bcg.status_code]||'--';
   document.getElementById('dashBed').textContent=bedShort;
   document.getElementById('dashBedNote').textContent=BCG_STATUS_TH[bcg.status_code]||bcg.status_text||'รอสัญญาณจากเตียง';
@@ -3535,7 +3539,7 @@ function renderUnifiedControl(state={},environment={},aircon={},bed={},music={})
   setUnifiedSensor('zoneSensorLight','unifiedLight',compactMetric(environment.lux,'',1),devices.opt3001);
   setUnifiedSensor('zoneSensorSound','unifiedSound',compactMetric(environment.sound_dba_est,'',1),devices.sph0645);
   const bcg=state.sensor?.bcg||{},bcgBase={model:'BCG Sensor',data_age_s:bcg.data_age_s};
-  const bcgMetric=value=>({...bcgBase,status:bcg.connected&&value!==null&&value!==undefined?'live':bcg.connected?'no_data':'offline'});
+  const bcgMetric=value=>({...bcgBase,status:bcg.restored_after_restart&&value!==null&&value!==undefined?'stale':bcg.connected&&value!==null&&value!==undefined?'live':bcg.connected?'no_data':'offline'});
   setUnifiedSensor('zoneSensorHeart','unifiedHeartRate',compactMetric(bcg.heart_rate_bpm,'',0),bcgMetric(bcg.heart_rate_bpm));
   setUnifiedSensor('zoneSensorRespiration','unifiedRespiration',compactMetric(bcg.respiration_rate,'',1),bcgMetric(bcg.respiration_rate));
   const bedStatusShort=BCG_STATUS_CONTROL_TH[bcg.status_code]||(bcg.status_text?'ไม่ทราบ':'--');

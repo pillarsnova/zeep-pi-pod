@@ -594,9 +594,19 @@ def assess_environment_values(
             "control": criterion["control"],
         }
         if not live:
+            # A restart cache may carry the last validated numeric value while
+            # its device is deliberately marked stale. Keep that value visible
+            # for continuity, but never assign a level, recommendation or
+            # passing assessment until a fresh packet arrives.
+            display = (
+                f"{float(raw):.{criterion['digits']}f}"
+                f"{(' ' + criterion['unit']) if criterion['unit'] else ''}"
+                if numeric else "--"
+            )
             evaluations.append({
                 **base, "status": "unavailable",
-                "device_status": device.get("status", "no_data"), "display": "--",
+                "device_status": device.get("status", "no_data"),
+                "value": float(raw) if numeric else None, "display": display,
                 "decision": "sensor_check", "score": None, "level": None,
             })
             continue

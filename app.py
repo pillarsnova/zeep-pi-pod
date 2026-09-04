@@ -434,6 +434,11 @@ SESSIONS_PATH = DATA_DIR / "sessions.jsonl"
 LABELS_PATH = DATA_DIR / "output_labels.json"
 AIRCON_CONTROL_STATE_PATH = DATA_DIR / "aircon_control_state.json"
 ACTIVE_SESSION_CHECKPOINT_PATH = DATA_DIR / "active_session_checkpoint.json"
+# Canonical 10-second Sensor frame saved during an orderly service restart.
+# It prevents a blank Dashboard while hardware readers wait for their first
+# post-boot packet. Restored values are always marked stale and can never arm
+# Safety, start a Session, or become Sleep Stage evidence.
+LAST_SENSOR_FRAME_PATH = DATA_DIR / "last_sensor_frame.json"
 # One JSON file per finished Session still waiting to reach the account
 # backend. The file holds the finished upload payload so a retry never has
 # to rebuild it from SQLite. PDPA: same personal boundary as DATA_DIR.
@@ -1719,6 +1724,7 @@ profile_lock = threading.Lock()
 sessions_file_lock = threading.Lock()
 session_lock = threading.Lock()
 active_session_checkpoint_lock = threading.Lock()
+last_sensor_frame_lock = threading.Lock()
 ingest_outbox_lock = threading.Lock()
 sleep_path_lock = threading.Lock()
 analysis_frame_lock = threading.Lock()
@@ -1735,6 +1741,7 @@ _sleep_stage_path = {
 _analysis_frame: Optional[Dict[str, Any]] = None
 
 ACTIVE_SESSION_CHECKPOINT_VERSION = 1
+LAST_SENSOR_FRAME_VERSION = 1
 INGEST_OUTBOX_VERSION = 1
 _CHECKPOINT_RECORD_FIELDS = {
     "session_id", "username", "username_key", "display_name", "gender", "age", "age_group",
@@ -1822,6 +1829,223 @@ def _load_active_session_checkpoint() -> Optional[Dict[str, Any]]:
 def _clear_active_session_checkpoint() -> None:
     with active_session_checkpoint_lock:
         ACTIVE_SESSION_CHECKPOINT_PATH.unlink(missing_ok=True)
+
+
+def _persist_last_sensor_frame(frame: Optional[Dict[str, Any]]) -> bool:
+    """Atomically preserve the last canonical frame for an orderly restart."""
+    if not isinstance(frame, dict) or not isinstance(frame.get("environment"), dict):
+        return False
+    payload = {
+        "schema_version": LAST_SENSOR_FRAME_VERSION,
+        "saved_at_utc": datetime.now(timezone.utc).isoformat(),
+        "frame": json.loads(json.dumps(frame)),
+    }
+    with last_sensor_frame_lock:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        temporary = LAST_SENSOR_FRAME_PATH.with_suffix(".json.tmp")
+        with temporary.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, separators=(",", ":"))
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, LAST_SENSOR_FRAME_PATH)
+    return True
+
+
+def _load_last_sensor_frame() -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """Read a restart frame without ever treating it as current telemetry."""
+    try:
+        with last_sensor_frame_lock:
+            with LAST_SENSOR_FRAME_PATH.open("r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        if not isinstance(payload, dict):
+            raise ValueError("restart Sensor frame is not an object")
+        if payload.get("schema_version") != LAST_SENSOR_FRAME_VERSION:
+            raise ValueError("unsupported restart Sensor frame version")
+        frame = payload.get("frame")
+        if not isinstance(frame, dict) or not isinstance(frame.get("environment"), dict):
+            raise ValueError("restart Sensor frame is incomplete")
+        epoch_s = float(frame.get("epoch_s"))
+        if not math.isfinite(epoch_s) or epoch_s <= 0:
+            raise ValueError("restart Sensor frame has invalid time")
+        return frame, str(payload.get("saved_at_utc") or "") or None
+    except FileNotFoundError:
+        return None, None
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        log_event("sensor_frame", "restart_cache_invalid", error=str(exc))
+        return None, None
+
+
+def _timeline_restart_frame() -> Optional[Dict[str, Any]]:
+    """Build the first-deployment fallback from the active Session timeline."""
+    with session_lock:
+        active = _active_session
+        session_id = (active or {}).get("record", {}).get("session_id")
+        samples = list((active or {}).get("samples") or [])
+    if not session_id or not samples:
+        return None
+    sample = next((
+        item for item in reversed(samples)
+        if any(item.get(key) is not None for key in (
+            "temp", "hum", "co2", "pm2_5", "voc", "lux", "dba", "hr", "rr", "bed",
+        ))
+    ), None)
+    if sample is None:
+        return None
+    epoch_s = float(sample.get("t") or 0)
+    if not math.isfinite(epoch_s) or epoch_s <= 0:
+        return None
+    values = {
+        "temperature_c": sample.get("temp"),
+        "humidity_rh": sample.get("hum"),
+        "lux": sample.get("lux"),
+        "sound_dba_est": sample.get("dba"),
+        "co2_ppm": sample.get("co2"),
+        "pm1_0_ug_m3": None,
+        "pm2_5_ug_m3": sample.get("pm2_5"),
+        "pm10_ug_m3": None,
+        "voc_index": sample.get("voc"),
+        "sgp40_raw": None,
+    }
+    availability = {
+        "sht3x_dis": values["temperature_c"] is not None and values["humidity_rh"] is not None,
+        "opt3001": values["lux"] is not None,
+        "sph0645": values["sound_dba_est"] is not None,
+        "mhz19c": values["co2_ppm"] is not None,
+        "pms7003": values["pm2_5_ug_m3"] is not None,
+        "sgp40": values["voc_index"] is not None,
+    }
+    models = {
+        "sht3x_dis": "SHT3x-DIS", "opt3001": "OPT3001", "sph0645": "SPH0645",
+        "mhz19c": "MH-Z19C", "pms7003": "PMS7003", "sgp40": "SGP40",
+    }
+    devices = {
+        key: {
+            "model": models[key], "status": "stale" if available else "offline",
+            "source": "session_timeline", "source_label": "Session Timeline · SQLite",
+            "data_age_s": round(max(0.0, time.time() - epoch_s), 1),
+            "invalid_values": {},
+        }
+        for key, available in availability.items()
+    }
+    bed_text = sample.get("bed")
+    status_code = next(
+        (code for code, text in STATUS_TEXT.items() if text == bed_text), None)
+    environment = {
+        **values,
+        "temperature": values["temperature_c"],
+        "humidity": values["humidity_rh"],
+        "co2": values["co2_ppm"],
+        "pm2_5": values["pm2_5_ug_m3"],
+        "raw_values": dict(values),
+        "calibration": {},
+        "devices": devices,
+        "live_count": 0,
+        "total_count": len(devices),
+        "status": "stale" if any(availability.values()) else "offline",
+        "sources": {
+            "timeline": {
+                "label": "Session Timeline · SQLite", "live": False,
+                "age_s": round(max(0.0, time.time() - epoch_s), 1), "has_history": True,
+            },
+        },
+    }
+    return {
+        "sequence": int(epoch_s // SLEEP_SAMPLE_SECONDS),
+        "timestamp": datetime.fromtimestamp(epoch_s, timezone.utc).isoformat(),
+        "epoch_s": epoch_s,
+        "refresh_s": SLEEP_SAMPLE_SECONDS,
+        "evidence_refresh_s": SLEEP_EVIDENCE_EPOCH_SECONDS,
+        "confirmation_s": SLEEP_CONFIRMATION_SECONDS,
+        "source": "session_timeline",
+        "session_id": session_id,
+        "environment": environment,
+        "bcg": {
+            "analysis_epoch_s": epoch_s,
+            "status_code": status_code,
+            "status_text": bed_text,
+            "heart_rate_bpm": sample.get("hr"),
+            "respiration_rate": sample.get("rr"),
+            "bcg_frames": 0,
+            "analysis_valid": False,
+            "analysis_source_connected": False,
+        },
+        "sleep": {},
+    }
+
+
+def _restore_latest_sensor_frame() -> bool:
+    """Publish the newest saved values immediately, explicitly as stale."""
+    global _analysis_frame
+    cached, saved_at_utc = _load_last_sensor_frame()
+    timeline = _timeline_restart_frame()
+    candidates = [frame for frame in (cached, timeline) if isinstance(frame, dict)]
+    if not candidates:
+        return False
+    with state_lock:
+        current_session_id = state["session"].get("session_id")
+    frame = max(candidates, key=lambda item: float(item.get("epoch_s") or 0))
+    original_session_id = frame.get("session_id")
+    same_session = bool(
+        current_session_id and original_session_id == current_session_id)
+    restored = json.loads(json.dumps(frame))
+    environment = restored.get("environment") or {}
+    for device in (environment.get("devices") or {}).values():
+        if device.get("status") not in {"offline", "fault", "invalid", "no_data"}:
+            device["status"] = "stale"
+        device["data_age_s"] = round(
+            max(0.0, time.time() - float(restored["epoch_s"])), 1)
+    environment["live_count"] = 0
+    environment["status"] = (
+        "stale" if any(
+            value is not None for key, value in environment.items()
+            if key in {
+                "temperature_c", "humidity_rh", "lux", "sound_dba_est",
+                "co2_ppm", "pm2_5_ug_m3", "voc_index",
+            }
+        ) else "offline"
+    )
+    bcg = dict(restored.get("bcg") or {}) if same_session else {}
+    bcg.update({
+        "analysis_valid": False,
+        "analysis_stale": True,
+        "analysis_source_connected": False,
+        "restored_after_restart": True,
+    })
+    restored.update({
+        "source": "restored_after_restart",
+        "restored_source": frame.get("source") or "unknown",
+        "restored_after_restart": True,
+        "restored_at_utc": datetime.now(timezone.utc).isoformat(),
+        "saved_at_utc": saved_at_utc,
+        "session_id": current_session_id,
+        "environment": environment,
+        "bcg": bcg,
+        # Sleep Stage is deliberately not restored as a current result. The
+        # estimator resumes only after a complete fresh evidence epoch.
+        "sleep": {
+            "state": "no_data", "confirmed_state": None,
+            "version": SLEEP_ESTIMATOR_VERSION,
+            "evidence_version": SLEEP_EVIDENCE_VERSION,
+            "classification_active": False, "evidence_active": False,
+            "probabilities": {key: 0.0 for key in ZEEP_SLEEP_STATES},
+            "confidence": "low", "data_status": "restored_waiting_live_frame",
+            "reason": "แสดงค่าล่าสุดก่อน Restart · รอ Sensor frame สด",
+        },
+    })
+    with analysis_frame_lock:
+        _analysis_frame = restored
+    _sleep_cache.update({
+        "t": 0.0, "value": None,
+        "session_id": current_session_id, "sequence": None,
+    })
+    log_event(
+        "sensor_frame", "restored_after_restart",
+        source=restored["restored_source"],
+        data_age_s=round(max(0.0, time.time() - float(restored["epoch_s"])), 1),
+        same_session=same_session,
+    )
+    return True
 
 def _reset_sleep_stage_path(session_id: Optional[str]) -> None:
     """Reset the per-session semi-Markov memory; caller holds sleep_path_lock."""
@@ -3604,7 +3828,11 @@ def sleep_state_cached() -> Dict[str, Any]:
     with state_lock:
         session_id = state["session"].get("session_id")
     frame = analysis_frame_cached()
-    if frame is not None and frame.get("session_id") == session_id:
+    if (
+        frame is not None
+        and not frame.get("restored_after_restart")
+        and frame.get("session_id") == session_id
+    ):
         value = dict(frame["sleep"])
         age_s = max(0.0, time.time() - float(frame["epoch_s"]))
         value["next_update_s"] = max(0, round(SLEEP_SAMPLE_SECONDS - age_s))
@@ -3779,6 +4007,7 @@ def snapshot() -> Dict[str, Any]:
     )
     frame_fresh = bool(
         analysis_frame
+        and not analysis_frame.get("restored_after_restart")
         and frame_age_s is not None
         and frame_age_s <= max(15.0, SLEEP_SAMPLE_SECONDS * 3)
     )
@@ -3842,6 +4071,9 @@ def snapshot() -> Dict[str, Any]:
         frame_metadata.update({
             "data_age_s": round(frame_age_s, 1),
             "stale": not frame_fresh,
+            "restored_after_restart": bool(
+                analysis_frame.get("restored_after_restart")),
+            "restored_source": analysis_frame.get("restored_source"),
         })
     else:
         for key in (
@@ -6319,7 +6551,8 @@ def _restore_interrupted_session() -> Optional[str]:
     samples = [{
         "t": datetime.fromisoformat(x["timestamp"]).timestamp(),
         "temp": x.get("temperature"), "hum": x.get("humidity"),
-        "co2": x.get("co2"), "lux": x.get("lux"), "dba": x.get("sound"),
+        "co2": x.get("co2"), "pm2_5": x.get("pm2_5"),
+        "voc": x.get("voc_index"), "lux": x.get("lux"), "dba": x.get("sound"),
         "hr": x.get("heart_rate"), "rr": x.get("respiration_rate"),
         "bed": x.get("bed_status"), "sleep": None,
         "sample_interval_s": _cadence_interval_at(
@@ -6533,6 +6766,12 @@ async def lifespan(_: FastAPI):
     except Exception as exc:
         log_event("session", "restart_resume_failed", error=str(exc))
     try:
+        _restore_latest_sensor_frame()
+    except Exception as exc:
+        # A damaged optional display cache must never block the Pod service.
+        # Hardware readers still replace it at the first canonical live frame.
+        log_event("sensor_frame", "restart_restore_failed", error=str(exc))
+    try:
         # Nights recorded while the account backend was unreachable.
         _sweep_ingest_outbox()
     except Exception as exc:
@@ -6566,6 +6805,10 @@ async def lifespan(_: FastAPI):
                 "type": "service_pause", "value": {"reason": "server_shutdown"},
             })
         database.flush(30)
+    try:
+        _persist_last_sensor_frame(analysis_frame_cached())
+    except Exception as exc:
+        log_event("sensor_frame", "restart_cache_save_failed", error=str(exc))
     player.stop()
     gpio.shutdown()
     bcg_storage.flush()

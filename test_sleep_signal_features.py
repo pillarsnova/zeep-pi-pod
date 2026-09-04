@@ -448,6 +448,51 @@ class ScoringGuardTests(unittest.TestCase):
         self.assertAlmostEqual(brief["wake"], quiet["wake"])
         self.assertTrue(evidence["movement"]["sleep_compatible"])
 
+    def test_initial_acquisition_drop_cannot_create_n1(self):
+        scores, evidence = self.score({
+            "hr_cv": 0.0434,
+            "rr_cv": 0.1035,
+            "movement_ratio": 0.0,
+            "hr_slope_bpm_per_min": -21.15,
+            "rr_slope_per_min": -12.45,
+            "bcg_amplitude_shift_ratio": 0.0345,
+            "waveform_available": True,
+        }, elapsed=0.35)
+        self.assertFalse(evidence["sleep_onset_gate"]["passed"])
+        self.assertFalse(evidence["sleep_onset_gate"]["observation_complete"])
+        self.assertEqual(evidence["n1_transition_support"], 0.0)
+        self.assertGreater(scores["wake"], scores["n1"])
+
+    def test_onset_needs_quiet_downward_evidence_after_observation(self):
+        common = {
+            "hr_cv": 0.03,
+            "rr_cv": 0.04,
+            "hr_slope_bpm_per_min": -2.0,
+            "rr_slope_per_min": -0.5,
+            "waveform_available": True,
+        }
+        _, quiet = self.score({**common, "movement_ratio": 0.0}, elapsed=6.0)
+        _, moving = self.score({
+            **common,
+            "movement_ratio": 0.5,
+            "max_moving_run_frames": 3,
+        }, elapsed=6.0)
+        self.assertTrue(quiet["sleep_onset_gate"]["passed"])
+        self.assertFalse(moving["sleep_onset_gate"]["passed"])
+        self.assertFalse(moving["sleep_onset_gate"]["quiet_bed"])
+
+        _, flat_quiet_wake = self.score({
+            **common,
+            "movement_ratio": 0.0,
+            "hr_slope_bpm_per_min": 0.0,
+            "rr_slope_per_min": 0.0,
+        }, elapsed=20.0)
+        self.assertFalse(flat_quiet_wake["sleep_onset_gate"]["passed"])
+        self.assertLess(
+            flat_quiet_wake["sleep_onset_gate"]["downward_transition"],
+            flat_quiet_wake["sleep_onset_gate"]["minimum_downward_transition"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

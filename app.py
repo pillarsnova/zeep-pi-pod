@@ -168,6 +168,12 @@ from sleep_system_policy import (
     SLEEP_EVIDENCE_EPOCH_SECONDS,
     SLEEP_PROBABILITY_EMA_ALPHA,
     SLEEP_PROBABILITY_SWITCH_MARGIN,
+    SLEEP_ONSET_INITIAL_WAKE_SUPPORT,
+    SLEEP_ONSET_MAX_HR_RISE_BPM_PER_MIN,
+    SLEEP_ONSET_MAX_MOVEMENT_RATIO,
+    SLEEP_ONSET_MAX_RR_RISE_PER_MIN,
+    SLEEP_ONSET_MIN_DOWNWARD_TRANSITION,
+    SLEEP_ONSET_MIN_OBSERVATION_SECONDS,
     SLEEP_SENSOR_FRAMES_PER_EPOCH,
     SLEEP_SENSOR_SAMPLE_SECONDS,
     SLEEP_STAGE_CONFIRM_TICKS,
@@ -3034,6 +3040,12 @@ def estimate_sleep_state() -> Dict[str, Any]:
         n2_rr_conflict_support=SLEEP_N2_RR_CONFLICT_SUPPORT,
         move_wake_ratio=SLEEP_MOVE_WAKE_RATIO,
         move_deep_ratio=SLEEP_MOVE_DEEP_RATIO,
+        onset_min_observation_minutes=SLEEP_ONSET_MIN_OBSERVATION_SECONDS / 60.0,
+        onset_max_movement_ratio=SLEEP_ONSET_MAX_MOVEMENT_RATIO,
+        onset_min_downward_transition=SLEEP_ONSET_MIN_DOWNWARD_TRANSITION,
+        onset_max_hr_rise_bpm_per_min=SLEEP_ONSET_MAX_HR_RISE_BPM_PER_MIN,
+        onset_max_rr_rise_per_min=SLEEP_ONSET_MAX_RR_RISE_PER_MIN,
+        onset_initial_wake_support=SLEEP_ONSET_INITIAL_WAKE_SUPPORT,
     )
     rr_stage_guard = {
         "conflict": sleep_evidence["n3_rr_conflict"],
@@ -3065,6 +3077,9 @@ def estimate_sleep_state() -> Dict[str, Any]:
         probability_current_stage,
         switch_margin=SLEEP_PROBABILITY_SWITCH_MARGIN,
         n3_gate=bool(sleep_evidence["n3_gate"]),
+        sleep_onset_gate_passed=bool(
+            sleep_evidence["sleep_onset_gate"]["passed"]
+        ),
     )
     # A position change or blanket adjustment is sleep-compatible movement.
     # Only the shared, physiology-corroborated movement rule may bypass the
@@ -3145,6 +3160,18 @@ def estimate_sleep_state() -> Dict[str, Any]:
             f"RR ใกล้ N2 มากกว่า N3 {rr_stage_guard['conflict']*100:.0f}%")
     if transition_guard:
         reason_bits.append(transition_guard)
+    if probability_transition.get("sleep_onset_guard_held"):
+        onset = sleep_evidence["sleep_onset_gate"]
+        if not onset["observation_complete"]:
+            reason_bits.append(
+                "คง W ระหว่างเก็บ Awake baseline 5 นาทีแรก"
+            )
+        elif not onset["quiet_bed"]:
+            reason_bits.append("คง W เพราะยังมีการเคลื่อนไหวบนเตียง")
+        else:
+            reason_bits.append(
+                "คง W เพราะ HR/RR ยังไม่ลดลงต่อเนื่องพอสำหรับ Sleep onset"
+            )
     if environment_context["sleep_support_score"] is not None:
         reason_bits.append(
             f"environment context {environment_context['sleep_support_score']}/100")
@@ -3204,6 +3231,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
         "timing_priors": {
             "rem_gate": sleep_evidence["rem_gate"],
             "rem_time_support": sleep_evidence["rem_time_support"],
+            "sleep_onset_gate": sleep_evidence["sleep_onset_gate"],
         },
         "evidence": {
             "candidate": raw_candidate,

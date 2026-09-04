@@ -108,6 +108,7 @@ def candidate_from_stage_evidence(
     *,
     switch_margin: float,
     n3_gate: bool,
+    sleep_onset_gate_passed: bool = True,
 ) -> tuple[str, dict[str, Any]]:
     """Select a stable candidate without starving physiologically gated N3.
 
@@ -130,20 +131,96 @@ def candidate_from_stage_evidence(
     )
     gated_n3_override = bool(n3_gate and current_candidate == "n3")
     candidate = current_candidate if gated_n3_override else ema_candidate
+    onset_guard_held = bool(
+        current_stage in {None, "wake"}
+        and candidate != "wake"
+        and not sleep_onset_gate_passed
+    )
+    if onset_guard_held:
+        candidate = "wake"
     metadata = dict(current_metadata if gated_n3_override else ema_metadata)
     metadata.update({
         "candidate_source": (
-            "gated_n3_current_30s_evidence_before_ema"
-            if gated_n3_override
-            else "ema_probability"
+            "sleep_onset_guard"
+            if onset_guard_held
+            else (
+                "gated_n3_current_30s_evidence_before_ema"
+                if gated_n3_override else "ema_probability"
+            )
         ),
         "ema_role": "default_candidate_stability_and_display",
         "gated_n3_current_evidence_override": gated_n3_override,
         "n3_gate": bool(n3_gate),
+        "sleep_onset_gate_passed": bool(sleep_onset_gate_passed),
+        "sleep_onset_guard_held": onset_guard_held,
         "current_evidence_winner": current_metadata["filtered_winner"],
         "ema_winner": ema_metadata["filtered_winner"],
     })
     return candidate, metadata
+
+
+def sleep_onset_evidence(
+    *,
+    elapsed_min: float,
+    movement_evidence: Mapping[str, Any],
+    hr_slope_bpm_per_min: float,
+    rr_slope_per_min: float,
+    downward_transition: float,
+    minimum_observation_minutes: float,
+    maximum_movement_ratio: float,
+    minimum_downward_transition: float,
+    maximum_hr_rise_bpm_per_min: float,
+    maximum_rr_rise_per_min: float,
+) -> dict[str, Any]:
+    """Return conservative evidence required to leave Wake for the first time.
+
+    BCG cannot distinguish quiet wake from EEG-defined N1 by a static HR/RR
+    range.  The guard therefore requires elapsed observation, a quiet bed and
+    a sustained autonomic downward trend.  The normal two-epoch state
+    confirmation remains a separate requirement after this gate passes.
+    """
+    elapsed = max(0.0, _finite(elapsed_min, 0.0))
+    movement_ratio = _clamp(
+        _finite(movement_evidence.get("movement_ratio"), 0.0)
+    )
+    hr_slope = _finite(hr_slope_bpm_per_min, 0.0)
+    rr_slope = _finite(rr_slope_per_min, 0.0)
+    downward = _clamp(downward_transition)
+    observation_complete = elapsed >= max(0.0, minimum_observation_minutes)
+    quiet_bed = bool(
+        movement_ratio < max(0.0, maximum_movement_ratio)
+        and not movement_evidence.get("sustained_on_bed")
+        and movement_evidence.get("category") != "bed_exit"
+    )
+    no_vital_rise = bool(
+        hr_slope <= maximum_hr_rise_bpm_per_min
+        and rr_slope <= maximum_rr_rise_per_min
+    )
+    downward_sustained = downward >= max(0.0, minimum_downward_transition)
+    passed = bool(
+        observation_complete and quiet_bed and no_vital_rise
+        and downward_sustained
+    )
+    return {
+        "passed": passed,
+        "observation_complete": observation_complete,
+        "elapsed_minutes": round(elapsed, 2),
+        "minimum_observation_minutes": round(
+            max(0.0, minimum_observation_minutes), 2
+        ),
+        "quiet_bed": quiet_bed,
+        "movement_ratio": round(movement_ratio, 4),
+        "maximum_movement_ratio": round(maximum_movement_ratio, 4),
+        "no_vital_rise": no_vital_rise,
+        "hr_slope_bpm_per_min": round(hr_slope, 4),
+        "rr_slope_per_min": round(rr_slope, 4),
+        "downward_transition": round(downward, 4),
+        "minimum_downward_transition": round(
+            minimum_downward_transition, 4
+        ),
+        "time_alone_can_create_n1": False,
+        "aasm_sleep_onset_equivalent": False,
+    }
 
 
 def align_probabilities_to_emitted_stage(
@@ -183,6 +260,12 @@ def score_sleep_evidence(
     n2_rr_conflict_support: float,
     move_wake_ratio: float,
     move_deep_ratio: float,
+    onset_min_observation_minutes: float = 5.0,
+    onset_max_movement_ratio: float = 0.15,
+    onset_min_downward_transition: float = 0.20,
+    onset_max_hr_rise_bpm_per_min: float = 0.50,
+    onset_max_rr_rise_per_min: float = 0.50,
+    onset_initial_wake_support: float = 0.75,
 ) -> tuple[dict[str, float], dict[str, Any]]:
     """Return five class scores and an auditable evidence record.
 
@@ -237,10 +320,30 @@ def score_sleep_evidence(
                              if shift_ratio is not None else 0.0)
 
     movement_evidence = sleep_movement_evidence(dict(metrics), move_wake_ratio)
+    onset_evidence = sleep_onset_evidence(
+        elapsed_min=elapsed_min,
+        movement_evidence=movement_evidence,
+        hr_slope_bpm_per_min=hr_slope,
+        rr_slope_per_min=rr_slope,
+        downward_transition=downward_transition,
+        minimum_observation_minutes=onset_min_observation_minutes,
+        maximum_movement_ratio=onset_max_movement_ratio,
+        minimum_downward_transition=onset_min_downward_transition,
+        maximum_hr_rise_bpm_per_min=onset_max_hr_rise_bpm_per_min,
+        maximum_rr_rise_per_min=onset_max_rr_rise_per_min,
+    )
     scores["wake"] += float(movement_evidence["wake_score_support"])
+    if not onset_evidence["observation_complete"]:
+        scores["wake"] += max(0.0, _finite(onset_initial_wake_support, 0.0))
+    onset_transition_support = (
+        downward_transition * 0.45
+        if onset_evidence["observation_complete"]
+        and onset_evidence["quiet_bed"]
+        and onset_evidence["no_vital_rise"]
+        else 0.0
+    )
     scores["n1"] += (
-        max(0.0, 0.55 - elapsed_min / 90.0)
-        + downward_transition * 0.45
+        onset_transition_support
         + (1.0 - flat_trend) * 0.15
         + amplitude_instability * 0.10
     )
@@ -333,6 +436,9 @@ def score_sleep_evidence(
         "bcg_baseline_drift_flag": drift_flag,
         "corroborated_acoustic_wake_support": round(acoustic_wake_support, 4),
         "movement": movement_evidence,
+        "sleep_onset_gate": onset_evidence,
+        "n1_time_only_bonus_removed": True,
+        "n1_transition_support": round(onset_transition_support, 4),
         "environment_direct_stage_influence": False,
         "n3_gate": n3_gate,
         "n3_hr_conflict": round(n3_hr_conflict, 4),

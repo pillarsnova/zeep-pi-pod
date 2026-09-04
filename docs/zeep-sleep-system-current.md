@@ -3,13 +3,14 @@
 > **Purpose:** เอกสารหลักฉบับเดียวของ Sleep State, Historical Replay, Sleep Score และ Session Report ที่ใช้งานจริงใน ZEEP Pod  
 > **Positioning:** Sleep Wellness · EEG-free exploratory telemetry · ไม่ใช่ PSG/การวินิจฉัย/คำสั่งรักษา  
 > **Status:** Implemented and regression-gated in repository · production activation must be verified after deployment · G2 paired-PSG validation open  
-> **Updated:** 2026-08-29  
+> **Updated:** 2026-09-04
 > **Code manifest:** [`pi5/sleep_system_policy.py`](../pi5/sleep_system_policy.py)  
 > **Related:** [Sleep-State Baseline v1.5](zeep-sleep-state-baseline-v1.0.md) · [AI Sleep-State](ai-sleep-state-and-assistant.md)
 
 ## TL;DR
 
 - ระบบเก็บ Sensor ทุก 10 วินาที สรุป `sleep_stage_evidence` ทุก 30 วินาที และเปลี่ยน `sleep_stage` ที่ยืนยันแล้วเมื่อหลักฐานต่อเนื่อง 2 epoch/60 วินาที **เฉพาะ** เมื่อมี Active Recording Session, ยืนยันผู้ใช้อยู่บนเตียง และรอบปัจจุบันมี HR+RR สดที่ผ่าน sanity; หากขาดข้อใดข้อหนึ่งจะแสดง `WAIT/OFF` โดย probability ทั้ง 5 เป็นศูนย์และไม่เขียน Sleep Stage ลง Timeline
+- Sleep-onset Guard คงสถานะ W อย่างน้อย 5 นาทีแรกเพื่อกัน Sensor acquisition/quiet wake ออกจาก N1; หลังจากนั้นต้องพบเตียงนิ่งและ HR/RR ลดลงต่อเนื่อง 2 evidence epochs จึงเริ่มลำดับ N1 ได้ เวลาเริ่ม Session หรือความนิ่งอย่างเดียวไม่ใช่หลักฐานการหลับ
 - BCG + Bed Status เป็นหลัก; SPH0645 ช่วยยืนยัน disturbance เมื่อตรงเวลากับ BCG/movement; Sensor อากาศอธิบายสิ่งรบกวนและ confidence เท่านั้น
 - Login ได้ก่อน แต่จะยังไม่สร้าง Session/Timeline จนกว่าอยู่บนเตียงครบ 20 วินาที และมี HR+RR สดในช่วง sanity ต่อเนื่อง 3 BCG packets ใหม่
 - การพลิกตัว ขยับแขนขา หรือขยับผ้าห่มขณะยังอยู่บนเตียงเป็น `sleep-compatible movement` และไม่เปลี่ยนเป็น Wake โดยลำพัง
@@ -26,13 +27,13 @@
 
 | ชั้นระบบ | Version |
 |---|---|
-| Health pipeline contract | `zeep-sleep-health-pipeline-v1.3-stable-30s-epoch` |
-| Live estimator | `bcg-audio-bed-5state-v1.19-balanced-n3-evidence` |
-| Evidence definition | `zeep-sleep-state-evidence-v2.0-30s-epoch` |
+| Health pipeline contract | `zeep-sleep-health-pipeline-v1.4-onset-guard` |
+| Live estimator | `bcg-audio-bed-5state-v1.20-sleep-onset-guard` |
+| Evidence definition | `zeep-sleep-state-evidence-v2.1-onset-guard` |
 | Baseline | `zeep-sleep-state-baseline-v1.5` |
-| Semi-Markov transition | `zeep-semimarkov-30s-v1.11-evidence-confirmation` |
+| Semi-Markov transition | `zeep-semimarkov-30s-v1.12-sleep-onset-guard` |
 | G2 ontology | `g2-aasm-5class-v1.0` |
-| Historical replay | `zeep-sleep-history-reclass-v14-balanced-n3-evidence` |
+| Historical replay | `zeep-sleep-history-reclass-v15-sleep-onset-guard` |
 | Sleep / Rest quality | `zeep-rest-quality-v7.0-two-pilot-modes` |
 | Session report | `zeep-session-report-v9.3-two-pilot-modes` |
 | Environment context | `zeep-environment-context-v2.0-mode-aware-fair-floor` |
@@ -69,7 +70,10 @@ flowchart LR
     C --> W
     X --> W
     W --> S["Five-state scorer"]
-    S --> G["Semi-Markov guard"]
+    S --> SO{"Sleep-onset guard passed?"}
+    SO -->|"No"| KW["Keep W · do not manufacture N1"]
+    SO -->|"Yes"| G["Semi-Markov guard"]
+    KW --> E30
     G --> E30["Persist evidence every 30 s"]
     E30 --> C60["Confirm state after 2 epochs / 60 s"]
     C60 --> D["Persist confirmed state every 30 s"]
@@ -105,6 +109,19 @@ flowchart LR
 ระบบไม่ใช้ Sensor อากาศสร้าง N1/N2/N3/REM และไม่ใช้ Sleep State เป็น trigger
 สั่งอุปกรณ์อัตโนมัติในเวอร์ชันนี้
 
+### 2.2 Sleep-onset Guard — ป้องกัน N1 เร็วเกินจริง
+
+BCG ที่อยู่ใต้เตียงไม่เห็น EEG จึงแยกคนที่นอนนิ่งแต่ยังตื่นออกจาก N1 โดยใช้ HR/RR
+คงที่เพียงอย่างเดียวไม่ได้ ระบบจึงใช้กฎเชิงอนุรักษ์ดังนี้:
+
+1. 5 นาทีแรกหลังเริ่ม Recording เป็นช่วง Awake/settling observation และคงผลเป็น W
+2. ตัดโบนัส N1 ที่เกิดจากเวลาช่วงต้น Session ออกทั้งหมด
+3. หลัง 5 นาที ต้องมี movement ต่ำกว่า 15%, ไม่มี sustained on-bed movement,
+   HR/RR ไม่กำลังเพิ่ม และ downward-transition ≥0.20
+4. Gate ต้องผ่านต่อเนื่องตาม Confirmation 2 epochs/60 วินาที จึงออกจาก W ไป N1
+5. Sensor acquisition drop ช่วงแรก, quiet wake, สมาธิ หรือการนอนนิ่งอย่างเดียว
+   ไม่เพียงพอให้เป็น N1; ผลยังเป็น ZEEP Wellness estimate ไม่ใช่ AASM/PSG onset
+
 หลักอ้างอิงด้านสุขภาพ: AASM ใช้ W/N1/N2/N3/R และต้องอาศัย EEG/EOG/chin EMG
 สำหรับการให้คะแนนจริง จึงใช้ชื่อชุดเดียวกันเป็น ontology เพื่อเทียบผลได้ แต่ ZEEP
 ไม่เรียกผล BCG ว่า AASM score งานของ Kortelainen และคณะ (2010,
@@ -114,7 +131,7 @@ bed sensor สามารถใช้ประมาณ Wake/NREM/REM ได้
 accuracy ดู [AASM Scoring Manual](https://learn.aasm.org/AssetListing/The-AASM-Manual-for-the-Scoring-of-Sleep-and-Associated-Events-4265/The-AASM-Manual-for-the-Scoring-of-Sleep-and-Associated-Events-6697)
 และ [งานวิจัย bed sensor](https://pubmed.ncbi.nlm.nih.gov/20403790/)
 
-### 2.2 Cadence และคุณภาพข้อมูล
+### 2.3 Cadence และคุณภาพข้อมูล
 
 - สร้าง Sensor frame ทุก 10 วินาทีโดยไม่ขึ้นกับ Login/Session: Environment ทั้ง 6 ตัว, HR, RR และ Bed Status เปลี่ยนพร้อมกันทุกหน้าเมื่อ `sensor_frame.sequence` เปลี่ยนเท่านั้น
 - WebSocket/Control ตอบสนองได้ถี่กว่า 10 วินาที แต่ห้ามนำ Raw packet ระหว่าง frame มาแทนค่าที่แสดง; Raw ใช้เฉพาะ Admin Packet Inspector และ Safety supervisor ยังคงอ่านสดโดยไม่รอ UI
@@ -134,7 +151,7 @@ accuracy ดู [AASM Scoring Manual](https://learn.aasm.org/AssetListing/The-AA
 - Timestamp ของ Timeline ใช้เวลาที่เก็บ Session sample จริง ไม่ใช้ Sensor-frame timestamp ซ้ำ; ข้อมูล Sensor frame สำหรับ Sleep State ยังมี provenance ของรอบ 10 วินาทีแยกต่างหาก
 - ค่า HR/RR ที่ invalid ถูกคัดออกก่อน State Machine; ข้อมูลขาดไม่ถูกแต่งเป็นค่าปกติ ไม่คง Stage ล่าสุดเป็นผลปัจจุบัน และไม่ให้สถานะเดิม 100%
 
-### 2.3 Session start gate
+### 2.4 Session start gate
 
 1. Browser Login และ Pod occupancy เริ่มได้ตามปกติ แต่ phase ยังเป็น
    `waiting_bed` และยังไม่มี row ใน `sessions.db`
@@ -168,7 +185,7 @@ accuracy ดู [AASM Scoring Manual](https://learn.aasm.org/AssetListing/The-AA
     หรือ `WAIT · กำลังยืนยันสถานะ`; ข้อมูล Sensor ในช่วงนั้นยังแสดงได้ แต่ช่วงดังกล่าว
     ไม่ใช่ Sleep Stage และไม่ถูกนำไปเติมย้อนหลังด้วย State ที่อยู่ก่อนหรือหลังช่องว่าง
 
-## 2.4 Baseline สามชั้นที่ต้องไม่ปนกัน
+### 2.5 Baseline สามชั้นที่ต้องไม่ปนกัน
 
 | ชั้น Baseline | ใช้อะไร | ใช้ทำอะไร | ห้ามใช้ทำอะไร |
 |---|---|---|---|
@@ -181,7 +198,7 @@ Session ที่เป็น `quality_type=sleep`, ตรวจพบการ�
 เพียงพอ และสะสมอย่างน้อย 3 คืน (rolling สูงสุด 7 คืน) การงีบที่สั้นเกินเกณฑ์,
 สมาธิ, พักเฉย ๆ และ Session ที่ Sensor ไม่ครบไม่ถูกปนเข้า physiology baseline
 
-## 2.5 Environment Context — ระดับที่ต้องแก้ไขและระดับที่คาดหวัง
+### 2.6 Environment Context — ระดับที่ต้องแก้ไขและระดับที่คาดหวัง
 
 หลักตัดสินใช้ค่าที่ต่ำที่สุดของ Sensor 7 เกณฑ์ เพื่อไม่ให้ค่าที่ดีบดบังค่าที่แย่:
 
@@ -513,6 +530,7 @@ systemctl is-active zeep-pod.service
 | Stable 30-second epoch release | Estimator v1.17: Sensor 10 s → Evidence 30 s → Confirmed State 60 s; rolling features 60 s (6 buckets) + EMA 20% + candidate margin 5%; Evidence probability ไม่ถูกบิดให้ตรงกับ State ที่กำลัง hold |
 | Guarded REM/Wake transition release | Estimator v1.18 / Transition v1.10: เปิด N1→REM แบบ REM-gated และ REM→Wake แบบปกติ โดยทุก transition ยังยืนยัน 2 evidence epochs/60 s; ไม่เปิด Wake→REM จากความง่วงหรือ daydream |
 | Balanced N3 evidence release | Estimator v1.19 / Transition v1.11: เฉพาะ N3 ที่ชนะ current 30 s evidence และผ่าน physiology gate เสนอ candidate ก่อน EMA แล้วจึงยืนยัน 2 epochs/60 s; State อื่นยังใช้ EMA และข้อห้ามเมื่อไม่มี HR/RR/on-bed ยังคงเดิม |
+| Sleep-onset guard release | Estimator v1.20 / Transition v1.12: 5 นาทีแรกคง W, ตัด time-only N1 bonus และต้องมี quiet downward HR/RR evidence ต่อเนื่องก่อน W→N1; แก้เคส 2026-09-04 ที่ acquisition drop ทำให้ N1 81.4% และยืนยันในไม่ถึง 2 นาที |
 | Terminal Wake sequence | รายงานปิดลำดับเป็น `Sleep State สุดท้าย → W · ตื่น → Occupancy/END`; marker 0 s แยกจาก physiology และไม่เปลี่ยน Stage statistics/Score/Baseline |
 | Classification-gap visibility | ลำดับรายงานแสดง WAIT/OFF ทุกช่องว่างที่ยืนยัน State ไม่ได้ แทนการซ่อนเวลา; Raw Timeline/decision และคะแนนไม่ถูกแก้ |
 

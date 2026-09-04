@@ -103,6 +103,26 @@ class SleepClassificationGateTests(unittest.TestCase):
         self.assert_inactive(result, "off_bed")
         self.assertEqual(result["data_status"], "empty_bed")
 
+    def test_startup_vital_drop_is_held_at_wake_not_n1(self):
+        self.set_session(active=True, recording=True)
+        with zeep.state_lock:
+            zeep.state["session"]["started_at"] = time.time() - 90.0
+        with zeep.sleep_path_lock:
+            zeep._reset_sleep_stage_path("gate-test")
+        hrs = (83.75, 76.3, 76.7, 79.7, 80.0, 80.6)
+        rrs = (20.2, 16.68, 16.05, 15.51, 15.8, 17.59)
+        for hr, rr in zip(hrs, rrs):
+            self.add_frame(hr=hr, rr=rr)
+
+        result = zeep.estimate_sleep_state()
+
+        self.assertEqual(result["raw_candidate"], "wake")
+        self.assertNotEqual(result["confirmed_state"], "n1")
+        self.assertFalse(result["sleep_evidence"]["sleep_onset_gate"]["passed"])
+        self.assertFalse(
+            result["sleep_evidence"]["sleep_onset_gate"]["observation_complete"]
+        )
+
 
 class SleepTransitionPolicyTests(unittest.TestCase):
     def setUp(self):
@@ -208,6 +228,19 @@ class BaselineProximityTests(unittest.TestCase):
 
 
 class SleepProbabilityStabilityTests(unittest.TestCase):
+    def test_onset_guard_holds_wake_when_n1_wins_too_early(self):
+        candidate, metadata = zeep.candidate_from_stage_evidence(
+            {"wake": 0.11, "n1": 0.81, "n2": 0.06, "n3": 0.01, "rem": 0.01},
+            {"wake": 0.11, "n1": 0.81, "n2": 0.06, "n3": 0.01, "rem": 0.01},
+            "wake",
+            switch_margin=zeep.SLEEP_PROBABILITY_SWITCH_MARGIN,
+            n3_gate=False,
+            sleep_onset_gate_passed=False,
+        )
+        self.assertEqual(candidate, "wake")
+        self.assertTrue(metadata["sleep_onset_guard_held"])
+        self.assertEqual(metadata["candidate_source"], "sleep_onset_guard")
+
     def test_ema_damps_one_thirty_second_probability_jump(self):
         previous = {"wake": 0.05, "n1": 0.05, "n2": 0.15, "n3": 0.05, "rem": 0.70}
         current = {"wake": 0.05, "n1": 0.05, "n2": 0.65, "n3": 0.05, "rem": 0.20}

@@ -52,6 +52,12 @@ from sleep_system_policy import (
     SLEEP_DISPLAY_WINNER_MARGIN,
     SLEEP_PROBABILITY_EMA_ALPHA,
     SLEEP_PROBABILITY_SWITCH_MARGIN,
+    SLEEP_ONSET_INITIAL_WAKE_SUPPORT,
+    SLEEP_ONSET_MAX_HR_RISE_BPM_PER_MIN,
+    SLEEP_ONSET_MAX_MOVEMENT_RATIO,
+    SLEEP_ONSET_MAX_RR_RISE_PER_MIN,
+    SLEEP_ONSET_MIN_DOWNWARD_TRANSITION,
+    SLEEP_ONSET_MIN_OBSERVATION_SECONDS,
     SLEEP_PROHIBITED_TRANSITIONS,
     SLEEP_STAGE_CONFIRM_TICKS,
     SLEEP_STAGE_MIN_DWELL_SECONDS,
@@ -391,6 +397,12 @@ def rescore_event(
         n2_rr_conflict_support=zeep.SLEEP_N2_RR_CONFLICT_SUPPORT,
         move_wake_ratio=zeep.SLEEP_MOVE_WAKE_RATIO,
         move_deep_ratio=zeep.SLEEP_MOVE_DEEP_RATIO,
+        onset_min_observation_minutes=SLEEP_ONSET_MIN_OBSERVATION_SECONDS / 60.0,
+        onset_max_movement_ratio=SLEEP_ONSET_MAX_MOVEMENT_RATIO,
+        onset_min_downward_transition=SLEEP_ONSET_MIN_DOWNWARD_TRANSITION,
+        onset_max_hr_rise_bpm_per_min=SLEEP_ONSET_MAX_HR_RISE_BPM_PER_MIN,
+        onset_max_rr_rise_per_min=SLEEP_ONSET_MAX_RR_RISE_PER_MIN,
+        onset_initial_wake_support=SLEEP_ONSET_INITIAL_WAKE_SUPPORT,
     )
 
     maximum = max(scores.values())
@@ -411,6 +423,9 @@ def rescore_event(
         path.last,
         switch_margin=SLEEP_PROBABILITY_SWITCH_MARGIN,
         n3_gate=bool(evidence["n3_gate"]),
+        sleep_onset_gate_passed=bool(
+            evidence["sleep_onset_gate"]["passed"]
+        ),
     )
     strong_wake = bool(
         instant_candidate == "wake" and evidence["movement"]["strong_wake"]

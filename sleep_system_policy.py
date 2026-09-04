@@ -13,13 +13,13 @@ from typing import Any
 
 
 # Every persisted decision/report carries these versions for provenance.
-SLEEP_PIPELINE_CONTRACT_VERSION = "zeep-sleep-health-pipeline-v1.3-stable-30s-epoch"
-SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.19-balanced-n3-evidence"
-SLEEP_EVIDENCE_VERSION = "zeep-sleep-state-evidence-v2.0-30s-epoch"
+SLEEP_PIPELINE_CONTRACT_VERSION = "zeep-sleep-health-pipeline-v1.4-onset-guard"
+SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.20-sleep-onset-guard"
+SLEEP_EVIDENCE_VERSION = "zeep-sleep-state-evidence-v2.1-onset-guard"
 ZEEP_SLEEP_BASELINE_VERSION = "zeep-sleep-state-baseline-v1.5"
-ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.11-evidence-confirmation"
+ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.12-sleep-onset-guard"
 SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
-SLEEP_HISTORY_BACKFILL_VERSION = "zeep-sleep-history-reclass-v14-balanced-n3-evidence"
+SLEEP_HISTORY_BACKFILL_VERSION = "zeep-sleep-history-reclass-v15-sleep-onset-guard"
 SESSION_REPORT_VERSION = "zeep-session-report-v9.3-two-pilot-modes"
 SLEEP_QUALITY_VERSION = "zeep-rest-quality-v7.0-two-pilot-modes"
 ENVIRONMENT_CONTEXT_POLICY_VERSION = "zeep-environment-context-v2.0-mode-aware-fair-floor"
@@ -110,6 +110,18 @@ SLEEP_STAGE_CONFIRM_TICKS = {
 SLEEP_STAGE_MIN_DWELL_SECONDS = {
     "wake": 10.0, "n1": 30.0, "n2": 60.0, "n3": 60.0, "rem": 60.0,
 }
+
+# Quiet wake and N1 overlap strongly in contactless BCG.  A new Session must
+# therefore collect a conservative awake/settling interval before the
+# semi-Markov path may leave Wake.  After that interval, two consecutive
+# evidence epochs must show a quiet bed and a sustained downward HR/RR trend.
+# This is an engineering false-positive guard, not an AASM sleep-onset rule.
+SLEEP_ONSET_MIN_OBSERVATION_SECONDS = 5 * 60.0
+SLEEP_ONSET_MAX_MOVEMENT_RATIO = 0.15
+SLEEP_ONSET_MIN_DOWNWARD_TRANSITION = 0.20
+SLEEP_ONSET_MAX_HR_RISE_BPM_PER_MIN = 0.50
+SLEEP_ONSET_MAX_RR_RISE_PER_MIN = 0.50
+SLEEP_ONSET_INITIAL_WAKE_SUPPORT = 0.75
 
 # Probability telemetry is filtered independently from the rolling feature
 # window. EMA remains the default continuity source for Wake/N1/N2/REM. A
@@ -590,6 +602,18 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "safety_supervisor_seconds": 1.0,
         },
         "minimum_dwell_seconds": dict(SLEEP_STAGE_MIN_DWELL_SECONDS),
+        "sleep_onset_guard": {
+            "minimum_observation_seconds": SLEEP_ONSET_MIN_OBSERVATION_SECONDS,
+            "maximum_movement_ratio": SLEEP_ONSET_MAX_MOVEMENT_RATIO,
+            "minimum_downward_transition": SLEEP_ONSET_MIN_DOWNWARD_TRANSITION,
+            "maximum_hr_rise_bpm_per_min": SLEEP_ONSET_MAX_HR_RISE_BPM_PER_MIN,
+            "maximum_rr_rise_per_min": SLEEP_ONSET_MAX_RR_RISE_PER_MIN,
+            "initial_wake_score_support": SLEEP_ONSET_INITIAL_WAKE_SUPPORT,
+            "confirmation_epochs_after_gate": SLEEP_CONFIRM_EPOCHS,
+            "quiet_wake_defaults_to_wake": True,
+            "time_alone_can_create_n1": False,
+            "engineering_guard_not_aasm_rule": True,
+        },
         "probability_filter": {
             "method": "ema_after_60s_rolling_features",
             "alpha": SLEEP_PROBABILITY_EMA_ALPHA,

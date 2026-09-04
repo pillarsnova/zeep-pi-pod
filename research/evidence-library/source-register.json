@@ -1,13 +1,21 @@
 {
-  "schema_version": "1.0.0",
-  "library_version": "1.1.0",
+  "$schema": "source-register.schema.json",
+  "schema_version": "1.1.0",
+  "library_version": "1.2.0",
   "checked_on": "2026-09-05",
   "maintainer": "ZEEP Research and Engineering",
+  "authority": {
+    "authoritative": true,
+    "scope": "External evidence metadata, approved URLs, access tier and artifact checksum",
+    "human_view": "SOURCE_REGISTER.md",
+    "owner_role": "ZEEP Evidence Reviewer"
+  },
   "runtime_policy": "Evidence files are review material only. Runtime thresholds and models must use separately versioned, tested policy/configuration.",
   "sources": [
     {
       "id": "SLP-001",
       "category": "sleep",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "PubMed/PMC identifiers, publisher metadata and cached artifact checksum"},
       "title": "Recommended Amount of Sleep for a Healthy Adult: A Joint Consensus Statement of the AASM and SRS",
       "year": 2015,
       "identifiers": {"doi": "10.5665/sleep.4716", "pmid": "26039963", "pmcid": "PMC4434546"},
@@ -23,6 +31,7 @@
     {
       "id": "SLP-002",
       "category": "sleep",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "PubMed/PMC identifiers, publisher metadata and cached artifact checksum"},
       "title": "Sleep staging from electrocardiography and respiration with deep learning",
       "year": 2020,
       "identifiers": {"doi": "10.1093/sleep/zsz306", "pmid": "31863111", "pmcid": "PMC7355395"},
@@ -38,6 +47,7 @@
     {
       "id": "SLP-003",
       "category": "sleep",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "PubMed/PMC identifiers, publisher metadata and cached artifact checksum"},
       "title": "Sleep Parameter Assessment Accuracy of a Consumer Home Sleep Monitoring Ballistocardiograph Beddit Sleep Tracker",
       "year": 2019,
       "identifiers": {"doi": "10.5664/jcsm.7682", "pmid": "30853052", "pmcid": "PMC6411173"},
@@ -53,6 +63,7 @@
     {
       "id": "SLP-004",
       "category": "sleep",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "PubMed/PMC identifiers, publisher metadata and cached artifact checksum"},
       "title": "A validation study of a ballistocardiograph sleep tracker against polysomnography",
       "year": 2022,
       "identifiers": {"doi": "10.5664/jcsm.9754", "pmid": "34705630", "pmcid": "PMC8974370"},
@@ -68,21 +79,24 @@
     {
       "id": "SLP-005",
       "category": "sleep",
-      "title": "AASM Consumer Sleep Technology Position Statement",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "PubMed PMID/PMCID/DOI and stable NCBI E-utilities full-text XML checksum"},
+      "title": "Consumer Sleep Technology: An American Academy of Sleep Medicine Position Statement",
       "year": 2018,
       "identifiers": {"doi": "10.5664/jcsm.7128", "pmid": "29734997", "pmcid": "PMC5940440"},
-      "source_url": "https://aasm.org/advocacy/position-statements/consumer-sleep-technology/",
-      "download_url": null,
-      "local_file": null,
-      "sha256": null,
-      "access": "link-only",
-      "license": "publisher-controlled; link retained",
+      "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5940440/",
+      "download_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id=5940440&rettype=full&retmode=xml",
+      "local_file": "papers/sleep/aasm-consumer-sleep-technology-position-statement-2018.xml",
+      "sha256": "ce566c47ec028d0e4f47a6d607791df06f5ecb5768358e32db81dfd83c7e8644",
+      "media_type": "application/xml",
+      "access": "downloadable",
+      "license": "AASM copyright; free full text on PMC; local review cache only",
       "use_in_zeep": "Wellness and patient-generated data boundary; not a replacement for clinical evaluation.",
-      "limitations": "Check the publisher page for the current position before external claims."
+      "limitations": "Free full text is not an open redistribution licence; recheck the PMC/publisher notice before external use."
     },
     {
       "id": "SLP-006",
       "category": "sleep",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "Official AASM product page and access-licence review"},
       "title": "AASM Manual for the Scoring of Sleep and Associated Events",
       "year": null,
       "identifiers": {},
@@ -98,6 +112,7 @@
     {
       "id": "HLT-001",
       "category": "health-wellness",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "PubMed/PMC identifiers, publisher metadata and cached artifact checksum"},
       "title": "Clinical Practice Guideline for Diagnostic Testing for Adult Obstructive Sleep Apnea",
       "year": 2017,
       "identifiers": {"doi": "10.5664/jcsm.6506", "pmid": "28162150", "pmcid": "PMC5337595"},
@@ -113,6 +128,7 @@
     {
       "id": "HLT-002",
       "category": "health-wellness",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "Official WHO live-data page and metadata review"},
       "title": "WHO Global Health Observatory",
       "year": null,
       "identifiers": {},
@@ -128,6 +144,7 @@
     {
       "id": "HLT-003",
       "category": "health-wellness",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "Official WHO live-data page and metadata review"},
       "title": "WHO Data",
       "year": null,
       "identifiers": {},
@@ -143,9 +160,10 @@
     {
       "id": "AIR-001",
       "category": "indoor-air-voc",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "PubMed PMID/PMCID/DOI cross-check and cached artifact checksum"},
       "title": "Human transport of thirdhand tobacco smoke: A prominent source of hazardous air pollutants into indoor nonsmoking environments",
       "year": 2020,
-      "identifiers": {"doi": "10.1126/sciadv.aay4109", "pmid": "32128423", "pmcid": "PMC7056301"},
+      "identifiers": {"doi": "10.1126/sciadv.aay4109", "pmid": "32181345", "pmcid": "PMC7056301"},
       "source_url": "https://doi.org/10.1126/sciadv.aay4109",
       "download_url": "https://europepmc.org/articles/PMC7056301?pdf=render",
       "local_file": "papers/indoor-air-voc/human-transport-thirdhand-smoke-2020.pdf",
@@ -158,6 +176,7 @@
     {
       "id": "AIR-002",
       "category": "indoor-air-voc",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "PubMed/PMC identifiers, publisher metadata and cached artifact checksum"},
       "title": "Emission Rates of Volatile Organic Compounds from Humans",
       "year": 2022,
       "identifiers": {"doi": "10.1021/acs.est.1c08764", "pmid": "35389619", "pmcid": "PMC9022422"},
@@ -173,6 +192,7 @@
     {
       "id": "AIR-003",
       "category": "indoor-air-voc",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "PubMed/PMC identifiers, publisher metadata and cached artifact checksum"},
       "title": "Identification and determination of the volatile organics of third-hand smoke from different cigarettes and clothing fabrics",
       "year": 2022,
       "identifiers": {"doi": "10.1007/s40201-021-00755-1", "pmid": "35669833", "pmcid": "PMC9163281"},
@@ -188,6 +208,7 @@
     {
       "id": "AIR-004",
       "category": "indoor-air-voc",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "PubMed identifier, title and abstract access review"},
       "title": "Volatile organic compounds as breath biomarkers for active and passive smoking",
       "year": 2002,
       "identifiers": {"pmid": "12117646"},
@@ -203,6 +224,7 @@
     {
       "id": "AIR-005",
       "category": "indoor-air-voc",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "PubMed identifier, title and abstract access review"},
       "title": "Utilization of breath analysis for exposure estimates of benzene associated with active smoking",
       "year": 2000,
       "identifiers": {"pmid": "10856191"},
@@ -218,6 +240,7 @@
     {
       "id": "AIR-006",
       "category": "indoor-air-voc",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "Official EPA HERO/NEPIS title, edition, year and report-number cross-check"},
       "title": "Residential Air Cleaners: A Technical Summary, 3rd Edition",
       "year": 2018,
       "identifiers": {"report": "EPA 402-F-09-002"},
@@ -233,6 +256,7 @@
     {
       "id": "WHO-001",
       "category": "who",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "Official WHO/IRIS title, ISBN, handle, rights and cached artifact checksum"},
       "title": "WHO global air quality guidelines",
       "year": 2021,
       "identifiers": {"isbn": "9789240034228", "handle": "10665/345329"},
@@ -248,6 +272,7 @@
     {
       "id": "WHO-002",
       "category": "who",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "Official WHO/IRIS title, ISBN, handle, rights and cached artifact checksum"},
       "title": "WHO housing and health guidelines",
       "year": 2018,
       "identifiers": {"isbn": "9789241550376", "handle": "10665/276001"},
@@ -263,6 +288,7 @@
     {
       "id": "WHO-003",
       "category": "who",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "Official WHO/IRIS title, ISBN, handle, rights and cached artifact checksum"},
       "title": "WHO guidelines for indoor air quality: selected pollutants",
       "year": 2010,
       "identifiers": {"isbn": "9789289002134", "handle": "10665/260127"},
@@ -278,6 +304,7 @@
     {
       "id": "WHO-004",
       "category": "who",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "Official WHO/IRIS title, ISBN, handle, rights and cached artifact checksum"},
       "title": "Roadmap to improve and ensure good indoor ventilation in the context of COVID-19",
       "year": 2021,
       "identifiers": {"isbn": "9789240021280", "handle": "10665/339857"},
@@ -293,6 +320,7 @@
     {
       "id": "WHO-005",
       "category": "who",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "Official WHO/IRIS title, ISBN, handle, rights and cached artifact checksum"},
       "title": "Methods for sampling and analysis of chemical pollutants in indoor air",
       "year": 2020,
       "identifiers": {"isbn": "9789289055239", "handle": "10665/334389"},
@@ -308,6 +336,7 @@
     {
       "id": "WHO-006",
       "category": "who",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "Canonical WHO publication URL, WHO/IRIS identifiers, rights and cached artifact checksum"},
       "title": "WHO report on the global tobacco epidemic, 2025: warning about the dangers of tobacco",
       "year": 2025,
       "identifiers": {"isbn": "9789240112063", "handle": "10665/381685"},
@@ -323,6 +352,7 @@
     {
       "id": "WHO-007",
       "category": "who",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "Official WHO/IRIS title, handle, reference number, rights and cached artifact checksum"},
       "title": "Tobacco Control Playbook: comprehensive smoke-free legislation",
       "year": 2025,
       "identifiers": {"handle": "10665/381594", "who_reference": "WHO-EURO-2025-3700-43459-79657"},
@@ -338,6 +368,7 @@
     {
       "id": "WHO-008",
       "category": "who",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "Official WHO live page, publication date and scope review"},
       "title": "WHO Tobacco and nicotine fact sheet",
       "year": 2026,
       "identifiers": {},
@@ -353,6 +384,7 @@
     {
       "id": "VEN-001",
       "category": "vendor",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "Manufacturer product metadata, datasheet URL and cached artifact checksum"},
       "title": "Sensirion SGP40 Datasheet",
       "year": 2021,
       "identifiers": {},
@@ -368,6 +400,7 @@
     {
       "id": "VEN-002",
       "category": "vendor",
+      "provenance": {"checked_on": "2026-09-05", "checked_by_role": "ZEEP Evidence Reviewer", "method": "Manufacturer document title/version, URL and cached artifact checksum"},
       "title": "SGP40 VOC Index for Experts, version 1.1",
       "year": 2020,
       "identifiers": {"version": "1.1"},

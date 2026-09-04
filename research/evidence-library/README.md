@@ -1,12 +1,23 @@
 # ZEEP Research Evidence Library
 
-เวอร์ชันทะเบียน: **1.1.0**
+เวอร์ชันทะเบียน: **1.2.0**
 
 ตรวจแหล่งข้อมูลล่าสุด: **5 กันยายน 2026**
 
 ขอบเขต: Sleep Wellness, สุขภาพที่เกี่ยวข้องกับการนอน, คุณภาพอากาศภายในอาคาร, VOC/ควันบุหรี่ และข้อจำกัดของเซนเซอร์
 
 คลังนี้ทำหน้าที่เป็นหลักฐานสำหรับออกแบบ ตรวจทาน และ audit ระบบ ZEEP ไม่ใช่ฐานความรู้ที่ runtime นำข้อความจาก PDF ไปเปลี่ยนเกณฑ์หรือวินิจฉัยผู้ใช้เอง ทุกการเปลี่ยน sleep scoring, safety threshold หรือคำแนะนำสุขภาพต้องผ่านการทบทวน แล้วบันทึกเป็น policy/config ที่มีเวอร์ชันและ regression test แยกต่างหาก
+
+## Authority และขอบเขตทะเบียน
+
+- [`source-register.json`](source-register.json) เป็น **authoritative register** ของ
+  external evidence: ID, metadata, URL, access tier, provenance และ checksum
+- [`protocol-register.json`](protocol-register.json) เป็น **authoritative register**
+  ของ owner, approval gate และ sign-off ของ validation protocol
+- `SOURCE_REGISTER.md` และตารางใน protocol เป็น human-readable views; หากไม่ตรง
+  กับ JSON ให้ถือว่า CI ล้มเหลวและห้าม merge
+- ทะเบียนเอกสารภายในอื่น (ถ้ามีใน governance repository) ดูแล policy/consent/
+  product documents คนละ scope และต้อง cross-link ด้วย Evidence ID แทนการคัดลอก URL
 
 ## เริ่มจากตรงไหน
 
@@ -16,7 +27,8 @@
 | [ทะเบียนแหล่งข้อมูลฉบับอ่านง่าย](SOURCE_REGISTER.md) | ทุกทีม | สรุปว่าเอกสารอ้างอิงแต่ละฉบับใช้รองรับเรื่องใดและห้ามตีความเกินอะไร |
 | [กรณีสารตกค้างที่มากับผู้ใช้งาน](SMOKING_VOC_CASE.md) | Research, Pilot | หลักฐานและวิธีควบคุมตัวแปรของกรณี thirdhand smoke; เป็นกรณีตัวอย่าง ไม่ใช่เป้าหมายการตรวจจับบุคคล |
 | [ทะเบียนสำหรับระบบ](source-register.json) | Engineering, Audit | Metadata, URL, สถานะการเข้าถึง และ checksum ที่เครื่องอ่านได้ |
-| [เครื่องมือดาวน์โหลดและตรวจสอบ](update_research_library.py) | Engineering | ดาวน์โหลด ตรวจลายเซ็น PDF และยืนยัน SHA-256 ของเอกสารที่อนุมัติ |
+| [ทะเบียน Validation Protocol](protocol-register.json) | Research, Safety, Audit | Owner, approver, G1/G3, สถานะ sign-off และกฎ release |
+| [เครื่องมือดาวน์โหลดและตรวจสอบ](update_research_library.py) | Engineering | ดาวน์โหลด ตรวจชนิด PDF/XML และยืนยัน SHA-256 ของเอกสารที่อนุมัติ |
 
 ลำดับอ่านที่แนะนำสำหรับหัวข้อ VOC คือ `VOC_CONTROL_VALIDATION.md` → `SMOKING_VOC_CASE.md` → รายการ `AIR-*`, `WHO-004`, `VEN-001` และ `VEN-002` ใน `SOURCE_REGISTER.md`
 
@@ -31,6 +43,9 @@ research/evidence-library/
 │   └── who/               คู่มือ/แนวทางฉบับทางการของ WHO
 ├── vendor/                เอกสารผู้ผลิตเซนเซอร์ที่จำเป็นต่อการตีความค่า
 ├── source-register.json   ทะเบียนที่เครื่องอ่านได้และ SHA-256 ของฉบับที่อนุมัติ
+├── source-register.schema.json JSON Schema ของทะเบียนหลักฐาน
+├── protocol-register.json ทะเบียน protocol, owner, approval gate และ sign-off
+├── protocol-register.schema.json JSON Schema ของทะเบียน protocol
 ├── SOURCE_REGISTER.md     สรุปว่าเอกสารแต่ละฉบับใช้รองรับเรื่องใด
 ├── VOC_CONTROL_VALIDATION.md แผนพิสูจน์ประสิทธิภาพการควบคุม VOC ของ ZEEP
 ├── SMOKING_VOC_CASE.md    กรณีศึกษา VOC ที่มากับผู้ใช้งานและ thirdhand smoke
@@ -45,11 +60,19 @@ research/evidence-library/
 python3 research/evidence-library/update_research_library.py sync
 python3 research/evidence-library/update_research_library.py verify
 python3 research/evidence-library/update_research_library.py status
+python3 research/evidence-library/update_research_library.py check
 ```
 
-- `sync` ดาวน์โหลดเฉพาะรายการ `downloadable` จาก URL ที่อนุมัติ ใช้ไฟล์ชั่วคราวและย้ายแบบ atomic
-- ทุกไฟล์ต้องขึ้นต้นด้วย `%PDF-` มีขนาดสมเหตุผล และ SHA-256 ตรงกับทะเบียน
-- ถ้าเจ้าของแหล่งข้อมูลเปลี่ยนไฟล์ upstream จน checksum ไม่ตรง ระบบจะหยุด ไม่ยอมรับฉบับใหม่อัตโนมัติ ต้องตรวจเนื้อหา/เวอร์ชันและแก้ทะเบียนผ่าน code review
+- `sync` ดาวน์โหลดเฉพาะรายการ `downloadable` จาก HTTPS ที่อนุมัติ และปฏิเสธ
+  redirect ทุก hop ที่ลดระดับเป็น HTTP หรือ scheme อื่น
+- `download`, `verify` และ `status` ใช้ path resolver ตัวเดียวกัน จึงอ่าน/เขียนได้
+  เฉพาะใต้ evidence library
+- PDF ต้องมีลายเซ็น `%PDF-`; NCBI XML ต้อง parse ได้และมี root ที่ยอมรับ;
+  ทุก artifact ต้องมีขนาดสมเหตุผลและ SHA-256 ตรงกับทะเบียน
+- ถ้า checksum ไม่ตรง ระบบหยุดทันทีโดยไม่ retry และเก็บไฟล์เป็น `.rejected`
+  เพื่อให้ตรวจ upstream change ได้ ก่อนแก้ checksum ผ่าน code review
+- `check` ตรวจ authority, provenance และ Markdown↔JSON consistency แบบ offline;
+  CI ตรวจ JSON Schema เพิ่มอีกชั้น
 - เอกสารที่มีข้อจำกัดด้านลิขสิทธิ์ เช่น AASM Scoring Manual บันทึกเป็น `link-only` เท่านั้น
 
 ## หลักการเลือกหลักฐาน

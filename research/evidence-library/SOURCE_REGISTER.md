@@ -2,7 +2,11 @@
 
 วันที่ตรวจสอบลิงก์และฉบับ: **5 กันยายน 2026**
 
-รายละเอียดที่เครื่องอ่านได้ ลิงก์ดาวน์โหลด และ checksum อยู่ใน [`source-register.json`](source-register.json)
+[`source-register.json`](source-register.json) เป็นทะเบียน **authoritative** สำหรับ ID,
+ชื่อเรื่อง, URL, access tier, provenance และ checksum ส่วนเอกสารนี้เป็น human-readable
+view สำหรับทีม หากข้อมูลต่างกันให้ยึด JSON และแก้ Markdown ให้ตรงใน pull request เดียวกัน
+
+Canonical JSON SHA-256: `310e95990e64877efbd66e3d44376f59395bbabf0d6807944ec012beb17ab8ae`
 
 ## 1. Sleep และการประเมินสถานะการนอน
 
@@ -12,7 +16,7 @@
 | SLP-002 | [Sleep staging from ECG and respiration with deep learning](https://doi.org/10.1093/sleep/zsz306) | ยืนยันว่า heart rhythm และ respiration มีข้อมูลที่สัมพันธ์กับ stage และควรใช้ temporal context | ผลจาก ECG/respiratory effort และโมเดลเฉพาะ ไม่ใช่ validation ของ BCG ZEEP |
 | SLP-003 | [Beddit BCG validation against PSG](https://doi.org/10.5664/jcsm.7682) | เตือนเรื่อง overestimate TST, underestimate WASO และความเสี่ยง stage ผิดจาก BCG | อุปกรณ์/อัลกอริทึมคนละชุดกับ ZEEP; กลุ่มตัวอย่างเล็ก |
 | SLP-004 | [EMFIT BCG validation against PSG](https://doi.org/10.5664/jcsm.9754) | รองรับ data-quality gate, Unknown และการไม่กล่าวอ้างเทียบเท่า PSG | ไม่ใช่ผลทดสอบ ZEEP; พบ data loss และ stage agreement ต่ำในอุปกรณ์ที่ศึกษา |
-| SLP-005 | [AASM Consumer Sleep Technology Position Statement](https://aasm.org/advocacy/position-statements/consumer-sleep-technology/) | กำหนดขอบเขตว่า consumer/wellness data ไม่ใช้วินิจฉัยหรือรักษาโรคโดยไม่มี validation/การรับรอง | `link-only`; ตรวจฉบับออนไลน์ก่อนใช้ในเอกสารภายนอก |
+| SLP-005 | [Consumer Sleep Technology: An American Academy of Sleep Medicine Position Statement](https://pmc.ncbi.nlm.nih.gov/articles/PMC5940440/) | กำหนดขอบเขตว่า consumer/wellness data ไม่ใช้วินิจฉัยหรือรักษาโรคโดยไม่มี validation/การรับรอง | Full text เปิดอ่านบน PMC และ cache เป็น NCBI XML ที่ล็อก checksum; ลิขสิทธิ์ยังเป็นของ AASM และห้ามเผยแพร่ซ้ำโดยพลการ |
 | SLP-006 | [AASM Scoring Manual](https://aasm.org/clinical-resources/scoring-manual/) | นิยามมาตรฐาน W/N1/N2/N3/REM และ epoch scoring สำหรับ PSG | มีลิขสิทธิ์/สิทธิ์เข้าถึง; ไม่ดาวน์โหลดหรือคัดลอกเนื้อหาเข้า repo |
 
 ## 2. Health & Wellness Guardrails
@@ -32,7 +36,7 @@
 | WHO-003 | [WHO Indoor Air Quality: Selected Pollutants 2010](https://iris.who.int/handle/10665/260127) | คุณสมบัติและความเสี่ยงของ benzene, formaldehyde, CO ฯลฯ | SGP40 ไม่สามารถแยกสารเหล่านี้รายตัว |
 | WHO-004 | [WHO Roadmap for Good Indoor Ventilation 2021](https://iris.who.int/handle/10665/339857) | หลักตรวจ ventilation และ operational response | จัดทำในบริบท COVID-19; ต้องปรับให้เข้ากับ POD และ hardware จริง |
 | WHO-005 | [WHO Methods for Sampling Indoor Chemical Pollutants 2020](https://iris.who.int/handle/10665/334389) | ออกแบบแผนเก็บตัวอย่าง/เครื่องมือยืนยัน VOC | เน้นพื้นที่สาธารณะสำหรับเด็ก; ใช้เป็นวิธีวิทยา ไม่ใช่เกณฑ์ pass/fail |
-| WHO-006 | [WHO Report on the Global Tobacco Epidemic 2025](https://www.who.int/teams/health-promotion/tobacco-control/global-tobacco-report-2025) | สถานการณ์และนโยบายยาสูบฉบับรายงานล่าสุดในทะเบียน | ข้อมูลประชากร ไม่ระบุว่า VOC event รายบุคคลมาจากบุหรี่ |
+| WHO-006 | [WHO Report on the Global Tobacco Epidemic 2025](https://www.who.int/publications/b/79987) | สถานการณ์และนโยบายยาสูบฉบับรายงานล่าสุดในทะเบียน | ข้อมูลประชากร ไม่ระบุว่า VOC event รายบุคคลมาจากบุหรี่ |
 | WHO-007 | [WHO Tobacco Control Playbook 2025](https://iris.who.int/handle/10665/381594) | หลัก smoke-free environment และการจัดการความเสี่ยงจากควัน | เป็นแนวนโยบาย ไม่ใช่คู่มือสอบเทียบ SGP40 |
 | WHO-008 | [WHO Tobacco and Nicotine Fact Sheet](https://www.who.int/news-room/fact-sheets/detail/tobacco) | หน้าอ้างอิงปัจจุบันเรื่องผลกระทบยาสูบ/ควันมือสอง; ณ วันที่ตรวจเป็นฉบับ 26 มิ.ย. 2026 | `link-only`; ต้องตรวจวันที่หน้าเว็บก่อนอ้างทุกครั้ง |
 

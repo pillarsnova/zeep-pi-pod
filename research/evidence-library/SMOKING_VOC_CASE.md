@@ -80,4 +80,4 @@ VOC Index ใกล้ 100 หมายถึงระดับพื้นห�
 - [Wang et al., Emission Rates of VOCs from Humans (2022)](https://doi.org/10.1021/acs.est.1c08764)
 - [WHO Tobacco and Nicotine Fact Sheet, checked 2026-09-05](https://www.who.int/news-room/fact-sheets/detail/tobacco)
 - [Sensirion SGP40 VOC Index for Experts](https://sensirion.com/en/media/documents/A6D12AD4/61644979/Sensirion_Gas_Sensors_Datasheet_GAS_AN_SGP40_VOC_Index_for_Experts_D.pdf)
-- [U.S. EPA, Residential Air Cleaners: A Technical Summary, 3rd Edition](https://www.epa.gov/sites/default/files/2018-07/documents/residential_air_cleaners_-_a_technical_summary_3rd_edition.pdf)
+- [AIR-006 — U.S. EPA, Residential Air Cleaners: A Technical Summary, 3rd Edition](SOURCE_REGISTER.md)

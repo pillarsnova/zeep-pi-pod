@@ -1,0 +1,36 @@
+name: Evidence library integrity
+
+on:
+  pull_request:
+    paths:
+      - "research/evidence-library/**"
+      - "test_research_evidence_library.py"
+      - ".github/workflows/evidence-library.yml"
+  push:
+    branches: [develop]
+    paths:
+      - "research/evidence-library/**"
+      - "test_research_evidence_library.py"
+      - ".github/workflows/evidence-library.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install schema validator
+        run: python -m pip install --disable-pip-version-check "jsonschema==4.23.0"
+      - name: Validate JSON Schemas
+        run: python -m unittest -v test_research_evidence_library.ResearchEvidenceLibraryTests.test_json_schema_validates_both_authoritative_registers
+      - name: Check registry consistency and security regression
+        run: |
+          python research/evidence-library/update_research_library.py check
+          python -m unittest -v test_research_evidence_library.py

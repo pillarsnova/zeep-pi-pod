@@ -1,0 +1,42 @@
+{
+  "$schema": "protocol-register.schema.json",
+  "schema_version": "1.0.0",
+  "checked_on": "2026-09-05",
+  "authority": {
+    "authoritative": true,
+    "scope": "Validation protocol ownership, approval gates and sign-off state",
+    "owner_role": "ZEEP Research Governance Lead"
+  },
+  "protocols": [
+    {
+      "id": "ZEEP-VOC-CTRL-001",
+      "title": "ZEEP VOC Control Validation Plan",
+      "version": "1.1.0",
+      "document": "VOC_CONTROL_VALIDATION.md",
+      "status": "pending-approval",
+      "owner_role": "ZEEP Research Lead",
+      "required_gates": ["G1", "G3"],
+      "release_rule": "Occupied testing and product-performance claims are prohibited until both G1 and G3 are signed off.",
+      "gates": [
+        {
+          "id": "G1",
+          "name": "Occupied-pod physical and life-safety readiness",
+          "approver_role": "ZEEP Safety Lead",
+          "status": "pending",
+          "signed_by": null,
+          "signed_at": null,
+          "evidence_reference": null
+        },
+        {
+          "id": "G3",
+          "name": "Research, data-quality, privacy and claims readiness",
+          "approver_role": "ZEEP Research Governance Lead",
+          "status": "pending",
+          "signed_by": null,
+          "signed_at": null,
+          "evidence_reference": null
+        }
+      ]
+    }
+  ]
+}

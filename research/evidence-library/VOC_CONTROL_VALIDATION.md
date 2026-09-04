@@ -1,8 +1,19 @@
 # ZEEP VOC Control Validation Plan
 
-สถานะ: **แผนตรวจสอบสำหรับ Pilot — ยังไม่ใช่ผลรับรองผลิตภัณฑ์**
+Protocol ID: **ZEEP-VOC-CTRL-001**
 
-เวอร์ชัน: **1.0.0** · ทบทวนล่าสุด: **5 กันยายน 2026**
+สถานะ: **Pending approval — ยังห้ามเริ่ม occupied validation และยังไม่ใช่ผลรับรองผลิตภัณฑ์**
+
+เวอร์ชัน: **1.1.0** · Owner: **ZEEP Research Lead** · ทบทวนล่าสุด: **5 กันยายน 2026**
+
+ทะเบียนสถานะที่เป็น authoritative: [`protocol-register.json`](protocol-register.json)
+
+## TL;DR
+
+Protocol นี้วัดว่า ventilation + Carbon Filter ช่วยลดภาระ VOC ภายใต้เงื่อนไข
+ควบคุมได้หรือไม่ โดยไม่ใช้ SGP40 ระบุชนิดสารหรือกล่าวหาผู้ใช้ ต้องผ่าน **G1**
+ด้านความปลอดภัยของการทดสอบที่มีคนอยู่ในตู้ และ **G3** ด้านวิจัย คุณภาพข้อมูล
+ความเป็นส่วนตัว และคำกล่าวอ้าง ก่อนเริ่มเก็บข้อมูลตาม protocol
 
 ## 1. คำถามหลัก
 
@@ -90,9 +101,18 @@ ZEEP สามารถใช้ระบบเติม/ระบายอา�
 - “ตรวจพบผู้สูบบุหรี่” หรือ “VOC นี้มาจากผู้ใช้คนนี้”
 - “ล้างสารพิษ/ดีท็อกซ์” หรือคำกล่าวอ้างด้านผลลัพธ์สุขภาพที่ยังไม่ได้ศึกษา
 
-## 8. เกณฑ์ผ่าน Pilot ที่ต้องอนุมัติก่อนเริ่ม
+## 8. Gate และ Sign-off ที่ต้องอนุมัติก่อนเริ่ม
 
-ทีม Research, Engineering และ Safety ต้องกำหนดล่วงหน้าอย่างน้อย:
+| Gate | ขอบเขต | Approver | สถานะ | ผู้ลงนาม | วันที่/หลักฐาน |
+|---|---|---|---|---|---|
+| G1 | ความพร้อม physical/life safety สำหรับ occupied POD: egress, door, ventilation, alarm, emergency response และผู้เฝ้าทดสอบ | ZEEP Safety Lead | **Pending** | — | — |
+| G3 | ความพร้อม protocol, data quality, consent/privacy, analysis plan และภาษาคำกล่าวอ้าง | ZEEP Research Governance Lead | **Pending** | — | — |
+
+เครื่องหมาย `—` คือยังไม่มีการลงนาม ไม่ใช่การอนุมัติโดยปริยาย การเปลี่ยนสถานะ
+ต้องแก้ `protocol-register.json` พร้อมชื่อผู้ลงนาม เวลาแบบ ISO 8601 และลิงก์
+หลักฐานใน pull request เดียวกัน
+
+ก่อนลงนาม G1/G3 ทีม Research, Engineering และ Safety ต้องกำหนดล่วงหน้าอย่างน้อย:
 
 - ค่า improvement ขั้นต่ำของ `auc_above_baseline` และ `clearance_time_min`
 - coverage ขั้นต่ำของ sensor และจำนวน paired sessions
@@ -102,10 +122,17 @@ ZEEP สามารถใช้ระบบเติม/ระบายอา�
 
 เมื่อผ่านจึงสรุปได้เฉพาะเงื่อนไข รุ่น Filter อัตราการไหล และประชากรที่ทดสอบ ไม่ขยายเป็นคำกล่าวอ้างครอบจักรวาล
 
-## 9. หลักฐานที่เกี่ยวข้อง
+## 9. Verification
 
-- [U.S. EPA — Air Cleaners and Air Filters in the Home](https://www.epa.gov/indoor-air-quality-iaq/air-cleaners-and-air-filters-home)
-- [U.S. EPA — Residential Air Cleaners: A Technical Summary, 3rd Edition](https://www.epa.gov/sites/default/files/2018-07/documents/residential_air_cleaners_-_a_technical_summary_3rd_edition.pdf)
+- Metadata, owner, approver, G1/G3 และ sign-off state ต้องตรงกับ `protocol-register.json`
+- แหล่งภายนอกทุกฉบับต้องอ้างผ่าน ID ใน `source-register.json`; ห้ามฝัง URL
+  ดาวน์โหลดไฟล์ตรงซ้ำใน protocol
+- CI ตรวจ JSON Schema, source Markdown↔JSON consistency, HTTPS/path containment
+  และ checksum quarantine ก่อน merge
+
+## 10. หลักฐานที่เกี่ยวข้อง
+
+- [AIR-006 — U.S. EPA: Air Cleaners and Residential Air Cleaners Technical Summary](SOURCE_REGISTER.md)
 - [WHO — Roadmap to improve and ensure good indoor ventilation](https://www.who.int/publications-detail-redirect/9789240021280)
 - [Sensirion — SGP40 product and technical downloads](https://sensirion.com/products/catalog/SGP40)
 - [หลักฐานกรณีสารตกค้างที่มากับผู้ใช้งาน](SMOKING_VOC_CASE.md)

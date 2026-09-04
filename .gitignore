@@ -20,8 +20,10 @@ pending-*/
 # Research evidence is downloaded on demand from the reviewed source register.
 # Keep large/copyrighted binaries out of Git; retain folders and metadata.
 research/evidence-library/papers/**/*.pdf
+research/evidence-library/papers/**/*.xml
 research/evidence-library/vendor/*.pdf
 research/evidence-library/**/*.part
+research/evidence-library/**/*.rejected
 
 .env
 .env.development.local

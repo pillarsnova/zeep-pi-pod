@@ -781,7 +781,7 @@
     Increment the query value when deploying a new theme so the ZEEP browser does not
     reuse a cached stylesheet.
   -->
-  <link rel="stylesheet" href="/static/theme-modern.css?v=20260905-153" />
+  <link rel="stylesheet" href="/static/theme-modern.css?v=20260905-154" />
 </head>
 <body>
 <!-- Shared line-icon library: every interactive view reuses the same 24 px
@@ -1043,11 +1043,11 @@
         <div class="admin-sleep-baseline-grid" id="dashSleepBaselineGrid"><div class="admin-sleep-baseline-empty">กำลังรอข้อมูล Baseline</div></div>
         <div class="admin-sleep-baseline-foot"><span id="dashSleepBaselineProgress">Sensor 10 วิ · Evidence 30 วิ · Confirm 60 วิ</span><span id="dashSleepBaselinePolicy">หลักฐานและสถานะยืนยันแยกจากกัน · ไม่ใช่ผล PSG</span></div>
       </section>
-      <section class="admin-live-explanation" id="adminLiveExplanation" data-admin-panel aria-label="คำอธิบายค่าปัจจุบันสำหรับผู้ดูแลระบบ">
+      <section class="admin-live-explanation" id="adminLiveExplanation" data-admin-panel aria-label="สรุปสิ่งที่ต้องติดตามสำหรับผู้ดูแลระบบ">
         <div class="admin-live-explanation-head">
           <div class="admin-live-explanation-identity">
             <span class="admin-live-explanation-icon" aria-hidden="true"><i></i><svg viewBox="0 0 24 24"><path d="M4 18V9m6 9V5m6 13v-7m4 7V3"/><path d="M3 21h18"/></svg></span>
-            <div><em>LIVE INTERPRETATION</em><b>คำอธิบายค่าปัจจุบัน</b><small>อ่านค่าจริงพร้อมบริบทที่ใช้ประเมิน</small></div>
+            <div><em>INSIGHTS &amp; ACTIONS</em><b>สรุปสิ่งที่ต้องติดตาม</b><small>ค่าปัจจุบันอยู่ด้านบน · ส่วนนี้แสดงความหมายและข้อสังเกต</small></div>
           </div>
           <div class="admin-live-explanation-context" aria-label="ค่าจริง · เทียบ Baseline และเกณฑ์ของโหมด">
             <div class="admin-live-explanation-basis"><span><i></i>ค่าปัจจุบัน</span><span>Baseline</span><span>เกณฑ์โหมด</span></div>
@@ -1056,11 +1056,11 @@
         </div>
         <div class="admin-live-explanation-grid">
           <article class="admin-live-explanation-group admin-live-explanation-bio" aria-labelledby="adminBioExplanationTitle">
-            <div class="admin-live-explanation-group-head"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h4l2-4 4 9 2-5h6"/><path d="M12 21C5 17 3 13 3 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 9 2.5c0 3.5-2 7.5-9 11.5Z"/></svg></span><div><h4 id="adminBioExplanationTitle">สัญญาณชีพและการนอน</h4><small>BCG · Baseline รายบุคคล หรืออายุและเพศ</small></div><em>BIOMETRIC</em></div>
+            <div class="admin-live-explanation-group-head"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h4l2-4 4 9 2-5h6"/><path d="M12 21C5 17 3 13 3 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 9 2.5c0 3.5-2 7.5-9 11.5Z"/></svg></span><div><h4 id="adminBioExplanationTitle">สัญญาณชีพและการนอน</h4><small>แสดงความหมายของสถานะและค่าที่อยู่นอก Baseline</small></div><em>BIOMETRIC</em></div>
             <div class="admin-live-explanation-list" id="adminBioExplanation"><div class="admin-live-explanation-empty">กำลังรอข้อมูล BCG, HR และ RR</div></div>
           </article>
           <article class="admin-live-explanation-group admin-live-explanation-environment" aria-labelledby="adminEnvironmentExplanationTitle">
-            <div class="admin-live-explanation-group-head"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8c4-4 8 4 12 0 2-2 3-2 4-2M4 13c4-4 8 4 12 0 2-2 3-2 4-2M4 18c4-4 8 4 12 0 2-2 3-2 4-2"/></svg></span><div><h4 id="adminEnvironmentExplanationTitle">สภาพแวดล้อมภายใน ZEEP</h4><small>Sensor สด · เกณฑ์ ZEEP ที่อนุมัติตามโหมด</small></div><em>ENVIRONMENT</em></div>
+            <div class="admin-live-explanation-group-head"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8c4-4 8 4 12 0 2-2 3-2 4-2M4 13c4-4 8 4 12 0 2-2 3-2 4-2M4 18c4-4 8 4 12 0 2-2 3-2 4-2"/></svg></span><div><h4 id="adminEnvironmentExplanationTitle">สภาพแวดล้อมภายใน ZEEP</h4><small>สรุปภาพรวมเดียว · รายละเอียดค่าดูจากการ์ด Sensor ด้านบน</small></div><em>ENVIRONMENT</em></div>
             <div class="admin-live-explanation-list environment" id="adminEnvironmentExplanation"><div class="admin-live-explanation-empty">กำลังรอข้อมูล Sensor</div></div>
           </article>
         </div>
@@ -1257,28 +1257,33 @@
         <p class="safety-case-note"><b>Critical:</b> GPIO ใช้ไม่ได้, ESP32 ขาดข้อมูลขณะมีผู้ใช้งาน, CO₂ ≥1,300 ppm หรืออุณหภูมินอก 13–32°C · <b>Blocking:</b> Basis ยังไม่อนุมัติ, CO₂ ไม่มีข้อมูลสด หรือ ESP32 ไม่พร้อมก่อนใช้งาน · ระบบไม่เปิดประตูและไม่สั่งแอร์อัตโนมัติ</p>
       </details>
     </div>
-    <section class="card admin-atmosphere-card" id="adminAtmosphereCard" data-pages="dashboard" data-admin-panel aria-label="วิเคราะห์ภาพรวมสำหรับผู้ดูแลระบบ">
+    <section class="card admin-atmosphere-card" id="adminAtmosphereCard" data-pages="dashboard" data-admin-panel aria-label="แผนปรับสภาพแวดล้อมสำหรับผู้ดูแลระบบ">
       <div class="admin-atmosphere-head">
-        <div><div class="section-title">ภาพรวม · ระดับและสิ่งที่ต้องแก้ไข</div><p>พอใช้ขึ้นไปถือว่าผ่านขั้นต่ำ · วิกฤต/แย่ต้องแก้ไข · ดี/ยอดเยี่ยมให้รักษาค่า โดยปรับเกณฑ์แสงและเสียงตาม Mode</p></div>
+        <div><div class="section-title">แผนปรับสภาพแวดล้อม</div><p>พอใช้ขึ้นไปถือว่าผ่านขั้นต่ำ · แสดงเฉพาะจุดที่ต้องแก้หรือปรับเพิ่ม · เกณฑ์ฉบับเต็มเปิดดูได้ด้านล่าง</p></div>
         <div class="admin-atmosphere-summary atmosphere-unknown" id="adminAtmosphereSummary"><span id="adminAtmosphereIcon">?</span><div><b id="adminAtmosphereLevel">รอข้อมูล</b><small id="adminAtmosphereCoverage">Sensor 0/7 เกณฑ์</small></div></div>
       </div>
       <div class="admin-atmosphere-layout">
         <section class="admin-atmosphere-section">
-          <h4>ระดับภาพรวม 5 ระดับ</h4>
-          <div class="admin-atmosphere-levels" id="adminAtmosphereLevelGuide"></div>
-        </section>
-        <section class="admin-atmosphere-section">
-          <h4>ค่าที่ต้องแก้ไข · ต่ำกว่าพอใช้</h4>
+          <h4>ต้องตรวจสอบ · ต่ำกว่าพอใช้หรือไม่มีข้อมูล</h4>
           <div class="admin-atmosphere-criteria" id="adminAtmosphereCriteria"></div>
         </section>
-        <section class="admin-atmosphere-section admin-atmosphere-threshold-section">
-          <h4>ช่วงค่าของแต่ละเกณฑ์</h4>
-          <div class="admin-atmosphere-thresholds" id="adminAtmosphereThresholds"></div>
-        </section>
         <section class="admin-atmosphere-section admin-atmosphere-actions">
-          <h4>ลำดับการแก้ไขและยกระดับ</h4>
+          <h4>ยกระดับจากพอใช้</h4>
           <div id="adminAtmosphereActions"><div class="admin-atmosphere-empty">กำลังรอข้อมูลจาก Sensor</div></div>
         </section>
+        <details class="admin-atmosphere-reference">
+          <summary><span>เกณฑ์อ้างอิง</span><small>ระดับภาพรวม 5 ระดับและช่วงค่าของ Sensor</small></summary>
+          <div class="admin-atmosphere-reference-grid">
+            <section class="admin-atmosphere-section">
+              <h4>ระดับภาพรวม 5 ระดับ</h4>
+              <div class="admin-atmosphere-levels" id="adminAtmosphereLevelGuide"></div>
+            </section>
+            <section class="admin-atmosphere-section admin-atmosphere-threshold-section">
+              <h4>ช่วงค่าของแต่ละเกณฑ์</h4>
+              <div class="admin-atmosphere-thresholds" id="adminAtmosphereThresholds"></div>
+            </section>
+          </div>
+        </details>
       </div>
       <div class="admin-atmosphere-note" id="adminAtmosphereBasis">เกณฑ์นี้เป็น ZEEP engineering operating bands สำหรับควบคุมสภาพแวดล้อมและตรวจระบบ ไม่ใช่การวินิจฉัยทางการแพทย์ · Sensor ที่ไม่ Live จะไม่ถูกตีความเป็นค่าปกติ</div>
     </section>
@@ -2462,31 +2467,37 @@ function renderAdminAtmosphere(result){
   const summary=document.getElementById('adminAtmosphereSummary'),levelEl=document.getElementById('adminAtmosphereLevel'),coverage=document.getElementById('adminAtmosphereCoverage'),icon=document.getElementById('adminAtmosphereIcon'),guide=document.getElementById('adminAtmosphereLevelGuide'),criteria=document.getElementById('adminAtmosphereCriteria'),thresholds=document.getElementById('adminAtmosphereThresholds'),actions=document.getElementById('adminAtmosphereActions');
   if(!summary||!levelEl||!coverage||!icon||!guide||!criteria||!thresholds||!actions)return;
   summary.className=`admin-atmosphere-summary atmosphere-${result.key}`;
-  levelEl.textContent=result.key==='unknown'?result.label:`${result.label} · ${result.english}`;
   const evaluations=Array.isArray(result.evaluations)?result.evaluations:[];
   const required=evaluations.filter(metric=>metric.status!=='live'||metric.decision==='required'||Number(metric.score)<2);
+  const unavailable=required.filter(metric=>metric.status!=='live');
+  const belowExpected=required.filter(metric=>metric.status==='live');
   const optimise=evaluations.filter(metric=>metric.status==='live'&&(metric.decision==='optimise'||Number(metric.score)===2));
   const passed=evaluations.filter(metric=>metric.status==='live'&&Number(metric.score)>=2).length;
-  coverage.textContent=`ผ่านขั้นต่ำ ${passed}/${evaluations.length||7} · ต้องแก้ ${required.length} · พอใช้ ${optimise.length}`;
+  // The dashboard card above is the single source for the current overall
+  // level. This Admin summary reports workload instead of repeating it.
+  levelEl.textContent=unavailable.length?`${unavailable.length} Sensor ไม่พร้อม`:belowExpected.length?`${belowExpected.length} จุดต้องแก้`:optimise.length?`${optimise.length} จุดปรับเพิ่ม`:'ไม่พบจุดผิดปกติ';
+  coverage.textContent=`ผ่านขั้นต่ำ ${passed}/${evaluations.length||7} · ต้องแก้ ${belowExpected.length} · ไม่พร้อม ${unavailable.length} · พอใช้ ${optimise.length}`;
   icon.textContent=result.symbol;
   const levels=Array.isArray(result.levels)&&result.levels.length?result.levels:dashboardAtmosphereLevels;
   guide.innerHTML=[...levels].reverse().map(level=>`<article class="atmosphere-guide-${level.key}${level.key===result.key?' active':''}"><span>${level.symbol}</span><div><b>${level.label} · ${level.english}</b><small>${level.description||level.principle||''}</small></div></article>`).join('');
   criteria.innerHTML=required.map(metric=>{
-    if(metric.status!=='live')return `<article class="admin-criterion unavailable"><div><b>${metric.name}</b><span>${metric.source} · ${metric.deviceStatus}</span></div><strong>${metric.display||'--'}</strong><small>เป้าหมาย ${metric.target}<br>${metric.principle}<br><em>${metric.bands}</em><br>${metric.deviceStatus==='stale'?'ค่าล่าสุดก่อน Restart · รอข้อมูลสด':'ตรวจ Sensor และ freshness'}</small></article>`;
-    return `<article class="admin-criterion criterion-${metric.level.key}"><div><b>${metric.name}</b><span>${metric.source} · ${metric.level.label}</span></div><strong>${metric.display}</strong><small>ผ่านขั้นต่ำ ${metric.expected_floor||metric.target}<br>เป้าหมายสูงสุด ${metric.target}<br>${metric.principle}</small></article>`;
+    if(metric.status!=='live')return `<article class="admin-criterion unavailable"><div><b>${metric.name}</b><span>${metric.source} · ${metric.deviceStatus||'ไม่พร้อม'}</span></div><strong>${metric.display||'--'}</strong><small>เป้าหมาย ${metric.target}<br>${metric.principle}<br><em>${metric.bands}</em><br>${metric.deviceStatus==='stale'?'ค่าล่าสุดก่อน Restart · รอข้อมูลสด':'ตรวจ Sensor และ freshness'}</small></article>`;
+    return `<article class="admin-criterion criterion-${metric.level.key}"><div><b>${metric.name}</b><span>${metric.source} · ${metric.level.label}</span></div><strong>${metric.display}</strong><small>ผ่านขั้นต่ำ ${metric.expected_floor||metric.target} · เป้าหมายสูงสุด ${metric.target}<br>${metric.recommendation||metric.principle}${metric.control?` · ตรวจที่ ${metric.control}`:''}</small></article>`;
   }).join('')||'<div class="admin-atmosphere-success"><span>✓</span><div><b>ผ่านขั้นต่ำพอใช้ขึ้นไปครบทุกเกณฑ์</b><small>ไม่มีค่าที่ต้องแก้ไข · ระดับพอใช้ยังแสดงเป็นข้อเสนอให้ปรับเพิ่มด้านล่าง</small></div></div>';
   const policyCriteria=Array.isArray(result.criteria)&&result.criteria.length?result.criteria:evaluations;
-  thresholds.innerHTML=policyCriteria.map(metric=>`<article><b>${metric.label||metric.name}</b><span>${metric.bands_text||metric.bands}</span><small>${metric.source}${metric.mode?` · ${metric.mode}`:''}</small></article>`).join('');
+  thresholds.innerHTML=policyCriteria.map(metric=>`<article><b>${metric.label||metric.name}</b><span>${metric.bands_text||metric.bands}</span><small>${metric.source}${metric.mode?` · ${metric.mode}`:''}<br>${ADMIN_EXPLANATION_CONTEXT[metric.id||metric.key]||metric.principle||''}</small></article>`).join('');
   const basis=document.getElementById('adminAtmosphereBasis'),basisInfo=current.safety?.threshold_basis||{};
   if(basis)basis.textContent=`Environment ${result.version||'ยังไม่กำหนด'} · Mode ${result.mode||'sleep'} · Safety Basis ${basisInfo.version||'ยังไม่กำหนด'} ${basisInfo.approved?'APPROVED':'NOT APPROVED'} · เกณฑ์นี้เป็น ZEEP Wellness Context ไม่ใช่การวินิจฉัย และไม่เปลี่ยน Safety Alarm`;
   const requiredActions=Array.isArray(result.required_actions)?result.required_actions:required.map(metric=>({name:metric.name,current:metric.display||'ไม่มีข้อมูล Live',target:metric.expected_floor||metric.target,control:metric.control||metric.source,action:metric.recommendation||`ตรวจ ${metric.source}`}));
   const optimisationActions=Array.isArray(result.optimisation_actions)?result.optimisation_actions:optimise.map(metric=>({name:metric.name,current:metric.display,target:metric.target,control:metric.control,action:metric.recommendation}));
-  const actionRows=[
-    ...requiredActions.map(action=>({...action,group:'ต้องแก้ไข',kind:'required'})),
-    ...optimisationActions.map(action=>({...action,group:'ผ่านขั้นต่ำ · ปรับเพิ่มได้',kind:'optimise'})),
-  ];
+  // Required items already contain their corrective action in the cards on
+  // the left. Keep this column for optional optimisation so the same warning
+  // is not rendered twice.
+  const actionRows=optimisationActions.map(action=>({...action,group:'ผ่านขั้นต่ำ · ปรับเพิ่มได้',kind:'optimise'}));
   if(!actionRows.length){
-    actions.innerHTML='<div class="admin-atmosphere-success"><span>★</span><div><b>อยู่ระดับดีหรือยอดเยี่ยม</b><small>รักษาค่าปัจจุบันและติดตาม freshness ต่อเนื่อง</small></div></div>';
+    actions.innerHTML=requiredActions.length
+      ?'<div class="admin-atmosphere-empty">แก้รายการที่ระบุด้านซ้ายก่อน แล้วระบบจะประเมินใหม่จาก packet ถัดไป</div>'
+      :'<div class="admin-atmosphere-success"><span>★</span><div><b>อยู่ระดับดีหรือยอดเยี่ยม</b><small>รักษาค่าปัจจุบันและติดตาม freshness ต่อเนื่อง</small></div></div>';
   }else{
     actions.innerHTML=actionRows.map((action,index)=>`<article class="admin-atmosphere-action ${action.kind}"><span>${index+1}</span><div><b>${action.group} · ${action.name} ${action.current} → ${action.target}</b><small>${action.action} · ตรวจที่ ${action.control}</small></div></article>`).join('');
   }
@@ -2546,7 +2557,8 @@ const ADMIN_EXPLANATION_STATUS=Object.freeze({
 function adminExplanationRow({tone='unknown',icon='unknown',title,value='--',status,summary,detail}){
   const marker=ADMIN_EXPLANATION_ICON[icon]||ADMIN_EXPLANATION_ICON.unknown;
   const state=status||ADMIN_EXPLANATION_STATUS[tone]||ADMIN_EXPLANATION_STATUS.unknown;
-  return `<article class="admin-live-explanation-row tone-${tone}"><div class="admin-live-explanation-row-head"><span class="admin-live-explanation-metric-icon" aria-hidden="true">${marker}</span><b>${title}</b><em>${state}</em></div><strong>${value}</strong><p>${summary}</p><small><i aria-hidden="true">→</i>${detail}</small></article>`;
+  const valueMarkup=value?`<strong>${value}</strong>`:'';
+  return `<article class="admin-live-explanation-row tone-${tone}${value?'':' is-summary'}"><div class="admin-live-explanation-row-head"><span class="admin-live-explanation-metric-icon" aria-hidden="true">${marker}</span><b>${title}</b><em>${state}</em></div>${valueMarkup}<p>${summary}</p><small><i aria-hidden="true">→</i>${detail}</small></article>`;
 }
 function adminBaselineComparison(value,range,unit){
   if(!Number.isFinite(Number(value))||!Array.isArray(range)||range.length<2)return 'ยังไม่มีช่วง Baseline ที่ใช้เทียบได้';
@@ -2586,40 +2598,54 @@ function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
   const source=sleep.classification_source==='personal'?'Baseline ส่วนบุคคล':'Baseline อายุและเพศ';
   const confidence=({high:'สูง',medium:'ปานกลาง',low:'ต่ำ'})[sleep.confidence]||'ไม่ระบุ';
   const bedLabel=BCG_STATUS_TH[bcg.status_code]||bcg.status_text||'รอสัญญาณจากเตียง';
-  bioRoot.innerHTML=[
-    adminExplanationRow({
-      tone:hrValid?adminBaselineTone(hr,baseline.hr):'unknown',icon:'hr',title:'ชีพจร',value:(hrValid||hrRestored)?`${hr.toFixed(1)} ครั้ง/นาที`:'--',
-      status:hrRestored?'ก่อน Restart':hrValid?(adminBaselineTone(hr,baseline.hr)==='good'?'ใน Baseline':'นอก Baseline'):'รอข้อมูล',
-      summary:hrRestored?'แสดงค่าล่าสุดเพื่อความต่อเนื่อง · ยังไม่เทียบ Baseline':hrValid?adminBaselineComparison(hr,baseline.hr,'ครั้ง/นาที'):(onBed?'ยังคำนวณชีพจรไม่ได้':'ไม่มีสัญญาณผู้ใช้งานบนเตียง'),
-      detail:hrRestored?'รอ BCG packet สดก่อนนำกลับไปวิเคราะห์':hrValid?`ค่าประมาณจาก BCG${bcg.heart_rate_held?' · เป็นค่าล่าสุดที่คงไว้ระหว่างตรวจคุณภาพสัญญาณ':''}; ใช้ดูแนวโน้มและเทียบ ${source} ไม่ใช้ค่าเดียวสรุปการฟื้นตัว`:'ตรวจสถานะเตียง ตำแหน่งผู้ใช้ และคุณภาพสัญญาณ BCG',
-    }),
-    adminExplanationRow({
-      tone:rrValid?adminBaselineTone(rr,baseline.rr):'unknown',icon:'rr',title:'อัตราการหายใจ',value:(rrValid||rrRestored)?`${rr.toFixed(1)} ครั้ง/นาที`:'--',
-      status:rrRestored?'ก่อน Restart':rrValid?(adminBaselineTone(rr,baseline.rr)==='good'?'ใน Baseline':'นอก Baseline'):'รอข้อมูล',
-      summary:rrRestored?'แสดงค่าล่าสุดเพื่อความต่อเนื่อง · ยังไม่เทียบ Baseline':rrValid?adminBaselineComparison(rr,baseline.rr,'ครั้ง/นาที'):(onBed?'ยังคำนวณอัตราการหายใจไม่ได้':'ไม่มีสัญญาณผู้ใช้งานบนเตียง'),
-      detail:rrRestored?'รอ BCG packet สดก่อนนำกลับไปวิเคราะห์':rrValid?`ค่าประมาณจาก BCG${bcg.respiration_held?' · เป็นค่าล่าสุดที่คงไว้ระหว่างตรวจคุณภาพสัญญาณ':''}; พิจารณาความนิ่งและแนวโน้มร่วมกับ HR/Movement`:'ยังไม่ใช้เป็นหลักฐาน Sleep Stage จนกว่า HR และ RR จะผ่าน Data-quality gate',
-    }),
-    adminExplanationRow({
+  const hrTone=hrValid?adminBaselineTone(hr,baseline.hr):'unknown';
+  const rrTone=rrValid?adminBaselineTone(rr,baseline.rr):'unknown';
+  const bioRows=[];
+  // Current numbers already have one authoritative home in the health cards.
+  // Repeat a vital here only when an operator must investigate it.
+  if(!hrValid||hrRestored||hrTone!=='good')bioRows.push(adminExplanationRow({
+    tone:hrTone,icon:'hr',title:'ชีพจร',value:(hrValid||hrRestored)?`${hr.toFixed(1)} ครั้ง/นาที`:'--',
+    status:hrRestored?'ก่อน Restart':hrValid?'นอก Baseline':'รอข้อมูล',
+    summary:hrRestored?'แสดงค่าล่าสุดเพื่อความต่อเนื่อง · ยังไม่เทียบ Baseline':hrValid?adminBaselineComparison(hr,baseline.hr,'ครั้ง/นาที'):(onBed?'ยังคำนวณชีพจรไม่ได้':'ไม่มีสัญญาณผู้ใช้งานบนเตียง'),
+    detail:hrRestored?'รอ BCG packet สดก่อนนำกลับไปวิเคราะห์':hrValid?`ค่าประมาณจาก BCG${bcg.heart_rate_held?' · เป็นค่าล่าสุดที่คงไว้ระหว่างตรวจคุณภาพสัญญาณ':''}; ตรวจแนวโน้มร่วมกับ ${source}`:'ตรวจสถานะเตียง ตำแหน่งผู้ใช้ และคุณภาพสัญญาณ BCG',
+  }));
+  if(!rrValid||rrRestored||rrTone!=='good')bioRows.push(adminExplanationRow({
+    tone:rrTone,icon:'rr',title:'อัตราการหายใจ',value:(rrValid||rrRestored)?`${rr.toFixed(1)} ครั้ง/นาที`:'--',
+    status:rrRestored?'ก่อน Restart':rrValid?'นอก Baseline':'รอข้อมูล',
+    summary:rrRestored?'แสดงค่าล่าสุดเพื่อความต่อเนื่อง · ยังไม่เทียบ Baseline':rrValid?adminBaselineComparison(rr,baseline.rr,'ครั้ง/นาที'):(onBed?'ยังคำนวณอัตราการหายใจไม่ได้':'ไม่มีสัญญาณผู้ใช้งานบนเตียง'),
+    detail:rrRestored?'รอ BCG packet สดก่อนนำกลับไปวิเคราะห์':rrValid?`ค่าประมาณจาก BCG${bcg.respiration_held?' · เป็นค่าล่าสุดที่คงไว้ระหว่างตรวจคุณภาพสัญญาณ':''}; ตรวจความนิ่งร่วมกับ HR และ Movement`:'ยังไม่ใช้เป็นหลักฐาน Sleep Stage จนกว่า HR และ RR จะผ่าน Data-quality gate',
+  }));
+  if(hrValid&&rrValid&&!hrRestored&&!rrRestored&&hrTone==='good'&&rrTone==='good')bioRows.push(adminExplanationRow({
+    tone:'good',icon:'hr',title:'สัญญาณชีพ',value:'',status:'ใน Baseline',
+    summary:'ชีพจรและอัตราการหายใจอยู่ในช่วง Baseline ของสถานะที่ยืนยัน',
+    detail:`ติดตามแนวโน้มร่วมกับ Movement และ ${source} · ค่าปัจจุบันดูจากการ์ดด้านบน`,
+  }));
+  bioRows.push(adminExplanationRow({
       tone:stageTone,icon:'sleep',title:'สถานะการนอน',value:stageKey?`${stage.code} · ${stage.label}`:'รอยืนยัน',status:stageKey?'ยืนยันแล้ว':'รอหลักฐาน',
       summary:stageKey?(stage.meaning||stage.title):'ระบบยังไม่มีสถานะยืนยัน จึงไม่แสดง W/N1/N2/N3/REM แทนข้อมูลที่หาย',
       detail:stageKey?`${source} · ความมั่นใจ ${confidence} · Evidence 30 วินาทีและยืนยันแนวโน้ม 60 วินาที · ไม่ใช่ผล PSG`:`สถานะเตียง ${bedLabel} · ต้องมี Session, ผู้ใช้งานบนเตียง, HR และ RR ที่ใช้ได้ก่อน`,
-    }),
-  ].join('');
+  }));
+  bioRoot.innerHTML=bioRows.join('');
 
   const result=atmosphere||{key:'unknown',evaluations:[]};
   const evaluations=Array.isArray(result.evaluations)?result.evaluations:[];
-  environmentRoot.innerHTML=evaluations.length?evaluations.map(metric=>{
-    const available=metric.status==='live'&&metric.level;
-    const restored=metric.status!=='live'&&metric.deviceStatus==='stale'&&metric.value!==null&&metric.value!==undefined;
-    const tone=available?(metric.level.key||'unknown'):'unknown';
-    const levelLabel=available?(metric.level.label||ADMIN_LEVEL_COPY[tone]||tone):restored?'ก่อน Restart':'ไม่มีข้อมูล Live';
-    const summary=available?(ADMIN_EXPLANATION_CONTEXT[metric.id||metric.key]||metric.principle||'ใช้ประกอบการประเมินสภาพแวดล้อมของ ZEEP'):restored?'แสดงค่าล่าสุดเพื่อความต่อเนื่อง · ยังไม่จัดระดับ':`ตรวจ ${metric.source||metric.name} และ freshness ก่อนแปลผล`;
-    const action=available?(metric.recommendation||'รักษาการตั้งค่าปัจจุบัน'):restored?'รอ Sensor packet สดก่อนประเมิน':'ไม่ใช้ค่าค้างแทนค่าปัจจุบัน';
-    const display=(metric.id||metric.key)==='sound'&&metric.display
-      ? String(metric.display).replace(/\bdBA\b(?! est\.)/,'dBA est.')
-      : metric.display||'--';
-    return adminExplanationRow({tone,icon:metric.id||metric.key,status:levelLabel,title:metric.name||metric.label,value:display,summary,detail:action});
-  }).join(''):'<div class="admin-live-explanation-empty">ยังไม่มีข้อมูล Sensor ที่ใช้แปลผลได้</div>';
+  const required=evaluations.filter(metric=>metric.status!=='live'||metric.decision==='required'||Number(metric.score)<2);
+  const unavailable=required.filter(metric=>metric.status!=='live');
+  const optimise=evaluations.filter(metric=>metric.status==='live'&&(metric.decision==='optimise'||Number(metric.score)===2));
+  const available=evaluations.filter(metric=>metric.status==='live').length;
+  const environmentTone=result.key&&result.key!=='unknown'?result.key:'unknown';
+  const environmentStatus=result.key==='unknown'?'รอข้อมูล':result.label||ADMIN_LEVEL_COPY[environmentTone]||environmentTone;
+  const environmentSummary=unavailable.length
+    ?`${unavailable.length} Sensor ไม่มีข้อมูล Live · ยังไม่ยืนยันภาพรวม`
+    :required.length?`${required.length} จุดต่ำกว่าเกณฑ์ขั้นต่ำ · เริ่มจาก ${required[0].name}`
+    :optimise.length?`ผ่านขั้นต่ำแล้ว · มี ${optimise.length} จุดที่ปรับให้ดีขึ้นได้`:`Sensor พร้อม ${available}/${evaluations.length||7} เกณฑ์ · ไม่พบจุดที่ต้องแก้`;
+  const environmentAction=required.length
+    ?(required[0].recommendation||`ตรวจ ${required[0].source||required[0].name}`)
+    :optimise.length?(optimise[0].recommendation||`ปรับ ${optimise[0].name}`):'รักษาการตั้งค่าปัจจุบันและติดตาม freshness ต่อเนื่อง';
+  environmentRoot.innerHTML=evaluations.length?adminExplanationRow({
+    tone:environmentTone,icon:'unknown',title:'ภาพรวมสภาพแวดล้อม',value:'',status:environmentStatus,
+    summary:environmentSummary,detail:`${environmentAction} · ค่าราย Sensor อยู่ด้านบน`,
+  }):'<div class="admin-live-explanation-empty">ยังไม่มีข้อมูล Sensor ที่ใช้แปลผลได้</div>';
   const modeLabel=({sleep:'Overnight Recovery',nap_recovery:'Nap & Refresh',relax_meditation:'Relax / Meditation',recovery_readiness:'Recovery / Readiness'})[result.mode]||session.rest_mode||'รอ Mode';
   modeRoot.textContent=`โหมด · ${modeLabel}`;
 }

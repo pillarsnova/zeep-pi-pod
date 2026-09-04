@@ -1116,8 +1116,8 @@ class RbacApiTests(unittest.TestCase):
         self.assertIn("อัปเดตจากบัญชี ZEEP เมื่อ Login", ui)
         self.assertIn("Profile API ไม่พร้อม", ui)
 
-    def test_admin_dashboard_explains_live_values_without_clinical_claims(self) -> None:
-        """Admin gets contextual explanations while the user view stays lean."""
+    def test_admin_dashboard_adds_insight_without_repeating_every_live_value(self) -> None:
+        """Admin gets actionable context while the current-value cards stay canonical."""
         ui = (Path(__file__).resolve().parent / "static" / "index.html").read_text(
             encoding="utf-8"
         )
@@ -1138,6 +1138,12 @@ class RbacApiTests(unittest.TestCase):
         self.assertIn("ค่าจริง · เทียบ Baseline และเกณฑ์ของโหมด", ui)
         self.assertIn("admin-live-explanation-metric-icon", ui)
         self.assertIn("ADMIN_EXPLANATION_STATUS", ui)
+        self.assertIn("INSIGHTS &amp; ACTIONS", ui)
+        self.assertIn('value:\'\',status:\'ใน Baseline\'', ui)
+        self.assertIn("environmentRoot.innerHTML=evaluations.length?adminExplanationRow", ui)
+        self.assertIn('<details class="admin-atmosphere-reference">', ui)
+        self.assertIn("const actionRows=optimisationActions.map", ui)
+        self.assertIn(".admin-atmosphere-reference-grid", css)
         self.assertIn('body:not([data-role="admin"]) [data-admin-panel]', css)
 
     def test_sensor_integrity_displays_every_sensor_and_primary_reading(self) -> None:

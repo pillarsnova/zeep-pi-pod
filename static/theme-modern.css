@@ -1271,19 +1271,13 @@ body[data-view="dashboard"][data-role="admin"] .admin-atmosphere-card {
   background: linear-gradient(145deg, rgba(14, 36, 51, .98), rgba(7, 21, 32, .98));
 }
 
-.admin-atmosphere-threshold-section {
-  grid-column: 1 / -1;
-}
+.admin-atmosphere-threshold-section { grid-column: auto; }
 
-.admin-atmosphere-thresholds {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
-}
+.admin-atmosphere-thresholds { display: grid; grid-template-columns: 1fr; gap: 7px; }
 
 .admin-atmosphere-thresholds article {
   display: grid;
-  grid-template-columns: minmax(92px, .38fr) minmax(0, 1.62fr) auto;
+  grid-template-columns: minmax(92px, .32fr) minmax(0, 1.68fr);
   align-items: center;
   gap: 8px;
   min-width: 0;
@@ -1306,9 +1300,10 @@ body[data-view="dashboard"][data-role="admin"] .admin-atmosphere-card {
 }
 
 .admin-atmosphere-thresholds small {
+  grid-column: 1 / -1;
   color: #5f7d89;
   font-size: 8px;
-  white-space: nowrap;
+  line-height: 1.45;
 }
 
 .admin-atmosphere-criteria > .admin-atmosphere-success {
@@ -1320,10 +1315,6 @@ body[data-view="dashboard"][data-role="admin"] .admin-atmosphere-card {
   .admin-atmosphere-thresholds b { font-size: 11px; }
   .admin-atmosphere-thresholds span { font-size: 9.5px; }
   .admin-atmosphere-thresholds small { font-size: 9px; }
-}
-
-@media (max-width: 900px) {
-  .admin-atmosphere-thresholds { grid-template-columns: 1fr; }
 }
 
 /* Redmi Pad 2 / Chrome control canvas ----------------------------------
@@ -7642,7 +7633,7 @@ body[data-view="monitor"] .raw-monitor { order: 4; }
 .admin-criterion small { grid-column: 1 / -1; color: #78939e; font-size: 8px; line-height: 1.45; }
 .admin-criterion small em { color: #9cb5be; font-style: normal; }
 
-.admin-atmosphere-actions { grid-column: 1 / -1; }
+.admin-atmosphere-actions { grid-column: auto; }
 .admin-atmosphere-action,
 .admin-atmosphere-success {
   display: grid;
@@ -7669,9 +7660,54 @@ body[data-view="monitor"] .raw-monitor { order: 4; }
 .admin-atmosphere-empty { padding: 12px; color: #78939e; font-size: 10px; text-align: center; }
 .admin-atmosphere-note { margin-top: 11px; color: #66818d; font-size: 8.5px; line-height: 1.5; }
 
+.admin-atmosphere-reference {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  border: 1px solid rgba(77, 126, 146, .25);
+  border-radius: 13px;
+  background: rgba(5, 18, 28, .56);
+}
+
+.admin-atmosphere-reference > summary {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  color: #b9d8df;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.admin-atmosphere-reference > summary::-webkit-details-marker { display: none; }
+.admin-atmosphere-reference > summary::before {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  flex: 0 0 24px;
+  border: 1px solid rgba(83, 233, 249, .3);
+  border-radius: 7px;
+  color: #75eaf5;
+  content: "+";
+  font: 800 14px var(--ui-font-mono);
+}
+.admin-atmosphere-reference[open] > summary::before { content: "−"; }
+.admin-atmosphere-reference > summary span { font-size: 11px; font-weight: 800; }
+.admin-atmosphere-reference > summary small { color: #6f8d99; font-size: 9px; }
+.admin-atmosphere-reference-grid {
+  display: grid;
+  grid-template-columns: minmax(230px, .62fr) minmax(0, 1.38fr);
+  gap: 10px;
+  padding: 0 10px 10px;
+}
+.admin-atmosphere-reference-grid > .admin-atmosphere-section { background: rgba(4, 16, 25, .72); }
+
 @media (max-width: 900px) {
   .admin-atmosphere-layout { grid-template-columns: 1fr; }
   .admin-atmosphere-actions { grid-column: auto; }
+  .admin-atmosphere-reference-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 620px) {
@@ -13901,10 +13937,10 @@ body[data-view="control"] .aircon-control-stack .fan-level-control .toggle-state
   font-size: 12px !important;
 }
 
-/* Admin live interpretation -------------------------------------------------
- * Explain the same confirmed sleep payload and versioned environment result
- * already rendered above. This is intentionally Admin-only and never turns a
- * single wellness reading into a diagnosis or a PSG-equivalent conclusion. */
+/* Admin insight layer -------------------------------------------------------
+ * Current numbers have one authoritative home in the cards above. This
+ * Admin-only layer adds meaning and shows repeated values only when a vital
+ * needs investigation; full environment bands stay in the collapsed guide. */
 .admin-live-explanation {
   position: relative;
   isolation: isolate;
@@ -14053,7 +14089,7 @@ body[data-view="control"] .aircon-control-stack .fan-level-control .toggle-state
 
 .admin-live-explanation-grid {
   display: grid;
-  grid-template-columns: minmax(270px, .72fr) minmax(0, 1.68fr);
+  grid-template-columns: minmax(0, 1.12fr) minmax(260px, .88fr);
   gap: 9px;
 }
 
@@ -14127,8 +14163,8 @@ body[data-view="control"] .aircon-control-stack .fan-level-control .toggle-state
   font-size: 9px;
 }
 
-.admin-live-explanation-list { display: grid; grid-template-columns: 1fr; gap: 6px; }
-.admin-live-explanation-list.environment { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.admin-live-explanation-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.admin-live-explanation-list.environment { grid-template-columns: 1fr; }
 .admin-live-explanation-row {
   --explanation-tone: #6f8995;
   display: grid;
@@ -14204,6 +14240,8 @@ body[data-view="control"] .aircon-control-stack .fan-level-control .toggle-state
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.admin-live-explanation-row.is-summary { grid-template-rows: auto 1fr auto; }
+.admin-live-explanation-row.is-summary p { margin-top: 8px; font-size: 9px; }
 .admin-live-explanation-row p {
   margin: 3px 0 0;
   color: #a8c7d0;
@@ -14270,13 +14308,13 @@ body[data-view="control"] .aircon-control-stack .fan-level-control .toggle-state
 }
 
 @media (max-width: 1120px) {
-  .admin-live-explanation-grid { grid-template-columns: minmax(230px, .62fr) minmax(0, 1.38fr); }
+  .admin-live-explanation-grid { grid-template-columns: minmax(0, 1fr) minmax(240px, .82fr); }
 }
 
 @media (max-width: 900px) {
   .admin-live-explanation-grid { grid-template-columns: 1fr; }
-  .admin-live-explanation-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .admin-live-explanation-list.environment { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-live-explanation-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-live-explanation-list.environment { grid-template-columns: 1fr; }
   .admin-live-explanation-row { min-height: 108px; }
 }
 

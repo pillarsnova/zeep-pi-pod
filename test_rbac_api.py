@@ -1119,15 +1119,21 @@ class RbacApiTests(unittest.TestCase):
                 "rem_ratio": 0.22,
             },
             {"wake": 96, "n2": 480, "n3": 108, "rem": 132},
+            rest_mode="sleep",
         )
-        self.assertTrue(quality["available"])
+        # This fixture contains only 816 five-second stage rounds (68 minutes)
+        # across an eight-hour wall-clock Session and no paired HR/RR samples.
+        # The current wellness release gate must retain the explainable shadow
+        # score for audit while withholding the public Sleep Score.
+        self.assertFalse(quality["available"])
+        self.assertIsNone(quality["score"])
         # Counts are the source of truth: 720 sleep / 816 scored rounds = 88%,
         # even when a legacy night_summary says 90%. The 8-hour wall duration
         # must not fabricate unobserved Sleep State coverage.
-        # The 40-point duration term uses the 720 recorded sleep rounds (1 h),
-        # not the legacy 7.2-hour summary value, so the score is intentionally
-        # below a full-night result while remaining explainable.
-        self.assertGreaterEqual(quality["score"], 70)
+        # The opportunity component uses the 720 recorded sleep rounds (1 h),
+        # not the legacy 7.2-hour summary value, so the shadow score remains
+        # explainable without publishing an under-covered result.
+        self.assertGreaterEqual(quality["engineering_shadow_score"], 65)
         self.assertEqual(quality["sleep_efficiency_pct"], 88)
         self.assertEqual(quality["deep_pct"], 15)
         self.assertEqual(set(quality["component_points"]),
@@ -1140,9 +1146,11 @@ class RbacApiTests(unittest.TestCase):
         self.assertFalse(missing["available"])
         self.assertIsNone(missing["score"])
         all_wake = pod_app._sleep_quality_summary(
-            3600, {"sleep_efficiency": 0.0, "awakenings": 0}, {"wake": 120})
-        self.assertTrue(all_wake["available"])
-        self.assertEqual(all_wake["score"], 0)
+            3600, {"sleep_efficiency": 0.0, "awakenings": 0},
+            {"wake": 120}, rest_mode="sleep")
+        self.assertFalse(all_wake["available"])
+        self.assertIsNone(all_wake["score"])
+        self.assertEqual(all_wake["engineering_shadow_score"], 0)
         active = pod_app._sleep_quality_summary(
             8 * 3600, {"sleep_efficiency": 0.9}, completed=False)
         self.assertFalse(active["available"])

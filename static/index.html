@@ -1952,8 +1952,8 @@
           <div><b>W</b><strong>ตื่น</strong><span>ช่วงที่ระบบประเมินว่ายังตื่นหรือกลับเข้าสู่สถานะตื่น</span></div>
           <div><b>N1</b><strong>หลับตื้น / เคลิ้มหลับ</strong><span>เริ่มเข้าสู่การนอน ร่างกายผ่อนคลาย และปลุกให้ตื่นได้ง่าย</span></div>
           <div><b>N2</b><strong>หลับสนิทขึ้น / หลับตื้นต่อเนื่อง</strong><span>หัวใจและการหายใจช้าลง ร่างกายเข้าสู่การนอนที่ต่อเนื่องขึ้น</span></div>
-          <div><b>N3</b><strong>หลับลึก</strong><span>รูปแบบ BCG/HR/RR ที่สอดคล้องกับ N3; เชื่อมโยงกับการฟื้นฟู แต่ไม่ได้วัดการซ่อมแซมโดยตรง</span></div>
-          <div><b>REM</b><strong>ระยะ REM</strong><span>รูปแบบ BCG/HR/RR ที่สอดคล้องกับ REM; ไม่ใช่การวัดความฝันหรือความจำโดยตรง</span></div>
+          <div><b>N3</b><strong>หลับลึก</strong><span>รูปแบบ BCG/HR/RR ที่สอดคล้องกับ N3; ตามสรีรวิทยาการนอน N3 เชื่อมโยงกับการฟื้นฟู แต่ ZEEP ไม่ได้วัดการซ่อมแซมโดยตรง</span></div>
+          <div><b>REM</b><strong>ระยะ REM</strong><span>รูปแบบ BCG/HR/RR ที่สอดคล้องกับ REM; ตามสรีรวิทยา REM สัมพันธ์กับความฝันและความจำ แต่ ZEEP ไม่ได้วัดความฝันหรือความจำโดยตรง</span></div>
         </div>
         <div class="stage-guide-note">ค่าบน ZEEP เป็นการประเมินจาก BCG และ Sensor ไม่ใช่ผล Sleep Stage จากการตรวจ PSG</div>
       </details>
@@ -2335,8 +2335,8 @@ const SLEEP_TH = {
   wake:       {code:'W',   title:'ตื่น',meaning:'ช่วงที่ระบบประเมินว่ายังตื่นหรือกลับเข้าสู่สถานะตื่น',label:'ตื่น',cls:'wake'},
   n1:         {code:'N1',  title:'หลับตื้น / เคลิ้มหลับ',meaning:'เริ่มเข้าสู่การนอน ร่างกายผ่อนคลาย และปลุกให้ตื่นได้ง่าย',label:'หลับตื้น',cls:'nrem'},
   n2:         {code:'N2',  title:'หลับสนิทขึ้น / หลับตื้นต่อเนื่อง',meaning:'หัวใจและการหายใจช้าลง ร่างกายเข้าสู่การนอนที่ต่อเนื่องขึ้น',label:'หลับสนิทขึ้น',cls:'nrem'},
-  n3:         {code:'N3',  title:'หลับลึก',meaning:'รูปแบบ BCG/HR/RR ที่สอดคล้องกับ N3; เชื่อมโยงกับการฟื้นฟู แต่ไม่ได้วัดการซ่อมแซมโดยตรง',label:'หลับลึก',cls:'deep'},
-  rem:        {code:'REM', title:'ระยะ REM',meaning:'รูปแบบ BCG/HR/RR ที่สอดคล้องกับ REM; ไม่ใช่การวัดความฝันหรือความจำโดยตรง',label:'REM',cls:'rem'},
+  n3:         {code:'N3',  title:'หลับลึก',meaning:'รูปแบบ BCG/HR/RR ที่สอดคล้องกับ N3; ตามสรีรวิทยาการนอน N3 เชื่อมโยงกับการฟื้นฟู แต่ ZEEP ไม่ได้วัดการซ่อมแซมโดยตรง',label:'หลับลึก',cls:'deep'},
+  rem:        {code:'REM', title:'ระยะ REM',meaning:'รูปแบบ BCG/HR/RR ที่สอดคล้องกับ REM; ตามสรีรวิทยา REM สัมพันธ์กับความฝันและความจำ แต่ ZEEP ไม่ได้วัดความฝันหรือความจำโดยตรง',label:'REM',cls:'rem'},
   // ``nrem`` is kept only for rendering old history. The live estimator never
   // emits a generic NREM because ZEEP's current ontology is W/N1/N2/N3/REM.
   nrem:       {code:'NREM', label:'หลับ · ข้อมูลเดิม',cls:'nrem'},

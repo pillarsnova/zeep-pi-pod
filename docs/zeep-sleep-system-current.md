@@ -317,6 +317,8 @@ physiology evidence ก่อนเสมอ การอนุญาต graph �
 
 `Sleep Score = Opportunity 20 + Stability 30 + Restorative 30 + Cycle 15 + Coverage 5`
 
+สัญญาน้ำหนักเชิงตัวเลขของสูตรคือ `20 + 30 + 30 + 15 + 5 = 100` คะแนน
+
 ระบบแยกคะแนนตามเป้าหมายที่ผู้ใช้เลือกโดยไม่แก้ Raw หรือบิด Sleep Stage:
 `Overnight Recovery` ใช้ Sleep Score เท่านั้น ส่วน `Nap & Refresh` ใช้ Recovery Score
 เท่านั้น ไม่ว่าจะพบการหลับหรือยังตื่นพักอยู่ การไม่มีข้อมูล Sensor เพียงพอจะไม่เผยแพร่

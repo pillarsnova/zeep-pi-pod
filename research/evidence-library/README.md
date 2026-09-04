@@ -1,12 +1,24 @@
 # ZEEP Research Evidence Library
 
-เวอร์ชันทะเบียน: **1.0.0**
+เวอร์ชันทะเบียน: **1.1.0**
 
 ตรวจแหล่งข้อมูลล่าสุด: **5 กันยายน 2026**
 
 ขอบเขต: Sleep Wellness, สุขภาพที่เกี่ยวข้องกับการนอน, คุณภาพอากาศภายในอาคาร, VOC/ควันบุหรี่ และข้อจำกัดของเซนเซอร์
 
 คลังนี้ทำหน้าที่เป็นหลักฐานสำหรับออกแบบ ตรวจทาน และ audit ระบบ ZEEP ไม่ใช่ฐานความรู้ที่ runtime นำข้อความจาก PDF ไปเปลี่ยนเกณฑ์หรือวินิจฉัยผู้ใช้เอง ทุกการเปลี่ยน sleep scoring, safety threshold หรือคำแนะนำสุขภาพต้องผ่านการทบทวน แล้วบันทึกเป็น policy/config ที่มีเวอร์ชันและ regression test แยกต่างหาก
+
+## เริ่มจากตรงไหน
+
+| เอกสาร | ใช้เมื่อ | สรุปสั้น |
+|---|---|---|
+| [แผนพิสูจน์การควบคุม VOC ของ ZEEP](VOC_CONTROL_VALIDATION.md) | Product, Pilot, Engineering | เอกสารหลักสำหรับพิสูจน์ว่า ventilation + Carbon Filter ลดภาระ VOC ได้หรือไม่ โดยไม่พยายามระบุตัวผู้สูบบุหรี่ |
+| [ทะเบียนแหล่งข้อมูลฉบับอ่านง่าย](SOURCE_REGISTER.md) | ทุกทีม | สรุปว่าเอกสารอ้างอิงแต่ละฉบับใช้รองรับเรื่องใดและห้ามตีความเกินอะไร |
+| [กรณีสารตกค้างที่มากับผู้ใช้งาน](SMOKING_VOC_CASE.md) | Research, Pilot | หลักฐานและวิธีควบคุมตัวแปรของกรณี thirdhand smoke; เป็นกรณีตัวอย่าง ไม่ใช่เป้าหมายการตรวจจับบุคคล |
+| [ทะเบียนสำหรับระบบ](source-register.json) | Engineering, Audit | Metadata, URL, สถานะการเข้าถึง และ checksum ที่เครื่องอ่านได้ |
+| [เครื่องมือดาวน์โหลดและตรวจสอบ](update_research_library.py) | Engineering | ดาวน์โหลด ตรวจลายเซ็น PDF และยืนยัน SHA-256 ของเอกสารที่อนุมัติ |
+
+ลำดับอ่านที่แนะนำสำหรับหัวข้อ VOC คือ `VOC_CONTROL_VALIDATION.md` → `SMOKING_VOC_CASE.md` → รายการ `AIR-*`, `WHO-004`, `VEN-001` และ `VEN-002` ใน `SOURCE_REGISTER.md`
 
 ## โครงสร้าง
 
@@ -20,7 +32,8 @@ research/evidence-library/
 ├── vendor/                เอกสารผู้ผลิตเซนเซอร์ที่จำเป็นต่อการตีความค่า
 ├── source-register.json   ทะเบียนที่เครื่องอ่านได้และ SHA-256 ของฉบับที่อนุมัติ
 ├── SOURCE_REGISTER.md     สรุปว่าเอกสารแต่ละฉบับใช้รองรับเรื่องใด
-├── SMOKING_VOC_CASE.md    ข้อสรุปและแผนทดสอบเคส VOC หลังผู้สูบบุหรี่เข้าตู้
+├── VOC_CONTROL_VALIDATION.md แผนพิสูจน์ประสิทธิภาพการควบคุม VOC ของ ZEEP
+├── SMOKING_VOC_CASE.md    กรณีศึกษา VOC ที่มากับผู้ใช้งานและ thirdhand smoke
 └── update_research_library.py
 ```
 
@@ -58,4 +71,6 @@ python3 research/evidence-library/update_research_library.py status
 
 - AASM sleep stage แบบ W/N1/N2/N3/REM อาศัย PSG/EEG/EOG/EMG; BCG + HR + RR ของ ZEEP เป็น estimator ที่ต้องผ่าน validation กับ PSG จึงจะกล่าวอ้างความแม่นยำเชิงคลินิกได้
 - SGP40 เป็นเซนเซอร์ VOC แบบกว้างพร้อม adaptive baseline จึงบอกทิศทาง/เหตุการณ์ VOC ได้ แต่ระบุชนิดสารหรือแหล่งกำเนิด เช่น บุหรี่ น้ำหอม หรือแอลกอฮอล์ โดยลำพังไม่ได้
+- การที่ค่า VOC Index ลดลงหลังเปิดระบบยังไม่พิสูจน์ว่า Carbon Filter เป็นสาเหตุเพียงอย่างเดียว เพราะ ventilation, การหยุดแหล่งกำเนิด, อุณหภูมิ, ความชื้น และ adaptive baseline มีผล ต้องใช้ protocol แบบเปรียบเทียบ
+- คำว่า “อยู่ในช่วงยอดเยี่ยมตลอดคืน” ต้องรายงานเป็นสัดส่วนเวลาที่ข้อมูล valid และอยู่ในช่วงเป้าหมาย พร้อม coverage และช่วงที่ข้อมูลขาด ไม่ใช้เป็นข้อสรุปเหมารวมจากภาพหน้าจอหรือ Session เดียว
 - WHO guideline ระยะยาวบางฉบับไม่ใช่ alarm threshold แบบ real-time ภายในตู้ การนำไปตั้ง safety policy ต้องมีการทบทวนทางวิศวกรรมและสุขภาพโดยเฉพาะ

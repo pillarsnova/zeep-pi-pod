@@ -73,6 +73,23 @@ class ResearchEvidenceLibraryTests(unittest.TestCase):
             errors = module.validate_pdf(fake, "0" * 64)
         self.assertIn("not a PDF signature", errors)
 
+    def test_voc_control_plan_is_primary_and_source_agnostic(self):
+        readme = (LIBRARY / "README.md").read_text(encoding="utf-8")
+        plan = (LIBRARY / "VOC_CONTROL_VALIDATION.md").read_text(encoding="utf-8")
+        case_note = (LIBRARY / "SMOKING_VOC_CASE.md").read_text(encoding="utf-8")
+        self.assertIn("VOC_CONTROL_VALIDATION.md", readme)
+        self.assertIn("ไม่ใช่การตรวจหาผู้สูบบุหรี่", plan)
+        for metric in (
+            "percent_time_in_target",
+            "valid_coverage_percent",
+            "auc_above_baseline",
+            "clearance_time_min",
+            "SRAW_VOC",
+        ):
+            self.assertIn(metric, plan)
+        self.assertIn("VOC_CONTROL_VALIDATION.md", case_note)
+        self.assertIn("AIR-006", {source["id"] for source in self.sources})
+
 
 if __name__ == "__main__":
     unittest.main()

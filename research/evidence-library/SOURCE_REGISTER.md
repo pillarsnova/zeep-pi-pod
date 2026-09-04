@@ -36,7 +36,7 @@
 | WHO-007 | [WHO Tobacco Control Playbook 2025](https://iris.who.int/handle/10665/381594) | หลัก smoke-free environment และการจัดการความเสี่ยงจากควัน | เป็นแนวนโยบาย ไม่ใช่คู่มือสอบเทียบ SGP40 |
 | WHO-008 | [WHO Tobacco and Nicotine Fact Sheet](https://www.who.int/news-room/fact-sheets/detail/tobacco) | หน้าอ้างอิงปัจจุบันเรื่องผลกระทบยาสูบ/ควันมือสอง; ณ วันที่ตรวจเป็นฉบับ 26 มิ.ย. 2026 | `link-only`; ต้องตรวจวันที่หน้าเว็บก่อนอ้างทุกครั้ง |
 
-## 4. VOC จากมนุษย์และกรณีผู้สูบบุหรี่
+## 4. การควบคุม VOC และแหล่งที่มากับผู้ใช้งาน
 
 | ID | แหล่งข้อมูล | ใช้อ้างอิงใน ZEEP | ข้อจำกัด |
 |---|---|---|---|
@@ -45,6 +45,7 @@
 | AIR-003 | [Third-hand smoke VOCs from clothing fabrics](https://doi.org/10.1007/s40201-021-00755-1) | รองรับการคงอยู่/off-gassing ของสารจากเสื้อผ้าหลังสัมผัสควัน และความต่างตามชนิดผ้า | การทดลองควบคุมกับผ้า ไม่ใช่การตรวจผู้ใช้งานจริง |
 | AIR-004 | [Breath VOC biomarkers for active/passive smoking](https://pubmed.ncbi.nlm.nih.gov/12117646/) | ชี้ว่าหลังสัมผัส/สูบบุหรี่ VOC ในลมหายใจอาจมีองค์ประกอบที่ลดเร็วและช้า | `link-only`; biomarker เฉพาะต้องใช้เครื่องมือจำแนกสาร |
 | AIR-005 | [Breath benzene associated with active smoking](https://pubmed.ncbi.nlm.nih.gov/10856191/) | รองรับการเพิ่มของ benzene ในลมหายใจหลังสูบบุหรี่ | `link-only`; SGP40 ไม่วัด benzene แบบจำเพาะ |
+| AIR-006 | [U.S. EPA Residential Air Cleaners: Technical Summary, 3rd Edition](https://www.epa.gov/indoor-air-quality-iaq/air-cleaners-and-air-filters-home) | รองรับลำดับ source control → clean-air ventilation → filtration; อธิบายว่า activated carbon ดูดซับสารก๊าซบางกลุ่มและมีความจุจำกัด | ไม่ใช่ผลทดสอบ ZEEP; ประสิทธิภาพขึ้นกับชนิดสาร ปริมาณ media อัตราการไหล ความชื้น และความอิ่มตัว และไม่กำจัดสารทุกชนิด |
 
 ## 5. Sensor/Vendor Evidence
 
@@ -55,6 +56,8 @@
 
 ## ข้อสรุปที่อนุญาตให้นำไปใช้
 
-- กล่าวได้ว่า **มีความเป็นไปได้ทางวิทยาศาสตร์** ที่ผู้สูบบุหรี่นำสารตกค้างและ VOC เข้ามากับลมหายใจ เสื้อผ้า ผิว หรือเส้นผม แล้วทำให้ค่า VOC ในพื้นที่ปิดขนาดเล็กเพิ่มขึ้น
+- เป้าหมายหลักคือประเมินว่า ZEEP ventilation + Carbon Filter ลดภาระ VOC และพาค่ากลับสู่ช่วงเป้าหมายได้หรือไม่ ไม่ใช่ตรวจหาผู้สูบบุหรี่
+- กล่าวได้ว่า **มีความเป็นไปได้ทางวิทยาศาสตร์** ที่คนพา VOC เข้ามากับลมหายใจ เสื้อผ้า ผิว เส้นผม ผลิตภัณฑ์ส่วนตัว หรือสารตกค้างจากควัน แล้วทำให้ค่าในพื้นที่ปิดขนาดเล็กเพิ่มขึ้น
 - ยังกล่าวไม่ได้ว่า “SGP40 ตรวจพบผู้สูบบุหรี่” หรือว่า VOC spike มาจากบุหรี่แน่นอน ต้องตัดแหล่งอื่นและใช้เครื่องมือจำแนกสารเพื่อยืนยัน
+- การกล่าวว่า ZEEP “รักษา VOC อยู่ในช่วงเป้าหมาย” ต้องแสดง `percent_time_in_target`, `valid_coverage_percent`, protocol และเงื่อนไข Filter/airflow; การลดลงครั้งเดียวไม่พิสูจน์ว่าเกิดจาก Carbon Filter เพียงอย่างเดียว
 - ค่า ZEEP sleep stage เป็นผลประมาณเชิง wellness จนกว่าจะมีการ validation แบบ time-aligned กับ PSG ในประชากรเป้าหมาย

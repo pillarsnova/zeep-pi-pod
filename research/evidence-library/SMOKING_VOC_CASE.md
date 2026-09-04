@@ -1,8 +1,16 @@
-# Case Note: VOC สูงขึ้นหลังผู้มีประวัติสูบบุหรี่เข้า ZEEP
+# Supporting Case: สารตกค้างที่มากับผู้ใช้งานและ VOC ใน ZEEP
 
-สถานะข้อสรุป: **เป็นไปได้และมีหลักฐานรองรับ แต่ยังยืนยันสาเหตุจาก SGP40 เพียงตัวเดียวไม่ได้**
+สถานะข้อสรุป: **เป็นแหล่งท้าทายที่เป็นไปได้และมีหลักฐานรองรับ แต่ไม่ใช่เป้าหมายการตรวจจับบุคคล และยังยืนยันสาเหตุจาก SGP40 เพียงตัวเดียวไม่ได้**
 
 วันที่ทบทวน: **5 กันยายน 2026**
+
+เอกสารหลักสำหรับการพิสูจน์ประสิทธิภาพผลิตภัณฑ์คือ [ZEEP VOC Control Validation Plan](VOC_CONTROL_VALIDATION.md) เอกสารนี้มีหน้าที่อธิบายเพียงหนึ่งกรณีของ VOC ที่อาจติดมากับผู้ใช้ เพื่อช่วยออกแบบตัวแปรควบคุมและไม่ให้ทีมตีความ SGP40 เกินความสามารถ
+
+## เป้าหมายที่ถูกต้อง
+
+เป้าหมายของ ZEEP คือพิสูจน์ว่า ventilation + Carbon Filter สามารถลด **ภาระ VOC**, เวลาที่อยู่นอกช่วงเป้าหมาย และเวลาที่ใช้กลับสู่ช่วงเป้าหมายได้ แม้ไม่มีการเปิดระบบกลิ่น/ไอน้ำ ไม่ใช่การตรวจว่าผู้ใช้สูบบุหรี่หรือไม่
+
+กรณีบุหรี่ใช้เป็นตัวอย่างทางวิทยาศาสตร์ว่า residue อาจมากับลมหายใจ เสื้อผ้า ผิว เส้นผม หรือสัมภาระได้ ส่วน VOC จากมนุษย์และผลิตภัณฑ์ส่วนตัวก็เกิดได้ตามปกติ จึงต้องวัดผลการควบคุมอากาศโดยไม่ระบุโทษหรือแหล่งกำเนิดจาก SGP40
 
 ## เหตุผลที่เป็นไปได้
 
@@ -32,7 +40,7 @@ VOC Index ใกล้ 100 หมายถึงระดับพื้นห�
 3. **กำหนดเวลาเข้า:** บันทึก `occupancy_entered_at`, `bed_occupied_at`, ประตู และ airflow เพื่อ time-align กับ sensor โดยไม่ใช้ชื่อในชุดวิเคราะห์
 4. **แบบสอบถามสมัครใจแบบช่วงเวลา:** สูบ/สูดไอ/ยาสูบร้อนครั้งล่าสุด `<15 นาที`, `15–60 นาที`, `1–4 ชม.`, `>4 ชม.`, `ไม่ใช้/ไม่ประสงค์ตอบ`; บันทึกน้ำหอม alcohol sanitizer อาหาร/เครื่องดื่ม และการใช้ผลิตภัณฑ์ทำความสะอาดด้วย
 5. **Matched comparison:** เทียบคนเดิมต่างวันภายใต้ airflow, temperature, RH และเสื้อผ้าใกล้เคียง หรือเทียบ cohort โดยใช้ coded ID; ห้ามสรุปจาก session เดียว
-6. **Decay test:** หลังผู้ใช้ออก ให้คง sensor/airflow เดิมและวัดการลดลงอย่างน้อย 20–30 นาที แล้วทำ ventilation A/B test
+6. **Decay test:** หลังผู้ใช้ออก ให้คง sensor/airflow เดิมและวัดการลดลงอย่างน้อย 20–30 นาที แล้วคำนวณ peak, AUC, เวลากลับสู่เป้าหมาย และ T50/T90; การแยกผล Carbon Filter ต้องทำ empty-pod controlled test ตามเอกสารหลัก
 7. **Reference confirmation:** หากต้องการระบุแหล่ง ให้ใช้ PID/TVOC ที่สอบเทียบเพื่อคัดกรอง และ sorbent tube + GC-MS/เครื่องมือจำแนกสาร โดยพิจารณา tobacco tracers เช่น acetonitrile, 2,5-dimethylfuran และ nicotine ตามวิธีวิจัย
 8. **QA:** ทำ field blank, duplicate, ตรวจตำแหน่งเซนเซอร์, warm-up/restart, filter saturation และ RH/temperature compensation
 
@@ -61,6 +69,7 @@ VOC Index ใกล้ 100 หมายถึงระดับพื้นห�
 
 - Dashboard แสดง “VOC สูงกว่าพื้นหลัง” และการตอบสนองที่แนะนำ ไม่แสดง “ตรวจพบผู้สูบบุหรี่”
 - ป้ายเหตุการณ์ควรเป็น `possible_external_voc_source` จนกว่าจะมี reference measurement
+- รายงานผลผลิตภัณฑ์ด้วย `percent_time_in_target`, `valid_coverage_percent`, `auc_above_baseline` และ `clearance_time_min` ไม่ใช้ประโยคว่า “ดีเยี่ยมตลอดคืน” หากไม่มีตัวเลขและ coverage รองรับ
 - ข้อมูลการสูบบุหรี่เป็นข้อมูลสุขภาพ/พฤติกรรมที่ละเอียดอ่อนในบริบทการวิจัย: ขอความยินยอม เก็บเท่าที่จำเป็น ใช้ coded ID จำกัดสิทธิ์ และกำหนด retention/deletion
 - Safety response ควรอิงเกณฑ์ที่อนุมัติร่วมกับ CO₂/PM2.5/ควัน/CO และความพร้อมระบบ ไม่ใช้ VOC Index เพียงตัวเดียวสั่ง emergency
 
@@ -71,3 +80,4 @@ VOC Index ใกล้ 100 หมายถึงระดับพื้นห�
 - [Wang et al., Emission Rates of VOCs from Humans (2022)](https://doi.org/10.1021/acs.est.1c08764)
 - [WHO Tobacco and Nicotine Fact Sheet, checked 2026-09-05](https://www.who.int/news-room/fact-sheets/detail/tobacco)
 - [Sensirion SGP40 VOC Index for Experts](https://sensirion.com/en/media/documents/A6D12AD4/61644979/Sensirion_Gas_Sensors_Datasheet_GAS_AN_SGP40_VOC_Index_for_Experts_D.pdf)
+- [U.S. EPA, Residential Air Cleaners: A Technical Summary, 3rd Edition](https://www.epa.gov/sites/default/files/2018-07/documents/residential_air_cleaners_-_a_technical_summary_3rd_edition.pdf)

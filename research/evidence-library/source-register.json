@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0.0",
-  "library_version": "1.0.0",
+  "library_version": "1.1.0",
   "checked_on": "2026-09-05",
   "maintainer": "ZEEP Research and Engineering",
   "runtime_policy": "Evidence files are review material only. Runtime thresholds and models must use separately versioned, tested policy/configuration.",
@@ -214,6 +214,21 @@
       "license": "publisher-controlled",
       "use_in_zeep": "Evidence that breath benzene can be elevated shortly after smoking.",
       "limitations": "Cannot be measured selectively with SGP40."
+    },
+    {
+      "id": "AIR-006",
+      "category": "indoor-air-voc",
+      "title": "Residential Air Cleaners: A Technical Summary, 3rd Edition",
+      "year": 2018,
+      "identifiers": {"report": "EPA 402-F-09-002"},
+      "source_url": "https://www.epa.gov/indoor-air-quality-iaq/air-cleaners-and-air-filters-home",
+      "download_url": null,
+      "local_file": null,
+      "sha256": null,
+      "access": "official-link-only",
+      "license": "U.S. EPA publication terms",
+      "use_in_zeep": "Engineering evidence for source control, clean-air ventilation, and gas-phase sorbent filtration; activated carbon can adsorb some gaseous pollutants and odors.",
+      "limitations": "Not ZEEP performance evidence. Removal varies by compound, sorbent quantity, airflow, temperature, humidity and saturation; no air cleaner removes every pollutant."
     },
     {
       "id": "WHO-001",

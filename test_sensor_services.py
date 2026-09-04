@@ -49,6 +49,21 @@ class CalibrationServiceTests(unittest.TestCase):
         self.assertEqual(apply_additive_bias("unknown", 12.3, biases=biases), 12.3)
         self.assertIsNone(apply_additive_bias("humidity_rh", None, biases=biases))
 
+    def test_approved_humidity_bias_subtracts_three_percentage_points(self) -> None:
+        document = load_calibration(Path(__file__).with_name("calibration.json"))
+        self.assertEqual(document["humidity_rh_bias"], -3.0)
+        biases, _ = resolve_biases(
+            document,
+            sound_error_percent=0.0,
+            sound_source="calibration.json",
+            humidity_bias=float(document["humidity_rh_bias"]),
+            humidity_source="calibration.json",
+        )
+        self.assertEqual(
+            apply_additive_bias("humidity_rh", 59.7, biases=biases),
+            56.7,
+        )
+
 
 class SensorRuntimeTests(unittest.TestCase):
     def test_sound_pipeline_keeps_raw_and_uses_zero_percent_transform(self) -> None:

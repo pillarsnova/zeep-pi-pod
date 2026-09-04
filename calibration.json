@@ -23,7 +23,7 @@
       "operator": "super",
       "reference_value": null,
       "unit": "%RH",
-      "updated_at": "2026-09-02T15:39:45.729377+00:00"
+      "updated_at": "2026-09-04T07:41:09+00:00"
     }
   },
   "photo_audit": {
@@ -65,9 +65,9 @@
     "under_range_pair_count": 2,
     "decision": "reject the two UNDER readings and apply only the conservative -2.5 dB correction from the single in-range pair; synchronized A/SLOW LO 30-80 retest is still required"
   },
-  "humidity_rh_bias": 0.0,
+  "humidity_rh_bias": -3.0,
   "humidity_bias_unit": "percentage_points",
-  "humidity_calibrated_at": "2026-09-02T22:39:45+07:00",
-  "humidity_method": "raw SHT3x-DIS pass-through; additive bias disabled",
-  "humidity_status": "raw_pass_through"
+  "humidity_calibrated_at": "2026-09-04T14:41:09+07:00",
+  "humidity_method": "displayed %RH = raw SHT3x-DIS %RH - 3.0 percentage points; raw reading retained unchanged",
+  "humidity_status": "provisional_minus_3_percentage_points"
 }

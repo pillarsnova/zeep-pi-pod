@@ -720,9 +720,9 @@ else:
     SOUND_DBFS_ERROR_PERCENT = 0.0
     SOUND_TRANSFORM_SOURCE = "default"
 
-# SHT3x-DIS currently uses raw pass-through (0.0 percentage-point bias).
-# A future validated adjustment may still be supplied through env or
-# calibration.json without modifying the raw Hub 1 payload.
+# SHT3x-DIS display values use the approved additive adjustment in
+# calibration.json.  The raw Hub 1 payload remains unchanged for audit and
+# future meter-based recalibration.
 _ENV_HUMIDITY_BIAS = os.getenv("HUMIDITY_RH_BIAS")
 if _ENV_HUMIDITY_BIAS is not None:
     HUMIDITY_RH_BIAS = float(_ENV_HUMIDITY_BIAS)

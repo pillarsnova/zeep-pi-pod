@@ -3,7 +3,7 @@
 > **Purpose:** นิยาม input, baseline, transition policy, data quality และแผน PSG validation ของตัวประมาณสถานะการนอนใน Pod  
 > **Positioning:** Sleep Wellness · EEG-free exploratory telemetry · ไม่ใช่ผล PSG/การวินิจฉัย/ตัวสั่งอุปกรณ์  
 > **Status:** Wellness release candidate · deterministic replay and guarded derived-result promotion required · paired-PSG G2 validation open
-> **Version:** `zeep-sleep-state-baseline-v1.8-sep1-cutover` · **Estimator:** `bcg-audio-bed-5state-v1.24-gap-safe-continuity` · **Transition:** `zeep-semimarkov-30s-v1.14-gap-safe-continuity` · **Updated:** 2026-09-05
+> **Version:** `zeep-sleep-state-baseline-v1.8-sep1-cutover` · **Estimator:** `bcg-audio-bed-5state-v1.24-gap-safe-continuity` · **Transition:** `zeep-semimarkov-30s-v1.15-restart-continuity` · **Updated:** 2026-09-05
 > **Related:** [Current Sleep System](zeep-sleep-system-current.md) · [AI Sleep-State](ai-sleep-state-and-assistant.md) · [Evidence](sleep-wellness-evidence.md) · [Closed Loop](closed-loop-spec.md)
 
 ## TL;DR
@@ -11,7 +11,7 @@
 - ทุก session/cycle เริ่ม `Wake → N1 → N2`; จาก N2 ไป N3 หรือ REM และจาก N3 ไป REM ได้เมื่อหลักฐาน REM ต่อเนื่อง
 - N2/N3/REM ที่จะตื่นแบบสัญญาณไม่ชัดต้องย้อนผ่าน N2/N1; bed-exit ไป Wake ได้หลังผ่าน debounce 3 รอบ 10 วินาที ส่วน Raw packet burst เป็นข้อมูล Debug ไม่ใช่ตัว confirm โดยลำพัง
 - HR/RR trend, respiratory regularity จาก Raw BCG, Bed Status และ movement เป็นหลัก
-- ไม่มี Active Recording Session, ไม่ยืนยันผู้ใช้อยู่บนเตียง หรือรอบปัจจุบันไม่มี HR+RR สด = **ไม่ประเมิน Sleep Stage**; แสดง `WAIT/OFF`, probability ทั้ง 5 เป็นศูนย์ และไม่เขียน stage ลง Timeline
+- ไม่มี Active Recording Session, ไม่ยืนยันผู้ใช้อยู่บนเตียง หรือรอบปัจจุบันไม่มี HR+RR สด = **ไม่ประเมิน Sleep Stage**; แสดง `WAIT/OFF`, probability ทั้ง 5 เป็นศูนย์ และไม่เขียน stage ลง Timeline ข้อยกเว้นด้านการแสดงผลคือ Session เดิมหลัง service/code restart สามารถคง State ที่ยืนยันและบันทึกไว้แล้วได้ชั่วคราวแบบ display-only โดยไม่เขียนข้อมูลซ้ำ
 - SPH0645 สนับสนุน Wake ได้เฉพาะเสียงรบกวนที่ time-aligned กับ BCG amplitude shift หรือ bed motion; เสียงดังอย่างเดียวไม่มีผลต่อ state
 - Sensor สิ่งแวดล้อม 7 ปัจจัยอธิบาย disturbance และปรับ confidence เท่านั้น ไม่มี direct stage weight
 - Sensor frame ทุก 10 วินาที, Evidence epoch ทุก 30 วินาทีจาก rolling 60 วินาที และยืนยัน State 60/120 วินาทีตาม target; แนวโน้ม onset ใช้ context ได้ถึง 270 วินาที
@@ -250,14 +250,17 @@ confidence จาก high เป็น medium โดยไม่เปลี่�
 
 ## 6. Data-quality และ fallback
 
-- BCG ไม่มี frame ใหม่เกิน 30 วินาที: หยุดจัดประเภท, แสดง `WAIT`, `data_status=stale`, probability ทั้ง 5 เป็นศูนย์
+- BCG ไม่มี frame ใหม่เกิน 30 วินาที: หยุดจัดประเภท, แสดง `WAIT`, `data_status=stale`, probability ทั้ง 5 เป็นศูนย์ ยกเว้น display-only grace ของ Session เดิมหลัง restart ตามเงื่อนไขด้านล่าง
 - HR นอกช่วง sanity 25–220 BPM, RR นอกช่วง 2–60 ครั้ง/นาที, NaN/Inf/
   ค่าที่แปลงเป็นตัวเลขไม่ได้: ตัดออกก่อนเข้า scorer; หากรอบปัจจุบันไม่มีทั้ง HR
   และ RR ที่ใช้ได้ให้หยุดจัดประเภท, `data_status=invalid_or_missing_current_vitals`
 - Empty bed แสดง operational status `OFF`, `data_status=empty_bed`; ไม่ตีความเป็น
   Wake และไม่สร้าง state ที่หกใน ontology/รายงาน Sleep Stage
-- `last_valid_state` เก็บได้เฉพาะ Admin provenance แต่ห้ามแสดงเป็นผลปัจจุบัน,
-  ห้ามให้ 100% และห้าม persist ระหว่าง hard gate ไม่ผ่าน
+- `last_valid_state` เก็บได้เฉพาะ Admin provenance และโดยทั่วไปห้ามแสดงเป็นผล
+  ปัจจุบัน ข้อยกเว้นเฉพาะ same-Session restart ต้องตรวจว่า saved frame ตรงกับ
+  durable `sleep_stage` ล่าสุด จึงแสดงได้ไม่เกิน 180 วินาทีด้วย confidence ต่ำ,
+  `evidence_active=false` และ `display_only_after_restart=true`; ห้าม persist,
+  ห้ามนับ Stage%/Baseline/Score และ confirmed Bed Exit ยกเลิก hold ทันที
 - BCG valid bucket ต่ำกว่า 75%, environment coverage ต่ำกว่า 50% หรือ waveform
   clip เฉลี่ย ≥20%: confidence ต่ำ
 - Raw waveform น้อยกว่า 20 วินาที: ไม่ใช้ spectral regularity; คงผลเป็น provisional/low confidence

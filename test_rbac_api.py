@@ -542,10 +542,14 @@ class RbacApiTests(unittest.TestCase):
                 "heart_rate_bpm": 61.0, "respiration_rate": 14.2,
                 "analysis_valid": True,
             },
-            # A saved stage is useful only as audit history. It must not become
-            # the current post-restart stage before fresh 30/60-second evidence.
+            # This label also exists as a durable sleep_stage event/path.  It
+            # may bridge the UI after restart, but must never become a new row.
             "sleep": {"state": "n3", "confirmed_state": "n3",
-                      "classification_active": True},
+                      "classification_active": True,
+                      "probabilities": {
+                          "wake": 0.02, "n1": 0.03, "n2": 0.15,
+                          "n3": 0.75, "rem": 0.05,
+                      }},
         }
         with pod_app.state_lock:
             original_session = copy.deepcopy(pod_app.state["session"])
@@ -555,6 +559,10 @@ class RbacApiTests(unittest.TestCase):
         with pod_app.analysis_frame_lock:
             original_frame = pod_app._analysis_frame
             pod_app._analysis_frame = None
+        with pod_app.sleep_path_lock:
+            original_path = copy.deepcopy(pod_app._sleep_stage_path)
+            pod_app._reset_sleep_stage_path(session_id)
+            pod_app._apply_stage_to_path("n3")
         original_sleep_cache = copy.deepcopy(pod_app._sleep_cache)
         try:
             with pod_app.state_lock:
@@ -580,8 +588,15 @@ class RbacApiTests(unittest.TestCase):
             self.assertTrue(restored["sensor_frame"]["restored_after_restart"])
             self.assertEqual(restored["sensor"]["bcg"]["heart_rate_bpm"], 61.0)
             self.assertFalse(restored["sensor"]["bcg"]["analysis_valid"])
-            self.assertFalse(restored["sleep"]["classification_active"])
-            self.assertIsNone(restored["sleep"]["confirmed_state"])
+            self.assertTrue(restored["sleep"]["classification_active"])
+            self.assertEqual(restored["sleep"]["confirmed_state"], "n3")
+            self.assertEqual(
+                restored["sleep"]["data_status"], "restored_confirmed_state"
+            )
+            self.assertTrue(restored["sleep"]["held_previous_state"])
+            self.assertTrue(restored["sleep"]["display_only_after_restart"])
+            # UI continuity must not fabricate a current physiological sample.
+            self.assertIsNone(pod_app.take_session_sample()["sleep"])
         finally:
             pod_app.LAST_SENSOR_FRAME_PATH.unlink(missing_ok=True)
             with pod_app.state_lock:
@@ -590,6 +605,9 @@ class RbacApiTests(unittest.TestCase):
                 pod_app._active_session = original_active
             with pod_app.analysis_frame_lock:
                 pod_app._analysis_frame = original_frame
+            with pod_app.sleep_path_lock:
+                pod_app._sleep_stage_path.clear()
+                pod_app._sleep_stage_path.update(original_path)
             pod_app._sleep_cache.clear()
             pod_app._sleep_cache.update(original_sleep_cache)
 

@@ -95,6 +95,12 @@ class SleepClassificationGateTests(unittest.TestCase):
 
     def test_confirmed_empty_bed_is_not_wake_or_sleep(self):
         self.set_session(active=True, recording=True)
+        hold = zeep._install_restart_sleep_hold(
+            {"state": "n3", "confirmed_state": "n3",
+             "classification_active": True},
+            session_id="gate-test", source_epoch_s=time.time(),
+        )
+        self.assertIsNotNone(hold)
         self.add_frame(
             hr=61.0, rr=14.0, status=1, confirmed_status=1,
             exit_confirmed=True,
@@ -102,6 +108,55 @@ class SleepClassificationGateTests(unittest.TestCase):
         result = zeep.estimate_sleep_state()
         self.assert_inactive(result, "off_bed")
         self.assertEqual(result["data_status"], "empty_bed")
+        self.assertIsNone(zeep._restart_sleep_hold_result("gate-test"))
+
+    def test_restart_reuses_last_confirmed_stage_while_vitals_reconnect(self):
+        self.set_session(active=True, recording=True)
+        hold = zeep._install_restart_sleep_hold(
+            {"state": "n3", "confirmed_state": "n3",
+             "classification_active": True,
+             "probabilities": {"wake": 0.0, "n1": 0.0, "n2": 0.1,
+                               "n3": 0.9, "rem": 0.0}},
+            session_id="gate-test", source_epoch_s=time.time(),
+        )
+        self.assertIsNotNone(hold)
+        self.add_frame(hr=None, rr=None, bcg_valid=False)
+
+        result = zeep.estimate_sleep_state()
+
+        self.assertEqual(result["state"], "n3")
+        self.assertEqual(result["confirmed_state"], "n3")
+        self.assertTrue(result["classification_active"])
+        self.assertFalse(result["evidence_active"])
+        self.assertTrue(result["held_previous_state"])
+        self.assertTrue(result["display_only_after_restart"])
+        self.assertEqual(result["data_status"], "restored_confirmed_state")
+        self.assertEqual(
+            result["current_data_status"], "invalid_or_missing_current_vitals"
+        )
+
+    def test_first_session_without_confirmed_stage_still_waits(self):
+        self.set_session(active=True, recording=True)
+        with zeep.sleep_path_lock:
+            zeep._reset_sleep_stage_path("gate-test")
+        self.add_frame(hr=None, rr=None, bcg_valid=False)
+
+        result = zeep.estimate_sleep_state()
+
+        self.assert_inactive(result, "no_data")
+        self.assertEqual(result["data_status"], "invalid_or_missing_current_vitals")
+
+    def test_fresh_confirmed_epoch_releases_restart_display_hold(self):
+        self.set_session(active=True, recording=True)
+        self.assertIsNotNone(zeep._install_restart_sleep_hold(
+            {"state": "n3", "confirmed_state": "n3",
+             "classification_active": True},
+            session_id="gate-test", source_epoch_s=time.time(),
+        ))
+
+        zeep._commit_sleep_stage("n3", {"n3": 1.0}, "fresh evidence")
+
+        self.assertIsNone(zeep._restart_sleep_hold_result("gate-test"))
 
     def test_startup_vital_drop_is_held_at_wake_not_n1(self):
         self.set_session(active=True, recording=True)

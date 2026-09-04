@@ -13,18 +13,18 @@ from typing import Any
 
 
 # Every persisted decision/report carries these versions for provenance.
-SLEEP_PIPELINE_CONTRACT_VERSION = "zeep-sleep-health-pipeline-v1.8-gap-safe-continuity"
+SLEEP_PIPELINE_CONTRACT_VERSION = "zeep-sleep-health-pipeline-v1.9-restart-continuity"
 SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.24-gap-safe-continuity"
 SLEEP_EVIDENCE_VERSION = "zeep-sleep-state-evidence-v3.2-respiratory-onset"
 ZEEP_SLEEP_BASELINE_VERSION = "zeep-sleep-state-baseline-v1.8-sep1-cutover"
-ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.14-gap-safe-continuity"
+ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.15-restart-continuity"
 SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
 SLEEP_HISTORY_BACKFILL_VERSION = "zeep-sleep-history-reclass-v18-sep1-derived"
 SESSION_REPORT_VERSION = "zeep-session-report-v10.0-wellness-longevity"
 SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.0-wellness-longevity"
 ENVIRONMENT_CONTEXT_POLICY_VERSION = "zeep-environment-context-v2.0-mode-aware-fair-floor"
 TERMINAL_WAKE_POLICY_VERSION = "zeep-terminal-wake-boundary-v1.0"
-SLEEP_CLASSIFICATION_GAP_VERSION = "zeep-sleep-classification-gap-v1.1-context-preserving"
+SLEEP_CLASSIFICATION_GAP_VERSION = "zeep-sleep-classification-gap-v1.2-restart-aware"
 
 
 ZEEP_SLEEP_STATES = ("wake", "n1", "n2", "n3", "rem")
@@ -252,6 +252,9 @@ SLEEP_SCORE_SOFTMAX_TEMPERATURE = 4.0
 # between valid classification windows. It no longer resets the confirmed
 # Sleep State/onset for the same active Session; only pending evidence is reset.
 SLEEP_CONTEXT_RESET_GAP_SECONDS = 60.0
+# Display-only grace period after the same active Session is restored.  No held
+# label is persisted or counted, and confirmed Bed Exit overrides it at once.
+SLEEP_RESTART_STATE_HOLD_SECONDS_DEFAULT = 180.0
 SLEEP_MIN_PAIRED_VITAL_COVERAGE = 0.80
 SLEEP_BUCKET_MIN_BCG_PACKETS = 8
 SLEEP_MIN_WAVEFORM_COVERAGE = 0.80
@@ -767,6 +770,11 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "detect_signal_gap_seconds": SLEEP_CONTEXT_RESET_GAP_SECONDS,
             "preserve_confirmed_context_after_signal_gap": True,
             "signal_gap_display": "WAIT/no_data",
+            "restart_same_session_display": "last_confirmed_display_only",
+            "restart_display_hold_max_seconds": (
+                SLEEP_RESTART_STATE_HOLD_SECONDS_DEFAULT
+            ),
+            "restart_display_persisted_as_stage": False,
             "full_context_reset_triggers": [
                 "session_owner_change",
                 "session_end",

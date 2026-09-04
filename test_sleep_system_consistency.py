@@ -178,6 +178,12 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertEqual(cadence["detect_signal_gap_seconds"], 60.0)
         self.assertTrue(cadence["preserve_confirmed_context_after_signal_gap"])
         self.assertEqual(cadence["signal_gap_display"], "WAIT/no_data")
+        self.assertEqual(
+            cadence["restart_same_session_display"],
+            "last_confirmed_display_only",
+        )
+        self.assertEqual(cadence["restart_display_hold_max_seconds"], 180.0)
+        self.assertFalse(cadence["restart_display_persisted_as_stage"])
 
     def test_sleep_stage_meanings_are_consistent_across_policy_and_ui(self):
         expected = {

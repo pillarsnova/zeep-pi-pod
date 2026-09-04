@@ -197,6 +197,7 @@ from sleep_system_policy import (
     SLEEP_N3_GATED_MIN_WINNER,
     SLEEP_PROBABILITY_EMA_ALPHA,
     SLEEP_PROBABILITY_SWITCH_MARGIN,
+    SLEEP_RESTART_STATE_HOLD_SECONDS_DEFAULT,
     SLEEP_ONSET_INITIAL_WAKE_SUPPORT,
     SLEEP_ONSET_MAX_HR_RISE_BPM_PER_MIN,
     SLEEP_ONSET_MAX_MOVEMENT_RATIO,
@@ -274,6 +275,14 @@ BCG_STALE_SECONDS = float(os.getenv("BCG_STALE_SECONDS", "60"))
 # immediately when the bed no longer represents a person so stale vitals are
 # never attributed to a new occupant.
 BCG_VITAL_HOLD_SECONDS = float(os.getenv("BCG_VITAL_HOLD_SECONDS", "15"))
+# A service/code restart is not physiological evidence.  Keep the last
+# confirmed label visible briefly while the serial readers rebuild a fresh
+# 30/60-second evidence window.  This bridge is display-only and can never be
+# persisted as a new Sleep State decision.
+RESTART_SLEEP_STATE_HOLD_SECONDS = max(60.0, float(os.getenv(
+    "RESTART_SLEEP_STATE_HOLD_SECONDS",
+    str(SLEEP_RESTART_STATE_HOLD_SECONDS_DEFAULT),
+)))
 SAFETY_REQUIRE_CO2 = os.getenv("SAFETY_REQUIRE_CO2", "1") == "1"
 SAFETY_CO2_WARN_PPM = float(os.getenv("SAFETY_CO2_WARN_PPM", "1000"))
 SAFETY_CO2_FAIR_MAX_PPM = float(os.getenv("SAFETY_CO2_FAIR_MAX_PPM", "1150"))
@@ -1737,6 +1746,7 @@ _sleep_stage_path = {
     "last_evidence_result": None, "awake_vital_pairs": [],
     "awake_hr_reference": None, "awake_rr_reference": None,
     "sleep_onset_at": None, "last_valid_frame_t": None,
+    "restart_hold_result": None, "restart_hold_until_epoch_s": None,
 }
 _analysis_frame: Optional[Dict[str, Any]] = None
 
@@ -2012,6 +2022,14 @@ def _restore_latest_sensor_frame() -> bool:
         "analysis_source_connected": False,
         "restored_after_restart": True,
     })
+    held_sleep = (
+        _install_restart_sleep_hold(
+            dict(frame.get("sleep") or {}),
+            session_id=current_session_id,
+            source_epoch_s=float(frame["epoch_s"]),
+        )
+        if same_session else None
+    )
     restored.update({
         "source": "restored_after_restart",
         "restored_source": frame.get("source") or "unknown",
@@ -2021,9 +2039,9 @@ def _restore_latest_sensor_frame() -> bool:
         "session_id": current_session_id,
         "environment": environment,
         "bcg": bcg,
-        # Sleep Stage is deliberately not restored as a current result. The
-        # estimator resumes only after a complete fresh evidence epoch.
-        "sleep": {
+        # Only a stage already confirmed in this same Session may bridge a
+        # planned restart. It remains display-only until fresh evidence resumes.
+        "sleep": held_sleep or {
             "state": "no_data", "confirmed_state": None,
             "version": SLEEP_ESTIMATOR_VERSION,
             "evidence_version": SLEEP_EVIDENCE_VERSION,
@@ -2036,7 +2054,8 @@ def _restore_latest_sensor_frame() -> bool:
     with analysis_frame_lock:
         _analysis_frame = restored
     _sleep_cache.update({
-        "t": 0.0, "value": None,
+        "t": time.monotonic(),
+        "value": json.loads(json.dumps(held_sleep)) if held_sleep else None,
         "session_id": current_session_id, "sequence": None,
     })
     log_event(
@@ -2044,6 +2063,8 @@ def _restore_latest_sensor_frame() -> bool:
         source=restored["restored_source"],
         data_age_s=round(max(0.0, time.time() - float(restored["epoch_s"])), 1),
         same_session=same_session,
+        sleep_state_held=bool(held_sleep),
+        held_state=held_sleep.get("state") if held_sleep else None,
     )
     return True
 
@@ -2057,7 +2078,91 @@ def _reset_sleep_stage_path(session_id: Optional[str]) -> None:
         "last_evidence_result": None, "awake_vital_pairs": [],
         "awake_hr_reference": None, "awake_rr_reference": None,
         "sleep_onset_at": None, "last_valid_frame_t": None,
+        "restart_hold_result": None, "restart_hold_until_epoch_s": None,
     })
+
+
+def _clear_restart_sleep_hold_locked() -> None:
+    """Clear restart-only display state; caller holds ``sleep_path_lock``."""
+    _sleep_stage_path["restart_hold_result"] = None
+    _sleep_stage_path["restart_hold_until_epoch_s"] = None
+    cached = _sleep_stage_path.get("last_evidence_result")
+    if isinstance(cached, dict) and cached.get("display_only_after_restart"):
+        _sleep_stage_path["last_evidence_result"] = None
+
+
+def _install_restart_sleep_hold(
+    source_sleep: Dict[str, Any],
+    *,
+    session_id: Optional[str],
+    source_epoch_s: float,
+) -> Optional[Dict[str, Any]]:
+    """Restore a verified pre-restart label for display, never persistence.
+
+    The saved browser frame alone is not trusted. Its label must agree with
+    the latest durable ``sleep_stage`` event already restored into this same
+    Session. A first-ever Session therefore still starts at WAIT.
+    """
+    source_stage = source_sleep.get("confirmed_state") or source_sleep.get("state")
+    with sleep_path_lock:
+        durable_stage = _sleep_stage_path.get("last")
+        if not (
+            session_id
+            and _sleep_stage_path.get("session_id") == session_id
+            and source_sleep.get("classification_active") is True
+            and source_stage in ZEEP_SLEEP_STATES
+            and source_stage == durable_stage
+        ):
+            _clear_restart_sleep_hold_locked()
+            return None
+        held = json.loads(json.dumps(source_sleep))
+        held.update({
+            "state": durable_stage,
+            "confirmed_state": durable_stage,
+            "classification_active": True,
+            "evidence_active": False,
+            "confidence": "low",
+            "provisional": True,
+            "data_status": "restored_confirmed_state",
+            "reason": (
+                "ยึดสถานะยืนยันล่าสุดก่อน Restart · "
+                "กำลังสร้างหลักฐานสดรอบใหม่"
+            ),
+            "held_previous_state": True,
+            "display_only_after_restart": True,
+            "restored_after_restart": True,
+            "restored_source_epoch_s": source_epoch_s,
+            "restart_hold_max_s": RESTART_SLEEP_STATE_HOLD_SECONDS,
+        })
+        _sleep_stage_path["restart_hold_result"] = json.loads(json.dumps(held))
+        _sleep_stage_path["restart_hold_until_epoch_s"] = (
+            time.time() + RESTART_SLEEP_STATE_HOLD_SECONDS
+        )
+        _sleep_stage_path["last_evidence_result"] = json.loads(json.dumps(held))
+        return held
+
+
+def _restart_sleep_hold_result(session_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Return the unexpired display-only restart bridge for this Session."""
+    with sleep_path_lock:
+        held = _sleep_stage_path.get("restart_hold_result")
+        expires = _sleep_stage_path.get("restart_hold_until_epoch_s")
+        valid = bool(
+            session_id
+            and _sleep_stage_path.get("session_id") == session_id
+            and isinstance(held, dict)
+            and held.get("state") == _sleep_stage_path.get("last")
+            and isinstance(expires, (int, float))
+            and time.time() <= float(expires)
+        )
+        if not valid:
+            _clear_restart_sleep_hold_locked()
+            return None
+        value = json.loads(json.dumps(held))
+        value["restart_hold_remaining_s"] = max(
+            0, round(float(expires) - time.time())
+        )
+        return value
 
 
 def _median(values: List[float]) -> Optional[float]:
@@ -2301,6 +2406,9 @@ def _commit_sleep_stage(stage: str, probabilities: Dict[str, float], reason: str
             _reset_sleep_stage_path(session_id)
         changed = _sleep_stage_path["last"] != stage
         _apply_stage_to_path(stage)
+        # A completed live evidence epoch now owns the display again.  The
+        # pre-restart bridge must disappear before this decision is persisted.
+        _clear_restart_sleep_hold_locked()
         seen = list(_sleep_stage_path["seen"])
     # Persist one confirmed-state record per 30-second evidence epoch, even
     # when the label is unchanged. Evidence itself has its own event stream.
@@ -3252,6 +3360,24 @@ def estimate_sleep_state() -> Dict[str, Any]:
         shown as the current result, assigned 100%, or written to the Session
         Sleep State event stream while occupancy/vital evidence is unavailable.
         """
+        restart_hold = (
+            _restart_sleep_hold_result(active_session_id)
+            if session_active
+            and session_recording
+            and data_status in {
+                "no_frame", "stale", "missing_bed_status",
+                "invalid_or_missing_current_vitals",
+                "invalid_or_missing_vitals",
+            }
+            else None
+        )
+        if restart_hold is not None:
+            # The old label is a UI continuity bridge, not present evidence.
+            # Keep the reason for the fresh-data pause available to Admin.
+            result.update(restart_hold)
+            result["current_data_status"] = data_status
+            result["current_data_reason"] = reason
+            return result
         result.update({
             "state": display_state,
             "probabilities": {
@@ -3303,6 +3429,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
             if _sleep_stage_path["session_id"] != active_session_id:
                 _reset_sleep_stage_path(active_session_id)
             _apply_stage_to_path("wake", now=now)
+            _clear_restart_sleep_hold_locked()
             _sleep_stage_path["probability_ema"] = None
         result["bed_exit_evidence"] = latest_exit
         return suspend_classification(
@@ -5213,6 +5340,7 @@ def _sleep_value_between_evidence_epochs(
         and (feature.get("bed_exit_evidence") or {}).get("confirmed")
     )
     current_vitals_valid = bool(feature.get("bcg_valid"))
+    restart_hold = _restart_sleep_hold_result(session_id)
     cached = _last_sleep_evidence_result()
 
     reason = None
@@ -5233,10 +5361,23 @@ def _sleep_value_between_evidence_epochs(
         reason = "รอบ Sensor ปัจจุบันไม่มี HR/RR สด · ยกเลิก Evidence ที่กำลังรอยืนยัน"
         data_status = "invalid_or_missing_current_vitals"
 
-    if reason is not None:
+    if (
+        reason is not None
+        and restart_hold is not None
+        and data_status in {"invalid_or_missing_current_vitals"}
+    ):
+        # Serial readers can need more than one 10-second bucket to reconnect
+        # after a code update. Keep the last durable stage on screen, but mark
+        # it as display-only and do not turn it into a Timeline sample.
+        value = restart_hold
+        value["current_data_status"] = data_status
+        value["current_data_reason"] = reason
+    elif reason is not None:
         with sleep_path_lock:
             _sleep_stage_path["candidate"] = None
             _sleep_stage_path["candidate_ticks"] = 0
+            if data_status in {"no_session", "waiting_for_vitals", "empty_bed"}:
+                _clear_restart_sleep_hold_locked()
             # A previously valid state must not reappear on a later 10-second
             # frame until a complete new 30-second evidence epoch is produced.
             _sleep_stage_path["last_evidence_result"] = None
@@ -5256,7 +5397,10 @@ def _sleep_value_between_evidence_epochs(
     elif cached is not None:
         value = cached
         value["data_status"] = (
-            "live" if value.get("classification_active") else "confirming_state"
+            "restored_confirmed_state"
+            if value.get("display_only_after_restart")
+            else "live" if value.get("classification_active")
+            else "confirming_state"
         )
         value["evidence_held_between_epochs"] = True
     else:
@@ -5362,6 +5506,10 @@ def take_session_sample() -> Dict[str, Any]:
     e = snap["sensor"].get("environment") or {}
     b = snap["sensor"]["bcg"] or {}
     sleep = snap.get("sleep") or {}
+    sleep_recordable = bool(
+        sleep.get("classification_active")
+        and not sleep.get("display_only_after_restart")
+    )
     sleep_metrics = sleep.get("metrics") or {}
     auxiliary = sleep_metrics.get("auxiliary_evidence") or {}
     acoustic = auxiliary.get("acoustic") or {}
@@ -5392,10 +5540,10 @@ def take_session_sample() -> Dict[str, Any]:
         "bed": b.get("status_text") if b_ok else None,
         # Operational statuses such as no_data/off_bed are not Sleep Stages and
         # must not enter stage counts, architecture percentages or baselines.
-        "sleep": sleep.get("state") if sleep.get("classification_active") else None,
+        "sleep": sleep.get("state") if sleep_recordable else None,
         "sleep_confirmed_state": (
             sleep.get("confirmed_state")
-            if sleep.get("classification_active") else None
+            if sleep_recordable else None
         ),
         "sleep_evidence_candidate": (sleep.get("evidence") or {}).get("candidate"),
         "sleep_confirmation": sleep.get("confirmation") or {},

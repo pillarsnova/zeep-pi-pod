@@ -2096,6 +2096,7 @@ const SLEEP_TH = {
 function renderSleepState(sl={},session={},bcg={}){
   const box = document.getElementById('sleepState');
   const classificationActive=sl.classification_active===true;
+  const restartHold=sl.display_only_after_restart===true&&sl.held_previous_state===true;
   const sessionActive=!!session.active,recording=!!session.recording;
   const offBed=sl.data_status==='empty_bed'||sl.data_status==='no_session'
     ||(!sessionActive)||(Number(bcg.status_code)===1&&bcg.bed_exit_evidence?.confirmed);
@@ -2115,7 +2116,9 @@ function renderSleepState(sl={},session={},bcg={}){
   const confirmProgress=`${confirmation.candidate_epochs||0}/${confirmation.required_epochs||2} epoch`;
   const confirmationSeconds=(confirmation.required_epochs||2)*30;
   const classificationNote=classificationActive
-    ? `${source}${provisional} · ยืนยัน ${meta.code} แล้ว · หลักฐานล่าสุด ${(evidenceCandidate||'--').toUpperCase()} · มั่นใจ ${confidenceTh[sl.confidence] || 'ต่ำ'}`
+    ? restartHold
+      ? `สถานะยืนยันก่อน Restart · รอหลักฐานสดรอบใหม่ · ไม่บันทึกซ้ำ`
+      : `${source}${provisional} · ยืนยัน ${meta.code} แล้ว · หลักฐานล่าสุด ${(evidenceCandidate||'--').toUpperCase()} · มั่นใจ ${confidenceTh[sl.confidence] || 'ต่ำ'}`
     : sl.evidence_active
       ? `หลักฐาน ${(evidenceCandidate||'--').toUpperCase()} · กำลังยืนยัน ${confirmProgress}`
       : 'ยังไม่จัดประเภทการนอน';
@@ -2672,10 +2675,14 @@ function renderSimpleDashboard(state={},environment={},bcg={},session={}){
   document.getElementById('dashBed').textContent=bedShort;
   document.getElementById('dashBedNote').textContent=BCG_STATUS_TH[bcg.status_code]||bcg.status_text||'รอสัญญาณจากเตียง';
   const sleep=state.sleep||{};
+  const restartSleepHold=sleep.display_only_after_restart===true
+    &&sleep.held_previous_state===true&&sleep.classification_active===true;
   const vitalPairValid=bcg.heart_rate_bpm!=null&&bcg.respiration_rate!=null
     &&Number.isFinite(Number(bcg.heart_rate_bpm))&&Number.isFinite(Number(bcg.respiration_rate));
-  const classificationActive=active&&recording&&personOnBed&&vitalPairValid&&sleep.classification_active===true;
-  const sleepStateKey=!active||!personOnBed?'off_bed':classificationActive?sleep.state:'no_data';
+  const sleepOccupancyValid=personOnBed||restartSleepHold;
+  const classificationActive=active&&recording&&sleepOccupancyValid
+    &&(vitalPairValid||restartSleepHold)&&sleep.classification_active===true;
+  const sleepStateKey=!active||!sleepOccupancyValid?'off_bed':classificationActive?sleep.state:'no_data';
   const sleepMeta=SLEEP_TH[sleepStateKey]||SLEEP_TH.no_data;
   document.getElementById('dashSleep').textContent=sleepMeta.label;
   document.getElementById('dashSleep').title=sleepMeta.meaning||sleepMeta.title||'';
@@ -2684,7 +2691,9 @@ function renderSimpleDashboard(state={},environment={},bcg={},session={}){
   const evidenceCandidate=sleep.evidence?.candidate||sleep.probability_winner||sleep.raw_candidate;
   const confirmation=sleep.confirmation||{};
   document.getElementById('dashSleepNote').textContent=classificationActive
-    ? `${sleepMeta.code} ยืนยันแล้ว · หลักฐาน ${(evidenceCandidate||'--').toUpperCase()} · ${sleepSource} · มั่นใจ ${confidence}`
+    ? restartSleepHold
+      ? `${sleepMeta.code} ก่อน Restart · กำลังรับหลักฐานสด · ไม่บันทึกซ้ำ`
+      : `${sleepMeta.code} ยืนยันแล้ว · หลักฐาน ${(evidenceCandidate||'--').toUpperCase()} · ${sleepSource} · มั่นใจ ${confidence}`
     : sleep.evidence_active
       ? `หลักฐาน ${(evidenceCandidate||'--').toUpperCase()} · กำลังยืนยัน ${confirmation.candidate_epochs||0}/${confirmation.required_epochs||2} epoch`
       : `${sleepMeta.code} · ${sleep.reason||vitalFallbackNote} · ยังไม่จัดประเภทการนอน`;

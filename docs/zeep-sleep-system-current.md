@@ -9,7 +9,7 @@
 
 ## TL;DR
 
-- ระบบเก็บ Sensor ทุก 10 วินาที สรุป `sleep_stage_evidence` ทุก 30 วินาที และเปลี่ยน `sleep_stage` ที่ยืนยันแล้วเมื่อหลักฐานต่อเนื่อง 2 epoch/60 วินาที (N2 ใช้ 4 epoch/120 วินาที) **เฉพาะ** เมื่อมี Active Recording Session, ยืนยันผู้ใช้อยู่บนเตียง และรอบปัจจุบันมี HR+RR สดที่ผ่าน sanity; หากขาดข้อใดข้อหนึ่งจะแสดง `WAIT/OFF` โดย probability ทั้ง 5 เป็นศูนย์และไม่เขียน Sleep Stage ลง Timeline
+- ระบบเก็บ Sensor ทุก 10 วินาที สรุป `sleep_stage_evidence` ทุก 30 วินาที และเปลี่ยน `sleep_stage` ที่ยืนยันแล้วเมื่อหลักฐานต่อเนื่อง 2 epoch/60 วินาที (N2 ใช้ 4 epoch/120 วินาที) **เฉพาะ** เมื่อมี Active Recording Session, ยืนยันผู้ใช้อยู่บนเตียง และรอบปัจจุบันมี HR+RR สดที่ผ่าน sanity; หากขาดข้อใดข้อหนึ่งจะแสดง `WAIT/OFF` โดย probability ทั้ง 5 เป็นศูนย์และไม่เขียน Sleep Stage ลง Timeline ยกเว้นการกู้ **Session เดิมหลัง service/code restart** ซึ่งแสดง State ที่ยืนยันล่าสุดแบบ display-only ชั่วคราว ไม่สร้าง Epoch/Timeline/Score ซ้ำ และ Bed Exit ยกเลิกค่าค้างทันที
 - Sleep-onset Guard คง W อย่างน้อย 5 นาทีแรก; หลังจากนั้น N1 ต้องมีเตียงนิ่ง ไม่มี vital rise และ HR/RR แสดงการลดลงหรือ plateau ที่ต่ำกว่าช่วงตั้งต้นอย่างสอดคล้องกัน เวลาเพียงอย่างเดียวสร้าง N1 ไม่ได้
 - หลักฐานทั้ง 5 State ถูกปรับให้อยู่บนงบ 0..1 เท่ากัน; หากผู้ชนะ <45% หรือห่างอันดับสอง <8% ระบบจะ abstain และไม่สร้าง transition ใหม่; N3 ใช้เกณฑ์เดียวกันหลังผ่าน waveform/movement/CV/regularity/relative-drop gate
 - พฤติกรรมย้อนหลังเรียนรู้แยกตามบัญชีและ Rest Mode จากอย่างน้อย 3 Session ก่อนหน้า เช่น latency, ช่วงเวลา, ระยะเวลา และสิ่งแวดล้อมที่มักพบ; ใช้เป็น expectation/report/recommendation context เท่านั้น (`direct_stage_influence=false`) และใช้ข้อมูลอดีตแบบ forward-only ตั้งแต่ 1 ก.ย. 2569
@@ -29,18 +29,18 @@
 
 | ชั้นระบบ | Version |
 |---|---|
-| Health pipeline contract | `zeep-sleep-health-pipeline-v1.8-gap-safe-continuity` |
+| Health pipeline contract | `zeep-sleep-health-pipeline-v1.9-restart-continuity` |
 | Live estimator candidate | `bcg-audio-bed-5state-v1.24-gap-safe-continuity` |
 | Evidence definition | `zeep-sleep-state-evidence-v3.2-respiratory-onset` |
 | Baseline | `zeep-sleep-state-baseline-v1.8-sep1-cutover` |
-| Semi-Markov transition | `zeep-semimarkov-30s-v1.14-gap-safe-continuity` |
+| Semi-Markov transition | `zeep-semimarkov-30s-v1.15-restart-continuity` |
 | G2 ontology | `g2-aasm-5class-v1.0` |
 | Historical replay | `zeep-sleep-history-reclass-v18-sep1-derived` |
 | Sleep / Recovery quality | `zeep-rest-quality-v8.0-wellness-longevity` |
 | Session report | `zeep-session-report-v10.0-wellness-longevity` |
 | Environment context | `zeep-environment-context-v2.0-mode-aware-fair-floor` |
 | Terminal Wake boundary | `zeep-terminal-wake-boundary-v1.0` |
-| Classification gap display | `zeep-sleep-classification-gap-v1.1-context-preserving` |
+| Classification gap display | `zeep-sleep-classification-gap-v1.2-restart-aware` |
 
 เวอร์ชันเหล่านี้ไม่ได้มีไว้แสดงอย่างเดียว: ทุก decision/final summary เก็บ version
 เพื่อให้รู้ว่าข้อมูลแต่ละคืนสร้างด้วยหลักการใด ข้อมูลเก่าจึงคง version เดิมตาม
@@ -166,7 +166,7 @@ accuracy ดู [AASM Scoring Manual](https://learn.aasm.org/AssetListing/The-AA
    `waiting_bed` และยังไม่มี row ใน `sessions.db`
 2. Bed Status ต้องเป็น `On bed / Moving / Weak breathing / Snoring`
    ต่อเนื่องครบ `BED_START_SECONDS=20`
-3. หลัง Login หรือ service restart ต้องได้ BCG packet ใหม่ที่มีทั้ง
+3. หลัง Login หรือ service restart ขณะที่ยังอยู่ phase `waiting_bed` ต้องได้ BCG packet ใหม่ที่มีทั้ง
    `HR 25–220 bpm` และ `RR 2–60 /min` ต่อเนื่อง
    `SESSION_VITAL_START_PACKETS=3`
 4. ค่า HR/RR ที่ UI hold ไว้ชั่วคราวจาก packet เก่าไม่นับผ่าน gate
@@ -178,13 +178,20 @@ accuracy ดู [AASM Scoring Manual](https://learn.aasm.org/AssetListing/The-AA
    Timeline เก็บ Sensor/coverage ตามจริง แต่ Sleep State เป็น `null`, หน้าจอแสดง
    `WAIT · รอ HR/RR` และจะเริ่มประเมินใหม่เมื่อหลักฐานปัจจุบันครบ รายงานย้อนหลัง
    ต้องสร้างช่วง `classification_gap` มาคั่นตามเวลาจริง ห้ามเว้นช่องจนดูเหมือนข้อมูลหาย
-   ระหว่าง WAIT ระบบไม่แสดง State เดิมเป็นผลปัจจุบัน แต่เก็บ confirmed State,
+   ระหว่าง WAIT จากการขาดสัญญาณทั่วไป ระบบไม่แสดง State เดิมเป็นผลปัจจุบัน แต่เก็บ confirmed State,
    Sleep onset, ลำดับวงจร และ Awake reference ไว้ภายใน Session เดิม เมื่อสัญญาณกลับมา
    จะประเมินต่อจากบริบทเดิมและล้างเฉพาะ candidate/EMA ที่ยืนยันไม่ครบ ห้ามตีความ
    ช่องว่างข้อมูลเป็น Wake หรือบังคับเริ่มวงจร W ใหม่
-8. เมื่อยืนยันว่าไม่มีผู้ใช้งานบนเตียง หน้าจอแสดง `OFF` ซึ่งเป็นสถานะการครอบครอง
+8. ข้อยกเว้นเฉพาะ **Session เดิมที่ระบบกู้หลัง service/code restart**: ถ้า State
+   ใน frame ก่อนปิดตรงกับ `sleep_stage` ล่าสุดที่บันทึกถาวร ระบบแสดง State เดิม
+   ชั่วคราวไม่เกิน 180 วินาที พร้อม `data_status=restored_confirmed_state` และ
+   `display_only_after_restart=true`; ค่านี้ไม่สร้าง Timeline sample, Evidence,
+   Stage%, Baseline หรือ Score ซ้ำ เมื่อได้ Evidence สดที่ยืนยันแล้วระบบยกเลิก hold
+   ทันที หากไม่มี State เดิมที่ยืนยัน ครั้งแรกยังแสดง `WAIT · กำลังยืนยันสถานะ`
+   ตามปกติ และ confirmed Bed Exit มีสิทธิ์แสดง `OFF`/ล้าง hold ทันที
+9. เมื่อยืนยันว่าไม่มีผู้ใช้งานบนเตียง หน้าจอแสดง `OFF` ซึ่งเป็นสถานะการครอบครอง
    ไม่ใช่ `Wake`; ระบบล้าง rolling physiology เมื่อจบ/เปลี่ยนเจ้าของ Session
-9. เมื่อ completed Session มี Bed Exit ที่ผ่าน debounce และไม่มี HR+RR ที่ valid
+10. เมื่อ completed Session มี Bed Exit ที่ผ่าน debounce และไม่มี HR+RR ที่ valid
    กลับมา รายงานจะปิดลำดับเป็น `W · ตื่น → ไม่มีผู้ใช้งานบนเตียง → ออกจาก ZEEP → จบ Session`
    โดยเริ่มช่วงแรกจาก bucket แรกที่ HR/RR หายก่อน Exit; Missing HR/RR เพียงอย่างเดียว
    ยังไม่เพียงพอ เพราะอาจเป็น Sensor fault

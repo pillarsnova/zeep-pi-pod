@@ -8038,6 +8038,12 @@ def _admin_finish_occupant_session(
         "action": action,
         "session_id": record["session_id"],
         "username": record["username"],
+        "account_key": record["username_key"],
+        "email": (
+            record["username_key"]
+            if "@" in str(record.get("username_key") or "")
+            else None
+        ),
         "duration_s": record["duration_s"],
         "samples": len(record["samples"]),
         "recording_started": record.get("recording_started", True),
@@ -8230,6 +8236,10 @@ def history_list(
         sessions.append({
             "session_id": record["session_id"], "username": record["user"],
             "display_name": history_profile.get("display_name") or record["user"],
+            "email": history_profile.get("email")
+            or history_profile.get("zeep_email")
+            or (key if "@" in key else None),
+            "account_key": key,
             "gender": record["gender"], "started_at_utc": record["start_time"],
             "ended_at_utc": record["end_time"], "duration_s": record["duration"],
             "end_reason": record["end_reason"], "sample_count": agg["n"],
@@ -8255,6 +8265,9 @@ def history_list(
     return {
         "username": username,
         "account_key": key,
+        "email": history_profile.get("email")
+        or history_profile.get("zeep_email")
+        or (key if "@" in key else None),
         "display_name": history_profile.get("display_name") or username,
         "health_reference": _health_reference_from_profile(history_profile),
         "sessions": sessions,
@@ -8569,6 +8582,9 @@ def history_detail(
         "session_id": row["session_id"], "username": row["user"],
         "display_name": profile.get("display_name") or row["user"],
         "account_key": row["username_key"],
+        "email": profile.get("email")
+        or profile.get("zeep_email")
+        or (row["username_key"] if "@" in row["username_key"] else None),
         # Legacy response alias retained for existing Admin tools.
         "username_key": row["username_key"], "gender": row["gender"],
         "age": profile.get("age"), "age_group": profile.get("age_group"),

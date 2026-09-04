@@ -1456,6 +1456,7 @@ class RbacApiTests(unittest.TestCase):
             self.assertEqual(history.status_code, 200, history.text)
             self.assertEqual(history.json()["total"], 0)
             self.assertEqual(history.json()["account_key"], "rename.user@example.test")
+            self.assertEqual(history.json()["email"], "rename.user@example.test")
             # A legacy page already open before the upgrade may still request
             # the old username. It resolves only through this same Profile's
             # recorded alias and returns the canonical email-keyed history.

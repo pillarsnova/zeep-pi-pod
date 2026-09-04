@@ -2214,8 +2214,8 @@ function renderAdminOccupantActions(session={}){
   const kickButton=document.getElementById('adminKickOccupantBtn');
   if(!title||!meta||!endButton||!kickButton)return;
   const active=!!session.active;
-  const username=session.display_name||session.username||'ผู้ใช้งาน';
-  title.textContent=active?username:'การใช้งาน ZEEP ปัจจุบัน';
+  const account=identityLabel(session);
+  title.textContent=active?account:'การใช้งาน ZEEP ปัจจุบัน';
   meta.textContent=active
     ? `${session.recording?'กำลังบันทึก':sessionStartGateText(session,current.system||{})} · ${Number(session.samples||0).toLocaleString('th-TH')} รอบ · ${session.session_id||'ไม่พบ Session ID'}`
     : 'ยังไม่มีผู้ใช้งานในตู้';
@@ -2234,7 +2234,7 @@ async function adminOccupantAction(action,btn){
     return;
   }
   const kick=action==='kick';
-  const shownName=sessionState.display_name||sessionState.username||'ผู้ใช้งานปัจจุบัน';
+  const shownName=identityLabel(sessionState,'ผู้ใช้งานปัจจุบัน');
   const confirmed=await confirmAction({
     title:kick?'เตะผู้ใช้งานออกจาก ZEEP':'จบและบันทึก Session',
     message:kick
@@ -2258,8 +2258,8 @@ async function adminOccupantAction(action,btn){
   renderAdminOccupantActions(sessionState);
   toast(
     kick
-      ? `เตะ ${result.username} ออกและบันทึก Session แล้ว`
-      : `จบและบันทึก Session ของ ${result.username} แล้ว`,
+      ? `เตะ ${identityLabel(result)} ออกและบันทึก Session แล้ว`
+      : `จบและบันทึก Session ของ ${identityLabel(result)} แล้ว`,
     'ok',3600,
   );
 }
@@ -2934,9 +2934,9 @@ function renderSimpleDashboard(state={},environment={},bcg={},session={}){
   const active=!!session.active,recording=!!session.recording;
   renderHealthReference(session);
   const avatar=document.getElementById('dashAvatar');
-  const username=active?(session.display_name||session.username):'ยังไม่เริ่ม Session';
-  avatar.textContent=active?String(username||'Z').trim().slice(0,1).toUpperCase():'Z';
-  document.getElementById('dashUserName').textContent=username;
+  const account=active?identityLabel(session):'ยังไม่เริ่ม Session';
+  avatar.textContent=active?String(account||'Z').trim().slice(0,1).toUpperCase():'Z';
+  document.getElementById('dashUserName').textContent=account;
   document.getElementById('dashUserMeta').textContent=active
     ? `${genderTh(session.gender)} · ${displayAge(session)} · ${recording?`บันทึกแล้ว ${session.samples||0} จุด`:sessionStartGateText(session,state.system||{})}`
     : 'เลือกผู้ใช้งานเพื่อเริ่มติดตามสุขภาพและสภาพแวดล้อม';
@@ -5062,6 +5062,13 @@ setInterval(()=>{
 function historyUserKey(user){
   return String(user?.account_key||user?.email||user?.username||'').trim().toLowerCase();
 }
+function identityLabel(user,fallback='ผู้ใช้งาน'){
+  const email=String(user?.email||'').trim();
+  const accountKey=String(user?.account_key||user?.username_key||'').trim();
+  if(email)return email;
+  if(accountKey.includes('@'))return accountKey;
+  return String(user?.username||user?.display_name||fallback).trim()||fallback;
+}
 function historyUserActivityMs(user){
   const timestamp=user?.history_order_utc||user?.last_session_utc||user?.created_at_utc;
   const parsed=timestamp?Date.parse(timestamp):0;
@@ -5079,8 +5086,8 @@ function sortHistoryUsersNewestFirst(users){
     if(aActive!==bActive)return aActive?-1:1;
     const activityDiff=historyUserActivityMs(b)-historyUserActivityMs(a);
     if(activityDiff)return activityDiff;
-    return String(a?.display_name||a?.username||a?.email||'').localeCompare(
-      String(b?.display_name||b?.username||b?.email||''),'th'
+    return identityLabel(a,'').localeCompare(
+      identityLabel(b,''),'th'
     );
   });
 }
@@ -5089,7 +5096,7 @@ async function loadUsers(){
   if(currentPrincipal?.role==='user'){
     chips.innerHTML='';sel.innerHTML='';
     const ownerTitle=document.getElementById('historyOwnerTitle');
-    if(ownerTitle)ownerTitle.textContent=`ประวัติของ ${currentPrincipal.display_name||currentPrincipal.username}`;
+    if(ownerTitle)ownerTitle.textContent=`ประวัติของ ${identityLabel(currentPrincipal)}`;
     if(document.body.dataset.view==='sessions')refreshHistory();
     return;
   }
@@ -5101,7 +5108,7 @@ async function loadUsers(){
     const orderedUsers=sortHistoryUsersNewestFirst(d.users);
     orderedUsers.forEach(u=>{
       const c = document.createElement('button'); c.className = 'chip';
-      c.textContent = `${u.display_name||u.username} · ${u.email||genderTh(u.gender)}`;
+      c.textContent = `${identityLabel(u)} · ${genderTh(u.gender)}`;
       c.onclick = ()=>{
         document.querySelectorAll('.chip').forEach(x=>x.classList.remove('sel'));
         c.classList.add('sel');
@@ -5113,7 +5120,7 @@ async function loadUsers(){
       chips.appendChild(c);
       const o = document.createElement('option');
       o.value = u.account_key||u.email||u.username;
-      o.textContent = `${u.display_name||u.username||u.email} (${u.sessions || 0} sessions)`;
+      o.textContent = `${identityLabel(u)} (${u.sessions || 0} sessions)`;
       sel.appendChild(o);
     });
     if (!orderedUsers.length) chips.innerHTML = '<div class="mini" style="margin-top:2px">ยังไม่มีผู้ใช้ — พิมพ์ชื่อด้านล่างเพื่อสร้างใหม่</div>';
@@ -5303,7 +5310,7 @@ async function doZeepLogin(btn){
       return;
     }
     document.getElementById('loginPassword').value = '';
-    afterLoginStarted(d, `เข้าสู่ระบบ: ${(d.user && d.user.display_name) || d.session.username}`);
+    afterLoginStarted(d, `เข้าสู่ระบบ: ${identityLabel(d.user||d.session)}`);
   });
 }
 
@@ -5332,7 +5339,8 @@ function afterLoginStarted(r, message){
   offlineTicket=null;offlineIdentifier='';
   authPod={occupied:true,owns_active_session:true,session_id:r.session?.session_id};
   applyRoleUI(r.principal||{
-    role:'user',username:r.session?.username,display_name:r.session?.display_name||r.session?.username
+    role:'user',username:r.session?.username,email:r.session?.email,
+    account_key:r.session?.account_key,display_name:r.session?.display_name||r.session?.username
   });
   document.getElementById('login').classList.add('hide');
   history.replaceState({},'', '/dashboard');applyPageView();
@@ -5340,11 +5348,11 @@ function afterLoginStarted(r, message){
   toast(message,'ok',2600);
   loadUsers();
   const sel = document.getElementById('historyUser');
-  if (sel){ sel.value = r.session.username; refreshHistory(); }
+  if (sel){ sel.value = r.session.account_key||r.session.email||r.session.username; refreshHistory(); }
 }
 
 async function doLogout(btn){
-  if (!await confirmAction({title:'จบและบันทึก Session',message:`การกดจบถือเป็นการยืนยันว่า “ตื่นแล้ว” ระบบจะบันทึก W · ตื่นก่อนจบ Session ของ “${sessionState.username}”`,confirmText:'ตื่นแล้ว · จบ Session',tone:'warning',icon:'◷'})) return;
+  if (!await confirmAction({title:'จบและบันทึก Session',message:`การกดจบถือเป็นการยืนยันว่า “ตื่นแล้ว” ระบบจะบันทึก W · ตื่นก่อนจบ Session ของ “${identityLabel(sessionState)}”`,confirmText:'ตื่นแล้ว · จบ Session',tone:'warning',icon:'◷'})) return;
   // User logout is one complete flow: persist the sleep record first, then
   // revoke the browser account. Never leave the former user inside the app
   // after a completed Session on a shared ZEEP tablet.
@@ -5726,7 +5734,7 @@ function renderReport(rec){
   const sessionEnded=rec.ended_at_utc
     ? `<div class="sleep-period terminal-occupancy-period"><div>${new Date(rec.ended_at_utc).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}<div class="mini">เหตุการณ์สุดท้าย</div></div><div class="stage">END · จบ Session</div><div>${rec.end_reason==='logout'?'ผู้ใช้กดจบ':'ผู้ดูแล/ระบบบันทึกการจบ'}</div><div class="reason"><div class="sleep-period-note">${terminalOccupancy?'Session จบหลังลำดับ Wake → ออกจาก ZEEP':'Session จบหลังบันทึก Terminal Wake boundary'}</div></div></div>`:'';
   root.innerHTML = `
-    <div class="section-title" style="margin-top:18px">รายงาน Session · ${rec.display_name || rec.username || ''}</div>
+    <div class="section-title" style="margin-top:18px">รายงาน Session · ${identityLabel(rec,'')}</div>
     <div class="mini" style="margin-top:0">${healthReferenceInline(rec)}</div>
     <div class="mini" style="margin-top:3px">ข้อมูลอ้างอิงสุขภาพ · ${fmtDateTh(rec.started_at_utc)} → ${fmtDateTh(rec.ended_at_utc)} · Sensor บันทึก ${fmtDur(rec.duration_s)} · ไม่ใช่การวินิจฉัย</div>
     ${renderSleepQuality(rec.sleep_quality, rec.ended_at_utc)}
@@ -5880,9 +5888,9 @@ function render(s, source='ws'){
   const logoutBtn = document.getElementById('logoutBtn');
   if (se.active){
     userPill.className = `top-user ${se.recording?'live':'waiting'}`;
-    const shownName=se.display_name||se.username||'ผู้ใช้งาน';
-    topUserAvatar.textContent=String(shownName).trim().slice(0,1).toUpperCase();
-    topUserName.textContent=shownName;
+    const shownAccount=identityLabel(se);
+    topUserAvatar.textContent=String(shownAccount).trim().slice(0,1).toUpperCase();
+    topUserName.textContent=shownAccount;
     if (se.recording){
       topUserMeta.textContent=`${genderTh(se.gender)} · ${displayAge(se)} · บันทึกแล้ว ${se.samples??0} จุด`;
       topUserState.textContent='● กำลังบันทึก';
@@ -5914,7 +5922,7 @@ function render(s, source='ws'){
   }
   if (sessionChanged && se.active){
     const sel = document.getElementById('historyUser');
-    if (sel){ sel.value = se.username; refreshHistory(); }
+    if (sel){ sel.value = se.account_key||se.email||se.username; refreshHistory(); }
   }
 
   const espOk = !!e.connected;

@@ -3,7 +3,7 @@
 > **Purpose:** นิยาม input, baseline, transition policy, data quality และแผน PSG validation ของตัวประมาณสถานะการนอนใน Pod  
 > **Positioning:** Sleep Wellness · EEG-free exploratory telemetry · ไม่ใช่ผล PSG/การวินิจฉัย/ตัวสั่งอุปกรณ์  
 > **Status:** Wellness release candidate · deterministic replay and guarded derived-result promotion required · paired-PSG G2 validation open
-> **Version:** `zeep-sleep-state-baseline-v1.8-sep1-cutover` · **Estimator:** `bcg-audio-bed-5state-v1.23-wellness-longitudinal` · **Transition:** `zeep-semimarkov-30s-v1.13-no-bridge-labels` · **Updated:** 2026-09-05
+> **Version:** `zeep-sleep-state-baseline-v1.8-sep1-cutover` · **Estimator:** `bcg-audio-bed-5state-v1.24-gap-safe-continuity` · **Transition:** `zeep-semimarkov-30s-v1.14-gap-safe-continuity` · **Updated:** 2026-09-05
 > **Related:** [Current Sleep System](zeep-sleep-system-current.md) · [AI Sleep-State](ai-sleep-state-and-assistant.md) · [Evidence](sleep-wellness-evidence.md) · [Closed Loop](closed-loop-spec.md)
 
 ## TL;DR

@@ -382,7 +382,7 @@ HR/RR เป็นค่า directional จาก sensor (pre-G2) ไม่ใ�
 ## Sleep State (est.) — internal telemetry
 
 แถบในการ์ด BCG รับ Sensor frame ทุก 10 วินาที สร้าง evidence ทุก 30 วินาที
-จาก rolling 6 ชุด (60 วินาที; candidate `bcg-audio-bed-5state-v1.23-wellness-longitudinal`)
+จาก rolling 6 ชุด (60 วินาที; candidate `bcg-audio-bed-5state-v1.24-gap-safe-continuity`)
 และยืนยัน State เมื่อ candidate เดิมต่อเนื่องตาม target: W/N1/N3/REM ใช้
 2 epoch/60 วินาที ส่วน N2 ใช้ 4 epoch/120 วินาที; EMA เป็น continuity หลัก
 ของ W/N1/N2/REM ส่วน N3 ที่ชนะและผ่าน physiology gate ใช้หลักฐานปัจจุบันก่อน EMA

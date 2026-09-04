@@ -2081,7 +2081,7 @@ def _upper_quartile(values: List[float]) -> Optional[float]:
 def _update_sleep_session_context(
     frames: List[Dict[str, Any]], *, now: float, session_started: Optional[float],
 ) -> Dict[str, Any]:
-    """Maintain prior-only awake references and reset continuity after gaps.
+    """Maintain prior-only awake references across transient evidence gaps.
 
     Confirmed pre-onset frames form a within-Session settling reference; they
     are not ground-truth Wake labels.  The upper quartile is used because the
@@ -2090,6 +2090,13 @@ def _update_sleep_session_context(
     Historical behaviour may describe
     expected onset/time-of-day, but never overwrites these observed HR/RR
     references or directly selects a Sleep State.
+
+    A missing HR/RR window is an observation gap, not physiological evidence
+    that a sleeping occupant woke up.  On recovery we therefore discard only
+    an incomplete challenger and its EMA.  The last confirmed state, the
+    established sleep sequence, the original onset and the pre-onset awake
+    reference survive while the same Session remains active. Session-owner
+    changes and confirmed Bed Exit continue to use their dedicated paths.
     """
     valid = [
         frame for frame in frames
@@ -2101,20 +2108,19 @@ def _update_sleep_session_context(
     with sleep_path_lock:
         latest_t = float(valid[-1]["t"]) if valid else None
         previous_t = _sleep_stage_path.get("last_valid_frame_t")
-        gap_reset = bool(
+        gap_detected = bool(
             latest_t is not None
             and isinstance(previous_t, (int, float))
             and latest_t - float(previous_t) >= SLEEP_CONTEXT_RESET_GAP_SECONDS
         )
-        if gap_reset:
+        if gap_detected:
+            # Do not turn a telemetry/processing gap into Wake.  Clear only
+            # evidence that was still waiting for confirmation; continuity
+            # state is retained and will be challenged by fresh evidence.
             _sleep_stage_path["candidate"] = None
             _sleep_stage_path["candidate_ticks"] = 0
             _sleep_stage_path["probability_ema"] = None
             _sleep_stage_path["last_evidence_result"] = None
-            _sleep_stage_path["last"] = None
-            _sleep_stage_path["seen"] = []
-            _sleep_stage_path["cycle_has_n1"] = False
-            _sleep_stage_path["sleep_onset_at"] = None
         if latest_t is not None:
             _sleep_stage_path["last_valid_frame_t"] = latest_t
 
@@ -2148,7 +2154,13 @@ def _update_sleep_session_context(
                 max(0.0, (now - float(sleep_onset_at)) / 60.0)
                 if isinstance(sleep_onset_at, (int, float)) else 0.0
             ),
-            "gap_reset": gap_reset,
+            # ``gap_reset`` is retained for response compatibility.  It now
+            # truthfully reports that no full context reset was performed.
+            "gap_reset": False,
+            "gap_detected": gap_detected,
+            "context_preserved_after_gap": bool(
+                gap_detected and _sleep_stage_path.get("last") is not None
+            ),
         }
 
 

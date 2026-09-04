@@ -249,6 +249,60 @@ class SleepTransitionPolicyTests(unittest.TestCase):
             self.assertEqual(stage, "n2" if index == 4 else "n1")
 
 
+class SleepContextGapTests(unittest.TestCase):
+    """A transient observation gap must not manufacture a Wake cycle."""
+
+    def setUp(self):
+        with zeep.sleep_path_lock:
+            self.previous = copy.deepcopy(zeep._sleep_stage_path)
+            zeep._reset_sleep_stage_path("gap-continuity-test")
+
+    def tearDown(self):
+        with zeep.sleep_path_lock:
+            zeep._sleep_stage_path.clear()
+            zeep._sleep_stage_path.update(self.previous)
+
+    @staticmethod
+    def valid_frame(timestamp, hr=60.0, rr=15.0):
+        return {
+            "t": timestamp,
+            "bcg_valid": True,
+            "hr": hr,
+            "rr": rr,
+        }
+
+    def test_transient_gap_preserves_confirmed_sleep_and_onset(self):
+        with zeep.sleep_path_lock:
+            zeep._apply_stage_to_path("wake", now=0.0)
+            zeep._apply_stage_to_path("n1", now=30.0)
+            zeep._apply_stage_to_path("n2", now=150.0)
+            zeep._sleep_stage_path["sleep_onset_at"] = 30.0
+            zeep._sleep_stage_path["last_valid_frame_t"] = 180.0
+            zeep._sleep_stage_path["candidate"] = "rem"
+            zeep._sleep_stage_path["candidate_ticks"] = 1
+            zeep._sleep_stage_path["probability_ema"] = {"rem": 1.0}
+
+        context = zeep._update_sleep_session_context(
+            [self.valid_frame(300.0)], now=300.0, session_started=0.0,
+        )
+
+        self.assertTrue(context["gap_detected"])
+        self.assertFalse(context["gap_reset"])
+        self.assertTrue(context["context_preserved_after_gap"])
+        self.assertTrue(context["sleep_onset_established"])
+        with zeep.sleep_path_lock:
+            self.assertEqual(zeep._sleep_stage_path["last"], "n2")
+            self.assertTrue(zeep._sleep_stage_path["cycle_has_n1"])
+            self.assertEqual(zeep._sleep_stage_path["sleep_onset_at"], 30.0)
+            self.assertIsNone(zeep._sleep_stage_path["candidate"])
+            self.assertEqual(zeep._sleep_stage_path["candidate_ticks"], 0)
+            self.assertIsNone(zeep._sleep_stage_path["probability_ema"])
+
+    def test_new_session_still_requires_wake_first(self):
+        self.assertFalse(zeep._transition_allowed("n1")[0])
+        self.assertTrue(zeep._transition_allowed("wake")[0])
+
+
 class BaselineProximityTests(unittest.TestCase):
     def test_midpoint_breaks_overlapping_range_ties(self):
         center, detail = zeep._baseline_interval_proximity(60.0, (50.0, 70.0))

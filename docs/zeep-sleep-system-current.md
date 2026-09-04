@@ -29,18 +29,18 @@
 
 | ชั้นระบบ | Version |
 |---|---|
-| Health pipeline contract | `zeep-sleep-health-pipeline-v1.7-wellness-longitudinal` |
-| Live estimator candidate | `bcg-audio-bed-5state-v1.23-wellness-longitudinal` |
+| Health pipeline contract | `zeep-sleep-health-pipeline-v1.8-gap-safe-continuity` |
+| Live estimator candidate | `bcg-audio-bed-5state-v1.24-gap-safe-continuity` |
 | Evidence definition | `zeep-sleep-state-evidence-v3.2-respiratory-onset` |
 | Baseline | `zeep-sleep-state-baseline-v1.8-sep1-cutover` |
-| Semi-Markov transition | `zeep-semimarkov-30s-v1.13-no-bridge-labels` |
+| Semi-Markov transition | `zeep-semimarkov-30s-v1.14-gap-safe-continuity` |
 | G2 ontology | `g2-aasm-5class-v1.0` |
 | Historical replay | `zeep-sleep-history-reclass-v18-sep1-derived` |
 | Sleep / Recovery quality | `zeep-rest-quality-v8.0-wellness-longevity` |
 | Session report | `zeep-session-report-v10.0-wellness-longevity` |
 | Environment context | `zeep-environment-context-v2.0-mode-aware-fair-floor` |
 | Terminal Wake boundary | `zeep-terminal-wake-boundary-v1.0` |
-| Classification gap display | `zeep-sleep-classification-gap-v1.0` |
+| Classification gap display | `zeep-sleep-classification-gap-v1.1-context-preserving` |
 
 เวอร์ชันเหล่านี้ไม่ได้มีไว้แสดงอย่างเดียว: ทุก decision/final summary เก็บ version
 เพื่อให้รู้ว่าข้อมูลแต่ละคืนสร้างด้วยหลักการใด ข้อมูลเก่าจึงคง version เดิมตาม
@@ -178,6 +178,10 @@ accuracy ดู [AASM Scoring Manual](https://learn.aasm.org/AssetListing/The-AA
    Timeline เก็บ Sensor/coverage ตามจริง แต่ Sleep State เป็น `null`, หน้าจอแสดง
    `WAIT · รอ HR/RR` และจะเริ่มประเมินใหม่เมื่อหลักฐานปัจจุบันครบ รายงานย้อนหลัง
    ต้องสร้างช่วง `classification_gap` มาคั่นตามเวลาจริง ห้ามเว้นช่องจนดูเหมือนข้อมูลหาย
+   ระหว่าง WAIT ระบบไม่แสดง State เดิมเป็นผลปัจจุบัน แต่เก็บ confirmed State,
+   Sleep onset, ลำดับวงจร และ Awake reference ไว้ภายใน Session เดิม เมื่อสัญญาณกลับมา
+   จะประเมินต่อจากบริบทเดิมและล้างเฉพาะ candidate/EMA ที่ยืนยันไม่ครบ ห้ามตีความ
+   ช่องว่างข้อมูลเป็น Wake หรือบังคับเริ่มวงจร W ใหม่
 8. เมื่อยืนยันว่าไม่มีผู้ใช้งานบนเตียง หน้าจอแสดง `OFF` ซึ่งเป็นสถานะการครอบครอง
    ไม่ใช่ `Wake`; ระบบล้าง rolling physiology เมื่อจบ/เปลี่ยนเจ้าของ Session
 9. เมื่อ completed Session มี Bed Exit ที่ผ่าน debounce และไม่มี HR+RR ที่ valid

@@ -13,18 +13,18 @@ from typing import Any
 
 
 # Every persisted decision/report carries these versions for provenance.
-SLEEP_PIPELINE_CONTRACT_VERSION = "zeep-sleep-health-pipeline-v1.7-wellness-longitudinal"
-SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.23-wellness-longitudinal"
+SLEEP_PIPELINE_CONTRACT_VERSION = "zeep-sleep-health-pipeline-v1.8-gap-safe-continuity"
+SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.24-gap-safe-continuity"
 SLEEP_EVIDENCE_VERSION = "zeep-sleep-state-evidence-v3.2-respiratory-onset"
 ZEEP_SLEEP_BASELINE_VERSION = "zeep-sleep-state-baseline-v1.8-sep1-cutover"
-ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.13-no-bridge-labels"
+ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.14-gap-safe-continuity"
 SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
 SLEEP_HISTORY_BACKFILL_VERSION = "zeep-sleep-history-reclass-v18-sep1-derived"
 SESSION_REPORT_VERSION = "zeep-session-report-v10.0-wellness-longevity"
 SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.0-wellness-longevity"
 ENVIRONMENT_CONTEXT_POLICY_VERSION = "zeep-environment-context-v2.0-mode-aware-fair-floor"
 TERMINAL_WAKE_POLICY_VERSION = "zeep-terminal-wake-boundary-v1.0"
-SLEEP_CLASSIFICATION_GAP_VERSION = "zeep-sleep-classification-gap-v1.0"
+SLEEP_CLASSIFICATION_GAP_VERSION = "zeep-sleep-classification-gap-v1.1-context-preserving"
 
 
 ZEEP_SLEEP_STATES = ("wake", "n1", "n2", "n3", "rem")
@@ -248,6 +248,9 @@ SLEEP_N3_GATED_MIN_MARGIN = SLEEP_EVIDENCE_MIN_MARGIN
 # features have been normalised to the same 0..1 budget.  The output remains an
 # evidence distribution and must not be described as a calibrated probability.
 SLEEP_SCORE_SOFTMAX_TEMPERATURE = 4.0
+# Backward-compatible constant name: this threshold detects a discontinuity
+# between valid classification windows. It no longer resets the confirmed
+# Sleep State/onset for the same active Session; only pending evidence is reset.
 SLEEP_CONTEXT_RESET_GAP_SECONDS = 60.0
 SLEEP_MIN_PAIRED_VITAL_COVERAGE = 0.80
 SLEEP_BUCKET_MIN_BCG_PACKETS = 8
@@ -761,7 +764,14 @@ def sleep_policy_snapshot() -> dict[str, Any]:
                 max(SLEEP_STAGE_CONFIRMATION_SECONDS.values()),
             ],
             "long_transition_context_seconds": SLEEP_LONG_CONTEXT_SECONDS,
-            "reset_after_signal_gap_seconds": SLEEP_CONTEXT_RESET_GAP_SECONDS,
+            "detect_signal_gap_seconds": SLEEP_CONTEXT_RESET_GAP_SECONDS,
+            "preserve_confirmed_context_after_signal_gap": True,
+            "signal_gap_display": "WAIT/no_data",
+            "full_context_reset_triggers": [
+                "session_owner_change",
+                "session_end",
+            ],
+            "confirmed_bed_exit_effect": "OFF display and new Wake cycle",
             "evidence_and_confirmed_state_separate": True,
             "safety_supervisor_seconds": 1.0,
         },

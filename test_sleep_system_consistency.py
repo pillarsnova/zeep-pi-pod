@@ -175,6 +175,9 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertEqual(cadence["evidence_epoch_seconds"], 30.0)
         self.assertEqual(cadence["confirmation_seconds"], 60.0)
         self.assertEqual(cadence["confirmation_seconds_range"], [60.0, 120.0])
+        self.assertEqual(cadence["detect_signal_gap_seconds"], 60.0)
+        self.assertTrue(cadence["preserve_confirmed_context_after_signal_gap"])
+        self.assertEqual(cadence["signal_gap_display"], "WAIT/no_data")
 
     def test_sleep_stage_meanings_are_consistent_across_policy_and_ui(self):
         expected = {

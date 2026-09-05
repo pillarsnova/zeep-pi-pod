@@ -40,6 +40,18 @@ class SessionCheckpointStoreTests(unittest.TestCase):
                 "rest_mode": "overnight",
                 "private_field": "must-not-be-persisted",
             },
+            "sleep_context": {
+                "session_id": "session-1",
+                "awake_vital_pairs": [
+                    [1_000.0 + index * 10.0, 76.0 - index, 18.0 - index / 10]
+                    for index in range(6)
+                ],
+                "awake_hr_reference": 74.0,
+                "awake_rr_reference": 17.8,
+                "sleep_onset_at": 1_060.0,
+                "last_valid_frame_t": 1_120.0,
+                "private_note": "must-not-be-persisted",
+            },
         }
 
     def test_round_trip_persists_only_allowlisted_fields(self) -> None:
@@ -49,8 +61,23 @@ class SessionCheckpointStoreTests(unittest.TestCase):
         serialized = self.path.read_text(encoding="utf-8")
         self.assertNotIn("must-not-be-persisted", serialized)
         self.assertNotIn("also-secret", serialized)
+        self.assertNotIn("private_note", serialized)
         self.assertEqual(payload, store.load())
         self.assertLessEqual(payload["onbed_elapsed_s"], 20)
+        self.assertEqual(
+            payload["sleep_context"]["awake_hr_reference"], 74.0
+        )
+        self.assertEqual(
+            len(payload["sleep_context"]["awake_vital_pairs"]), 6
+        )
+
+    def test_sleep_context_must_belong_to_the_same_session(self) -> None:
+        store = SessionCheckpointStore(self.path, bed_start_seconds=20)
+        active = self.active_session()
+        active["sleep_context"]["session_id"] = "another-session"
+
+        with self.assertRaisesRegex(ValueError, "belongs to another session"):
+            store.save(active)
 
     def test_invalid_checkpoint_is_rejected_and_reported(self) -> None:
         errors: list[str] = []

@@ -39,6 +39,16 @@ CHECKPOINT_RECORD_FIELDS = frozenset(
         "sample_cadence_segments",
     }
 )
+CHECKPOINT_SLEEP_CONTEXT_FIELDS = frozenset(
+    {
+        "session_id",
+        "awake_vital_pairs",
+        "awake_hr_reference",
+        "awake_rr_reference",
+        "sleep_onset_at",
+        "last_valid_frame_t",
+    }
+)
 RESTART_SAFE_PHASES = frozenset({"waiting_bed", "recording"})
 REQUIRED_IDENTITY_FIELDS = frozenset(
     {"session_id", "username", "username_key", "identity_subject", "pod_id"}
@@ -71,7 +81,7 @@ class SessionCheckpointStore:
         if phase not in RESTART_SAFE_PHASES:
             raise ValueError("active session phase is not restart-safe")
         elapsed = self._waiting_bed_elapsed(active, phase)
-        return {
+        payload = {
             "schema_version": SESSION_CHECKPOINT_VERSION,
             "saved_at_utc": datetime.now(UTC).isoformat(),
             "phase": phase,
@@ -79,6 +89,13 @@ class SessionCheckpointStore:
             "onbed_elapsed_s": round(min(elapsed, self.bed_start_seconds), 3),
             "record": safe_record,
         }
+        sleep_context = self._safe_sleep_context(
+            active.get("sleep_context"),
+            session_id=record.get("session_id"),
+        )
+        if sleep_context is not None:
+            payload["sleep_context"] = sleep_context
+        return payload
 
     def save(self, active: Mapping[str, Any]) -> dict[str, Any]:
         """Atomically persist the active Login/Session link."""
@@ -139,6 +156,51 @@ class SessionCheckpointStore:
             raise ValueError("checkpoint record is missing")
         if any(not record.get(key) for key in REQUIRED_IDENTITY_FIELDS):
             raise ValueError("checkpoint identity is incomplete")
+        sleep_context = payload.get("sleep_context")
+        if sleep_context is not None:
+            SessionCheckpointStore._safe_sleep_context(
+                sleep_context,
+                session_id=record.get("session_id"),
+            )
+
+    @staticmethod
+    def _safe_sleep_context(
+        context: Any,
+        *,
+        session_id: Any,
+    ) -> dict[str, Any] | None:
+        """Return only restart-safe physiological continuity fields."""
+        if context is None:
+            return None
+        if not isinstance(context, Mapping):
+            raise ValueError("checkpoint sleep context is not an object")
+        context_session_id = context.get("session_id")
+        if context_session_id != session_id:
+            raise ValueError("checkpoint sleep context belongs to another session")
+
+        safe = {
+            key: context.get(key)
+            for key in CHECKPOINT_SLEEP_CONTEXT_FIELDS
+            if key in context
+        }
+        pairs = safe.get("awake_vital_pairs")
+        if pairs is not None:
+            if not isinstance(pairs, list):
+                raise ValueError("checkpoint awake vital pairs are invalid")
+            safe["awake_vital_pairs"] = [
+                [float(timestamp), float(heart_rate), float(respiration_rate)]
+                for timestamp, heart_rate, respiration_rate in pairs[-720:]
+            ]
+        for key in (
+            "awake_hr_reference",
+            "awake_rr_reference",
+            "sleep_onset_at",
+            "last_valid_frame_t",
+        ):
+            value = safe.get(key)
+            if value is not None:
+                safe[key] = float(value)
+        return safe
 
 
 def bed_is_occupied(

@@ -111,6 +111,10 @@ from zeep_pod.sessions.lifecycle import (
     evaluate_vital_start_gate,
     service_resume_event,
 )
+from zeep_pod.sessions.sleep_context import (
+    checkpoint_sleep_context,
+    restore_sleep_context,
+)
 from zeep_pod.sessions.history import (
     USER_HISTORY_FILTER,
     session_availability_by_account,
@@ -1295,12 +1299,14 @@ ACTIVE_SESSION_CHECKPOINT_VERSION = SESSION_CHECKPOINT_VERSION
 
 def _active_session_checkpoint_payload(active: Dict[str, Any]) -> Dict[str, Any]:
     """Compatibility facade for the extracted Session checkpoint store."""
-    return session_checkpoint_store.build_payload(active)
+    return session_checkpoint_store.build_payload(
+        _active_with_sleep_context(active)
+    )
 
 
 def _save_active_session_checkpoint(active: Dict[str, Any]) -> Dict[str, Any]:
     """Compatibility facade for durable Session checkpoint persistence."""
-    return session_checkpoint_store.save(active)
+    return session_checkpoint_store.save(_active_with_sleep_context(active))
 
 
 def _load_active_session_checkpoint() -> Optional[Dict[str, Any]]:
@@ -1663,6 +1669,41 @@ def _upper_quartile(values: List[float]) -> Optional[float]:
     return ordered[min(len(ordered) - 1, int(round((len(ordered) - 1) * 0.75)))]
 
 
+def _active_with_sleep_context(active: Dict[str, Any]) -> Dict[str, Any]:
+    """Attach only restart-safe Sleep context to a checkpoint copy."""
+    checkpoint_active = dict(active)
+    session_id = (active.get("record") or {}).get("session_id")
+    with sleep_path_lock:
+        context = checkpoint_sleep_context(_sleep_stage_path, session_id)
+    if context is not None:
+        checkpoint_active["sleep_context"] = context
+    return checkpoint_active
+
+
+def _restore_sleep_path_after_restart(
+    session_id: str,
+    *,
+    stage_events: List[Dict[str, Any]],
+    evidence_events: List[Dict[str, Any]],
+    samples: List[Dict[str, Any]],
+    checkpoint_context: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Rebuild confirmed path and frozen physiology after a service restart."""
+    restored = restore_sleep_context(
+        session_id,
+        stage_events=stage_events,
+        evidence_events=evidence_events,
+        samples=samples,
+        checkpoint_context=checkpoint_context,
+        heart_rate_range=HR_SANITY_RANGE_BPM,
+        respiration_rate_range=RR_SANITY_RANGE_PER_MIN,
+    )
+    with sleep_path_lock:
+        _reset_sleep_stage_path(session_id)
+        _sleep_stage_path.update(restored["path"])
+    return restored["provenance"]
+
+
 def _update_sleep_session_context(
     frames: List[Dict[str, Any]], *, now: float, session_started: Optional[float],
 ) -> Dict[str, Any]:
@@ -1893,10 +1934,11 @@ def _commit_sleep_stage(stage: str, probabilities: Dict[str, float], reason: str
     # Persist one confirmed-state record per 30-second evidence epoch, even
     # when the label is unchanged. Evidence itself has its own event stream.
     with session_lock:
+        active_for_checkpoint = _active_session
         persist_decision = bool(
-            _active_session
-            and _active_session.get("phase") == "recording"
-            and _active_session["record"].get("session_id") == session_id
+            active_for_checkpoint
+            and active_for_checkpoint.get("phase") == "recording"
+            and active_for_checkpoint["record"].get("session_id") == session_id
         )
     if persist_decision:
         database.enqueue("sessions", "event", {
@@ -1919,6 +1961,16 @@ def _commit_sleep_stage(stage: str, probabilities: Dict[str, float], reason: str
                 "state_changed": changed,
             },
         })
+        if changed:
+            try:
+                _save_active_session_checkpoint(active_for_checkpoint)
+            except Exception as exc:
+                log_event(
+                    "session",
+                    "sleep_context_checkpoint_failed",
+                    session_id=session_id,
+                    error=str(exc),
+                )
     return seen
 
 
@@ -6048,6 +6100,12 @@ def _restore_interrupted_session() -> Optional[str]:
         "SELECT timestamp,value FROM events WHERE session_id=? AND type='sleep_stage' ORDER BY timestamp",
         (session_id,),
     )
+    evidence_events = database.read_sessions(
+        """SELECT timestamp,value FROM events
+           WHERE session_id=? AND type='sleep_stage_evidence'
+           ORDER BY timestamp DESC""",
+        (session_id,),
+    )
     # Restore the already classified windows as well as their raw Sensor rows.
     # Without this mapping a service update would retain Timeline data but make
     # the pre-restart portion disappear from TST/stage percentages at Logout.
@@ -6081,16 +6139,17 @@ def _restore_interrupted_session() -> Optional[str]:
                     })
         except (TypeError, ValueError, json.JSONDecodeError):
             continue
-    with sleep_path_lock:
-        _reset_sleep_stage_path(session_id)
-        for event in stage_events:
-            try:
-                value = json.loads(event["value"]) if isinstance(event.get("value"), str) else event.get("value", {})
-                stage = value.get("state")
-                if stage in {"wake", "n1", "n2", "n3", "rem"}:
-                    _apply_stage_to_path(stage)
-            except (TypeError, ValueError, json.JSONDecodeError):
-                continue
+    restored_sleep_context = _restore_sleep_path_after_restart(
+        session_id,
+        stage_events=stage_events,
+        evidence_events=evidence_events,
+        samples=samples,
+        checkpoint_context=(
+            checkpoint.get("sleep_context")
+            if isinstance(checkpoint, dict)
+            else None
+        ),
+    )
     started_dt = datetime.fromisoformat(row["start_time"])
     elapsed_s = max(0.0, time.time() - started_dt.timestamp())
     with profile_lock:
@@ -6205,7 +6264,8 @@ def _restore_interrupted_session() -> Optional[str]:
               user=row["user"], samples=len(samples), legacy_closed=was_legacy_closed,
               owner_login_restored=bool(
                   checkpoint and checkpoint.get("owner_auth_session_id")
-              ), occupancy_error=occupancy_error)
+              ), occupancy_error=occupancy_error,
+              sleep_context=restored_sleep_context)
     if cadence_upgraded:
         log_event(
             "session", "sample_cadence_upgraded",

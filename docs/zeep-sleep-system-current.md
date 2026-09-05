@@ -30,12 +30,12 @@
 | ชั้นระบบ | Version |
 |---|---|
 | Health pipeline contract | `zeep-sleep-health-pipeline-v1.9-restart-continuity` |
-| Live estimator candidate | `bcg-audio-bed-5state-v1.24-gap-safe-continuity` |
-| Evidence definition | `zeep-sleep-state-evidence-v3.2-respiratory-onset` |
+| Live estimator candidate | `bcg-audio-bed-5state-v1.25-hrrr-fit-fusion` |
+| Evidence definition | `zeep-sleep-state-evidence-v3.3-hrrr-fit-fusion` |
 | Baseline | `zeep-sleep-state-baseline-v1.8-sep1-cutover` |
 | Semi-Markov transition | `zeep-semimarkov-30s-v1.15-restart-continuity` |
 | G2 ontology | `g2-aasm-5class-v1.0` |
-| Historical replay | `zeep-sleep-history-reclass-v21-epoch-complete` |
+| Historical replay | `zeep-sleep-history-reclass-v22-fit-fusion` |
 | Sleep / Recovery quality | `zeep-rest-quality-v8.0-wellness-longevity` |
 | Session report | `zeep-session-report-v10.0-wellness-longevity` |
 | Environment context | `zeep-environment-context-v2.0-mode-aware-fair-floor` |
@@ -218,7 +218,12 @@ accuracy ดู [AASM Scoring Manual](https://learn.aasm.org/AssetListing/The-AA
 
 `HR/RR Fit` ในหน้า Admin หมายถึงความใกล้ของค่า HR/RR เฉลี่ยกับช่วงอ้างอิง
 ของแต่ละ State เท่านั้น ช่วงเหล่านี้ทับซ้อนกันได้และไม่ใช่ความน่าจะเป็นจาก PSG
-ดังนั้น State ที่ Fit สูงสุดอาจต่างจาก State ที่ยืนยันเมื่อ BCG waveform, movement,
+รุ่น v1.25 นำ evidence distribution มาผสานกับ HR/RR Fit distribution โดย Fit มี
+น้ำหนัก 20% หรือ 25% เมื่อ Fit สูงสุดตรงกับ State ที่ยืนยันอยู่ แล้วจึงผ่าน EMA,
+transition, dwell และการยืนยัน 60/120 วินาที การผสานจะตัด probability ของ State
+ที่ physiology gate ปิดเป็นศูนย์ จึงทำให้ Fit มีผลจริงโดยไม่ข้าม safety invariant
+
+State ที่ Fit สูงสุดยังอาจต่างจาก State ที่ยืนยันเมื่อ BCG waveform, movement,
 ความแปรปรวน, respiratory regularity, gate, ลำดับ State หรือเวลายืนยันยังไม่ผ่าน
 โดยเฉพาะ `HR/RR Fit N3` ห้ามสร้าง N3 โดยลำพัง หน้า Admin ต้องแสดง State ที่
 HR/RR ใกล้ที่สุด, State evidence, State ที่ยืนยัน และเหตุผลที่ต่างกันแยกจากกัน

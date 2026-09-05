@@ -10,6 +10,106 @@ configure_app_test_environment()
 import app as zeep
 
 
+class HrRrFitFusionTests(unittest.TestCase):
+    def test_clear_eligible_n3_fit_can_change_the_fused_winner(self):
+        fused, metadata = zeep.fuse_hr_rr_fit_with_stage_probabilities(
+            {
+                "wake": 0.0,
+                "n1": 0.0,
+                "n2": 0.55,
+                "n3": 0.45,
+                "rem": 0.0,
+            },
+            {
+                "wake": 0.0,
+                "n1": 0.0,
+                "n2": 0.10,
+                "n3": 0.90,
+                "rem": 0.0,
+            },
+            eligible_states={
+                "wake": False,
+                "n1": True,
+                "n2": True,
+                "n3": True,
+                "rem": False,
+            },
+            confirmed_state="n2",
+            fit_weight=0.20,
+            agreement_weight=0.25,
+        )
+
+        self.assertEqual(metadata["overall_fit_winner"], "n3")
+        self.assertEqual(metadata["fused_winner"], "n3")
+        self.assertGreater(fused["n3"], fused["n2"])
+        self.assertAlmostEqual(sum(fused.values()), 1.0)
+
+    def test_fit_cannot_give_probability_to_a_closed_n3_gate(self):
+        fused, metadata = zeep.fuse_hr_rr_fit_with_stage_probabilities(
+            {
+                "wake": 0.0,
+                "n1": 0.40,
+                "n2": 0.60,
+                "n3": 0.0,
+                "rem": 0.0,
+            },
+            {
+                "wake": 0.05,
+                "n1": 0.10,
+                "n2": 0.15,
+                "n3": 0.95,
+                "rem": 0.10,
+            },
+            eligible_states={
+                "wake": False,
+                "n1": True,
+                "n2": True,
+                "n3": False,
+                "rem": False,
+            },
+            confirmed_state="n1",
+            fit_weight=0.20,
+            agreement_weight=0.25,
+        )
+
+        self.assertFalse(metadata["overall_fit_winner_eligible"])
+        self.assertEqual(metadata["eligible_fit_winner"], "n2")
+        self.assertEqual(fused["n3"], 0.0)
+        self.assertFalse(metadata["fit_can_bypass_state_gate"])
+        self.assertFalse(metadata["fit_can_bypass_confirmation"])
+
+    def test_fit_agreement_uses_versioned_continuity_weight(self):
+        _, metadata = zeep.fuse_hr_rr_fit_with_stage_probabilities(
+            {
+                "wake": 0.0,
+                "n1": 0.10,
+                "n2": 0.70,
+                "n3": 0.20,
+                "rem": 0.0,
+            },
+            {
+                "wake": 0.0,
+                "n1": 0.10,
+                "n2": 0.80,
+                "n3": 0.10,
+                "rem": 0.0,
+            },
+            eligible_states={
+                "wake": False,
+                "n1": True,
+                "n2": True,
+                "n3": True,
+                "rem": False,
+            },
+            confirmed_state="n2",
+            fit_weight=0.20,
+            agreement_weight=0.25,
+        )
+
+        self.assertTrue(metadata["fit_agrees_with_confirmed_state"])
+        self.assertEqual(metadata["fit_weight"], 0.25)
+
+
 class SleepClassificationGateTests(unittest.TestCase):
     """A machine/empty Pod must never be assigned a human Sleep Stage."""
 

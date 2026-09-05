@@ -41,6 +41,7 @@ from sleep_signal_features import (
 from sleep_stage_scoring import (
     candidate_from_stage_evidence,
     evidence_candidate_with_abstention,
+    fuse_hr_rr_fit_with_stage_probabilities,
     score_sleep_evidence,
     softmax_stage_evidence,
     smooth_stage_probabilities,
@@ -78,6 +79,8 @@ from sleep_system_policy import (
     SLEEP_ESTIMATOR_VERSION,
     SLEEP_EVIDENCE_VERSION,
     SLEEP_HISTORY_BACKFILL_VERSION,
+    SLEEP_HR_RR_FIT_FUSION_AGREEMENT_WEIGHT,
+    SLEEP_HR_RR_FIT_FUSION_WEIGHT,
     SLEEP_MIN_PAIRED_VITAL_COVERAGE,
     SLEEP_MIN_WAVEFORM_COVERAGE,
     SLEEP_N3_GATED_MIN_MARGIN,
@@ -794,17 +797,31 @@ def replay_session(
             deep_cv_threshold=SLEEP_DEFAULT_HR_CV_DEEP,
             rem_cv_threshold=SLEEP_DEFAULT_HR_CV_REM,
         )
-        probabilities = softmax_stage_evidence(
+        eligible_states = {
+            "wake": evidence["wake_gate"],
+            "n1": evidence["n1_gate"],
+            "n2": evidence["n2_gate"],
+            "n3": evidence["n3_gate"],
+            "rem": evidence["rem_gate"],
+        }
+        stage_evidence_probabilities = softmax_stage_evidence(
             scores,
             temperature=SLEEP_SCORE_SOFTMAX_TEMPERATURE,
-            eligible_states={
-                "wake": evidence["wake_gate"],
-                "n1": evidence["n1_gate"],
-                "n2": evidence["n2_gate"],
-                "n3": evidence["n3_gate"],
-                "rem": evidence["rem_gate"],
-            },
+            eligible_states=eligible_states,
         )
+        probabilities, fit_fusion = (
+            fuse_hr_rr_fit_with_stage_probabilities(
+                stage_evidence_probabilities,
+                base_scores,
+                eligible_states=eligible_states,
+                confirmed_state=path.last,
+                fit_weight=SLEEP_HR_RR_FIT_FUSION_WEIGHT,
+                agreement_weight=(
+                    SLEEP_HR_RR_FIT_FUSION_AGREEMENT_WEIGHT
+                ),
+            )
+        )
+        evidence["hr_rr_fit_fusion"] = fit_fusion
         accepted, quality = evidence_candidate_with_abstention(
             probabilities,
             minimum_winner=SLEEP_EVIDENCE_MIN_WINNER,
@@ -830,13 +847,7 @@ def replay_session(
                     evidence["sleep_onset_gate"]["passed"]
                     or evidence["sleep_onset_established"]
                 ),
-                eligible_states={
-                    "wake": evidence["wake_gate"],
-                    "n1": evidence["n1_gate"],
-                    "n2": evidence["n2_gate"],
-                    "n3": evidence["n3_gate"],
-                    "rem": evidence["rem_gate"],
-                },
+                eligible_states=eligible_states,
             )
         strong_wake = bool(
             max(probabilities, key=probabilities.get) == "wake"
@@ -850,6 +861,11 @@ def replay_session(
             "candidate": candidate,
             "winner": max(probabilities, key=probabilities.get),
             "probabilities": {key: round(value, 6) for key, value in probabilities.items()},
+            "pre_fusion_probabilities": {
+                key: round(value, 6)
+                for key, value in stage_evidence_probabilities.items()
+            },
+            "hr_rr_fit_fusion": fit_fusion,
             "quality": quality,
             "candidate_policy": candidate_meta,
             "gates": {key: evidence[key] for key in ("wake_gate", "n1_gate", "n2_gate", "n3_gate", "rem_gate")},

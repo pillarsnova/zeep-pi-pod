@@ -174,6 +174,7 @@ from sleep_stage_scoring import (
     align_probabilities_to_emitted_stage,
     candidate_from_stage_evidence,
     evidence_candidate_with_abstention,
+    fuse_hr_rr_fit_with_stage_probabilities,
     interpret_baseline_fit,
     score_sleep_evidence,
     softmax_stage_evidence,
@@ -217,6 +218,8 @@ from sleep_system_policy import (
     SLEEP_EVIDENCE_EPOCH_SECONDS,
     SLEEP_EVIDENCE_MIN_MARGIN,
     SLEEP_EVIDENCE_MIN_WINNER,
+    SLEEP_HR_RR_FIT_FUSION_AGREEMENT_WEIGHT,
+    SLEEP_HR_RR_FIT_FUSION_WEIGHT,
     SLEEP_LONG_CONTEXT_SECONDS,
     SLEEP_BUCKET_MIN_BCG_PACKETS,
     SLEEP_MIN_PAIRED_VITAL_COVERAGE,
@@ -2956,16 +2959,23 @@ def estimate_sleep_state() -> Dict[str, Any]:
         "n2_support": sleep_evidence["n3_rr_conflict"] * SLEEP_N2_RR_CONFLICT_SUPPORT,
     }
 
-    raw_probabilities = softmax_stage_evidence(
+    eligible_states = {
+        stage: sleep_evidence[f"{stage}_gate"]
+        for stage in ZEEP_SLEEP_STATES
+    }
+    stage_evidence_probabilities = softmax_stage_evidence(
         scores, temperature=SLEEP_SCORE_SOFTMAX_TEMPERATURE,
-        eligible_states={
-            "wake": sleep_evidence["wake_gate"],
-            "n1": sleep_evidence["n1_gate"],
-            "n2": sleep_evidence["n2_gate"],
-            "n3": sleep_evidence["n3_gate"],
-            "rem": sleep_evidence["rem_gate"],
-        },
+        eligible_states=eligible_states,
     )
+    raw_probabilities, fit_fusion = fuse_hr_rr_fit_with_stage_probabilities(
+        stage_evidence_probabilities,
+        base_scores,
+        eligible_states=eligible_states,
+        confirmed_state=current_stage_for_scoring,
+        fit_weight=SLEEP_HR_RR_FIT_FUSION_WEIGHT,
+        agreement_weight=SLEEP_HR_RR_FIT_FUSION_AGREEMENT_WEIGHT,
+    )
+    sleep_evidence["hr_rr_fit_fusion"] = fit_fusion
     instant_candidate = max(raw_probabilities, key=raw_probabilities.get)
     accepted_instant_candidate, evidence_quality = (
         evidence_candidate_with_abstention(
@@ -3007,13 +3017,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
                 sleep_evidence["sleep_onset_gate"]["passed"]
                 or sleep_evidence["sleep_onset_established"]
             ),
-            eligible_states={
-                "wake": sleep_evidence["wake_gate"],
-                "n1": sleep_evidence["n1_gate"],
-                "n2": sleep_evidence["n2_gate"],
-                "n3": sleep_evidence["n3_gate"],
-                "rem": sleep_evidence["rem_gate"],
-            },
+            eligible_states=eligible_states,
         )
         probability_transition["evidence_quality"] = evidence_quality
     # A position change or blanket adjustment is sleep-compatible movement.
@@ -3168,6 +3172,10 @@ def estimate_sleep_state() -> Dict[str, Any]:
         "classification_active": confirmed_state is not None,
         "evidence_active": True,
         "raw_probabilities": {k: round(v, 4) for k, v in raw_probabilities.items()},
+        "pre_fusion_probabilities": {
+            k: round(v, 4)
+            for k, v in stage_evidence_probabilities.items()
+        },
         "smoothed_probabilities": {
             k: round(v, 4) for k, v in smoothed_probabilities.items()
         },
@@ -3185,6 +3193,10 @@ def estimate_sleep_state() -> Dict[str, Any]:
         "scoring_weights": {
             "hr_baseline": SLEEP_BASELINE_HR_WEIGHT,
             "rr_baseline": SLEEP_BASELINE_RR_WEIGHT,
+            "hr_rr_fit_fusion": SLEEP_HR_RR_FIT_FUSION_WEIGHT,
+            "hr_rr_fit_fusion_when_confirmed_agrees": (
+                SLEEP_HR_RR_FIT_FUSION_AGREEMENT_WEIGHT
+            ),
         },
         "probability_filter": {
             "method": "ema_after_60s_rolling_features",

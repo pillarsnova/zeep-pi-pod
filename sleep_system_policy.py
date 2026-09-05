@@ -14,12 +14,12 @@ from typing import Any
 
 # Every persisted decision/report carries these versions for provenance.
 SLEEP_PIPELINE_CONTRACT_VERSION = "zeep-sleep-health-pipeline-v1.9-restart-continuity"
-SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.24-gap-safe-continuity"
-SLEEP_EVIDENCE_VERSION = "zeep-sleep-state-evidence-v3.2-respiratory-onset"
+SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.25-hrrr-fit-fusion"
+SLEEP_EVIDENCE_VERSION = "zeep-sleep-state-evidence-v3.3-hrrr-fit-fusion"
 ZEEP_SLEEP_BASELINE_VERSION = "zeep-sleep-state-baseline-v1.8-sep1-cutover"
 ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.15-restart-continuity"
 SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
-SLEEP_HISTORY_BACKFILL_VERSION = "zeep-sleep-history-reclass-v21-epoch-complete"
+SLEEP_HISTORY_BACKFILL_VERSION = "zeep-sleep-history-reclass-v22-fit-fusion"
 SESSION_REPORT_VERSION = "zeep-session-report-v10.0-wellness-longevity"
 SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.0-wellness-longevity"
 ENVIRONMENT_CONTEXT_POLICY_VERSION = "zeep-environment-context-v2.0-mode-aware-fair-floor"
@@ -248,6 +248,12 @@ SLEEP_N3_GATED_MIN_MARGIN = SLEEP_EVIDENCE_MIN_MARGIN
 # features have been normalised to the same 0..1 budget.  The output remains an
 # evidence distribution and must not be described as a calibrated probability.
 SLEEP_SCORE_SOFTMAX_TEMPERATURE = 4.0
+# HR/RR interval proximity is pooled with gated physiology evidence before
+# temporal smoothing.  Agreement with the current confirmed state receives a
+# small continuity increase; disagreement must still pass the normal gate,
+# margin, dwell and confirmation rules.
+SLEEP_HR_RR_FIT_FUSION_WEIGHT = 0.20
+SLEEP_HR_RR_FIT_FUSION_AGREEMENT_WEIGHT = 0.25
 # Backward-compatible constant name: this threshold detects a discontinuity
 # between valid classification windows. It no longer resets the confirmed
 # Sleep State/onset for the same active Session; only pending evidence is reset.
@@ -817,6 +823,16 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "n3_gated_minimum_winner": SLEEP_N3_GATED_MIN_WINNER,
             "n3_gated_minimum_margin": SLEEP_N3_GATED_MIN_MARGIN,
             "ambiguous_evidence_action": "abstain_without_stage_persistence",
+            "hr_rr_fit_fusion": {
+                "method": "gated_linear_pool_before_ema_and_semimarkov",
+                "weight": SLEEP_HR_RR_FIT_FUSION_WEIGHT,
+                "weight_when_confirmed_state_agrees": (
+                    SLEEP_HR_RR_FIT_FUSION_AGREEMENT_WEIGHT
+                ),
+                "ineligible_stage_mass": 0.0,
+                "can_bypass_stage_gate": False,
+                "can_bypass_confirmation": False,
+            },
         },
         "personal_baseline_learning": {
             "completed_final_summary_required": True,

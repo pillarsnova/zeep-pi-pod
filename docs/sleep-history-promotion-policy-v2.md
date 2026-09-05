@@ -49,6 +49,9 @@ Product Owner เป็นผู้กำหนด cohort และเป็น�
   N1 `25%`, N2 `25%`, N3 `15%` และ REM `20%`
 - เมื่อคิดกับ physiological fit ที่มีเพดาน `0.90` ผลต่อ evidence budget สูงสุดคือ
   W `27`, N1 `22.5`, N2 `22.5`, N3 `13.5` และ REM `18` จุดจาก 100
+- รุ่น v1.25 ผสาน distribution ดังกล่าวกับ gated stage evidence อีกชั้นที่น้ำหนัก
+  `20%`; เมื่อ Fit สูงสุดตรงกับ State ที่ยืนยันอยู่ใช้น้ำหนัก `25%` เพื่อรักษา
+  continuity โดยไม่บังคับ State
 - Baseline Fit ช่วยจัดอันดับเฉพาะ State ที่ physiology gate เปิดแล้ว ไม่สามารถสร้าง
   N2/N3/REM, ข้าม transition หรือเติม State ใน WAIT/NO DATA/OFF BED ได้
 - Admin เห็น Baseline Fit, ระยะห่างจากช่วง HR/RR และน้ำหนักที่ใช้ได้โดยตรง

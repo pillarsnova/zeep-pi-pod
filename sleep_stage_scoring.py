@@ -183,6 +183,96 @@ def softmax_stage_evidence(
     return normalise_stage_probabilities(weights)
 
 
+def fuse_hr_rr_fit_with_stage_probabilities(
+    evidence_probabilities: Mapping[str, Any],
+    baseline_fit_scores: Mapping[str, Any],
+    *,
+    eligible_states: Mapping[str, Any],
+    confirmed_state: str | None,
+    fit_weight: float,
+    agreement_weight: float,
+) -> tuple[dict[str, float], dict[str, Any]]:
+    """Fuse gated HR/RR proximity with the current physiology evidence.
+
+    The fusion happens before EMA and semi-Markov confirmation.  HR/RR Fit
+    therefore influences the winner while the independent physiology gates
+    retain authority over which states may compete.  A matching confirmed
+    state receives a slightly larger Fit contribution; a mismatch remains
+    free to challenge through the normal confirmation path instead of being
+    copied directly into the output.
+    """
+    eligible = {
+        stage: bool(eligible_states.get(stage, False)) for stage in STAGES
+    }
+    evidence = normalise_stage_probabilities({
+        stage: (
+            _finite(evidence_probabilities.get(stage), 0.0)
+            if eligible[stage] else 0.0
+        )
+        for stage in STAGES
+    })
+    overall_fit = normalise_stage_probabilities(baseline_fit_scores)
+    eligible_fit = normalise_stage_probabilities({
+        stage: (
+            _finite(baseline_fit_scores.get(stage), 0.0)
+            if eligible[stage] else 0.0
+        )
+        for stage in STAGES
+    })
+    overall_winner = max(STAGES, key=overall_fit.get)
+    eligible_winner = (
+        max(STAGES, key=eligible_fit.get)
+        if any(eligible_fit.values()) else None
+    )
+    agrees = bool(
+        confirmed_state in STAGES and eligible_winner == confirmed_state
+    )
+    requested_weight = agreement_weight if agrees else fit_weight
+    applied_weight = _clamp(requested_weight)
+    if not any(evidence.values()) or not any(eligible_fit.values()):
+        applied_weight = 0.0
+    fused = normalise_stage_probabilities({
+        stage: (
+            (1.0 - applied_weight) * evidence[stage]
+            + applied_weight * eligible_fit[stage]
+        )
+        for stage in STAGES
+    })
+    ordered_fit = sorted(STAGES, key=overall_fit.get, reverse=True)
+    fused_winner = max(STAGES, key=fused.get) if any(fused.values()) else None
+    return fused, {
+        "method": "gated_linear_pool_before_ema_and_semimarkov",
+        "fit_weight": round(applied_weight, 4),
+        "configured_fit_weight": round(_clamp(fit_weight), 4),
+        "configured_agreement_weight": round(
+            _clamp(agreement_weight), 4
+        ),
+        "overall_fit_winner": overall_winner,
+        "overall_fit_runner_up": ordered_fit[1],
+        "overall_fit_margin": round(
+            overall_fit[overall_winner] - overall_fit[ordered_fit[1]], 4
+        ),
+        "overall_fit_winner_eligible": eligible[overall_winner],
+        "eligible_fit_winner": eligible_winner,
+        "confirmed_state_before_fusion": (
+            confirmed_state if confirmed_state in STAGES else None
+        ),
+        "fit_agrees_with_confirmed_state": agrees,
+        "evidence_winner_before_fusion": (
+            max(STAGES, key=evidence.get) if any(evidence.values()) else None
+        ),
+        "fused_winner": fused_winner,
+        "eligible_fit_probabilities": {
+            stage: round(value, 6)
+            for stage, value in eligible_fit.items()
+        },
+        "ineligible_state_can_receive_fit_mass": False,
+        "fit_can_bypass_state_gate": False,
+        "fit_can_bypass_confirmation": False,
+        "aasm_psg_probability": False,
+    }
+
+
 def evidence_candidate_with_abstention(
     probabilities: Mapping[str, Any],
     *,

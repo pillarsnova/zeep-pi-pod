@@ -41,7 +41,9 @@ from sleep_signal_features import (
 from sleep_stage_scoring import (
     align_probabilities_to_emitted_stage,
     candidate_from_stage_evidence,
+    fuse_hr_rr_fit_with_stage_probabilities,
     score_sleep_evidence,
+    softmax_stage_evidence,
     smooth_stage_probabilities,
 )
 from sleep_system_policy import (
@@ -49,10 +51,13 @@ from sleep_system_policy import (
     SLEEP_CONFIRMATION_SECONDS,
     SLEEP_CONFIRM_EPOCHS,
     SLEEP_HISTORY_BACKFILL_VERSION,
+    SLEEP_HR_RR_FIT_FUSION_AGREEMENT_WEIGHT,
+    SLEEP_HR_RR_FIT_FUSION_WEIGHT,
     PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED,
     SLEEP_DISPLAY_WINNER_MARGIN,
     SLEEP_PROBABILITY_EMA_ALPHA,
     SLEEP_PROBABILITY_SWITCH_MARGIN,
+    SLEEP_SCORE_SOFTMAX_TEMPERATURE,
     SLEEP_ONSET_INITIAL_WAKE_SUPPORT,
     SLEEP_ONSET_MAX_HR_RISE_BPM_PER_MIN,
     SLEEP_ONSET_MAX_MOVEMENT_RATIO,
@@ -413,10 +418,27 @@ def rescore_event(
         onset_initial_wake_support=SLEEP_ONSET_INITIAL_WAKE_SUPPORT,
     )
 
-    maximum = max(scores.values())
-    weights = {stage: math.exp((score - maximum) * 1.8) for stage, score in scores.items()}
-    total = sum(weights.values())
-    raw = {stage: weight / total for stage, weight in weights.items()}
+    eligible_states = {
+        "wake": evidence["wake_gate"],
+        "n1": evidence["n1_gate"],
+        "n2": evidence["n2_gate"],
+        "n3": evidence["n3_gate"],
+        "rem": evidence["rem_gate"],
+    }
+    stage_evidence_probabilities = softmax_stage_evidence(
+        scores,
+        temperature=SLEEP_SCORE_SOFTMAX_TEMPERATURE,
+        eligible_states=eligible_states,
+    )
+    raw, fit_fusion = fuse_hr_rr_fit_with_stage_probabilities(
+        stage_evidence_probabilities,
+        base_scores,
+        eligible_states=eligible_states,
+        confirmed_state=path.last,
+        fit_weight=SLEEP_HR_RR_FIT_FUSION_WEIGHT,
+        agreement_weight=SLEEP_HR_RR_FIT_FUSION_AGREEMENT_WEIGHT,
+    )
+    evidence["hr_rr_fit_fusion"] = fit_fusion
     instant_candidate = max(raw, key=raw.get)
     path.probability_ema = smooth_stage_probabilities(
         path.probability_ema,
@@ -434,13 +456,7 @@ def rescore_event(
         sleep_onset_gate_passed=bool(
             evidence["sleep_onset_gate"]["passed"]
         ),
-        eligible_states={
-            "wake": evidence["wake_gate"],
-            "n1": evidence["n1_gate"],
-            "n2": evidence["n2_gate"],
-            "n3": evidence["n3_gate"],
-            "rem": evidence["rem_gate"],
-        },
+        eligible_states=eligible_states,
     )
     strong_wake = bool(
         instant_candidate == "wake" and evidence["movement"]["strong_wake"]
@@ -495,6 +511,10 @@ def rescore_event(
         "confirmed_probabilities": confirmed_probabilities,
         "confirmed_state": selected,
         "raw_probabilities": {key: round(item, 4) for key, item in raw.items()},
+        "pre_fusion_probabilities": {
+            key: round(item, 4)
+            for key, item in stage_evidence_probabilities.items()
+        },
         "smoothed_probabilities": {
             key: round(item, 4) for key, item in path.probability_ema.items()
         },

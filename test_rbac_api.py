@@ -768,7 +768,7 @@ class RbacApiTests(unittest.TestCase):
             channel for channel in inspector.json()["channels"]
             if channel["metric"] == "sound_dba_est"
         )
-        self.assertEqual(sound["raw_unit"], "dBFS")
+        self.assertEqual(sound["raw_unit"], "dBA est.")
         self.assertEqual(sound["unit"], "dBA est.")
         self.assertFalse(sound["editable"])
         self.assertEqual(

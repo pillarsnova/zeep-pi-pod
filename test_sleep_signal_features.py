@@ -1,4 +1,5 @@
 import base64
+import json
 import math
 import sqlite3
 import struct
@@ -16,6 +17,7 @@ from sleep_signal_features import (
     filter_vital_values,
     linear_slope_per_minute,
     movement_window_metrics,
+    sleep_classification_gap_controls,
     sleep_classification_gap_timeline,
     sleep_movement_evidence,
     summary_features,
@@ -382,6 +384,36 @@ class SignalFeatureTests(unittest.TestCase):
         self.assertEqual(len(gaps), 1)
         self.assertEqual(gaps[0]["state"], "sensor_gap")
         self.assertFalse(gaps[0]["held_previous_state"])
+
+    def test_operational_annotation_holds_later_gaps_with_audit(self):
+        controls = sleep_classification_gap_controls([{
+            "type": "classification_gap_annotation",
+            "timestamp": "2026-09-05T00:00:00+00:00",
+            "value": json.dumps({
+                "policy": "hold_previous_confirmed_state",
+                "scope": "after_initial_wait",
+                "display_only": True,
+            }),
+        }])
+        gaps = sleep_classification_gap_timeline(
+            [
+                {"state": "wake", "start_time": 130, "end_time": 150},
+                {"state": "n1", "start_time": 180, "end_time": 200},
+            ],
+            [],
+            session_start=100,
+            classification_end=200,
+            sensor_sample_interval_s=10,
+            **controls,
+        )
+        self.assertEqual([gap["state"] for gap in gaps], [
+            "sensor_gap", "restart_hold",
+        ])
+        self.assertEqual(gaps[1]["held_state"], "wake")
+        self.assertEqual(
+            gaps[1]["operational_hold_source"],
+            "session_operational_annotation",
+        )
 
     def test_tiny_bcg_shift_is_not_arousal_proxy_evidence(self):
         proxy = arousal_proxy_evidence({

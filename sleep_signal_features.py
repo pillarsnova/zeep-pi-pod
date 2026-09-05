@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import base64
 from datetime import datetime, timezone
+import json
 import math
 import struct
 from typing import Any, Iterable, Mapping, Optional
@@ -32,6 +33,38 @@ MIN_WAVEFORM_SECONDS = 20.0
 HR_SANITY_RANGE_BPM = (25.0, 220.0)
 RR_SANITY_RANGE_PER_MIN = (2.0, 60.0)
 TERMINAL_OCCUPANCY_POLICY_VERSION = "zeep-terminal-occupancy-v1.0"
+
+
+def sleep_classification_gap_controls(
+    events: Iterable[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Extract restart markers and audited display overrides from events."""
+    pause_times: list[Any] = []
+    resume_times: list[Any] = []
+    hold_after_first = False
+    for event in events:
+        event_type = str(event.get("type") or "")
+        if event_type == "service_pause":
+            pause_times.append(event.get("timestamp"))
+        elif event_type == "service_resume":
+            resume_times.append(event.get("timestamp"))
+        elif event_type == "classification_gap_annotation":
+            value = event.get("value")
+            try:
+                value = json.loads(value) if isinstance(value, str) else value
+            except json.JSONDecodeError:
+                continue
+            hold_after_first = bool(
+                isinstance(value, Mapping)
+                and value.get("policy") == "hold_previous_confirmed_state"
+                and value.get("scope") == "after_initial_wait"
+                and value.get("display_only") is True
+            )
+    return {
+        "service_pause_times": pause_times,
+        "service_resume_times": resume_times,
+        "hold_unclassified_after_first_state": hold_after_first,
+    }
 
 
 def movement_window_metrics(
@@ -485,6 +518,7 @@ def sleep_classification_gap_timeline(
     minimum_gap_s: Optional[float] = None,
     service_pause_times: Iterable[Any] = (),
     service_resume_times: Iterable[Any] = (),
+    hold_unclassified_after_first_state: bool = False,
 ) -> list[dict[str, Any]]:
     """Expose unclassified wall-clock gaps without inventing Sleep Stages.
 
@@ -589,11 +623,15 @@ def sleep_classification_gap_timeline(
             if period[0] >= gap_end - interval
         ]
         held_stage = previous_periods[-1][2] if previous_periods else None
-        restart_hold = bool(
-            restart_markers
+        operational_hold = bool(
+            (restart_markers or hold_unclassified_after_first_state)
             and held_stage in {"wake", "n1", "n2", "n3", "rem"}
             and following_periods
         )
+        hold_source = (
+            "service_event" if restart_markers
+            else "session_operational_annotation"
+        ) if operational_hold else None
         rows = [
             row for sample_epoch, row in sample_rows
             if gap_start <= sample_epoch < gap_end
@@ -618,7 +656,7 @@ def sleep_classification_gap_timeline(
             }
             for label in bed_labels
         )
-        if restart_hold:
+        if operational_hold:
             state = "restart_hold"
             label = {
                 "wake": "W · ตื่น",
@@ -627,10 +665,14 @@ def sleep_classification_gap_timeline(
                 "n3": "N3 · หลับลึก",
                 "rem": "REM · หลับฝัน",
             }[held_stage] + " · คงสถานะก่อน Restart"
+            evidence = (
+                "พบ event หยุด/เริ่ม Service"
+                if restart_markers else "มี Operational annotation ที่มี Audit"
+            )
             reason = (
-                "พบเหตุการณ์หยุด/เริ่ม Service ในช่วงนี้ จึงแสดงสถานะที่"
-                "ยืนยันล่าสุดเพื่อความต่อเนื่องเท่านั้น โดยไม่สร้างหลักฐาน"
-                "Sleep Stage และไม่นำช่วงนี้ไปคิดคะแนนหรือ Baseline"
+                f"{evidence} จึงแสดงสถานะที่ยืนยันล่าสุดเพื่อความต่อเนื่อง"
+                "เท่านั้น โดยไม่สร้างหลักฐาน Sleep Stage และไม่นำช่วงนี้ไป"
+                "คิดคะแนนหรือ Baseline"
             )
             status = "service_restart_hold"
         elif not rows:
@@ -681,8 +723,9 @@ def sleep_classification_gap_timeline(
             "reason": reason,
             "decision_kind": "classification_gap",
             "data_status": status,
-            "held_previous_state": restart_hold,
-            "held_state": held_stage if restart_hold else None,
+            "held_previous_state": operational_hold,
+            "held_state": held_stage if operational_hold else None,
+            "operational_hold_source": hold_source,
             "service_restart_marker_count": len(restart_markers),
             "sleep_stage": False,
             "excluded_from_stage_statistics": True,

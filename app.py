@@ -175,6 +175,7 @@ from sleep_signal_features import (
     debounced_bed_status_labels,
     filter_vital_values,
     movement_window_metrics,
+    sleep_classification_gap_controls,
     sleep_classification_gap_timeline,
     summary_features,
     terminal_occupancy_timeline,
@@ -8362,10 +8363,7 @@ def history_detail(
     annotation_rows = [event for event in events
                        if event["type"] == "sleep_stage_annotation"]
     annotations = load_annotations(annotation_rows)
-    service_pause_times = [event["timestamp"] for event in events
-                           if event["type"] == "service_pause"]
-    service_resume_times = [event["timestamp"] for event in events
-                            if event["type"] == "service_resume"]
+    gap_controls = sleep_classification_gap_controls(events)
     for event in events:
         if event["type"] == "final_summary":
             continue
@@ -8430,8 +8428,7 @@ def history_detail(
         classification_end=classification_end,
         sensor_sample_interval_s=_sample_interval_seconds(
             final_summary.get("sensor_sample_interval_s"), history_interval_s),
-        service_pause_times=service_pause_times,
-        service_resume_times=service_resume_times,
+        **gap_controls,
     )
     if classification_gaps:
         sleep_timeline = sorted(

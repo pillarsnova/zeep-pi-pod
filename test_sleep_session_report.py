@@ -229,6 +229,25 @@ class SleepSessionReportTests(unittest.TestCase):
             quality["release_requirements"]["paired_hr_rr_coverage_pct"], 0.0,
         )
 
+    def test_overnight_low_coverage_keeps_score_with_confidence(self):
+        samples = [{"hr": 58.0, "rr": 13.0} for _ in range(400)]
+        quality = build_sleep_quality(
+            3600,
+            {"sleep_onset_proxy_s": 600},
+            {"n2": 400},
+            rest_mode="overnight",
+            sensor_samples=samples,
+        )
+
+        self.assertTrue(quality["available"])
+        self.assertIsInstance(quality["score"], int)
+        self.assertEqual(quality["score_confidence"]["level"], "medium")
+        self.assertFalse(
+            quality["release_requirements"][
+                "confirmed_stage_coverage_blocks_score"
+            ]
+        )
+
     def test_n3_above_twenty_percent_keeps_full_recovery_credit(self):
         quality = build_sleep_quality(
             25_200,
@@ -402,6 +421,34 @@ class SleepSessionReportTests(unittest.TestCase):
             quality["physiology"]["paired_hr_rr_coverage_pct"], 66.7,
         )
         self.assertEqual(quality["physiology"]["source_sensor_samples"], 30)
+
+    def test_recovery_low_session_coverage_keeps_score_with_confidence(self):
+        samples = [{
+            "hr": 65.0,
+            "rr": 14.0,
+            "bed": "On bed",
+            "temp": 24.0,
+            "hum": 50.0,
+            "co2": 750.0,
+            "dba": 35.0,
+            "lux": 2.0,
+        } for _ in range(180)]
+        quality = build_sleep_quality(
+            30 * 60,
+            {},
+            {"wake": 180},
+            rest_mode="nap_recovery",
+            sensor_samples=samples,
+        )
+
+        self.assertTrue(quality["available"])
+        self.assertIsInstance(quality["score"], int)
+        self.assertEqual(quality["score_confidence"]["level"], "medium")
+        self.assertFalse(
+            quality["release_requirements"][
+                "session_coverage_blocks_score"
+            ]
+        )
 
     def test_two_mode_protocol_windows_are_reported(self):
         samples = [{

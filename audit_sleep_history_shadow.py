@@ -1593,7 +1593,9 @@ def main() -> int:
                 "raw_acquisition_min_percent": 95,
                 "raw_packet_gap_must_be_less_than_s": SLEEP_CONTEXT_RESET_GAP_SECONDS,
             },
-            "architecture_minimum_confirmed_coverage_percent": 80,
+            "score_high_confidence_minimum_coverage_percent": 80,
+            "coverage_is_admin_qa_context": True,
+            "coverage_blocks_score": False,
         },
         "sessions": results,
     }

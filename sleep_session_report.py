@@ -271,6 +271,35 @@ def _regularity(values: list[float], *, soft_cv: float) -> Optional[float]:
     return max(0.0, min(1.0, 1.0 - cv / max(0.0001, soft_cv)))
 
 
+def _score_confidence(
+    coverage_ratio: float,
+    paired_vital_ratio: float,
+) -> Dict[str, Any]:
+    """Describe score evidence completeness without suppressing the score.
+
+    Session coverage remains visible to Admin QA and already contributes a
+    bounded score component.  It must not become a second, hidden veto after
+    minimum paired HR/RR evidence has passed.
+    """
+    evidence_floor = min(coverage_ratio, paired_vital_ratio)
+    if evidence_floor >= 0.80:
+        level, label = "high", "หลักฐานสูง"
+    elif evidence_floor >= 0.50:
+        level, label = "medium", "หลักฐานปานกลาง"
+    else:
+        level, label = "low", "หลักฐานจำกัด"
+    return {
+        "level": level,
+        "label": label,
+        "session_coverage_pct": round(coverage_ratio * 100.0, 1),
+        "paired_hr_rr_coverage_pct": round(
+            paired_vital_ratio * 100.0, 1
+        ),
+        "coverage_is_admin_qa_context": True,
+        "coverage_can_hide_score": False,
+    }
+
+
 def _settling(values: list[float], *, scale: float) -> Optional[float]:
     """Compare early/late thirds; stable is neutral, a gentle fall is positive."""
     if len(values) < 6:
@@ -429,29 +458,33 @@ def _build_awake_rest_quality(
         "data_coverage": "ข้อมูล Sensor ยังครอบคลุม Session ไม่เพียงพอ",
     }
     sleep_s = sum(counts[stage] for stage in SLEEP_STAGES) * interval
-    score_releasable = bool(
+    score_available = bool(
         not no_sensor_evidence
-        and coverage_ratio >= 0.80
         and paired_vital_samples >= 6
         and paired_vital_ratio >= 0.80
         and hr_regularity is not None
         and rr_regularity is not None
     )
+    score_confidence = _score_confidence(
+        coverage_ratio, paired_vital_ratio
+    )
     return {
-        "available": score_releasable,
-        "score": score if score_releasable else None,
+        "available": score_available,
+        "score": score if score_available else None,
         "engineering_shadow_score": score,
-        "score_releasable": score_releasable,
+        "score_releasable": score_available,
+        "score_confidence": score_confidence,
         "release_requirements": {
-            "minimum_coverage_pct": 80,
+            "minimum_coverage_pct_for_high_confidence": 80,
+            "session_coverage_blocks_score": False,
             "minimum_paired_hr_rr_coverage_pct": 80,
             "minimum_paired_samples": 6,
             "paired_hr_rr_required": True,
-            "passed": score_releasable,
+            "passed": score_available,
         },
         "reason": (
-            None if score_releasable else
-            "ข้อมูล HR/RR หรือความครอบคลุมของ Session ยังไม่พอสำหรับเผยแพร่ Recovery Score"
+            None if score_available else
+            "ข้อมูล HR/RR ที่จับคู่กันยังไม่พอสำหรับคำนวณ Recovery Score"
         ),
         "score_title": policy["score_title"],
         "score_scope": policy.get("score_scope"),
@@ -1014,19 +1047,23 @@ def build_sleep_quality(
     else:
         insight = f"หลับไว ความต่อเนื่อง และการฟื้นฟูของ {mode['label']} โดยรวมอยู่ในเกณฑ์ดี"
 
-    score_releasable = bool(
-        coverage_ratio >= 0.80
-        and estimated_sleep_s > 0
+    score_available = bool(
+        estimated_sleep_s > 0
         and paired_vital_rows >= 6
         and paired_vital_ratio >= 0.80
     )
+    score_confidence = _score_confidence(
+        coverage_ratio, paired_vital_ratio
+    )
     return {
-        "available": score_releasable,
-        "score": score if score_releasable else None,
+        "available": score_available,
+        "score": score if score_available else None,
         "engineering_shadow_score": score,
-        "score_releasable": score_releasable,
+        "score_releasable": score_available,
+        "score_confidence": score_confidence,
         "release_requirements": {
-            "minimum_confirmed_stage_coverage_pct": 80,
+            "minimum_confirmed_stage_coverage_pct_for_high_confidence": 80,
+            "confirmed_stage_coverage_blocks_score": False,
             "confirmed_sleep_required": True,
             "minimum_paired_hr_rr_coverage_pct": 80,
             "minimum_paired_samples": 6,
@@ -1034,11 +1071,11 @@ def build_sleep_quality(
             "paired_hr_rr_rows": paired_vital_rows,
             "source_vital_rows": source_vital_rows,
             "paired_hr_rr_coverage_pct": round(paired_vital_ratio * 100.0, 1),
-            "passed": score_releasable,
+            "passed": score_available,
         },
         "reason": (
-            None if score_releasable else
-            "Sleep State หรือข้อมูล HR/RR ที่จับคู่กันยังไม่ครอบคลุมอย่างน้อย 80% จึงยังไม่เผยแพร่ Sleep Score"
+            None if score_available else
+            "ยังไม่พบ Sleep State หรือข้อมูล HR/RR ที่จับคู่กันไม่พอสำหรับคำนวณ Sleep Score"
         ),
         "score_title": mode.get("score_title") or "คุณภาพการนอน",
         "score_scope": mode.get("score_scope") or "ค่าประเมินการนอนจาก Sensor",

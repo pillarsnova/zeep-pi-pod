@@ -35,9 +35,9 @@
 | Baseline | `zeep-sleep-state-baseline-v1.8-sep1-cutover` |
 | Semi-Markov transition | `zeep-semimarkov-30s-v1.15-restart-continuity` |
 | G2 ontology | `g2-aasm-5class-v1.0` |
-| Historical replay | `zeep-sleep-history-reclass-v22-fit-fusion` |
-| Sleep / Recovery quality | `zeep-rest-quality-v8.0-wellness-longevity` |
-| Session report | `zeep-session-report-v10.0-wellness-longevity` |
+| Historical replay | `zeep-sleep-history-reclass-v23-fit-fusion-score-confidence` |
+| Sleep / Recovery quality | `zeep-rest-quality-v8.1-score-confidence` |
+| Session report | `zeep-session-report-v10.1-score-confidence` |
 | Environment context | `zeep-environment-context-v2.0-mode-aware-fair-floor` |
 | Terminal Wake boundary | `zeep-terminal-wake-boundary-v1.0` |
 | Classification gap display | `zeep-sleep-classification-gap-v1.2-restart-aware` |
@@ -339,7 +339,7 @@ stateDiagram-v2
 physiology evidence ก่อนเสมอ การอนุญาต graph นี้ไม่ได้หมายความว่า BCG เทียบเท่า PSG
 ซึ่งยังต้องใช้ EEG/EOG/chin EMG จริง
 
-## 4. Sleep / Recovery Quality v8.0
+## 4. Sleep / Recovery Quality v8.1
 
 ### 4.1 สมการภาพรวม
 
@@ -351,6 +351,11 @@ physiology evidence ก่อนเสมอ การอนุญาต graph �
 `Overnight Recovery` ใช้ Sleep Score เท่านั้น ส่วน `Nap & Refresh` ใช้ Recovery Score
 เท่านั้น ไม่ว่าจะพบการหลับหรือยังตื่นพักอยู่ การไม่มีข้อมูล Sensor เพียงพอจะไม่เผยแพร่
 คะแนนจาก duration เพียงอย่างเดียว
+
+Coverage ไม่ใช่เงื่อนไขซ่อนคะแนนอีกต่อไป เมื่อมีหลักฐาน HR/RR ที่จับคู่กัน
+เพียงพอและพบข้อมูลตามเป้าหมายของโหมด ระบบจะแสดงคะแนนพร้อมระดับความมั่นใจ
+`high / medium / low` และหักคะแนนใน component ความครบของข้อมูลตามจริง Tier
+และ coverage ยังแสดงใน Admin QA แต่ไม่มีอำนาจปิดคะแนนทั้ง Session เพียงลำพัง
 
 | Component | เต็ม | วิธีปัจจุบัน |
 |---|---:|---|
@@ -421,13 +426,15 @@ W/N1/N2/N3/REM ทั้งสองสายแสดง `score_title`, `qualit
 - Cycle นับเมื่อมี accumulated NREM ≥45 นาทีก่อนเข้า REM และไม่เพิ่มหลายรอบจาก REM flicker
 - Arousal proxy ไม่ใช่ EEG cortical arousal และ Cycle proxy ไม่ใช่ AASM cycle count
 
-## 5. Session Report v10.0
+## 5. Session Report v10.1
 
 เมื่อจบ Session ระบบสร้างและ persist รายงานจากข้อมูลชุดเดียวกับ Timeline:
 
 - W/N1/N2/N3/REM: จำนวนรอบ, เวลา, % ของ scored time และ % ของ TST
 - TST estimate, Wake, WASO proxy, sleep onset proxy, awakenings
 - คะแนนรวม, component points, Rest Mode, target และ version
+- ระดับความมั่นใจของคะแนน พร้อม coverage ของ Session และ HR/RR; coverage
+  เป็นบริบท QA ไม่ใช่ตัวซ่อนคะแนนเมื่อหลักฐานขั้นต่ำผ่านแล้ว
 - ค่าเฉลี่ย/ต่ำสุด/สูงสุดของอุณหภูมิ ความชื้น แสง เสียง CO₂ PM2.5 และ VOC พร้อม coverage
 - Findings แยกเป็น `ต้องแก้ไข`, `ผ่านขั้นต่ำ/ปรับเพิ่มได้` และ `ดี/ยอดเยี่ยม/รักษาค่า` โดยไม่เรียกค่าพอใช้หรือดีว่าเป็นข้อผิดพลาด
 - อุณหภูมิเฉลี่ยและ CO₂ อยู่ในบริบทของลำดับสถานะ ไม่ใช้เปลี่ยน stage

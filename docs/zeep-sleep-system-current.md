@@ -605,6 +605,24 @@ cutover ต้องเป็น `Sleep Score` หรือ `Recovery Score` ต
 cascade ข้อมูลลูก, rebuild profile counters/personal baselines, ตรวจ integrity/orphan
 แล้วจึงเขียน marker ถาวร เมื่อ marker มีอยู่จะไม่ลบข้อมูลซ้ำ
 
+### 9.3 Wake lock-in shadow audit
+
+ปัญหา legacy ที่ signal gap ทำให้ `sleep_onset_established` และ awake reference
+หลุดกลางคืนถูกปิดด้วย continuity policy ปัจจุบัน และขึ้นทะเบียนเป็น coded
+regression fixtures สามชุดใน
+`docs/zeep-wake-lock-regression-register.md` ระบบตรวจซ้ำแบบ read-only ทุกเช้า
+ด้วย `audit_wake_lock_in.py`; ผลเป็น Admin QA flag เท่านั้น ไม่แก้ Sleep State,
+WASO, Score หรือ Raw data อัตโนมัติ
+
+### 9.4 Session count source of truth
+
+จำนวนข้างชื่อผู้ใช้และรายการ User History ต้องมาจาก SQLite query ชุดเดียวกัน:
+Session ต้องจบแล้ว อยู่หลัง product cutover และมี Timeline อย่างน้อยหนึ่งแถว
+จึงถือว่าเปิดดูได้ ค่าใน `profiles.json` เป็น lifetime cache เพื่อ compatibility
+และห้ามใช้เพิ่มตัวเลขด้วย `+1` หลังจบ Session เพราะอาจ drift หลัง cleanup,
+migration หรือ retry ผู้ดูแลยังเห็นยอดสะสม/รายการ archive ผ่าน metadata แยกได้
+โดยไม่ทำให้หน้า User แสดงจำนวนที่กดแล้วไม่พบข้อมูล
+
 ## 10. Claim boundary
 
 - AASM stage จริงต้องใช้ PSG signals/criteria; ZEEP ไม่มี EEG/EOG/chin EMG

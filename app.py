@@ -110,6 +110,11 @@ from zeep_pod.sessions.lifecycle import (
     bed_is_occupied,
     evaluate_vital_start_gate,
 )
+from zeep_pod.sessions.history import (
+    USER_HISTORY_FILTER,
+    session_availability_by_account,
+    users_ordered_by_latest_session as _users_ordered_by_latest_session,
+)
 from maintenance_registry import maintenance_contract_snapshot
 from migration import migrate_jsonl
 from personal import BaselineStore
@@ -5798,12 +5803,23 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
     except Exception as exc:
         log_event("ai", "baseline_update_failed", user=record["username"],
                   error=str(exc))
+    availability = session_availability_by_account(
+        database.read_sessions,
+        PERSONAL_BASELINE_LEARNING_START_UTC,
+    ).get(record["username_key"], {})
     with profile_lock:
         profiles = _load_profiles()
         profile = profiles.get(record["username_key"])
         if profile is not None:
-            profile["sessions"] = int(profile.get("sessions", 0)) + 1
-            profile["last_session_utc"] = record["ended_at_utc"]
+            # SQLite is authoritative. Incrementing a cached JSON counter can
+            # drift after cleanup, migration or a retried finalisation.
+            profile["sessions"] = int(
+                availability.get("lifetime_sessions") or 0
+            )
+            profile["last_session_utc"] = (
+                availability.get("last_data_session_utc")
+                or record["ended_at_utc"]
+            )
             _save_profiles(profiles)
     with state_lock:
         state["session"].update({
@@ -6088,10 +6104,6 @@ def _restore_interrupted_session() -> Optional[str]:
         health_reference = checkpoint_record.get("health_reference")
         if not isinstance(health_reference, dict) or health_reference.get("schema_version") != 1:
             health_reference = _health_reference_from_profile(profile)
-        if was_legacy_closed and profile:
-            profile["sessions"] = max(0, int(profile.get("sessions", 0)) - 1)
-            profiles[row["username_key"]] = profile
-            _save_profiles(profiles)
     identity_subject = (
         checkpoint_record.get("identity_subject")
         or row.get("identity_subject")
@@ -6148,6 +6160,21 @@ def _restore_interrupted_session() -> Optional[str]:
         database.enqueue("sessions", "session_resume", {"session_id": session_id})
         if not database.flush(30):
             raise RuntimeError("database writer did not flush session resume")
+        availability = session_availability_by_account(
+            database.read_sessions,
+            PERSONAL_BASELINE_LEARNING_START_UTC,
+        ).get(row["username_key"], {})
+        with profile_lock:
+            profiles = _load_profiles()
+            profile = profiles.get(row["username_key"])
+            if profile is not None:
+                profile["sessions"] = int(
+                    availability.get("lifetime_sessions") or 0
+                )
+                profile["last_session_utc"] = availability.get(
+                    "last_data_session_utc"
+                )
+                _save_profiles(profiles)
     bcg_storage.start_session(session_id)
     with state_lock:
         state["session"].update({
@@ -7993,69 +8020,24 @@ def admin_kick_occupant(
     )
 
 
-def _history_user_activity_epoch(value: Any) -> float:
-    """Return a comparable UTC epoch for a Profile activity timestamp."""
-    if not value:
-        return 0.0
-    try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
-    except (TypeError, ValueError, OverflowError):
-        return 0.0
-
-
-def _users_ordered_by_latest_session(
-    profiles: Dict[str, Any],
-    active_record: Optional[Dict[str, Any]] = None,
-) -> List[Dict[str, Any]]:
-    """Build the Admin chooser with the most recently used account first.
-
-    A running Session is newer than completed history.  Stable name ordering is
-    retained only as a tie-breaker so the selector does not jump unpredictably.
-    The ordering metadata is response-only and never mutates ``profiles.json``.
-    """
-    active_record = active_record or {}
-    active_key = str(active_record.get("username_key") or "").strip().casefold()
-    users: List[Dict[str, Any]] = []
-    for stored_key, stored_profile in profiles.items():
-        profile = dict(stored_profile or {})
-        # The Admin user chooser needs completion status, not raw lifestyle
-        # answers. Keep optional answers behind the dedicated self-service API
-        # until a separately governed research export is designed.
-        profile["progressive_profile_summary"] = admin_progress_summary(profile)
-        profile.pop("progressive_profile", None)
-        account_key = str(
-            profile.get("account_key") or stored_key or profile.get("email") or ""
-        ).strip().casefold()
-        is_active = bool(active_key and account_key == active_key)
-        latest_utc = (
-            active_record.get("started_at_utc")
-            or active_record.get("armed_at_utc")
-        ) if is_active else None
-        latest_utc = latest_utc or profile.get("last_session_utc")
-        profile["history_order_utc"] = latest_utc
-        profile["has_active_session"] = is_active
-        users.append(profile)
-
-    users.sort(
-        key=lambda p: str(
-            p.get("display_name") or p.get("username") or p.get("email") or ""
-        ).casefold()
-    )
-    users.sort(
-        key=lambda p: _history_user_activity_epoch(p.get("history_order_utc")),
-        reverse=True,
-    )
-    users.sort(key=lambda p: bool(p.get("has_active_session")), reverse=True)
-    return users
-
-
 @app.get("/api/users", dependencies=[Depends(require_admin)])
 def users_list():
     with profile_lock:
         profiles = _load_profiles()
+    availability = session_availability_by_account(
+        database.read_sessions,
+        PERSONAL_BASELINE_LEARNING_START_UTC,
+    )
     with session_lock:
         active_record = dict((_active_session or {}).get("record") or {})
-    return {"users": _users_ordered_by_latest_session(profiles, active_record)}
+    return {
+        "users": _users_ordered_by_latest_session(
+            profiles,
+            active_record,
+            availability,
+            progress_summary=admin_progress_summary,
+        )
+    }
 
 
 @app.get("/api/sleep/baselines")
@@ -8117,11 +8099,12 @@ def history_list(
     with profile_lock:
         history_profile = _load_profiles().get(key, {})
     records = database.read_sessions(
-        "SELECT * FROM sessions WHERE username_key=? AND start_time>=? "
-        "ORDER BY start_time DESC LIMIT ?",
+        "SELECT s.* FROM sessions AS s WHERE " + USER_HISTORY_FILTER
+        + " ORDER BY s.start_time DESC LIMIT ?",
         (key, PERSONAL_BASELINE_LEARNING_START_UTC, limit))
     total = database.read_sessions(
-        "SELECT COUNT(*) AS n FROM sessions WHERE username_key=? AND start_time>=?",
+        "SELECT COUNT(*) AS n FROM sessions AS s WHERE "
+        + USER_HISTORY_FILTER,
         (key, PERSONAL_BASELINE_LEARNING_START_UTC))[0]["n"]
     sessions = []
     for record in records:
@@ -8312,8 +8295,10 @@ def history_detail(
 ):
     key = _require_username_access(username, principal)
     rows = database.read_sessions(
-        "SELECT * FROM sessions WHERE username_key=? AND session_id=? AND start_time>=?",
-        (key, session_id, PERSONAL_BASELINE_LEARNING_START_UTC))
+        "SELECT s.* FROM sessions AS s WHERE s.session_id=? AND "
+        + USER_HISTORY_FILTER,
+        (session_id, key, PERSONAL_BASELINE_LEARNING_START_UTC),
+    )
     if not rows:
         raise HTTPException(404, "ไม่พบ session นี้")
     row = rows[0]

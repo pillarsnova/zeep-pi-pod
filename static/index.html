@@ -5124,12 +5124,19 @@ async function loadUsers(){
         selectGender(u.gender);
       };
       chips.appendChild(c);
+      const availableSessions=Number(u.available_sessions??u.sessions??0);
+      if(availableSessions<=0)return;
       const o = document.createElement('option');
       o.value = u.account_key||u.email||u.username;
-      o.textContent = `${identityLabel(u)} (${u.sessions || 0} sessions)`;
+      o.textContent = `${identityLabel(u)} (${availableSessions} sessions)`;
       sel.appendChild(o);
     });
     if (!orderedUsers.length) chips.innerHTML = '<div class="mini" style="margin-top:2px">ยังไม่มีผู้ใช้ — พิมพ์ชื่อด้านล่างเพื่อสร้างใหม่</div>';
+    if (!sel.options.length){
+      const empty=document.createElement('option');
+      empty.value='';empty.textContent='ยังไม่มี Session ที่มีข้อมูล';empty.disabled=true;
+      empty.selected=true;sel.appendChild(empty);
+    }
     // Sessions may receive its first WebSocket frame before the admin user
     // list finishes loading. Restore the active user after options exist, then
     // load the list automatically instead of leaving a false "no user" state.

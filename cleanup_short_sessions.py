@@ -177,8 +177,16 @@ def rebuild_profiles(data_dir: Path) -> None:
     sessions = connect(data_dir / "sessions.db", readonly=True)
     try:
         rows = sessions.execute(
-            """SELECT username_key,COUNT(*) AS session_count,MAX(end_time) AS last_session
-               FROM sessions WHERE end_time IS NOT NULL GROUP BY username_key"""
+            """
+            SELECT username_key,COUNT(*) AS session_count,MAX(end_time) AS last_session
+            FROM sessions AS s
+            WHERE end_time IS NOT NULL
+              AND EXISTS (
+                  SELECT 1 FROM timeline AS t
+                  WHERE t.session_id=s.session_id
+              )
+            GROUP BY username_key
+            """
         ).fetchall()
     finally:
         sessions.close()

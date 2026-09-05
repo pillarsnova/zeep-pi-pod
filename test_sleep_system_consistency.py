@@ -320,9 +320,36 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertTrue(users[0]["has_active_session"])
         self.assertEqual(users[1]["history_order_utc"], "2026-08-28T10:00:00+00:00")
 
+        availability = {
+            "old@example.test": {
+                "available_sessions": 0,
+                "lifetime_sessions": 2,
+                "archived_sessions": 2,
+                "sessions_without_data": 0,
+            },
+            "new@example.test": {
+                "available_sessions": 1,
+                "lifetime_sessions": 3,
+                "archived_sessions": 2,
+                "sessions_without_data": 0,
+                "last_available_session_utc": "2026-09-01T10:00:00+00:00",
+            },
+        }
+        users = zeep._users_ordered_by_latest_session(
+            profiles,
+            availability_by_account=availability,
+        )
+        by_account = {user["account_key"]: user for user in users}
+        self.assertEqual(by_account["old@example.test"]["sessions"], 0)
+        self.assertEqual(by_account["old@example.test"]["lifetime_sessions"], 2)
+        self.assertEqual(by_account["new@example.test"]["sessions"], 1)
+        self.assertEqual(by_account["new@example.test"]["archived_sessions"], 2)
+
         ui = (PI5_ROOT / "static" / "index.html").read_text(encoding="utf-8")
         self.assertIn("sortHistoryUsersNewestFirst(d.users)", ui)
         self.assertIn("sessionState.account_key||sessionState.email", ui)
+        self.assertIn("u.available_sessions??u.sessions??0", ui)
+        self.assertIn("ยังไม่มี Session ที่มีข้อมูล", ui)
 
     def test_canonical_document_tracks_all_current_policy_versions(self):
         doc = (DOCS_ROOT / "zeep-sleep-system-current.md").read_text(encoding="utf-8")

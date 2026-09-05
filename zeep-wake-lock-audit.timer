@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the ZEEP Wake lock-in shadow audit every morning
+
+[Timer]
+OnCalendar=*-*-* 10:00:00 Asia/Bangkok
+Persistent=true
+RandomizedDelaySec=120
+Unit=zeep-wake-lock-audit.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=ZEEP read-only Wake lock-in shadow audit
+After=zeep-pod.service
+
+[Service]
+Type=oneshot
+User=pod1
+Group=pod1
+WorkingDirectory=/home/pod1/pi5
+UMask=0077
+ExecStart=/home/pod1/pi5/.venv/bin/python /home/pod1/pi5/audit_wake_lock_in.py --data-dir /home/pod1/pi5/data --lookback-days 2 --output /home/pod1/pi5/data/maintenance/wake-lock-audit-latest.json
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pod1/pi5/data/maintenance
+

@@ -31,6 +31,8 @@
 | Storage | `database.py`, `bcg_storage.py`, `backup.py` | SQLite writer, raw BCG และ Daily backup |
 | UI source | `static/index.template.html`, `static/partials/control/*` | App shell และการ์ดควบคุมที่แก้ไขได้ |
 | UI bundle | `ui_composer.py`, `static/index.html` | ประกอบและตรวจ runtime HTML โดยไม่ fetch partial ตอนใช้งาน |
+| User History availability | `zeep_pod/sessions/history.py` | นับ Session จาก SQLite ที่จบแล้วและมี Timeline ให้ตรงกับรายการที่เปิดดูได้ |
+| Wake lock-in QA | `audit_wake_lock_in.py`, `zeep_pod/sessions/wake_lock_audit.py` | Shadow audit แบบ read-only; ไม่แก้ State, Score หรือ Raw data |
 
 ## 2. Data flow ที่อนุญาต
 

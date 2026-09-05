@@ -14,6 +14,7 @@ class MaintenanceRegistryTests(unittest.TestCase):
         expected = {
             "reclassify_sleep_history.py",
             "audit_sleep_history_shadow.py",
+            "audit_wake_lock_in.py",
             "promote_sleep_history.py",
             "compare_sleep_history_replay.py",
             "rescore_session_reports.py",

@@ -17,7 +17,7 @@ from sleep_system_policy import (
 )
 
 
-MAINTENANCE_CONTRACT_VERSION = "zeep-maintenance-tools-v1.3"
+MAINTENANCE_CONTRACT_VERSION = "zeep-maintenance-tools-v1.4"
 
 MAINTENANCE_TOOLS: dict[str, dict[str, Any]] = {
     "reclassify_sleep_history.py": {
@@ -76,6 +76,28 @@ MAINTENANCE_TOOLS: dict[str, dict[str, Any]] = {
         "default_mode": "read_only",
         "guard": "accepts replay manifests only; output files are mode 0600",
         "policy_version": SLEEP_HISTORY_BACKFILL_VERSION,
+    },
+    "audit_wake_lock_in.py": {
+        "group": "sleep_replay",
+        "purpose": (
+            "Flag the historical long-Wake lock-in signature for Admin review"
+        ),
+        "writes": ["explicit_owner_only_audit_artifact"],
+        "preserves": [
+            "sessions.db",
+            "bcg.db",
+            "events",
+            "timeline",
+            "raw_bcg",
+            "sleep_state",
+            "scores",
+        ],
+        "default_mode": "read_only",
+        "guard": (
+            "coded references only + conjunction detector + no automatic "
+            "relabel or score mutation"
+        ),
+        "policy_version": "zeep-wake-lock-shadow-audit-v1.0",
     },
     "rescore_session_reports.py": {
         "group": "derived_reports",

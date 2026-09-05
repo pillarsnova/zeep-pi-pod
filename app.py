@@ -3010,11 +3010,10 @@ def estimate_sleep_state() -> Dict[str, Any]:
         )
         _sleep_stage_path["probability_ema"] = dict(smoothed_probabilities)
         probability_current_stage = _sleep_stage_path.get("last")
-    # EMA remains the default continuity source. Only a current N3 winner that
-    # passes the strict physiology gate may bypass EMA; the semi-Markov resolver
-    # below still requires two consecutive epochs before changing state. This
-    # removes the duplicate history lock that previously suppressed valid N3
-    # without making Wake/N1/N2/REM more reactive.
+    # EMA remains the default continuity source. Gated N1 -> N2 progression and
+    # a current N3 winner may use the fresh 30-second evidence before EMA; the
+    # semi-Markov resolver still requires two consecutive epochs/60 seconds.
+    # This prevents a stale display EMA from trapping genuine sleep in N1/N2.
     evidence_candidate = None
     probability_transition: Dict[str, Any] = {
         "candidate_source": "abstain",
@@ -3266,6 +3265,11 @@ def estimate_sleep_state() -> Dict[str, Any]:
                  "rr_n3_fit": round(rr_stage_fits["n3"], 4),
                  "rr_n3_conflict": round(rr_stage_guard["conflict"], 4),
                  "rr_n3_penalty": round(rr_stage_guard["n3_penalty"], 4),
+                 "awake_hr_reference": session_context["awake_hr_reference"],
+                 "awake_rr_reference": session_context["awake_rr_reference"],
+                 "sleep_onset_established": session_context[
+                     "sleep_onset_established"
+                 ],
                  **summary_signal,
                  **waveform_signal,
                  "arousal_proxy": arousal_proxy,

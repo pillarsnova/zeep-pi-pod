@@ -356,14 +356,14 @@ def candidate_from_stage_evidence(
     sleep_onset_gate_passed: bool = True,
     eligible_states: Mapping[str, Any] | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    """Select a stable candidate without starving physiologically gated N3.
+    """Select a stable candidate without starving gated N2/N3 progression.
 
-    EMA remains the default candidate source for Wake/N1/N2/REM. A current N3
-    winner may bypass EMA only after the independent N3 physiology gate passes
-    and the normal winner margin is met. The caller's semi-Markov state machine
-    still requires two consecutive evidence epochs/60 seconds, so this removes
-    duplicate historical inertia without weakening N3 evidence requirements or
-    making the other states more reactive.
+    EMA remains the default candidate source. A current N2 winner may bypass a
+    trailing N1 EMA only for the natural N1 -> N2 progression, after the N2
+    physiology gate and normal winner margin pass. N3 keeps the equivalent
+    strict-gate override. The caller's semi-Markov state machine still requires
+    two consecutive evidence epochs/60 seconds, so neither override can create
+    a stage from one noisy 30-second window.
     """
     ema_candidate, ema_metadata = stable_probability_candidate(
         ema_probabilities,
@@ -374,6 +374,14 @@ def candidate_from_stage_evidence(
         current_probabilities,
         current_stage,
         switch_margin=switch_margin,
+    )
+    gated_n2_progression_override = bool(
+        current_stage == "n1"
+        and current_candidate == "n2"
+        and (
+            eligible_states is None
+            or eligible_states.get("n2", False)
+        )
     )
     gated_n3_override = bool(n3_gate and current_candidate == "n3")
     # Entry into N1 has already passed the explicit onset physiology gate.
@@ -386,7 +394,11 @@ def candidate_from_stage_evidence(
         and sleep_onset_gate_passed
         and current_candidate == "n1"
     )
-    current_override = gated_n3_override or gated_n1_onset_override
+    current_override = (
+        gated_n2_progression_override
+        or gated_n3_override
+        or gated_n1_onset_override
+    )
     candidate = current_candidate if current_override else ema_candidate
     onset_guard_held = bool(
         current_stage in {None, "wake"}
@@ -406,7 +418,7 @@ def candidate_from_stage_evidence(
     )
     if closed_gate_transition_prevented:
         candidate = current_stage if current_stage in STAGES else None
-    metadata = dict(current_metadata if gated_n3_override else ema_metadata)
+    metadata = dict(current_metadata if current_override else ema_metadata)
     metadata.update({
         "candidate_source": (
             "sleep_onset_guard"
@@ -414,12 +426,17 @@ def candidate_from_stage_evidence(
             else (
                 "gated_n1_current_30s_evidence_before_ema"
                 if gated_n1_onset_override else
+                "gated_n2_current_30s_evidence_before_ema"
+                if gated_n2_progression_override else
                 "gated_n3_current_30s_evidence_before_ema"
                 if gated_n3_override else "ema_probability"
             )
         ),
         "ema_role": "default_candidate_stability_and_display",
         "gated_n3_current_evidence_override": gated_n3_override,
+        "gated_n2_current_evidence_override": (
+            gated_n2_progression_override
+        ),
         "gated_n1_onset_current_evidence_override": gated_n1_onset_override,
         "current_candidate_gate_open": candidate_gate_open,
         "closed_gate_transition_prevented": closed_gate_transition_prevented,

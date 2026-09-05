@@ -13,14 +13,14 @@ from typing import Any
 
 
 # Every persisted decision/report carries these versions for provenance.
-SLEEP_PIPELINE_CONTRACT_VERSION = "zeep-sleep-health-pipeline-v1.9-restart-continuity"
-SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.26-fit-continuity-35"
-SLEEP_EVIDENCE_VERSION = "zeep-sleep-state-evidence-v3.4-fit-continuity-35"
+SLEEP_PIPELINE_CONTRACT_VERSION = "zeep-sleep-health-pipeline-v1.10-n2-progression"
+SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.27-gated-n2-progression"
+SLEEP_EVIDENCE_VERSION = "zeep-sleep-state-evidence-v3.5-gated-n2-progression"
 ZEEP_SLEEP_BASELINE_VERSION = "zeep-sleep-state-baseline-v1.8-sep1-cutover"
-ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.15-restart-continuity"
+ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.16-n2-progression"
 SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
 SLEEP_HISTORY_BACKFILL_VERSION = (
-    "zeep-sleep-history-reclass-v25-fit-continuity-35"
+    "zeep-sleep-history-reclass-v26-gated-n2-progression"
 )
 SESSION_REPORT_VERSION = "zeep-session-report-v10.3-nap-goal-duration"
 SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.3-nap-goal-duration"
@@ -866,8 +866,13 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "method": "ema_after_60s_rolling_features",
             "alpha": SLEEP_PROBABILITY_EMA_ALPHA,
             "candidate_switch_margin": SLEEP_PROBABILITY_SWITCH_MARGIN,
-            "candidate_source": "ema_with_gated_n1_onset_and_n3_current_evidence_override",
+            "candidate_source": (
+                "ema_with_gated_n1_onset_n2_progression_"
+                "and_n3_current_evidence_override"
+            ),
             "ema_role": "default_candidate_stability_and_display",
+            "n2_current_evidence_override_requires_gate": True,
+            "n2_current_evidence_override_from_stage": "n1",
             "n3_current_evidence_override_requires_gate": True,
             "display_winner_margin": SLEEP_DISPLAY_WINNER_MARGIN,
             "instant_strong_wake_bypass": False,

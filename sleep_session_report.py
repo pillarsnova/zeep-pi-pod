@@ -310,12 +310,45 @@ def _settling(values: list[float], *, scale: float) -> Optional[float]:
     return max(0.0, min(1.0, 0.5 + (first - last) / max(0.1, scale)))
 
 
-def _awake_rest_duration_profile(group: str) -> tuple[float, float, float, float]:
-    """Minutes: full-credit low/high and permissive outer low/high."""
-    return {
-        "nap_recovery": (25.0, 35.0, 10.0, 60.0),
-        "general_rest": (10.0, 60.0, 3.0, 120.0),
-    }.get(group, (10.0, 60.0, 3.0, 120.0))
+def _rest_goal_seconds(group: str) -> float:
+    """Return the full-credit rest goal for a Recovery Score.
+
+    The product exposes one Nap & Refresh goal: 30 minutes.  Legacy recovery
+    aliases use the same target so historical reports remain comparable.
+    """
+    protocol = (
+        REST_MODE_PROTOCOLS.get(group)
+        or REST_MODE_PROTOCOLS["nap_recovery"]
+    )
+    target = _number(protocol.get("full_credit_target_seconds")) or 30 * 60
+    return max(1.0, target)
+
+
+def _eligible_rest_seconds(
+    rows: list[Dict[str, Any]], interval: float, duration: float,
+) -> float:
+    """Count recorded time with evidence that the user remained in ZEEP.
+
+    Nap & Refresh may be quiet wakefulness, so sleep stages are deliberately
+    not required.  Moving, weak breathing and snoring still mean the user is
+    on the bed.  For legacy rows without Bed Status, valid paired HR/RR is the
+    occupancy fallback.  Confirmed ``Get out of bed`` and unknown rows do not
+    earn goal-duration time.
+    """
+    occupied_labels = {"on bed", "moving", "weak breathing", "snoring"}
+    eligible_rows = 0
+    for row in rows:
+        bed = str(row.get("bed") or row.get("bed_status") or "").strip().casefold()
+        if bed in occupied_labels:
+            eligible_rows += 1
+            continue
+        if bed:
+            continue
+        hr_ok = bool(filter_vital_values([row.get("hr")], HR_SANITY_RANGE_BPM))
+        rr_ok = bool(filter_vital_values([row.get("rr")], RR_SANITY_RANGE_PER_MIN))
+        if hr_ok and rr_ok:
+            eligible_rows += 1
+    return min(max(0.0, duration), eligible_rows * interval)
 
 
 def _build_awake_rest_quality(
@@ -341,9 +374,9 @@ def _build_awake_rest_quality(
     # Sensor rows there is no defensible evidence for an awake-rest score, so
     # keep the historical zero instead of awarding duration-only points.
     no_sensor_evidence = not rows
-    duration_min = duration / 60.0
-    low, high, soft_low, soft_high = _awake_rest_duration_profile(group)
-    duration_factor = _range_fit(duration_min, low, high, soft_low, soft_high)
+    duration_goal_s = _rest_goal_seconds(group)
+    eligible_rest_s = _eligible_rest_seconds(rows, interval, duration)
+    duration_factor = min(1.0, eligible_rest_s / duration_goal_s)
     duration_points = 0.0 if no_sensor_evidence else round(20.0 * duration_factor, 1)
 
     hr = [value for value in _values(rows, "hr") if 30 <= value <= 220]
@@ -503,8 +536,16 @@ def _build_awake_rest_quality(
             "protocol_status": _protocol_status(mode, duration),
         },
         "duration_target": {
-            "range_minutes": [int(low), int(high)],
-            "basis": f"ZEEP Wellness target สำหรับ{policy['label']}",
+            "seconds": round(duration_goal_s, 1),
+            "target_minutes": round(duration_goal_s / 60.0, 1),
+            "recommended_range_minutes": [25, 35],
+            "eligible_rest_seconds": round(eligible_rest_s, 1),
+            "eligible_rest_minutes": round(eligible_rest_s / 60.0, 1),
+            "completion_pct": round(100.0 * duration_factor, 1),
+            "basis": (
+                f"เป้าหมาย {policy['label']} 30 นาที; "
+                "นับเวลาที่มีหลักฐานว่าอยู่ใน ZEEP และไม่หักเมื่อพักเกินเป้าหมาย"
+            ),
         },
         "physiology": {
             "available": hr_regularity is not None and rr_regularity is not None,
@@ -553,7 +594,11 @@ def _build_awake_rest_quality(
             "data_coverage": "ความครบของข้อมูล",
         },
         "score_unrounded": earned,
-        "score_basis": "เวลาพัก 20 + การตอบสนอง HR/RR 30 + ความต่อเนื่อง 20 + สภาพแวดล้อม 20 + ข้อมูล 10",
+        "score_basis": (
+            "เวลาพักที่มีหลักฐานเทียบเป้าหมาย 30 นาที 20 + "
+            "การตอบสนอง HR/RR 30 + ความต่อเนื่อง 20 + "
+            "สภาพแวดล้อม 20 + ข้อมูล 10"
+        ),
         "version": SLEEP_QUALITY_VERSION,
         "outcome_interpretation": "Nap & Refresh ไม่บังคับให้หลับหรือมี N3/REM; ความสดชื่นจริงใช้คำตอบหลัง Session ประกอบ",
         "disclaimer": "Recovery Score เป็นการประเมิน ZEEP Wellness จาก Sensor ไม่ใช่การวินิจฉัย การรักษา หรือผล AASM/PSG",

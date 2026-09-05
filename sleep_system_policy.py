@@ -22,8 +22,8 @@ SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
 SLEEP_HISTORY_BACKFILL_VERSION = (
     "zeep-sleep-history-reclass-v25-fit-continuity-35"
 )
-SESSION_REPORT_VERSION = "zeep-session-report-v10.2-score-confidence"
-SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.2-score-confidence"
+SESSION_REPORT_VERSION = "zeep-session-report-v10.3-nap-goal-duration"
+SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.3-nap-goal-duration"
 ENVIRONMENT_CONTEXT_POLICY_VERSION = "zeep-environment-context-v2.0-mode-aware-fair-floor"
 TERMINAL_WAKE_POLICY_VERSION = "zeep-terminal-wake-boundary-v1.0"
 SLEEP_CLASSIFICATION_GAP_VERSION = "zeep-sleep-classification-gap-v1.2-restart-aware"

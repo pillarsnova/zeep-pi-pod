@@ -491,8 +491,43 @@ class SleepSessionReportTests(unittest.TestCase):
         self.assertEqual(nap["rest_mode"]["group"], "nap_recovery")
         self.assertEqual(nap["rest_mode"]["resolved"], "short_nap")
         self.assertEqual(nap["score_title"], "Recovery Score")
-        self.assertEqual(nap["duration_target"]["range_minutes"], [25, 35])
+        self.assertEqual(nap["duration_target"]["target_minutes"], 30.0)
+        self.assertEqual(
+            nap["duration_target"]["recommended_range_minutes"], [25, 35],
+        )
         self.assertEqual(nap["rest_mode"]["protocol_status"]["status"], "recommended")
+
+    def test_nap_duration_uses_occupied_rest_time_against_thirty_minute_goal(self):
+        on_bed = {
+            "hr": 65.0, "rr": 14.0, "bed": "On bed", "temp": 24.0,
+            "hum": 50.0, "co2": 750.0, "dba": 35.0, "lux": 2.0,
+        }
+        off_bed = {
+            **on_bed, "hr": None, "rr": None, "bed": "Get out of bed",
+        }
+        quality = build_sleep_quality(
+            30 * 60, {}, {"wake": 360}, rest_mode="nap_recovery",
+            sensor_samples=[dict(on_bed) for _ in range(180)]
+            + [dict(off_bed) for _ in range(180)],
+        )
+
+        self.assertEqual(quality["component_points"]["goal_duration"], 10.0)
+        self.assertEqual(quality["duration_target"]["eligible_rest_minutes"], 15.0)
+        self.assertEqual(quality["duration_target"]["completion_pct"], 50.0)
+
+    def test_nap_duration_reaches_full_credit_without_over_target_penalty(self):
+        samples = [{
+            "hr": 65.0, "rr": 14.0, "bed": "On bed", "temp": 24.0,
+            "hum": 50.0, "co2": 750.0, "dba": 35.0, "lux": 2.0,
+        } for _ in range(540)]
+        quality = build_sleep_quality(
+            45 * 60, {}, {"wake": 540}, rest_mode="nap_recovery",
+            sensor_samples=samples,
+        )
+
+        self.assertEqual(quality["component_points"]["goal_duration"], 20.0)
+        self.assertEqual(quality["duration_target"]["eligible_rest_minutes"], 45.0)
+        self.assertEqual(quality["duration_target"]["completion_pct"], 100.0)
 
     def test_smart_mode_classifies_observed_character_without_guessing_awake_goal(self):
         short = build_sleep_quality(30 * 60, {}, {"n2": 360}, rest_mode="auto")

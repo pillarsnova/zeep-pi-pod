@@ -36,8 +36,8 @@
 | Semi-Markov transition | `zeep-semimarkov-30s-v1.15-restart-continuity` |
 | G2 ontology | `g2-aasm-5class-v1.0` |
 | Historical replay | `zeep-sleep-history-reclass-v25-fit-continuity-35` |
-| Sleep / Recovery quality | `zeep-rest-quality-v8.2-score-confidence` |
-| Session report | `zeep-session-report-v10.2-score-confidence` |
+| Sleep / Recovery quality | `zeep-rest-quality-v8.3-nap-goal-duration` |
+| Session report | `zeep-session-report-v10.3-nap-goal-duration` |
 | Environment context | `zeep-environment-context-v2.0-mode-aware-fair-floor` |
 | Terminal Wake boundary | `zeep-terminal-wake-boundary-v1.0` |
 | Classification gap display | `zeep-sleep-classification-gap-v1.2-restart-aware` |
@@ -340,7 +340,7 @@ stateDiagram-v2
 physiology evidence ก่อนเสมอ การอนุญาต graph นี้ไม่ได้หมายความว่า BCG เทียบเท่า PSG
 ซึ่งยังต้องใช้ EEG/EOG/chin EMG จริง
 
-## 4. Sleep / Recovery Quality v8.2
+## 4. Sleep / Recovery Quality v8.3
 
 ### 4.1 สมการภาพรวม
 
@@ -370,14 +370,21 @@ Nap & Refresh ใช้ Recovery Score: เวลา 20 + การตอบส�
 สิ่งแวดล้อมสนับสนุน 20 + ความครบข้อมูล 10 ไม่บังคับให้หลับและไม่บังคับ N3/REM
 ส่วนความสดชื่นจริงต้องใช้แบบประเมินหลัง Session ประกอบ ห้ามอนุมานจาก Sensor เพียงอย่างเดียว
 
+คะแนนเวลา NAP ใช้ **เวลาพักที่มีหลักฐานว่าอยู่ใน ZEEP เทียบเป้าหมาย 30 นาที**:
+`Duration points = 20 × min(1, eligible rest seconds / 1,800)` โดย On bed,
+Moving, Weak breathing และ Snoring นับเป็นเวลาพัก ส่วน Get out of bed ไม่นับ
+หากข้อมูลเก่าไม่มี Bed Status จะใช้ HR/RR ที่จับคู่และผ่าน sanity range เป็น fallback
+เมื่อครบ 30 นาทีได้เต็ม 20 และไม่หักคะแนนเพียงเพราะพักนานกว่าเป้าหมาย ทั้งนี้
+ช่วงแนะนำ 25–35 นาทีและเพดานปฏิบัติการ 45 นาทียังคงแสดงแยกใน `protocol_status`
+
 คำอธิบายสองรูปแบบ แผนที่หลักฐาน และข้อห้ามในการเปรียบเทียบคะแนนอยู่ที่
 [`TWO_MODE_SCORE_EVIDENCE.md`](../research/evidence-library/TWO_MODE_SCORE_EVIDENCE.md)
 
 ### 4.2 Rest Mode และ Duration target
 
-| Mode | Target ที่ใช้ใน duration 15 คะแนน |
+| Mode | Target ที่ใช้ใน Duration component |
 |---|---:|
-| Short nap | 1,800 s / 30 min |
+| Nap & Refresh | 1,800 s / 30 min ของเวลาพักที่มีหลักฐานว่าอยู่ใน ZEEP |
 | Cycle nap | 5,400 s / 90 min |
 | Overnight/main sleep | 25200 s / 7 h |
 
@@ -427,7 +434,7 @@ W/N1/N2/N3/REM ทั้งสองสายแสดง `score_title`, `qualit
 - Cycle นับเมื่อมี accumulated NREM ≥45 นาทีก่อนเข้า REM และไม่เพิ่มหลายรอบจาก REM flicker
 - Arousal proxy ไม่ใช่ EEG cortical arousal และ Cycle proxy ไม่ใช่ AASM cycle count
 
-## 5. Session Report v10.2
+## 5. Session Report v10.3
 
 เมื่อจบ Session ระบบสร้างและ persist รายงานจากข้อมูลชุดเดียวกับ Timeline:
 

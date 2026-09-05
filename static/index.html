@@ -5509,13 +5509,19 @@ function renderSleepQuality(q, ended){
     q.component_labels?.[key]||legacyLabels[key]||key,
     pointText(key),
   ]);
-  const targetText=q.duration_target?.range_minutes
+  const targetText=q.duration_target?.target_minutes!=null
+    ? `${q.duration_target.target_minutes} นาที`
+    : q.duration_target?.range_minutes
     ? `${q.duration_target.range_minutes[0]}–${q.duration_target.range_minutes[1]} นาที`
     : q.duration_target?.hours==null?null:`${q.duration_target.hours} ชม.`;
   const restMetrics = [
     ['รูปแบบการพัก', q.rest_mode?.label || 'ประเมินตามเวลาที่บันทึกจริง'],
     ...componentRows,
     targetText?['เป้าหมายเวลา',targetText]:null,
+    q.duration_target?.eligible_rest_minutes==null?null:
+      ['เวลาพักที่นับได้',`${q.duration_target.eligible_rest_minutes} นาที`],
+    q.duration_target?.completion_pct==null?null:
+      ['ความสำเร็จตามเป้าหมาย',`${q.duration_target.completion_pct}%`],
     q.physiology?.heart_rate_average==null?null:['ชีพจรเฉลี่ย',`${q.physiology.heart_rate_average} bpm`],
     q.physiology?.respiration_average==null?null:['หายใจเฉลี่ย',`${q.physiology.respiration_average} ครั้ง/นาที`],
     q.body_response?.movement_pct==null?null:['การเคลื่อนไหว',`${q.body_response.movement_pct}%`],

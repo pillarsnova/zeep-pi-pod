@@ -80,6 +80,9 @@ def build_comparison(
 ) -> dict[str, Any]:
     old_by_id = session_index(old_manifest)
     new_by_id = session_index(new_manifest)
+    common_ids = set(old_by_id) & set(new_by_id)
+    new_only_ids = set(new_by_id) - set(old_by_id)
+    removed_ids = set(old_by_id) - set(new_by_id)
     old_allowed = set(
         (old_manifest.get("acceptance") or {}).get(
             "wellness_derived_promotion_eligible_session_ids"
@@ -158,10 +161,41 @@ def build_comparison(
     operational_status_counts = Counter()
     old_stage_totals = Counter()
     new_stage_totals = Counter()
+    common_old_stage_totals = Counter()
+    common_new_stage_totals = Counter()
+    new_only_stage_totals = Counter()
+    fit_fusion_totals = Counter()
+    fit_overall_winner_counts = Counter()
+    fit_eligible_winner_counts = Counter()
     for row in rows:
         operational_status_counts.update(row["operational_status_counts"])
         old_stage_totals.update(row["old_stage_counts"])
         new_stage_totals.update(row["new_stage_counts"])
+        if row["session_id"] in common_ids:
+            common_old_stage_totals.update(row["old_stage_counts"])
+            common_new_stage_totals.update(row["new_stage_counts"])
+        elif row["session_id"] in new_only_ids:
+            new_only_stage_totals.update(row["new_stage_counts"])
+        replay = (new_by_id.get(row["session_id"]) or {}).get("replay") or {}
+        fusion = replay.get("hr_rr_fit_fusion") or {}
+        fit_fusion_totals["evidence_epochs"] += int(
+            fusion.get("evidence_epochs") or 0
+        )
+        fit_fusion_totals["changed_evidence_winner_count"] += int(
+            fusion.get("changed_evidence_winner_count") or 0
+        )
+        fit_fusion_totals["agreed_with_confirmed_state_count"] += int(
+            fusion.get("agreed_with_confirmed_state_count") or 0
+        )
+        fit_fusion_totals["overall_fit_winner_gate_closed_count"] += int(
+            fusion.get("overall_fit_winner_gate_closed_count") or 0
+        )
+        fit_overall_winner_counts.update(
+            fusion.get("overall_fit_winner_counts") or {}
+        )
+        fit_eligible_winner_counts.update(
+            fusion.get("eligible_fit_winner_counts") or {}
+        )
     evaluation_epochs = (
         sum(new_stage_totals.values())
         + sum(operational_status_counts.values())
@@ -173,6 +207,10 @@ def build_comparison(
     return {
         "scope": {
             "sessions": len(rows),
+            "previous_sessions": len(old_by_id),
+            "common_sessions": len(common_ids),
+            "new_sessions": len(new_only_ids),
+            "removed_sessions": len(removed_ids),
             "unique_emails": len({row["email"] for row in rows}),
             "raw_files_modified": False,
             "production_database_modified": False,
@@ -188,6 +226,11 @@ def build_comparison(
         "result_change": {
             "sessions_with_stage_count_changes": sum(
                 row["stage_counts_changed"] for row in rows
+            ),
+            "common_sessions_with_stage_count_changes": sum(
+                row["stage_counts_changed"]
+                and row["session_id"] in common_ids
+                for row in rows
             ),
             "sessions_with_comparable_score_changes": sum(
                 row["shadow_score_delta"] not in (None, 0) for row in rows
@@ -214,6 +257,31 @@ def build_comparison(
             "stage_count_delta": {
                 stage: new_stage_totals[stage] - old_stage_totals[stage]
                 for stage in STAGES
+            },
+            "common_cohort_old_stage_counts": dict(
+                common_old_stage_totals
+            ),
+            "common_cohort_new_stage_counts": dict(
+                common_new_stage_totals
+            ),
+            "common_cohort_stage_count_delta": {
+                stage: (
+                    common_new_stage_totals[stage]
+                    - common_old_stage_totals[stage]
+                )
+                for stage in STAGES
+            },
+            "new_session_stage_counts": dict(new_only_stage_totals),
+            "hr_rr_fit_fusion": {
+                **dict(fit_fusion_totals),
+                "overall_fit_winner_counts": dict(
+                    fit_overall_winner_counts
+                ),
+                "eligible_fit_winner_counts": dict(
+                    fit_eligible_winner_counts
+                ),
+                "fit_can_bypass_state_gate": False,
+                "fit_can_bypass_confirmation": False,
             },
             "evaluation_epoch_count": evaluation_epochs,
             "confirmed_stage_coverage_percent": confirmed_coverage_percent,
@@ -260,18 +328,32 @@ def markdown_report(comparison: Mapping[str, Any]) -> str:
         "- Coverage ของ State ที่ยืนยันรวม: "
         f"{result['confirmed_stage_coverage_percent']}% จาก "
         f"{result['evaluation_epoch_count']} Epoch",
+        "- Session ที่เทียบโมเดลได้ทั้งสองรุ่น: "
+        f"{scope['common_sessions']} · Session ใหม่: "
+        f"{scope['new_sessions']}",
         "",
-        "## State รวมก่อนและหลัง",
+        "## State ของ Cohort เดียวกันก่อนและหลัง",
         "",
         "| State | เดิม | ใหม่ | ผลต่าง |",
         "|---|---:|---:|---:|",
         *[
             f"| {stage.upper()} | "
-            f"{result['old_stage_counts'].get(stage, 0)} | "
-            f"{result['new_stage_counts'].get(stage, 0)} | "
-            f"{result['stage_count_delta'].get(stage, 0):+d} |"
+            f"{result['common_cohort_old_stage_counts'].get(stage, 0)} | "
+            f"{result['common_cohort_new_stage_counts'].get(stage, 0)} | "
+            f"{result['common_cohort_stage_count_delta'].get(stage, 0):+d} |"
             for stage in STAGES
         ],
+        "",
+        "## ผลของ HR/RR Fit Fusion",
+        "",
+        "- Epoch ที่มีหลักฐาน: "
+        f"{result['hr_rr_fit_fusion'].get('evidence_epochs', 0)}",
+        "- Fit ทำให้ Evidence winner เปลี่ยน: "
+        f"{result['hr_rr_fit_fusion'].get('changed_evidence_winner_count', 0)}",
+        "- Fit winner ตรงกับ State ที่ยืนยันก่อนหน้า: "
+        f"{result['hr_rr_fit_fusion'].get('agreed_with_confirmed_state_count', 0)}",
+        "- Fit winner ถูก Gate ปิดและไม่อนุญาตให้แข่งขัน: "
+        f"{result['hr_rr_fit_fusion'].get('overall_fit_winner_gate_closed_count', 0)}",
         "",
         "สถานะที่ไม่ใช่ Sleep Stage: "
         + ", ".join(

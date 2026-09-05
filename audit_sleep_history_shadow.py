@@ -925,6 +925,37 @@ def replay_session(
         if passed
     )
     winner_counts = Counter(row["winner"] for row in evidence_rows)
+    fit_overall_winner_counts = Counter(
+        winner
+        for row in evidence_rows
+        if (winner := row["hr_rr_fit_fusion"].get(
+            "overall_fit_winner"
+        ))
+    )
+    fit_eligible_winner_counts = Counter(
+        winner
+        for row in evidence_rows
+        if (winner := row["hr_rr_fit_fusion"].get(
+            "eligible_fit_winner"
+        ))
+    )
+    fit_changed_winner_count = sum(
+        row["hr_rr_fit_fusion"].get("evidence_winner_before_fusion")
+        != row["hr_rr_fit_fusion"].get("fused_winner")
+        for row in evidence_rows
+    )
+    fit_agreement_count = sum(
+        bool(row["hr_rr_fit_fusion"].get(
+            "fit_agrees_with_confirmed_state"
+        ))
+        for row in evidence_rows
+    )
+    fit_winner_gate_closed_count = sum(
+        not bool(row["hr_rr_fit_fusion"].get(
+            "overall_fit_winner_eligible"
+        ))
+        for row in evidence_rows
+    )
     abstention_count = sum(not row["quality"]["passed"] for row in evidence_rows)
     confirmed_without_current_gate = sum(
         1 for row in evidence_rows
@@ -997,6 +1028,18 @@ def replay_session(
         "counts": dict(counts),
         "gate_pass_counts": dict(gate_pass_counts),
         "evidence_winner_counts": dict(winner_counts),
+        "hr_rr_fit_fusion": {
+            "overall_fit_winner_counts": dict(fit_overall_winner_counts),
+            "eligible_fit_winner_counts": dict(fit_eligible_winner_counts),
+            "changed_evidence_winner_count": fit_changed_winner_count,
+            "agreed_with_confirmed_state_count": fit_agreement_count,
+            "overall_fit_winner_gate_closed_count": (
+                fit_winner_gate_closed_count
+            ),
+            "evidence_epochs": len(evidence_rows),
+            "fit_can_bypass_state_gate": False,
+            "fit_can_bypass_confirmation": False,
+        },
         "abstention_count": abstention_count,
         "confirmed_coverage_percent": round(confirmed_coverage, 1),
         "confidence_percent": confidence_percent,

@@ -45,6 +45,14 @@ class ReplayComparisonTests(unittest.TestCase):
                 "replay": {
                     "counts": {"wake": 4},
                     "confirmed_coverage_percent": 70.0,
+                    "hr_rr_fit_fusion": {
+                        "evidence_epochs": 5,
+                        "changed_evidence_winner_count": 2,
+                        "agreed_with_confirmed_state_count": 3,
+                        "overall_fit_winner_gate_closed_count": 1,
+                        "overall_fit_winner_counts": {"n2": 4, "n3": 1},
+                        "eligible_fit_winner_counts": {"n2": 5},
+                    },
                 },
             }],
         }
@@ -69,6 +77,56 @@ class ReplayComparisonTests(unittest.TestCase):
             71,
         )
         self.assertTrue(result["sessions"][0]["stage_counts_changed"])
+        fusion = result["result_change"]["hr_rr_fit_fusion"]
+        self.assertEqual(fusion["evidence_epochs"], 5)
+        self.assertEqual(fusion["changed_evidence_winner_count"], 2)
+        self.assertEqual(fusion["overall_fit_winner_counts"], {
+            "n2": 4,
+            "n3": 1,
+        })
+        self.assertFalse(fusion["fit_can_bypass_state_gate"])
+
+    def test_separates_model_delta_from_a_new_session(self):
+        old = {
+            "acceptance": {},
+            "sessions": [{
+                "session_id": "common",
+                "replay": {"counts": {"wake": 2, "n1": 1}},
+            }],
+        }
+        new = {
+            "acceptance": {},
+            "sessions": [
+                {
+                    "session_id": "common",
+                    "replay": {"counts": {"wake": 1, "n2": 2}},
+                },
+                {
+                    "session_id": "new",
+                    "replay": {"counts": {"wake": 9, "n3": 3}},
+                },
+            ],
+        }
+
+        result = build_comparison(old, new)
+
+        self.assertEqual(result["scope"]["common_sessions"], 1)
+        self.assertEqual(result["scope"]["new_sessions"], 1)
+        change = result["result_change"]
+        self.assertEqual(change["common_cohort_stage_count_delta"], {
+            "wake": -1,
+            "n1": -1,
+            "n2": 2,
+            "n3": 0,
+            "rem": 0,
+        })
+        self.assertEqual(change["new_session_stage_counts"], {
+            "wake": 9,
+            "n1": 0,
+            "n2": 0,
+            "n3": 3,
+            "rem": 0,
+        })
 
     def test_cli_stdout_contains_aggregate_without_session_ids_or_emails(self):
         old = {

@@ -201,6 +201,12 @@ def _event_values(session: dict[str, Any]) -> list[tuple[str, str, str]]:
         payload = {
             "candidate": evidence.get("candidate"),
             "probabilities": evidence.get("probabilities") or {},
+            "pre_fusion_probabilities": (
+                evidence.get("pre_fusion_probabilities") or {}
+            ),
+            "hr_rr_fit_fusion": (
+                evidence.get("hr_rr_fit_fusion") or {}
+            ),
             "confidence": confidence(evidence),
             "reason": "replayed_from_preserved_raw_bcg",
             "metrics": evidence.get("diagnostics") or {},

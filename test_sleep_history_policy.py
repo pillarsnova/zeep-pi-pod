@@ -1,5 +1,6 @@
 import base64
 from datetime import datetime, timezone
+import json
 import struct
 import unittest
 
@@ -7,7 +8,7 @@ from audit_sleep_history_shadow import (
     operational_status_row,
     replay_session,
 )
-from promote_sleep_history import public_promotion_summary
+from promote_sleep_history import _event_values, public_promotion_summary
 from sleep_history_policy import (
     promotion_ready,
     quality_tier,
@@ -81,6 +82,33 @@ class SleepHistoryPolicyTests(unittest.TestCase):
         self.assertEqual(summary["reviewed_report_parity_count"], 1)
         self.assertTrue(summary["raw_timeline_hash_unchanged"])
         self.assertTrue(summary["raw_bcg_hash_unchanged"])
+
+    def test_promoted_evidence_preserves_fit_fusion_provenance(self):
+        events = _event_values({
+            "evidence_rows": [{
+                "t": 60.0,
+                "candidate": "n2",
+                "probabilities": {"n2": 0.6},
+                "pre_fusion_probabilities": {"n2": 0.5},
+                "hr_rr_fit_fusion": {
+                    "eligible_fit_winner": "n2",
+                    "fit_weight": 0.25,
+                },
+                "quality": {"winner_value": 0.6},
+            }],
+            "state_rows": [],
+            "status_rows": [],
+        })
+
+        evidence_payload = json.loads(events[0][2])
+        self.assertEqual(
+            evidence_payload["pre_fusion_probabilities"],
+            {"n2": 0.5},
+        )
+        self.assertEqual(
+            evidence_payload["hr_rr_fit_fusion"]["eligible_fit_winner"],
+            "n2",
+        )
 
     def test_replay_exposes_every_empty_epoch_as_no_data(self):
         replay = replay_session(

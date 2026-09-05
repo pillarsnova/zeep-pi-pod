@@ -23,6 +23,7 @@ def hub1(**overrides):
         "humidity": 51.3,
         "lux": 2.1,
         "sound_dba_est": 31.4,
+        "sound_measurement_valid": True,
         "sensor_status": {
             "sht31": True,
             "opt3001": True,
@@ -54,16 +55,22 @@ def hub2(**overrides):
 
 
 class EnvironmentContractTests(unittest.TestCase):
-    def test_sph0645_display_uses_rounded_absolute_dbfs_without_reduction(self):
-        with patch.object(app, "SOUND_DBFS_ERROR_PERCENT", 0.0):
-            negative = app.normalize_esp32_sensor({"sound_dbfs": -39.69})
-            positive = app.normalize_esp32_sensor({"sound_dbfs": 39.69})
+    def test_sph0645_rejects_legacy_dbfs_and_accepts_firmware_laeq(self):
+        legacy = app.normalize_esp32_sensor({"sound_dbfs": -39.69})
+        valid = app.normalize_esp32_sensor({
+            "sound_dbfs": -39.69,
+            "sound_laeq_dba": 54.0,
+            "sound_valid": True,
+            "sound_weighting": "A",
+            "sound_metric": "LAeq",
+            "sound_window_ms": 10_000,
+        })
 
-        self.assertEqual(negative["sound_dbfs"], -39.69)
-        self.assertEqual(negative["sound_dbfs_magnitude"], 39.7)
-        self.assertEqual(negative["sound_dba_est"], 39.7)
-        self.assertEqual(positive["sound_dba_est"], 39.7)
-        self.assertEqual(negative["sound_error_percent"], 0.0)
+        self.assertEqual(legacy["sound_dbfs"], -39.69)
+        self.assertNotIn("sound_dba_est", legacy)
+        self.assertEqual(legacy["sound_invalid_reason"], "legacy_dbfs_only")
+        self.assertEqual(valid["sound_dba_est"], 54.0)
+        self.assertTrue(valid["sound_measurement_valid"])
 
     def test_six_live_sensors_are_merged_from_two_hubs(self):
         result = app.build_environment_snapshot(hub1(), hub2(), NOW)
@@ -111,13 +118,19 @@ class EnvironmentContractTests(unittest.TestCase):
         self.assertEqual(result["devices"]["mhz19c"]["status"], "live")
         self.assertEqual(result["devices"]["mhz19c"]["source"], "hub1")
 
-    def test_held_sound_is_visible_but_not_counted_as_live(self):
+    def test_invalid_sound_is_not_visible_or_counted_as_live(self):
         result = app.build_environment_snapshot(
-            hub1(sound_value_held=True), hub2(), NOW
+            hub1(
+                sound_dba_est=None,
+                sound_measurement_valid=False,
+                sound_invalid_reason="legacy_dbfs_only",
+            ),
+            hub2(),
+            NOW,
         )
 
-        self.assertEqual(result["sound_dba_est"], 31.4)
-        self.assertEqual(result["devices"]["sph0645"]["status"], "held")
+        self.assertIsNone(result["sound_dba_est"])
+        self.assertEqual(result["devices"]["sph0645"]["status"], "invalid")
         self.assertEqual(result["live_count"], 5)
 
     def test_session_sample_keeps_live_pm25_and_voc_for_the_final_report(self):

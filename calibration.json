@@ -1,24 +1,29 @@
 {
-  "sound_dbfs_error_percent": 0.0,
-  "calibrated_at": "2026-09-03T00:31:40+07:00",
-  "method": "requested display transform: round(abs(raw sound_dbfs), 1) with no percentage reduction; raw dBFS unchanged; not a traceable SPL calibration",
-  "operator": "super",
+  "sound_processing": {
+    "version": "esp32-sph0645-laeq-a-v1.0",
+    "owner": "sensorhub1_firmware",
+    "required_metric": "LAeq",
+    "required_weighting": "A",
+    "required_window_ms": 10000,
+    "legacy_dbfs_policy": "invalid",
+    "pi_abs_transform_allowed": false,
+    "status": "firmware_update_required",
+    "legacy_configuration": {
+      "retired_at": "2026-09-06",
+      "sound_dbfs_error_percent": 0.0,
+      "calibrated_at": "2026-09-03T00:31:40+07:00",
+      "method": "round(abs(raw sound_dbfs), 1)",
+      "operator": "super",
+      "reason_retired": "dBFS is a full-scale ratio and cannot be converted to dBA with abs()"
+    }
+  },
   "reference_meter": "CEM DT-8852",
   "reference_dba_range": "30-130 dBA",
   "previous_legacy_sound_dba_offset": 61.65,
   "previous_fixed_adjustment_db": -2.0,
   "rejected_adjustment_db": -11.0,
   "observed_valid_pair_sensor_minus_meter_db": 2.5,
-  "status": "abs_dbfs_no_percentage_reduction_estimate_pending_reference_retest",
   "sensor_bias_metadata": {
-    "sound_dba_est": {
-      "operator": "super",
-      "reference_value": null,
-      "unit": "dBA est.",
-      "raw_unit": "dBFS",
-      "parameter_unit": "%",
-      "updated_at": "2026-09-02T17:31:40+00:00"
-    },
     "humidity_rh": {
       "operator": "super",
       "reference_value": 61.0,

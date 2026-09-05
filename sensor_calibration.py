@@ -38,16 +38,6 @@ SENSOR_CALIBRATION_SPECS: dict[str, dict[str, Any]] = {
         "default": 0.0, "bias_min": -5000.0, "bias_max": 5000.0,
         "value_min": 0.0, "value_max": 83865.0, "step": 0.1,
     },
-    "sound_dba_est": {
-        "device": "SPH0645", "device_key": "sph0645",
-        "label": "ระดับเสียงโดยประมาณ", "unit": "dBA est.",
-        "config_key": "sound_dbfs_error_percent",
-        "default": 0.0, "bias_min": 0.0, "bias_max": 30.0,
-        "value_min": 0.0, "value_max": 120.0, "step": 0.1,
-        "raw_field": "sound_dbfs", "bias_label": "ERROR REDUCTION",
-        "parameter_unit": "%", "raw_unit": "dBFS",
-        "formula": "round(abs(raw dBFS), 1) × (1 - error_percent / 100)",
-    },
     "co2_ppm": {
         "device": "MH-Z19C", "device_key": "mhz19c",
         "label": "คาร์บอนไดออกไซด์", "unit": "ppm", "config_key": "co2_ppm_bias",
@@ -101,8 +91,6 @@ def persist_calibration(path: Path, data: Mapping[str, Any]) -> None:
 def resolve_biases(
     calibration: Mapping[str, Any],
     *,
-    sound_error_percent: float,
-    sound_source: str,
     humidity_bias: float,
     humidity_source: str,
 ) -> tuple[dict[str, float], dict[str, str]]:
@@ -110,9 +98,7 @@ def resolve_biases(
     biases: dict[str, float] = {}
     sources: dict[str, str] = {}
     for metric, spec in SENSOR_CALIBRATION_SPECS.items():
-        if metric == "sound_dba_est":
-            value, source = sound_error_percent, sound_source
-        elif metric == "humidity_rh":
+        if metric == "humidity_rh":
             value, source = humidity_bias, humidity_source
         elif spec["config_key"] in calibration:
             value, source = float(calibration[spec["config_key"]]), "calibration.json"
@@ -143,3 +129,26 @@ def apply_additive_bias(
     adjusted = float(raw_value) + float(biases.get(metric, 0.0))
     adjusted = min(float(spec["value_max"]), max(float(spec["value_min"]), adjusted))
     return round(adjusted, 2)
+
+
+def sound_inspector_channel(
+    hub1: Mapping[str, Any],
+    environment: Mapping[str, Any],
+    device: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Describe the firmware-owned sound pipeline for Admin inspection."""
+    return {
+        "metric": "sound_dba_est", "device": "SPH0645",
+        "device_key": "sph0645", "label": "ระดับเสียง LAeq(A)",
+        "unit": "dBA est.", "raw_unit": "dBFS",
+        "raw": hub1.get("sound_dbfs"), "bias": 0.0,
+        "calibrated": environment.get("sound_dba_est"),
+        "editable": False, "source": device.get("source_label"),
+        "status": device.get("status", "offline"),
+        "data_age_s": device.get("data_age_s"),
+        "formula": "ESP32: I2S alignment → A-weighting → LAeq",
+        "firmware_value": hub1.get("sound_laeq_dba"),
+        "measurement_valid": hub1.get("sound_measurement_valid") is True,
+        "invalid_reason": hub1.get("sound_invalid_reason"),
+        "lock_reason": "dBFS เป็น dBA ไม่ได้; ต้องคำนวณ LAeq(A) ที่ ESP32",
+    }

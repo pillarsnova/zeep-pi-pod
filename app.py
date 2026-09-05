@@ -154,6 +154,7 @@ from sensor_calibration import (
     load_calibration,
     persist_calibration,
     resolve_biases,
+    sound_inspector_channel,
 )
 from sensor_runtime import (
     compose_environment_snapshot,
@@ -592,12 +593,9 @@ CONTROLHUB2_ACK_TIMEOUT_SECONDS = float(
 # immediately through the internal bed_stop command.
 BED_MOVE_SECONDS = max(0.5, float(os.getenv("BED_MOVE_SECONDS", "2")))
 
-# SPH0645 display transform for the current field trial.
-# magnitude = round(abs(sound_dbfs), 1)
-# dBA_est = magnitude when error_percent = 0% (current approved setting).
-# Raw dBFS remains untouched for audit/recalibration.
-# This is an estimated display value, not a traceable SPL calibration.
-# Priority: SOUND_DBFS_ERROR_PERCENT env > calibration.json > 0.0.
+# Calibration file for environmental channels. SPH0645 processing is owned by
+# Sensor Hub 1 firmware: the Pi accepts only a validated A-weighted LAeq value
+# and keeps dBFS as Admin diagnostics. It never derives dBA with abs(dBFS).
 CALIBRATION_PATH = BASE_DIR / "calibration.json"
 
 
@@ -610,18 +608,6 @@ def _load_calibration() -> Dict[str, Any]:
 
 
 CALIBRATION = _load_calibration()
-_ENV_SOUND_ERROR_PERCENT = os.getenv("SOUND_DBFS_ERROR_PERCENT")
-if _ENV_SOUND_ERROR_PERCENT is not None:
-    SOUND_DBFS_ERROR_PERCENT = float(_ENV_SOUND_ERROR_PERCENT)
-    SOUND_TRANSFORM_SOURCE = "env"
-elif "sound_dbfs_error_percent" in CALIBRATION:
-    SOUND_DBFS_ERROR_PERCENT = float(
-        CALIBRATION["sound_dbfs_error_percent"]
-    )
-    SOUND_TRANSFORM_SOURCE = "calibration.json"
-else:
-    SOUND_DBFS_ERROR_PERCENT = 0.0
-    SOUND_TRANSFORM_SOURCE = "default"
 
 # SHT3x-DIS display values use the approved additive adjustment in
 # calibration.json.  The raw Hub 1 payload remains unchanged for audit and
@@ -647,8 +633,6 @@ SENSOR_CALIBRATION_LOCK = threading.RLock()
 def _load_sensor_biases() -> tuple[Dict[str, float], Dict[str, str]]:
     return resolve_biases(
         CALIBRATION,
-        sound_error_percent=SOUND_DBFS_ERROR_PERCENT,
-        sound_source=SOUND_TRANSFORM_SOURCE,
         humidity_bias=HUMIDITY_RH_BIAS,
         humidity_source=HUMIDITY_BIAS_SOURCE,
     )
@@ -676,7 +660,6 @@ def _persist_calibration(data: Dict[str, Any]) -> None:
 def update_sensor_bias(metric: str, bias: float, *, operator: str,
                        reference_value: Optional[float] = None) -> Dict[str, Any]:
     """Validate, persist and activate one Admin calibration adjustment."""
-    global SOUND_DBFS_ERROR_PERCENT, SOUND_TRANSFORM_SOURCE
     global HUMIDITY_RH_BIAS, HUMIDITY_BIAS_SOURCE
     spec = SENSOR_CALIBRATION_SPECS.get(metric)
     if spec is None:
@@ -707,10 +690,7 @@ def update_sensor_bias(metric: str, bias: float, *, operator: str,
         CALIBRATION.update(updated)
         SENSOR_BIASES[metric] = rounded
         SENSOR_BIAS_SOURCES[metric] = "calibration.json"
-        if metric == "sound_dba_est":
-            SOUND_DBFS_ERROR_PERCENT = rounded
-            SOUND_TRANSFORM_SOURCE = "calibration.json"
-        elif metric == "humidity_rh":
+        if metric == "humidity_rh":
             HUMIDITY_RH_BIAS = rounded
             HUMIDITY_BIAS_SOURCE = "calibration.json"
     with state_lock:
@@ -720,18 +700,13 @@ def update_sensor_bias(metric: str, bias: float, *, operator: str,
         environment_calibration["sources"] = dict(SENSOR_BIAS_SOURCES)
         environment_calibration["humidity_rh_bias"] = HUMIDITY_RH_BIAS
         environment_calibration["humidity_bias_source"] = HUMIDITY_BIAS_SOURCE
-        if metric == "sound_dba_est":
-            sound_transform = state["system"]["sound_transform"]
-            sound_transform["error_percent"] = SOUND_DBFS_ERROR_PERCENT
-            sound_transform["source"] = SOUND_TRANSFORM_SOURCE
     return {
         "metric": metric, "bias": rounded, "source": "calibration.json",
         "updated_at": changed_at, "reference_value": reference,
     }
 
-# User-facing SPL range. Raw dBFS and the unbounded calibrated estimate remain
-# available for developer diagnostics, but the dashboard must never show a
-# negative estimate or a value above the supported 120 dBA est. display range.
+# User-facing range accepted from validated Sensor Hub 1 LAeq(A) telemetry.
+# Values outside this envelope and all legacy dBFS-only packets are invalid.
 SOUND_DBA_DISPLAY_MIN = 0.0
 SOUND_DBA_DISPLAY_MAX = 120.0
 # Operational sleep-comfort target used by Monitor recommendations. This is
@@ -1012,20 +987,17 @@ state: Dict[str, Any] = {
         "session_vital_start_packets": SESSION_VITAL_START_PACKETS,
         "player": None,  # filled in once the audio backend is chosen
         "sound_transform": {
-            "formula": "round(abs(sound_dbfs), 1) * (1 - error_percent / 100)",
-            "error_percent": SOUND_DBFS_ERROR_PERCENT,
-            "source": SOUND_TRANSFORM_SOURCE,
-            "calibrated_at": CALIBRATION.get("calibrated_at"),
-            "method": CALIBRATION.get("method"),
+            "formula": "ESP32 I2S alignment -> DC block -> A-weighting -> LAeq",
+            "source": "sensorhub1_firmware",
+            "required_metric": "LAeq",
+            "required_weighting": "A",
+            "legacy_dbfs_policy": "invalid",
+            "pi_abs_transform_allowed": False,
             # Calibration provenance is Admin-only because snapshot_for()
             # removes sound_transform from the consumer system payload.
-            "status": CALIBRATION.get("status"),
-            "operator": CALIBRATION.get("operator"),
+            "status": "firmware_laeq_required",
             "reference_meter": CALIBRATION.get("reference_meter"),
             "reference_range": CALIBRATION.get("reference_dba_range"),
-            "valid_sample_count": CALIBRATION.get("valid_sample_count"),
-            "median_error_db": CALIBRATION.get("median_error_db"),
-            "fit_r_squared": CALIBRATION.get("fit_r_squared"),
             "photo_audit": CALIBRATION.get("photo_audit"),
         },
         "environment_calibration": {
@@ -3705,13 +3677,13 @@ def normalize_esp32_sensor(obj: Dict[str, Any]) -> Dict[str, Any]:
     """Compatibility facade for deterministic Hub 1 normalization."""
     return normalize_hub1_sensor(
         obj,
-        sound_error_percent=SOUND_DBFS_ERROR_PERCENT,
+        sound_display_min=SOUND_DBA_DISPLAY_MIN,
         sound_display_max=SOUND_DBA_DISPLAY_MAX,
     )
 
 
 def hold_last_valid_sound(current: Dict[str, Any], previous: Dict[str, Any]) -> Dict[str, Any]:
-    """Compatibility facade for the missing-value hold policy."""
+    """Compatibility facade for fail-closed sound validation."""
     return hold_sound_value(
         current,
         previous,
@@ -3723,6 +3695,7 @@ def hold_last_valid_sound(current: Dict[str, Any], previous: Dict[str, Any]) -> 
 def esp32_reader():
     """ESP32 sends one JSON object per line over USB serial."""
     last_error = None
+    last_sound_status = None
     while True:
         try:
             with serial.Serial(ESP32_PORT, ESP32_BAUD, timeout=1) as ser:
@@ -3743,9 +3716,26 @@ def esp32_reader():
                                 obj = hold_last_valid_sound(
                                     obj, state["sensor"].get("esp32", {}) or {})
                                 state["sensor"]["esp32"] = obj
+                            sound_status = (
+                                bool(obj.get("sound_measurement_valid")),
+                                obj.get("sound_invalid_reason"),
+                            )
+                            if sound_status != last_sound_status:
+                                log_event(
+                                    "sph0645",
+                                    "measurement_valid"
+                                    if sound_status[0] else "measurement_invalid",
+                                    reason=sound_status[1],
+                                    firmware_version=obj.get(
+                                        "sound_firmware_version"),
+                                    weighting=obj.get("sound_weighting"),
+                                    metric=obj.get("sound_metric"),
+                                    window_ms=obj.get("sound_window_ms"),
+                                )
+                                last_sound_status = sound_status
                             sound_value = obj.get("sound_dba_est")
                             if (
-                                not obj.get("sound_value_held")
+                                obj.get("sound_measurement_valid") is True
                                 and isinstance(sound_value, (int, float))
                                 and not isinstance(sound_value, bool)
                                 and math.isfinite(float(sound_value))
@@ -6554,6 +6544,9 @@ def sensor_calibration_inspector_snapshot() -> Dict[str, Any]:
             "reference_value": channel_meta.get("reference_value"),
         })
 
+    sound_device = devices.get("sph0645") or {}
+    channels.append(sound_inspector_channel(hub1, environment, sound_device))
+
     # These algorithm-owned values are inspected beside the adjustable
     # channels, but are intentionally not offset in software. SGP40 learns its
     # own 24-hour baseline; BCG summary bytes feed the physiology estimator.
@@ -6600,10 +6593,7 @@ def sensor_calibration_inspector_snapshot() -> Dict[str, Any]:
         "calibration_file": str(CALIBRATION_PATH),
         "formula": {
             "default": "calibrated = clamp(raw + bias)",
-            "sound_dba_est": (
-                "estimate = clamp(round(abs(raw dBFS), 1) * "
-                "(1 - error_percent / 100))"
-            ),
+            "sound_dba_est": "ESP32 I2S alignment → A-weighting → LAeq",
         },
     }
 
@@ -8089,8 +8079,9 @@ def sleep_policy_admin():
         },
         "humidity_bias_percentage_points": HUMIDITY_RH_BIAS,
         "sound_display_transform": {
-            "formula": "round(abs(sound_dbfs), 1)",
-            "error_percent": 0.0,
+            "formula": "ESP32 I2S alignment -> A-weighting -> LAeq",
+            "legacy_dbfs_policy": "invalid",
+            "pi_abs_transform_allowed": False,
         },
         "sensor_biases": dict(SENSOR_BIASES),
     }

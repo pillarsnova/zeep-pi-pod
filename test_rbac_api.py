@@ -223,7 +223,7 @@ class RbacApiTests(unittest.TestCase):
         self.assertEqual(sensors.status_code, 200)
         self.assertEqual(
             sensors.json()["data"]["contract_version"],
-            "zeep-sensor-contract-v1.0",
+            "zeep-sensor-contract-v1.1",
         )
         maintenance = admin.get("/api/v1/admin/maintenance")
         self.assertEqual(maintenance.status_code, 200)
@@ -770,10 +770,10 @@ class RbacApiTests(unittest.TestCase):
         )
         self.assertEqual(sound["raw_unit"], "dBFS")
         self.assertEqual(sound["unit"], "dBA est.")
-        self.assertEqual(sound["parameter_unit"], "%")
+        self.assertFalse(sound["editable"])
         self.assertEqual(
             sound["formula"],
-            "round(abs(raw dBFS), 1) × (1 - error_percent / 100)",
+            "ESP32: I2S alignment → A-weighting → LAeq",
         )
 
         previous_biases = dict(pod_app.SENSOR_BIASES)

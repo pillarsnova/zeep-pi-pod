@@ -211,53 +211,38 @@ MOSFET driver / relay เสมอ ห้ามต่อตรงเด็ดข
 ## Serial / รูปแบบข้อมูล ESP32
 
 Datasheet, physical range, field alias, JSON envelope v1 และ byte map BCG ดูที่
-[Sensor Interface Contract v1.0](../docs/zeep-sensor-interface-contract-v1.0.md)
+[Sensor Interface Contract v1.1](docs/zeep-sensor-interface-contract-v1.1.md)
 
 - BCG: `/dev/ttyUSB_HRB` @ 115200
 - ESP32 hub: `/dev/ttyACM0` @ 115200 — ส่ง JSON บรรทัดละ 1 object เช่น
-  `{"lux":26.1,"temperature_c":24.1,"humidity_rh":56.0,"sound_dbfs":-29.5}`
+  `{"lux":26.1,"temperature_c":24.1,"humidity_rh":56.0,"sound_dbfs":-29.5,"sound_laeq_dba":40.8,"sound_valid":true,"sound_weighting":"A","sound_metric":"LAeq","sound_window_ms":10000}`
 
 ชื่อ field ที่รับได้ (ตัวแรกที่เป็นตัวเลขชนะ) — temperature:
 `temperature_c|temperature|temp|temp_c` · humidity: `humidity|hum|rh|humidity_rh` ·
-lux: `lux|light|illuminance` · sound: `sound_dbfs` เท่านั้น
+lux: `lux|light|illuminance` · sound raw: `sound_dbfs` · sound ที่ใช้แสดง:
+`sound_laeq_dba` พร้อม metadata ยืนยันตาม Contract v1.1
 
 ถ้า ESP32 เงียบเกิน `ESP32_STALE_SECONDS` (ค่าเริ่มต้น 5 วิ) ทั้งที่พอร์ตยังเปิดอยู่
 จอจะแสดงเป็น stale/disconnected แทนการโชว์ค่าเก่าค้างเหมือนเป็นค่าจริง
 
 ## การแสดงค่าเสียง SPH0645
 
-`magnitude = round(abs(sound_dbfs), 1)` และ
-`dBA_est = magnitude × (1 - error_percent / 100)` — รุ่นปัจจุบันใช้
-`error_percent = 0.0` จึงเท่ากับ `dBA_est = magnitude` โดยไม่ลด 3% และเก็บค่าใน
-`calibration.json` ข้าง `app.py`:
+Pi **ยกเลิก `abs(sound_dbfs)` ถาวร** เพราะ dBFS เป็นอัตราส่วนเทียบ full scale
+ของสัญญาณดิจิทัล ไม่ใช่ Sound Pressure Level และแปลงเป็น dBA ด้วยค่าสัมบูรณ์
+ไม่ได้ ค่า `sound_dbfs` ยังคงเก็บไว้ให้ Admin ตรวจ Raw เท่านั้น
 
-```json
-{"sound_dbfs_error_percent": 0.0,
- "calibrated_at": "2026-09-03T00:31:40+07:00",
- "method": "round(abs(raw sound_dbfs), 1), no percentage reduction",
- "operator": "super"}
-```
+ESP32 Sensor Hub 1 ต้องแก้ I2S word alignment/sign extension, ตัด DC,
+ทำ A-weighting และสะสมพลังงานเป็น LAeq ก่อนส่งค่า 10 วินาที พร้อม metadata:
+`sound_valid=true`, `sound_weighting="A"`, `sound_metric="LAeq"` และ
+`sound_window_ms=10000` จึงจะเผยแพร่เป็น `sound_dba_est` ได้
 
-ลำดับความสำคัญ: env `SOUND_DBFS_ERROR_PERCENT` >
-`calibration.json` > ค่าเริ่มต้น `0.0` ค่าที่ใช้จริงและที่มาดูได้ใน
-`/api/state → system.sound_transform`
+ถ้า ESP32 ส่งเฉพาะ `sound_dbfs`, ส่ง metadata ไม่ครบ, ระบุ invalid, ค่าไม่ finite
+หรืออยู่นอกช่วง 0–120 ระบบจะระบุ SPH0645 เป็น **INVALID** ไม่คงค่าเก่ามาแสดง
+เป็นค่าปัจจุบัน ไม่บันทึกลง Session และไม่ใช้ประเมินสิ่งรบกวนการนอน
 
-ตัวอย่าง: raw `-39.69 dBFS` → magnitude `39.7` →
-`39.7 dBA est.`
-
-**นี่คือค่าประเมินสำหรับ Field Trial ไม่ใช่ค่า SPL/dBA ที่สอบเทียบแบบ
-traceable ด้วยเครื่อง Class 1/2** ค่า `sound_dbfs` ดิบยังคงถูกเก็บโดยไม่แก้ไข
-เพื่อใช้ตรวจสอบและสอบเทียบใหม่
-
-หน้าจอผู้ใช้แสดงค่าประเมินช่วง `0–120 dBA est.` และไม่แสดงค่า dBFS ติดลบ
-ถ้าค่าประเมินที่คำนวณได้ต่ำกว่า 0 ระบบจะคงค่าที่ valid ก่อนหน้า; ถ้าเกิน 120
-จะแสดง 120 พร้อมคำเตือน โดย API เก็บ `sound_dba_est_unbounded` ไว้วิเคราะห์
-การจำกัดช่วงแสดงผลไม่ใช่การสอบเทียบและไม่ทำให้ค่าที่วัดแม่นยำขึ้น
-
-ค่าที่เผยแพร่ไปทุกหน้าจอในรอบวิเคราะห์ 10 วินาทีเป็น **energy average
-(Leq)** ของตัวอย่าง dBA est. ที่เข้ามาในรอบนั้น ไม่ใช่ค่าตัวอย่างสุดท้ายและไม่ใช่
-ค่าเฉลี่ยเลขคณิตของเดซิเบล ค่า raw/latest และสรุป `min/max/span/sample_count`
-อยู่ใน Admin `/api/state → system.sound_analysis` เพื่อ Debug เท่านั้น
+ข้อกำหนด Firmware และขั้นตอนทดสอบอยู่ที่
+[Sensor Interface Contract v1.1](docs/zeep-sensor-interface-contract-v1.1.md)
+และค่าดิบ/สาเหตุ invalid ดูได้ใน Admin Packet Inspector
 
 เวลาสอบเทียบ CEM DT-8852 ให้ใช้ A-weighting + SLOW และเลือกช่วงที่ครอบคลุม
 ค่าจริง (`LO 30–80 dBA` สำหรับสภาพแวดล้อมนอน) ห้ามใช้แถวที่หน้ามิเตอร์ขึ้น

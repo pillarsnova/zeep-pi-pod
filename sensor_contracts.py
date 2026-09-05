@@ -19,7 +19,7 @@ import struct
 from typing import Any, Mapping
 
 
-SENSOR_CONTRACT_VERSION = "zeep-sensor-contract-v1.0"
+SENSOR_CONTRACT_VERSION = "zeep-sensor-contract-v1.1"
 TELEMETRY_SCHEMA = "zeep.sensor.telemetry"
 TELEMETRY_SCHEMA_VERSION = "1.0"
 
@@ -65,10 +65,20 @@ SENSOR_CATALOG: dict[str, dict[str, Any]] = {
             "nominal_snr_dba": 65,
             "bandwidth_hz": 18000,
             "typical_current_ua": 600,
-            "note": "The microphone outputs digital PCM/dBFS, not calibrated dBA. ZEEP applies a separately versioned field calibration.",
+            "note": "The microphone outputs digital PCM/dBFS, not dBA. ESP32 must correct I2S alignment, apply A-weighting and integrate LAeq before the Pi can publish the value.",
         },
         "datasheet": "https://www.knowles.com/docs/default-source/model-downloads/sph0645lm4h-b-datasheet-rev-c.pdf",
-        "fields": ["sound_dbfs", "sound_dba_est"],
+        "fields": [
+            "sound_dbfs", "sound_laeq_dba", "sound_valid",
+            "sound_weighting", "sound_metric", "sound_window_ms",
+        ],
+        "zeep_processing": {
+            "owner": "sensorhub1_firmware",
+            "required_weighting": "A",
+            "required_metric": "LAeq",
+            "legacy_dbfs_policy": "invalid",
+            "pi_abs_transform_allowed": False,
+        },
         "health_use": "environment_context_and_corroborated_arousal_only",
     },
     "mhz19c": {
@@ -172,7 +182,7 @@ ENVIRONMENT_DEVICE_SPECS: dict[str, dict[str, Any]] = {
     },
     "sph0645": {
         "model": "SPH0645", "sources": ("hub1",), "status": ("sph0645",),
-        "fields": {"sound_dba_est": (("sound_dba_est", "sound_dba", "dba", "spl_dba"), 0, 120)},
+        "fields": {"sound_dba_est": (("sound_dba_est",), 0, 120)},
     },
     "mhz19c": {
         "model": "MH-Z19C", "sources": ("hub2", "hub1"),

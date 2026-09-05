@@ -2722,7 +2722,7 @@ const dashboardAtmosphereCriteria=Object.freeze([
   {id:'temperature',name:'อุณหภูมิ',deviceKey:'sht3x_dis',source:'SHT3x-DIS',unit:'°C',digits:1,target:'18–27°C',principle:'ประเมิน Thermal comfort จากอุณหภูมิจริงใน ZEEP',bands:'ยอดเยี่ยม 18–27 · ดี 17–28 · พอใช้ 16–29 · แย่ 13–32 · วิกฤตนอกช่วง',read:e=>e.temperature_c,score:v=>dashboardRangeScore(v,[[18,27],[17,28],[16,29],[13,32]]),control:'เครื่องปรับอากาศ',action:v=>v>27?'ลดอุณหภูมิที่เลือกหรือเปิดแอร์':v<18?'เพิ่มอุณหภูมิที่เลือกหรือลดความเย็น':'รักษาอุณหภูมิปัจจุบัน'},
   {id:'humidity',name:'ความชื้น',deviceKey:'sht3x_dis',source:'SHT3x-DIS',unit:'%RH',digits:1,target:'40–60%RH',principle:'ป้องกันอากาศแห้งเกินไปหรือความชื้นสะสมและการควบแน่น',bands:'ยอดเยี่ยม 40–60 · ดี 35–65 · พอใช้ 30–70 · แย่ 20–80 · วิกฤตนอกช่วง',read:e=>e.humidity_rh,score:v=>dashboardRangeScore(v,[[40,60],[35,65],[30,70],[20,80]]),control:'ไอน้ำ · ระบบระบายอากาศ',action:v=>v>60?'ปิดไอน้ำและเร่งระบายอากาศ':v<40?'เปิดไอน้ำเป็นช่วงและติดตามค่า':'รักษาความชื้นปัจจุบัน'},
   {id:'light',name:'ความสว่าง',deviceKey:'opt3001',source:'OPT3001',unit:'lux',digits:1,target:'≤5 lux',principle:'ประเมินแสงรบกวนในโหมดเตรียมนอนและขณะนอน',bands:'ยอดเยี่ยม ≤5 · ดี ≤10 · พอใช้ ≤30 · แย่ ≤100 · วิกฤต >100 lux',read:e=>e.lux,score:v=>dashboardUpperScore(v,[5,10,30,100]),control:'ไฟเพดาน · แสงแดง · ประตู',action:v=>v>5?'ลดหรือปิดไฟ ตรวจแสงรั่วและตำแหน่งประตู':'รักษาระดับแสงปัจจุบัน'},
-  {id:'sound',name:'เสียง',deviceKey:'sph0645',source:'SPH0645',unit:'dBA est.',digits:1,target:'<40 dBA est.',principle:'ประเมินเสียงพื้นหลังจากค่า SPH0645 ที่แปลงด้วยสูตร Field Trial',bands:'ยอดเยี่ยม <40 · ดี 40–45 · พอใช้ >45–50 · แย่ >50–60 · วิกฤต >60 dBA est.',read:e=>e.sound_dba_est,score:v=>v<40?4:v<=45?3:v<=50?2:v<=60?1:0,control:'เสียงบรรยากาศ · พัดลม · คอมเพรสเซอร์',action:v=>v>=40?'ลดเสียงเพลงและตรวจพัดลม คอมเพรสเซอร์ หรือการสั่น':'รักษาระดับเสียงปัจจุบัน'},
+  {id:'sound',name:'เสียง',deviceKey:'sph0645',source:'SPH0645',unit:'dBA est.',digits:1,target:'<40 dBA est.',principle:'ESP32 คำนวณ A-weighted LAeq จาก PCM ของ SPH0645 ก่อนส่งให้ Pi',bands:'ยอดเยี่ยม <40 · ดี 40–45 · พอใช้ >45–50 · แย่ >50–60 · วิกฤต >60 dBA est.',read:e=>e.sound_dba_est,score:v=>v<40?4:v<=45?3:v<=50?2:v<=60?1:0,control:'เสียงบรรยากาศ · พัดลม · คอมเพรสเซอร์',action:v=>v>=40?'ลดเสียงเพลงและตรวจพัดลม คอมเพรสเซอร์ หรือการสั่น':'รักษาระดับเสียงปัจจุบัน'},
   {id:'co2',name:'CO₂',deviceKey:'mhz19c',source:'MH-Z19C',unit:'ppm',digits:0,target:'≤800 ppm',principle:'ใช้ CO₂ เป็นตัวชี้การระบายอากาศ ไม่ใช่ค่าปริมาณออกซิเจน',bands:'ยอดเยี่ยม ≤800 · ดี ≤1,000 · พอใช้ ≤1,150 · แย่ <1,300 · วิกฤต ≥1,300 ppm',read:e=>e.co2_ppm,score:v=>v<=800?4:v<=1000?3:v<=1150?2:v<1300?1:0,control:'พัดลมลมเข้า · พัดลมลมออก',action:v=>v>800?'เพิ่มการเติมและระบายอากาศ พร้อมตรวจ Filter อุดตัน':'รักษาการหมุนเวียนอากาศปัจจุบัน'},
   {id:'pm25',name:'PM2.5',deviceKey:'pms7003',source:'PMS7003',unit:'µg/m³',digits:1,target:'≤15 µg/m³',principle:'ตรวจประสิทธิภาพการกรองฝุ่นละเอียดและการรั่วของอากาศ',bands:'ยอดเยี่ยม ≤15 · ดี ≤25 · พอใช้ ≤37.5 · แย่ ≤50 · วิกฤต >50 µg/m³',read:e=>e.pm2_5_ug_m3,score:v=>dashboardUpperScore(v,[15,25,37.5,50]),control:'Pre-Filter · HEPA · ซีลประตู',action:v=>v>15?'ตรวจหรือเปลี่ยน Pre/HEPA Filter และตรวจรอยรั่ว':'รักษาระบบกรองอากาศปัจจุบัน'},
   {id:'voc',name:'VOC Index',deviceKey:'sgp40',source:'SGP40',unit:'',digits:0,target:'≤120',principle:'เทียบสารระเหยกับ Adaptive baseline ของ SGP40 ซึ่งปรับตัวใกล้ 100',bands:'ยอดเยี่ยม ≤120 · ดี ≤150 · พอใช้ ≤200 · แย่ ≤300 · วิกฤต >300',read:e=>e.voc_index,score:v=>dashboardUpperScore(v,[120,150,200,300]),control:'กลิ่น · พัดลมระบาย · Carbon Filter',action:v=>v>120?'หยุดแหล่งกลิ่นหรือสารระเหย เร่งระบาย และตรวจ Carbon Filter':'รักษาการระบายอากาศปัจจุบัน'},
@@ -4906,10 +4906,7 @@ function calibrationReferenceChanged(metric,input){
   const channel=(calibrationInspectorState?.channels||[]).find(item=>item.metric===metric);
   const raw=Number(channel?.raw),reference=Number(input.value);
   if(!Number.isFinite(raw)||!Number.isFinite(reference))return;
-  const isSoundEstimate=metric==='sound_dba_est';
-  const base=isSoundEstimate?Math.round(Math.abs(raw)*10)/10:raw;
-  if(isSoundEstimate&&base===0)return;
-  const suggested=isSoundEstimate?(1-reference/base)*100:reference-base;
+  const suggested=reference-raw;
   calibrationBiasDraft[metric]=String(Math.round(suggested*1000)/1000);
   const biasInput=document.querySelector(`input[data-calibration-bias="${metric}"]`);
   if(biasInput)biasInput.value=calibrationBiasDraft[metric];
@@ -4943,11 +4940,11 @@ function renderCalibrationInspector(data,{force=false}={}){
       const raw=calibrationNumber(channel.raw,step),bias=calibrationNumber(channel.bias,step),output=calibrationNumber(channel.calibrated,step);
       const unit=channel.unit||'',rawUnit=channel.raw_unit||unit,parameterUnit=channel.parameter_unit||unit;
       const isSoundEstimate=metric==='sound_dba_est';
-      const outputLabel=isSoundEstimate?'ESTIMATE':'CALIBRATED';
-      const parameterLabel=isSoundEstimate?'ERROR REDUCTION':'NEW BIAS';
+      const outputLabel=isSoundEstimate?'LAEQ(A)':'CALIBRATED';
+      const parameterLabel='NEW BIAS';
       const values=`<div class="calibration-values">
         <div class="calibration-value"><span>RAW</span><b>${raw}</b><small>${rawUnit}</small></div>
-        <div class="calibration-value"><span>${channel.bias_label||'BIAS'}</span><b>${channel.editable?(isSoundEstimate?'':Number(channel.bias)>=0?'+':'')+bias:'LOCK'}</b><small>${channel.editable?parameterUnit:channel.bias_source||'algorithm'}</small></div>
+        <div class="calibration-value"><span>${channel.bias_label||'BIAS'}</span><b>${channel.editable?(Number(channel.bias)>=0?'+':'')+bias:'LOCK'}</b><small>${channel.editable?parameterUnit:channel.bias_source||'algorithm'}</small></div>
         <div class="calibration-value output"><span>${outputLabel}</span><b>${output}</b><small>${unit}</small></div>
       </div>`;
       if(!channel.editable){
@@ -4983,8 +4980,8 @@ async function applyCalibrationBias(metric,btn){
   const rawReference=calibrationReferenceDraft[metric];
   const reference=rawReference===''||rawReference==null?null:Number(rawReference);
   if(!channel?.editable){toast('Sensor channel นี้เป็น Algorithm locked','error');return;}
-  const parameterName=metric==='sound_dba_est'?'Error reduction (%)':'Bias';
-  const parameterPrefix=metric==='sound_dba_est'?'':bias>=0?'+':'';
+  const parameterName='Bias';
+  const parameterPrefix=bias>=0?'+':'';
   if(!Number.isFinite(bias)||bias<Number(channel.bias_min)||bias>Number(channel.bias_max)){toast(`${parameterName} ต้องอยู่ระหว่าง ${channel.bias_min} ถึง ${channel.bias_max}`,'error');return;}
   if(reference!==null&&!Number.isFinite(reference)){toast('ค่า Reference ไม่ถูกต้อง','error');return;}
   return withBusy(btn,async()=>{
@@ -6104,26 +6101,20 @@ function render(s, source='ws'){
   const bcgAge = Number(b.data_age_s);
   const bcgFallback = !!b.fallback_active;
   const bcgAgeText = Number.isFinite(bcgAge) ? `${bcgAge.toFixed(1)} วินาที` : 'ไม่ทราบอายุ';
-  document.getElementById('sound').title = e.sound_value_held
-    ? e.sound_invalid_value != null && Number(e.sound_invalid_value) < 0
-      ? `ค่าประเมินใหม่ ${e.sound_invalid_value} dBA est. ต่ำกว่า 0 จึงคงค่าที่ valid ก่อนหน้า`
-      : 'คงค่าล่าสุด เนื่องจากไม่ได้รับค่าที่เป็นตัวเลขจาก sensor'
-    : e.sound_value_limited
-      ? `ค่าก่อนจำกัดช่วง ${e.sound_dba_est_unbounded ?? 'N/A'} dBA est. · ค่าสูงสุดที่แสดง 120`
-      : 'ค่าประเมินจาก SPH0645 · ปัด abs(raw dBFS) เป็น 1 ตำแหน่ง · ไม่หักเปอร์เซ็นต์';
+  const sphStatus=environment.devices?.sph0645?.status||'offline';
+  const soundInvalidReason=e.sound_invalid_reason||environment.devices?.sph0645?.invalid_values?.sound_dba_est;
+  document.getElementById('sound').title = environment.sound_dba_est==null
+    ? `INVALID · ${soundInvalidReason||'ESP32 ยังไม่ส่ง LAeq(A) ที่ยืนยันแล้ว'}`
+    : `SPH0645 · LAeq(A) ${e.sound_window_ms||'--'} ms · คำนวณที่ ESP32`;
   const soundQuality=document.getElementById('soundQuality');
   soundQuality.textContent=espFallback
-    ? `⚠ SPH0645 · ใช้ค่าล่าสุด (${espAgeText})`
+    ? `⚠ SPH0645 · ข้อมูลไม่สด (${espAgeText})`
     : environment.sound_dba_est==null
-    ? espOk?'SPH0645 · รอข้อมูลเสียง':'SPH0645 · ไม่เชื่อมต่อ'
-    : e.sound_value_held
-    ? e.sound_invalid_value != null && Number(e.sound_invalid_value) < 0
-      ? '⚠ SPH0645 · ค่าต่ำกว่า 0 จึงคงค่าที่ valid ก่อนหน้า'
-      : '⚠ SPH0645 · ไม่มีค่าปัจจุบัน จึงคงค่าที่ valid ก่อนหน้า'
-    : e.sound_value_limited
-      ? '⚠ SPH0645 · ค่าประเมินเกินช่วงแสดงผลสูงสุด 120'
-      : '✓ SPH0645 · ค่า valid ปัจจุบัน';
-  soundQuality.className=`sensor-note ${espFallback||environment.sound_dba_est==null||e.sound_value_held||e.sound_value_limited?'status-warn':'status-good'}`;
+    ? espOk?`✕ SPH0645 · INVALID · ${soundInvalidReason||'รอ Firmware LAeq(A)'}`:'SPH0645 · ไม่เชื่อมต่อ'
+    : sphStatus==='live'
+      ? '✓ SPH0645 · LAeq(A) valid'
+      : `⚠ SPH0645 · ${sphStatus}`;
+  soundQuality.className=`sensor-note ${espFallback||environment.sound_dba_est==null||sphStatus!=='live'?'status-warn':'status-good'}`;
   document.getElementById('environmentCard').title=[espFallback?`Pi5 Sensor Set 1 fallback ${espAgeText}`:null,hub2Fallback?`ESP32 Air Sensor fallback ${hub2AgeText}`:null].filter(Boolean).join(' · ');
 
   document.getElementById('bcgConn').textContent = b.connected ? 'Connected' : 'Disconnected';

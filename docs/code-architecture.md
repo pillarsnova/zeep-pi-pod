@@ -33,7 +33,8 @@ are migrated. Their current responsibilities are:
 - `sleep_system_policy.py`: versioned thresholds and transition policy.
 - `sleep_session_report.py`: final Sleep/Recovery reports.
 - `sensor_contracts.py`: wire formats and device contracts.
-- `sensor_runtime.py`: environment and sound transformations.
+- `sensor_runtime.py`: environment normalization and fail-closed validation of
+  ESP32-computed A-weighted LAeq (never converts dBFS to dBA).
 - `access_control.py` and `pod_occupancy.py`: browser identity and Pod lease.
 - `database.py` and `bcg_storage.py`: persistence boundaries.
 

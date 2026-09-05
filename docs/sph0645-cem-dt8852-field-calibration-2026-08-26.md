@@ -1,12 +1,10 @@
 # SPH0645 ↔ CEM DT-8852 field comparison — 2026-08-26
 
 > **Document status: historical evidence / superseded for runtime.** ตั้งแต่
-> 2026-09-03 ระบบใช้ Field Trial display transform:
-> `dBA_est = round(abs(sound_dbfs), 1)` โดยไม่ลด `3%` อีกต่อไป
-> ตัวอย่าง raw `-39.69 dBFS` แสดงเป็น `39.7 dBA est.`
-> สูตร offset และค่าที่บันทึกด้านล่างเป็น
-> ลำดับเหตุการณ์เดิมสำหรับ Audit เท่านั้น ไม่ใช่ Runtime configuration ปัจจุบัน
-> และค่าปัจจุบันยังไม่ใช่ traceable SPL calibration.
+> 2026-09-06 ระบบยกเลิก `abs(sound_dbfs)` และไม่แปลง dBFS เป็น dBA บน Pi
+> อีกต่อไป สูตรและ offset ด้านล่างเป็นลำดับเหตุการณ์เดิมสำหรับ Audit เท่านั้น
+> Packet แบบเดิมถูกระบุเป็น INVALID จนกว่า ESP32 จะส่ง A-weighted LAeq ตาม
+> Sensor Interface Contract v1.1
 
 ## Decision
 

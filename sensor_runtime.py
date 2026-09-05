@@ -19,9 +19,13 @@ HUB1_ALIASES: dict[str, tuple[str, ...]] = {
     "lux": ("lux", "light", "illuminance"),
     "co2": ("co2", "co2_ppm", "carbon_dioxide"),
     "sound_dbfs": ("sound_dbfs",),
+    "sound_laeq_dba": ("sound_laeq_dba", "laeq_dba"),
     "sound_rms": ("sound_rms",),
     "sound_peak": ("sound_peak",),
 }
+
+SOUND_REQUIRED_WEIGHTING = "A"
+SOUND_REQUIRED_METRIC = "LAEQ"
 
 
 def first_numeric(obj: Mapping[str, Any], keys: Sequence[str]) -> Optional[float]:
@@ -150,8 +154,16 @@ def compose_environment_snapshot(
             status = "stale"
         else:
             status = "offline"
-        if key == "sph0645" and hub1.get("sound_value_held") and selected:
-            status = "held"
+        if key == "sph0645" and hub1.get("sound_measurement_valid") is False:
+            # A live USB packet is not automatically a valid acoustic
+            # measurement. Legacy dBFS-only packets and malformed LAeq
+            # packets remain visible to Admin as raw diagnostics, but they
+            # must never appear as dBA on health-facing screens.
+            selected = None
+            chosen = primary
+            status = "invalid" if primary["live"] else status
+            primary["invalid_values"]["sound_dba_est"] = hub1.get(
+                "sound_invalid_reason", "untrusted_sound_measurement")
         for field in spec["fields"]:
             values[field] = selected["values"].get(field) if selected else None
         devices[key] = {
@@ -172,10 +184,7 @@ def compose_environment_snapshot(
     )
     raw_values = dict(values)
     for metric in calibration_metrics:
-        # SPH0645 already follows the dBFS transform below; applying an
-        # additive calibration a second time would corrupt the estimate.
-        if metric != "sound_dba_est":
-            values[metric] = apply_bias(metric, values.get(metric))
+        values[metric] = apply_bias(metric, values.get(metric))
     return {
         **values,
         "temperature": values.get("temperature_c"),
@@ -201,26 +210,68 @@ def compose_environment_snapshot(
 def normalize_hub1_sensor(
     payload: Mapping[str, Any],
     *,
-    sound_error_percent: float,
+    sound_display_min: float,
     sound_display_max: float,
 ) -> dict[str, Any]:
-    """Preserve a Hub 1 packet and add canonical aliases/display sound."""
+    """Preserve Hub 1 raw values and validate firmware-computed LAeq(A).
+
+    ``sound_dbfs`` is an electrical full-scale ratio, not sound pressure. It
+    is intentionally never converted with ``abs()`` or published as dBA. The
+    Pi accepts a health-facing sound value only when ESP32 explicitly marks a
+    finite, in-range, A-weighted LAeq window as valid.
+    """
     result = dict(payload)
     for target, keys in HUB1_ALIASES.items():
         value = first_numeric(payload, keys)
         if value is not None:
             result[target] = value
-    sound_dbfs = result.get("sound_dbfs")
-    if isinstance(sound_dbfs, (int, float)) and not isinstance(sound_dbfs, bool):
-        magnitude = round(abs(float(sound_dbfs)), 1)
-        estimate = magnitude * (1.0 - sound_error_percent / 100.0)
-        if math.isfinite(estimate):
-            estimate = round(estimate, 2)
-            result["sound_dba_est_unbounded"] = estimate
-            result["sound_dba_est"] = round(min(sound_display_max, estimate), 2)
-            result["sound_value_limited"] = estimate > sound_display_max
-            result["sound_dbfs_magnitude"] = magnitude
-            result["sound_error_percent"] = sound_error_percent
+    result.pop("sound_dba_est", None)
+    result["sound_measurement_valid"] = False
+    result["sound_value_held"] = False
+
+    laeq = first_numeric(result, ("sound_laeq_dba", "laeq_dba"))
+    if laeq is None:
+        reason = (
+            "legacy_dbfs_only"
+            if first_numeric(result, ("sound_dbfs",)) is not None
+            else "missing_laeq"
+        )
+        result["sound_status"] = "invalid"
+        result["sound_invalid_reason"] = reason
+        return result
+
+    declared_valid = payload.get("sound_valid") is True
+    weighting = str(payload.get("sound_weighting") or "").strip().upper()
+    metric = str(payload.get("sound_metric") or "").strip().upper()
+    window_ms = first_numeric(payload, ("sound_window_ms",))
+    if window_ms is None:
+        window_s = first_numeric(payload, ("sound_window_s",))
+        window_ms = window_s * 1000.0 if window_s is not None else None
+
+    invalid_reason: Optional[str] = None
+    if not declared_valid:
+        invalid_reason = str(payload.get("sound_invalid_reason") or "firmware_invalid")
+    elif weighting != SOUND_REQUIRED_WEIGHTING:
+        invalid_reason = "weighting_must_be_A"
+    elif metric != SOUND_REQUIRED_METRIC:
+        invalid_reason = "metric_must_be_LAeq"
+    elif window_ms is None or not math.isfinite(window_ms) or window_ms <= 0:
+        invalid_reason = "invalid_integration_window"
+    elif not math.isfinite(laeq) or not sound_display_min <= laeq <= sound_display_max:
+        invalid_reason = "laeq_out_of_range"
+
+    if invalid_reason:
+        result["sound_status"] = "invalid"
+        result["sound_invalid_reason"] = invalid_reason
+        result["sound_invalid_value"] = laeq
+        return result
+
+    result["sound_laeq_dba"] = round(laeq, 2)
+    result["sound_dba_est"] = round(laeq, 2)
+    result["sound_window_ms"] = round(window_ms, 1)
+    result["sound_measurement_valid"] = True
+    result["sound_status"] = "valid"
+    result["sound_processing_source"] = "esp32_a_weighted_laeq"
     return result
 
 
@@ -231,20 +282,26 @@ def hold_last_valid_sound(
     display_min: float,
     display_max: float,
 ) -> dict[str, Any]:
-    """Hold only a missing/non-finite sound value; never invent a new value."""
+    """Fail closed on invalid sound without presenting a stale value as live.
+
+    The last valid value is retained under an Admin-only diagnostic key, but
+    is never copied into ``sound_dba_est`` and is never recorded in a Session.
+    """
     value = current.get("sound_dba_est")
-    if _valid_sound(value, display_min, display_max):
+    if (
+        current.get("sound_measurement_valid") is True
+        and _valid_sound(value, display_min, display_max)
+    ):
         current["sound_value_held"] = False
         return current
     old = previous.get("sound_dba_est")
     if _valid_sound(old, display_min, display_max):
-        current["sound_dba_est"] = old
-        current["sound_value_held"] = True
-        current["sound_invalid_value"] = value
-    else:
-        current.pop("sound_dba_est", None)
-        current["sound_value_held"] = True
-        current["sound_invalid_value"] = value
+        current["sound_last_valid_dba"] = old
+    current.pop("sound_dba_est", None)
+    current["sound_value_held"] = False
+    current["sound_measurement_valid"] = False
+    current.setdefault("sound_status", "invalid")
+    current.setdefault("sound_invalid_reason", "untrusted_sound_measurement")
     return current
 
 

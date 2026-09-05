@@ -45,6 +45,13 @@ from sleep_stage_scoring import (
     softmax_stage_evidence,
     smooth_stage_probabilities,
 )
+from sleep_history_policy import (
+    promotion_ready,
+    quality_tier,
+    replay_integrity_blockers,
+    replay_review_warnings,
+    split_issue_codes,
+)
 from sleep_system_policy import (
     AGE_SLEEP_BASELINES,
     GENDER_BASELINE_ADJUSTMENTS,
@@ -112,6 +119,7 @@ MAINTENANCE_TOOL_NAME = "audit_sleep_history_shadow.py"
 REPLAY_SOURCE_FILES = (
     "audit_sleep_history_shadow.py",
     "promote_sleep_history.py",
+    "sleep_history_policy.py",
     "rescore_session_reports.py",
     "app.py",
     "personal.py",
@@ -473,9 +481,14 @@ def make_buckets(
         exit_ratio = statuses.count(1) / len(statuses) if statuses else 0.0
         status = 1 if exit_ratio >= 0.8 else (2 if 2 in statuses else (statuses[-1] if statuses else None))
         paired_coverage = len(pairs) / len(bucket["packets"]) if bucket["packets"] else 0.0
+        waveform_coverage = min(
+            1.0,
+            len(samples) / max(1.0, BCG_SAMPLE_RATE_HZ * 10.0),
+        )
         valid = bool(
             len(bucket["packets"]) >= SLEEP_BUCKET_MIN_BCG_PACKETS
             and paired_coverage >= SLEEP_MIN_PAIRED_VITAL_COVERAGE
+            and waveform_coverage >= SLEEP_MIN_WAVEFORM_COVERAGE
         )
         result.append({
             "t": bucket["t"],
@@ -487,6 +500,7 @@ def make_buckets(
             "packet_count": len(bucket["packets"]),
             "paired_packets": len(pairs),
             "paired_vital_coverage": round(paired_coverage, 4),
+            "waveform_sample_coverage": round(waveform_coverage, 4),
             "sound_leq_dba": (timeline_sound or {}).get(bucket_index),
             # Timeline stores the canonical 10-second estimate, not every
             # microphone sub-sample, so within-bucket 20 dB span detection is
@@ -494,6 +508,48 @@ def make_buckets(
             "sound_large_step": False,
         })
     return result
+
+
+def operational_status_row(
+    bucket: dict[str, Any],
+    *,
+    state: str,
+    data_status: str,
+    reason: str,
+    segment: int,
+) -> dict[str, Any]:
+    """Describe an unclassified 30-second epoch without inventing a Stage."""
+    labels = {
+        "wait": "WAIT · กำลังยืนยันสถานะ",
+        "no_data": "NO DATA · หลักฐานไม่ครบ",
+        "off_bed": (
+            "OFF BED · ไม่มีผู้ใช้งาน"
+            "บนเตียง"
+        ),
+    }
+    return {
+        "t": bucket["t"],
+        "state": state,
+        "label": labels[state],
+        "data_status": data_status,
+        "reason": reason,
+        "segment": segment,
+        "confidence": "unavailable",
+        "sleep_stage": False,
+        "excluded_from_stage_statistics": True,
+        "excluded_from_score": True,
+        "excluded_from_personal_baseline": True,
+        "coverage": {
+            "bcg_packets": int(bucket.get("packet_count") or 0),
+            "paired_hr_rr_packets": int(bucket.get("paired_packets") or 0),
+            "paired_hr_rr_ratio": float(
+                bucket.get("paired_vital_coverage") or 0.0
+            ),
+            "bcg_waveform_ratio": float(
+                bucket.get("waveform_sample_coverage") or 0.0
+            ),
+        },
+    }
 
 
 def replay_session(
@@ -510,10 +566,12 @@ def replay_session(
     awake_pairs: list[tuple[float, float]] = []
     evidence_rows = []
     state_rows = []
+    status_rows = []
     operational = Counter()
     last_valid_t: Optional[float] = None
     offbed_run = 0
     for index, bucket in enumerate(buckets):
+        epoch_boundary = (index + 1) % 3 == 0
         context.append(bucket)
         # Mirror the live pre-onset reference: continue learning while Wake is
         # the only confirmed state and use a robust upper quartile. This avoids
@@ -527,6 +585,18 @@ def replay_session(
             offbed_run = 0
         if offbed_run >= 3:
             operational["off_bed_10s"] += 1
+            if epoch_boundary:
+                status_rows.append(operational_status_row(
+                    bucket,
+                    state="off_bed",
+                    data_status="confirmed_off_bed",
+                    reason=(
+                        "Bed Status ยืนยันว่า"
+                        "ไม่มีผู้ใช้งานบนเตียง "
+                        "จึงไม่สร้าง Sleep State"
+                    ),
+                    segment=path.segment,
+                ))
             if offbed_run == 3:
                 path.reset_after_gap()
                 context.clear()
@@ -534,18 +604,86 @@ def replay_session(
             continue
         if not bucket["valid"]:
             operational["invalid_10s"] += 1
+            if epoch_boundary:
+                no_packets = int(bucket.get("packet_count") or 0) <= 0
+                status_rows.append(operational_status_row(
+                    bucket,
+                    state="no_data",
+                    data_status=(
+                        "sensor_gap" if no_packets
+                        else "invalid_or_missing_current_vitals_or_bcg"
+                    ),
+                    reason=(
+                        "ไม่มี Raw BCG packet ใน Epoch นี้"
+                        if no_packets else
+                        "BCG หรือคู่ HR/RR "
+                        "ไม่ผ่านเกณฑ์ราย Epoch"
+                    ),
+                    segment=path.segment,
+                ))
             if last_valid_t is not None and bucket["t"] - last_valid_t >= SLEEP_CONTEXT_RESET_GAP_SECONDS:
                 path.reset_after_gap()
                 context.clear()
                 last_valid_t = None
             continue
         last_valid_t = bucket["t"]
-        if (index + 1) % 3:
+        if not epoch_boundary:
+            continue
+        current_epoch = list(context)[-3:]
+        if len(current_epoch) < 3:
+            operational["incomplete_current_epoch_30s"] += 1
+            status_rows.append(operational_status_row(
+                bucket,
+                state="wait",
+                data_status="incomplete_current_epoch",
+                reason=(
+                    "กำลังสะสมข้อมูลครบ 30 วินาที"
+                    "สำหรับ Epoch ปัจจุบัน"
+                ),
+                segment=path.segment,
+            ))
+            continue
+        if any(item["status"] == 1 for item in current_epoch):
+            operational["possible_off_bed_epoch_30s"] += 1
+            status_rows.append(operational_status_row(
+                bucket,
+                state="wait",
+                data_status="confirming_off_bed",
+                reason=(
+                    "พบสัญญาณออกจากเตียง"
+                    "ใน Epoch ปัจจุบัน แต่ยังไม่ครบ"
+                    "เงื่อนไข OFF BED"
+                ),
+                segment=path.segment,
+            ))
+            continue
+        if any(not item["valid"] for item in current_epoch):
+            operational["invalid_current_epoch_30s"] += 1
+            status_rows.append(operational_status_row(
+                bucket,
+                state="no_data",
+                data_status="incomplete_current_epoch_evidence",
+                reason=(
+                    "Bed + HR + RR + Raw BCG ไม่ครบทุก bucket "
+                    "ของ Epoch 30 วินาที"
+                ),
+                segment=path.segment,
+            ))
             continue
         short = list(context)[-6:]
         valid_short = [item for item in short if item["valid"]]
         if len(short) < 6 or len(valid_short) / len(short) < 0.80:
             operational["insufficient_epoch_30s"] += 1
+            status_rows.append(operational_status_row(
+                bucket,
+                state="wait",
+                data_status="insufficient_confirmation_window",
+                reason=(
+                    "กำลังสะสมหน้าต่าง 60 วินาที "
+                    "หรือข้อมูลที่ใช้ได้ยังไม่ถึง 80%"
+                ),
+                segment=path.segment,
+            ))
             continue
         hrs = [item["hr"] for item in valid_short]
         rrs = [item["rr"] for item in valid_short]
@@ -748,6 +886,20 @@ def replay_session(
                 "t": bucket["t"], "state": confirmed,
                 "segment": path.segment, "metrics": metrics,
             })
+        else:
+            status_rows.append(operational_status_row(
+                bucket,
+                state="wait",
+                data_status=str(
+                    transition.get("decision") or "confirming_state"
+                ),
+                reason=(
+                    "หลักฐานราย Epoch พร้อม "
+                    "แต่ยังไม่ผ่านการยืนยันสถานะ "
+                    "60/120 วินาที"
+                ),
+                segment=path.segment,
+            ))
 
     counts = Counter(row["state"] for row in state_rows)
     gate_pass_counts = Counter(
@@ -797,18 +949,41 @@ def replay_session(
     first_sleep_t = next(
         (row["t"] for row in state_rows if row["state"] in SLEEP_STAGES), None,
     )
+    evaluation_epoch_count = len(state_rows) + len(status_rows)
     confirmed_coverage = (
-        len(state_rows) * 100.0 / len(evidence_rows) if evidence_rows else 0.0
+        len(state_rows) * 100.0 / evaluation_epoch_count
+        if evaluation_epoch_count else 0.0
     )
+    evidence_by_time = {
+        round(float(row["t"]), 3): row for row in evidence_rows
+    }
+    confidence_counts = Counter(
+        confidence(evidence_by_time.get(round(float(row["t"]), 3), {}))
+        for row in state_rows
+    )
+    confidence_total = sum(confidence_counts.values())
+    confidence_percent = {
+        level: (
+            round(confidence_counts[level] * 100.0 / confidence_total, 1)
+            if confidence_total else 0.0
+        )
+        for level in ("high", "medium", "low")
+    }
     return {
         "bucket_count": len(buckets),
+        "evaluation_epoch_count": evaluation_epoch_count,
         "evidence_count": len(evidence_rows),
         "confirmed_count": len(state_rows),
+        "operational_status_count": len(status_rows),
+        "operational_status_counts": dict(Counter(
+            row["state"] for row in status_rows
+        )),
         "counts": dict(counts),
         "gate_pass_counts": dict(gate_pass_counts),
         "evidence_winner_counts": dict(winner_counts),
         "abstention_count": abstention_count,
         "confirmed_coverage_percent": round(confirmed_coverage, 1),
+        "confidence_percent": confidence_percent,
         "sleep_onset_minutes": (
             round((first_sleep_t - start) / 60.0, 1)
             if first_sleep_t is not None else None
@@ -833,6 +1008,7 @@ def replay_session(
         "operational": dict(operational),
         "evidence_rows": evidence_rows,
         "state_rows": state_rows,
+        "status_rows": status_rows,
         "sensor_rows": [
             {
                 "hr": item["hr"], "rr": item["rr"],
@@ -933,40 +1109,35 @@ def main() -> int:
         }
         raw_quality = raw_packet_quality(packets, start, end)
         raw_coverage = raw_quality["acquisition_coverage"]
-        tier_a = bool(
-            paired_coverage >= 0.90
-            and raw_quality["paired_vital_coverage"] >= 0.90
-            and raw_coverage >= 0.95
-            and raw_quality["maximum_packet_gap_s"] < SLEEP_CONTEXT_RESET_GAP_SECONDS
+        tier = quality_tier(
+            timeline_paired_hr_rr=paired_coverage,
+            raw_paired_hr_rr=raw_quality["paired_vital_coverage"],
+            raw_acquisition=raw_coverage,
+            raw_maximum_gap_s=raw_quality["maximum_packet_gap_s"],
+            context_reset_gap_s=SLEEP_CONTEXT_RESET_GAP_SECONDS,
         )
-        tier_b = bool(
-            paired_coverage >= 0.80
-            and raw_quality["paired_vital_coverage"] >= 0.80
-            and raw_coverage >= 0.80
-        )
-        tier = "A" if tier_a else "B" if tier_b else "exclude"
         tier_counts[tier] += 1
-        replay = (
-            replay_session(
-                packets, start, end,
-                baseline=baseline,
-                rem_variability_weight=float(
-                    gender_adjustment["rem_variability_weight"]
-                ),
-                timeline_sound=sound_by_bucket(
-                    sessions, row["session_id"], start=start, end=end,
-                ),
-            )
-            if tier != "exclude" else None
+        # Replay every Session in the operator-defined cohort.  Invalid or
+        # missing 10-second buckets abstain inside replay_session; a whole-
+        # Session QA tier must not discard otherwise valid physiological epochs.
+        replay = replay_session(
+            packets, start, end,
+            baseline=baseline,
+            rem_variability_weight=float(
+                gender_adjustment["rem_variability_weight"]
+            ),
+            timeline_sound=sound_by_bucket(
+                sessions, row["session_id"], start=start, end=end,
+            ),
         )
         new_score = None
         stage_pct = {}
         stage_pct_of_occupied_evidence = {}
-        flags = []
+        issue_codes = []
         behaviour_key = (str(row["username_key"]), group)
         prior = prior_behaviour[behaviour_key]
         behaviour_context = {
-            "source": "prior_completed_tier_A_sessions_same_mode_only",
+            "source": "prior_completed_replayable_sessions_same_mode_only",
             "prior_sessions": len(prior),
             "minimum_sessions": 3,
             "status": "active" if len(prior) >= 3 else "learning",
@@ -1079,10 +1250,12 @@ def main() -> int:
                 sample_interval_s=SLEEP_EVIDENCE_EPOCH_SECONDS,
                 estimator_version=SLEEP_ESTIMATOR_VERSION,
                 completed=True,
-                timeline_schema_version=int(summary.get("timeline_schema_version") or 3),
+                timeline_schema_version=int(
+                    summary.get("timeline_schema_version") or 3
+                ),
             )
             if not quality.get("available"):
-                flags.append("wellness_score_not_releasable")
+                issue_codes.append("wellness_score_not_releasable")
             details[row["session_id"]] = {
                 "session_id": row["session_id"],
                 "email": row["username_key"],
@@ -1095,41 +1268,57 @@ def main() -> int:
                 "quality": quality,
                 "report": report,
                 "demographics": demographics,
-                "manual_review_flags": flags,
+                "review_warnings": [],
+                "promotion_blockers": [],
                 "evidence_rows": replay["evidence_rows"],
                 "state_rows": replay["state_rows"],
+                "status_rows": replay["status_rows"],
             }
             # Architecture-distribution flags are review prompts for the
             # overnight product only. Nap & Refresh explicitly allows awake
             # rest, brief N1/N2 or a short nap, so forcing adult overnight
             # proportions onto that mode would be a category error.
             if group == "sleep" and stage_pct.get("n2", 0) > 85:
-                flags.append("overnight_N2_over_85_percent")
+                issue_codes.append("overnight_N2_over_85_percent")
             if group == "sleep" and total_sleep and stage_pct.get("n1", 0) > 30:
-                flags.append("overnight_N1_over_30_percent")
+                issue_codes.append("overnight_N1_over_30_percent")
             if group == "sleep" and total_sleep and stage_pct.get("n3", 0) > 35:
-                flags.append("overnight_N3_over_35_percent")
+                issue_codes.append("overnight_N3_over_35_percent")
             if group == "sleep" and total_sleep and stage_pct.get("rem", 0) > 40:
-                flags.append("overnight_REM_over_40_percent")
+                issue_codes.append("overnight_REM_over_40_percent")
             if group == "sleep" and not total_sleep:
-                flags.append("overnight_no_confirmed_sleep")
+                issue_codes.append("overnight_no_confirmed_sleep")
             if group == "sleep" and total_sleep and stage_pct.get("n3", 0) == 0:
-                flags.append("overnight_N3_zero")
+                issue_codes.append("overnight_N3_zero")
             if group == "sleep" and replay["confirmed_coverage_percent"] < 80.0:
-                flags.append("overnight_confirmed_stage_coverage_below_80_percent")
+                issue_codes.append(
+                    "overnight_confirmed_stage_coverage_below_80_percent"
+                )
             if group == "nap_recovery" and float(row["duration"]) > 90 * 60:
-                flags.append("nap_duration_over_90_minutes")
+                issue_codes.append("nap_duration_over_90_minutes")
             if replay["forbidden_transition_count"]:
-                flags.append("forbidden_transition")
+                issue_codes.append("forbidden_transition")
             if replay["ping_pong_count"]:
-                flags.append("ping_pong_within_60s")
+                issue_codes.append("ping_pong_within_60s")
             if replay["confirmed_transition_without_current_gate_count"]:
-                flags.append("confirmed_transition_without_current_gate")
+                issue_codes.append("confirmed_transition_without_current_gate")
+            issue_codes.extend(replay_integrity_blockers(
+                replay,
+                raw_packet_count=int(raw_quality["packet_count"]),
+            ))
+            issue_codes.extend(replay_review_warnings(replay))
+            review_warnings, promotion_blockers = split_issue_codes(issue_codes)
+            details[row["session_id"]]["review_warnings"] = review_warnings
+            details[row["session_id"]]["promotion_blockers"] = promotion_blockers
             first_sleep = next(
-                (item for item in replay["state_rows"] if item["state"] in SLEEP_STAGES),
+                (
+                    item
+                    for item in replay["state_rows"]
+                    if item["state"] in SLEEP_STAGES
+                ),
                 None,
             )
-            if tier == "A" and first_sleep is not None:
+            if first_sleep is not None and not promotion_blockers:
                 local_start = datetime.fromtimestamp(start, LOCAL_TIMEZONE)
                 prior.append({
                     "session_id": row["session_id"],
@@ -1168,31 +1357,55 @@ def main() -> int:
             },
             "old_score": old_score,
             "shadow_score": new_score,
+            "shadow_engineering_score": (
+                (details.get(row["session_id"], {}).get("quality") or {}).get(
+                    "engineering_shadow_score"
+                )
+            ),
+            "shadow_score_releasable": bool(
+                (details.get(row["session_id"], {}).get("quality") or {}).get(
+                    "score_releasable"
+                )
+            ),
+            "shadow_confidence_percent": replay.get("confidence_percent") or {},
+            "shadow_operational_status_counts": (
+                replay.get("operational_status_counts") or {}
+            ),
             "shadow_stage_pct_of_sleep": stage_pct,
             "shadow_stage_pct_of_occupied_evidence": (
                 stage_pct_of_occupied_evidence
             ),
             "personal_behaviour_context": behaviour_context,
             "environment_context": environment,
-            "manual_review_flags": flags,
-            "replay": ({key: value for key, value in replay.items()
-                        if key not in {"evidence_rows", "state_rows", "sensor_rows"}} if replay else None),
+            "review_warnings": (
+                details.get(row["session_id"], {}).get("review_warnings") or []
+            ),
+            "promotion_blockers": (
+                details.get(row["session_id"], {}).get("promotion_blockers") or []
+            ),
+            "replay": {
+                key: value
+                for key, value in replay.items()
+                if key not in {
+                    "evidence_rows", "state_rows", "status_rows", "sensor_rows",
+                }
+            },
         })
 
-    eligible = [item for item in results if item["quality"]["tier"] == "A" and item["replay"]]
-    blockers = []
-    if any((item["replay"] or {}).get("forbidden_transition_count") for item in eligible):
-        blockers.append("forbidden_transition_detected")
-    if any((item["replay"] or {}).get("ping_pong_count") for item in eligible):
-        blockers.append("ping_pong_detected")
-    if any((item["replay"] or {}).get(
-        "confirmed_transition_without_current_gate_count") for item in eligible):
-        blockers.append("confirmed_transition_without_current_gate_detected")
-    if not eligible:
-        blockers.append("no_tier_A_sessions")
-    engineering_blockers = list(blockers)
     promotion_eligible = [
-        item for item in eligible if not item["manual_review_flags"]
+        item for item in results
+        if promotion_ready(details.get(item["session_id"], {}))
+    ]
+    score_releasable = [
+        item for item in promotion_eligible
+        if item["shadow_score_releasable"]
+    ]
+    score_withheld = [
+        item for item in promotion_eligible
+        if not item["shadow_score_releasable"]
+    ]
+    engineering_blockers = [] if promotion_eligible else [
+        "no_sessions_with_promotable_derived_epochs"
     ]
     # Distribution/coverage flags stay visible for human review and public
     # score abstention, but they are not algorithm-invariant failures. Raw
@@ -1283,17 +1496,27 @@ def main() -> int:
             "emails": dict(email_counts),
         },
         "acceptance": {
-            "engineering_decision": "NO_GO" if engineering_blockers else "PASS_WITH_LIMITATIONS",
+            "engineering_decision": (
+                "NO_GO" if engineering_blockers else "PASS_WITH_LIMITATIONS"
+            ),
             "engineering_blockers": engineering_blockers,
             "wellness_derived_promotion_decision": (
                 "NO_GO" if engineering_blockers else "PASS_WITH_LIMITATIONS"
             ),
             "wellness_derived_promotion_blockers": engineering_blockers,
-            "wellness_derived_promotion_eligible_tier_A_sessions": len(
+            "wellness_derived_promotion_eligible_sessions": len(
                 promotion_eligible
             ),
             "wellness_derived_promotion_eligible_session_ids": [
                 item["session_id"] for item in promotion_eligible
+            ],
+            "wellness_score_releasable_sessions": len(score_releasable),
+            "wellness_score_releasable_session_ids": [
+                item["session_id"] for item in score_releasable
+            ],
+            "wellness_score_withheld_sessions": len(score_withheld),
+            "wellness_score_withheld_session_ids": [
+                item["session_id"] for item in score_withheld
             ],
             "clinical_stage_replacement_decision": "NO_GO",
             "clinical_stage_replacement_blockers": clinical_replacement_blockers,
@@ -1303,7 +1526,9 @@ def main() -> int:
                 "Approved promotion remains a versioned ZEEP Wellness estimate; "
                 "clinical/AASM-equivalent replacement requires independent PSG labels."
             ),
-            "tier_A_definition": {
+            "quality_tier_is_advisory": True,
+            "review_warnings_block_promotion": False,
+            "quality_tier_A_definition": {
                 "timeline_paired_hr_rr_min_percent": 90,
                 "raw_paired_hr_rr_min_percent": 90,
                 "raw_acquisition_min_percent": 95,

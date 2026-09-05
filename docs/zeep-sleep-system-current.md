@@ -5,7 +5,7 @@
 > **Status:** Wellness release candidate · guarded derived-result replay/promotion · G2 paired-PSG validation open
 > **Updated:** 2026-09-05
 > **Code manifest:** [`pi5/sleep_system_policy.py`](../pi5/sleep_system_policy.py)  
-> **Related:** [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.0.md) · [v1.23 Wellness Replay Review](sleep-estimator-v123-wellness-longitudinal-report-2026-09-05.md) · [AI Sleep-State](ai-sleep-state-and-assistant.md)
+> **Related:** [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.0.md) · [Historical Promotion Policy v2](sleep-history-promotion-policy-v2.md) · [v1.23 Wellness Replay Review](sleep-estimator-v123-wellness-longitudinal-report-2026-09-05.md) · [AI Sleep-State](ai-sleep-state-and-assistant.md)
 
 ## TL;DR
 
@@ -23,7 +23,7 @@
 - ช่วงจบ Session แยก `Wake` ของมนุษย์ออกจาก `ไม่มีผู้ใช้งานบนเตียง → ออกจาก ZEEP → จบ Session`; สองสถานะหลังเป็น Occupancy และไม่ปนเปอร์เซ็นต์ Sleep Stage
 - รายงานไม่ซ่อนเวลาที่ไม่มี confirmed State: แสดง `WAIT` เมื่อ HR/RR/Sensor/confirmation ไม่ครบ และ `OFF` เมื่อ Bed Status สนับสนุนว่าไม่มีผู้ใช้งานบนเตียง โดยทุกช่วงถูกกันออกจาก Stage%, Score และ Baseline
 - สิ่งแวดล้อมใช้ 5 ระดับ `วิกฤต / แย่ / พอใช้ / ดี / ยอดเยี่ยม`; **พอใช้ขึ้นไปผ่านขั้นต่ำ**, วิกฤต/แย่ต้องแก้ไข, ดี/ยอดเยี่ยมให้รักษาค่า และแสง/เสียงเปลี่ยนกรอบตาม Rest Mode
-- ข้อมูลก่อน `2026-09-01 00:00 Asia/Bangkok` ถูกตัดออกจาก Product history, Baseline, Replay และ Score รุ่นใหม่ แต่ Raw/Audit ยังเก็บไว้โดยไม่แก้ไข; Derived result หลัง cutover เขียนได้เฉพาะ Tier A ที่ผ่าน replay manifest และ immutable-Raw hash guard
+- ข้อมูลก่อน `2026-09-01 00:00 Asia/Bangkok` ถูกตัดออกจาก Product history, Baseline, Replay และ Score รุ่นใหม่ แต่ Raw/Audit ยังเก็บไว้โดยไม่แก้ไข; หลัง cutover ระบบประเมินหลักฐานเป็นราย Epoch, ใช้ Tier เป็น Admin QA เท่านั้น และเขียน Derived result ได้เฉพาะรายการที่ไม่มี integrity blocker หลัง Product Owner ตรวจ allowlist โดย replay manifest และ immutable-Raw hash guard ต้องผ่าน
 
 ## 1. เวอร์ชันที่ใช้งานปัจจุบัน
 
@@ -35,7 +35,7 @@
 | Baseline | `zeep-sleep-state-baseline-v1.8-sep1-cutover` |
 | Semi-Markov transition | `zeep-semimarkov-30s-v1.15-restart-continuity` |
 | G2 ontology | `g2-aasm-5class-v1.0` |
-| Historical replay | `zeep-sleep-history-reclass-v18-sep1-derived` |
+| Historical replay | `zeep-sleep-history-reclass-v21-epoch-complete` |
 | Sleep / Recovery quality | `zeep-rest-quality-v8.0-wellness-longevity` |
 | Session report | `zeep-session-report-v10.0-wellness-longevity` |
 | Environment context | `zeep-environment-context-v2.0-mode-aware-fair-floor` |
@@ -155,7 +155,10 @@ accuracy ดู [AASM Scoring Manual](https://learn.aasm.org/AssetListing/The-AA
   Bed Exit และ Safety ตอบสนองใน pipeline แยกและไม่รอ Sleep State
 - เปอร์เซ็นต์สูงสุดบน Dashboard คือ **หลักฐานล่าสุด** จึงอาจต่างจาก `confirmed_state` ระหว่างช่วงรอยืนยัน โดย UI ต้องติดป้ายสองค่านี้แยกกัน
 - ก่อนครบ 2 Evidence epochs จะแสดง candidate แบบ provisional/low confidence แต่ยังไม่มี confirmed Sleep State ใหม่
-- Timeline ของ Session บันทึก Sensor ทุก 10 วินาที, `sleep_stage_evidence` ทุก 30 วินาที และ `sleep_stage` ที่ยืนยันแล้วทุก 30 วินาที; เมื่อ hard gate ไม่ผ่านช่อง Sleep State เป็น `null`
+- Timeline ของ Session บันทึก Sensor ทุก 10 วินาที, `sleep_stage_evidence` ทุก
+  30 วินาที และ `sleep_stage` ที่ยืนยันแล้วทุก 30 วินาที; เมื่อ hard gate ไม่ผ่าน
+  จะบันทึก Derived `sleep_stage_status` เป็น `WAIT`, `NO DATA` หรือ `OFF BED`
+  ซึ่งไม่ใช่ Sleep Stage และไม่ถูกนับใน Score/Baseline
 - การเปิดใช้ 10 วินาทีเต็มรูปแบบระหว่าง Active Session ไม่แก้ Raw เดิม: checkpoint เก็บ `sample_cadence_segments` ว่าช่วงใดเป็น legacy 5 วินาที/ช่วงใดเป็น 10 วินาที และรายงานถ่วงน้ำหนักตามเวลาจริง จึงไม่ทำให้ TST, WASO, Stage ratio หรือค่าเฉลี่ย Sensor เพิ่ม/ลดเท่าตัวหลัง restart
 - Timestamp ของ Timeline ใช้เวลาที่เก็บ Session sample จริง ไม่ใช้ Sensor-frame timestamp ซ้ำ; ข้อมูล Sensor frame สำหรับ Sleep State ยังมี provenance ของรอบ 10 วินาทีแยกต่างหาก
 - ค่า HR/RR ที่ invalid ถูกคัดออกก่อน State Machine; ข้อมูลขาดไม่ถูกแต่งเป็นค่าปกติ ไม่คง Stage ล่าสุดเป็นผลปัจจุบัน และไม่ให้สถานะเดิม 100%
@@ -305,7 +308,7 @@ stateDiagram-v2
 3. N3 ไป REM ได้เมื่อผ่าน normal dwell/hysteresis จึงไม่บังคับ N2 ที่รอยต่อนี้
 4. REM ไป Wake, N1 หรือ N2 ได้ตามหลักฐานที่ยืนยันแล้ว; REM ไป N3 โดยตรงยัง bridge ผ่าน N2
 5. Wake ที่ไม่ชัดจาก N2/N3 ยังย้อนผ่าน N1/N2; strong-Wake เปิด transition path แต่ยังยืนยัน 2 epoch ส่วน bed-exit ที่ผ่าน event guard จะแสดง `OFF` ใน occupancy pipeline ทันทีโดยไม่สร้าง Wake จากเตียงว่าง
-6. Replay gate ปฏิเสธ transition ต้องห้าม, REM boundary ping-pong, invalid HR/RR, transition เข้าสู่ State ที่ gate ปัจจุบันปิด และ sleep-to-Wake ที่ไม่มี proxy ใน window เดียวกัน; derived result เขียนย้อนหลังได้เฉพาะ Tier A ผ่าน `promote_sleep_history.py` โดยยืนยัน hash ว่า Timeline/Raw BCG ไม่เปลี่ยน
+6. Replay จะ abstain ใน Epoch ที่ HR/RR/BCG ไม่ครบและปฏิเสธ transition ต้องห้ามหรือ State ที่ gate ปัจจุบันปิด; Tier และคำเตือนเชิงสัดส่วนเป็น Admin QA ไม่ใช่ allowlist ส่วนการเขียนย้อนหลังผ่าน `promote_sleep_history.py` ต้องไม่มี per-Session integrity blocker, อยู่ใน reviewed allowlist และยืนยัน hash ว่า Timeline/Raw BCG ไม่เปลี่ยน
 
 ### 3.1 การพลิกตัวและกายวิภาคที่ระบบตีความได้
 
@@ -437,7 +440,8 @@ health record เดิม การแก้ derived record จริงยั�
 |---|---|---|
 | `audit_sleep_history_shadow.py` | อ่าน Raw/Timeline แบบ read-only เพื่อทดสอบ deterministic replay, quality tier, transition และคะแนน | Raw BCG, Timeline, Report และ DB ทุกชนิด |
 | `reclassify_sleep_history.py` | Legacy event comparison; ใช้ scorer/policy เดียวกันและมี dry-run/guard | Raw BCG และ Timeline |
-| `promote_sleep_history.py` | Promote เฉพาะ Tier A หลังตรวจ replay/code/input hash บน staging copy | Raw BCG และ Timeline; Tier B/Exclude |
+| `promote_sleep_history.py` | Promote valid derived Epoch ของ reviewed Session หลังตรวจ per-Session blocker และ replay/code/input hash บน staging copy | Raw BCG, Timeline และช่วง WAIT/OFF/No Data |
+| `compare_sleep_history_replay.py` | เปรียบเทียบ replay manifest สองรุ่นเป็น owner-only JSON/Markdown | DB, Raw, Event และ Report ทุกชนิด |
 | `rescore_session_reports.py` | Derived `final_summary`, quality และ report | Raw BCG, Timeline, event ต้นฉบับ |
 | `trim_session.py` | ตัดข้อมูลตามคำสั่งผู้ดูแลพร้อม audit | ข้อมูลนอกช่วงที่สั่ง |
 

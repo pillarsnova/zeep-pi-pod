@@ -17,7 +17,7 @@ from sleep_system_policy import (
 )
 
 
-MAINTENANCE_CONTRACT_VERSION = "zeep-maintenance-tools-v1.2"
+MAINTENANCE_CONTRACT_VERSION = "zeep-maintenance-tools-v1.3"
 
 MAINTENANCE_TOOLS: dict[str, dict[str, Any]] = {
     "reclassify_sleep_history.py": {
@@ -40,7 +40,8 @@ MAINTENANCE_TOOLS: dict[str, dict[str, Any]] = {
         "default_mode": "read_only",
         "guard": (
             "SQLite mode=ro + input hashes + no historical writeback without "
-            "independent reference labels and explicit approval"
+            "explicit Product Owner approval; no clinical claim without "
+            "independent reference labels"
         ),
         "policy_version": SLEEP_HISTORY_BACKFILL_VERSION,
     },
@@ -52,14 +53,28 @@ MAINTENANCE_TOOLS: dict[str, dict[str, Any]] = {
         ),
         "writes": [
             "events.sleep_stage", "events.sleep_stage_evidence",
+            "events.sleep_stage_status",
             "events.final_summary", "baselines.json",
         ],
         "preserves": ["timeline", "bcg.db", "raw_bcg", "profiles.json"],
         "default_mode": "dry_run",
         "guard": (
             "exact sessions/bcg SHA-256 + completed post-cutover Session + "
-            "Tier A with no manual-review flags + SQLite/baseline backup before --apply"
+            "reviewed allowlist + per-Session integrity blockers + "
+            "SQLite/baseline backup before --apply; QA Tier and warnings do not block"
         ),
+        "policy_version": SLEEP_HISTORY_BACKFILL_VERSION,
+    },
+    "compare_sleep_history_replay.py": {
+        "group": "sleep_replay",
+        "purpose": (
+            "Compare two read-only replay manifests and produce owner-only "
+            "JSON/Markdown review artifacts"
+        ),
+        "writes": ["explicit_comparison_artifacts_only"],
+        "preserves": ["sessions.db", "bcg.db", "events", "timeline", "raw_bcg"],
+        "default_mode": "read_only",
+        "guard": "accepts replay manifests only; output files are mode 0600",
         "policy_version": SLEEP_HISTORY_BACKFILL_VERSION,
     },
     "rescore_session_reports.py": {

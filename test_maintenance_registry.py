@@ -15,6 +15,7 @@ class MaintenanceRegistryTests(unittest.TestCase):
             "reclassify_sleep_history.py",
             "audit_sleep_history_shadow.py",
             "promote_sleep_history.py",
+            "compare_sleep_history_replay.py",
             "rescore_session_reports.py",
             "recalibrate_sound_history.py",
             "cleanup_short_sessions.py",

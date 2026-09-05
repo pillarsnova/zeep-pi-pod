@@ -1,5 +1,9 @@
 # ZEEP v1.23 Wellness Longitudinal Replay Report
 
+> **หมายเหตุสถานะ:** เอกสารนี้เป็นผลรอบเดิมก่อน Historical Promotion Policy v2
+> และเก็บไว้เป็นหลักฐานเปรียบเทียบเท่านั้น กติกา Tier A/manual-review allowlist ใน
+> เอกสารนี้ถูกแทนที่โดย [Historical Promotion Policy v2](sleep-history-promotion-policy-v2.md)
+
 > **สถานะ:** ผ่านการตรวจวิศวกรรมแบบมีข้อจำกัด (`PASS_WITH_LIMITATIONS`)
 >
 > **ขอบเขต:** ZEEP Wellness & Longevity; ไม่ใช่ PSG, AASM scoring, การวินิจฉัย หรือคำแนะนำการรักษา

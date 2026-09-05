@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Promote a reviewed Raw-BCG replay into derived ZEEP wellness results.
 
-The command replaces only ``sleep_stage``/``sleep_stage_evidence`` events and
-the derived final report for completed Sessions at or after the approved pilot
-cutover. It never updates Timeline rows or ``bcg.db``. Run without ``--apply``
-first; apply requires exact input hashes from ``audit_sleep_history_shadow.py``.
+The command replaces only ``sleep_stage``, ``sleep_stage_evidence`` and
+``sleep_stage_status`` events, plus the derived final report for completed
+Sessions at or after the approved pilot cutover. It never updates Timeline rows
+or ``bcg.db``. Run without ``--apply`` first; apply requires exact input hashes
+from ``audit_sleep_history_shadow.py``.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from audit_sleep_history_shadow import (
 )
 from personal import BaselineStore
 from rescore_session_reports import rescore
+from sleep_history_policy import promotion_ready, quality_tier
 from sleep_stage_scoring import align_probabilities_to_emitted_stage
 from sleep_signal_features import (
     HR_SANITY_RANGE_BPM,
@@ -50,11 +52,6 @@ from sleep_system_policy import (
 
 
 MAINTENANCE_TOOL_NAME = "promote_sleep_history.py"
-# Historical result promotion is intentionally stricter than Admin review.
-# Tier B remains visible in the replay artifact, but only Tier A (>=90% paired
-# Timeline HR/RR, >=90% paired raw HR/RR and >=95% raw acquisition) may update
-# derived wellness events/reports.
-ALLOWED_TIERS = {"A"}
 
 
 def file_sha256(path: Path) -> str:
@@ -63,6 +60,42 @@ def file_sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def public_promotion_summary(
+    result: dict[str, Any],
+    *,
+    manifest_path: Path | None = None,
+) -> dict[str, Any]:
+    """Return CLI-safe aggregate without Session IDs or health details."""
+    summary = {
+        "applied": bool(result.get("applied")),
+        "selected_sessions": int(result.get("selected_sessions") or 0),
+        "derived_events": int(result.get("derived_events") or 0),
+        "raw_timeline_modified": bool(result.get("raw_timeline_modified")),
+        "raw_bcg_modified": bool(result.get("raw_bcg_modified")),
+    }
+    if result.get("applied"):
+        summary.update({
+            "reviewed_report_parity_count": len(
+                result.get("reviewed_report_parity") or []
+            ),
+            "baselines_rebuilt": int(result.get("baselines_rebuilt") or 0),
+            "sessions_integrity_check": result.get(
+                "sessions_integrity_check"
+            ),
+            "raw_timeline_hash_unchanged": (
+                result.get("raw_timeline_sha256_before")
+                == result.get("raw_timeline_sha256_after")
+            ),
+            "raw_bcg_hash_unchanged": (
+                result.get("raw_bcg_sha256_before")
+                == result.get("raw_bcg_sha256_after")
+            ),
+        })
+    if manifest_path is not None:
+        summary["private_manifest"] = str(manifest_path)
+    return summary
 
 
 def timeline_sha256(
@@ -107,7 +140,7 @@ def _quality_tier(
         (session_id,),
     ).fetchone()
     if row is None or row[1] is None:
-        return "exclude", {}
+        return "below_B", {}
     timeline = sessions.execute(
         "SELECT heart_rate,respiration_rate FROM timeline WHERE session_id=?",
         (session_id,),
@@ -119,18 +152,14 @@ def _quality_tier(
     timeline_ratio = paired / len(timeline) if timeline else 0.0
     packets = raw_packets(bcg, session_id)
     raw = raw_packet_quality(packets, epoch(row[0]), epoch(row[1]))
-    tier_a = bool(
-        timeline_ratio >= 0.90
-        and raw["paired_vital_coverage"] >= 0.90
-        and raw["acquisition_coverage"] >= 0.95
-        and raw["maximum_packet_gap_s"] < SLEEP_CONTEXT_RESET_GAP_SECONDS
+    tier = quality_tier(
+        timeline_paired_hr_rr=timeline_ratio,
+        raw_paired_hr_rr=raw["paired_vital_coverage"],
+        raw_acquisition=raw["acquisition_coverage"],
+        raw_maximum_gap_s=raw["maximum_packet_gap_s"],
+        context_reset_gap_s=SLEEP_CONTEXT_RESET_GAP_SECONDS,
     )
-    tier_b = bool(
-        timeline_ratio >= 0.80
-        and raw["paired_vital_coverage"] >= 0.80
-        and raw["acquisition_coverage"] >= 0.80
-    )
-    return ("A" if tier_a else "B" if tier_b else "exclude"), {
+    return tier, {
         "timeline_paired_hr_rr": timeline_ratio,
         "raw_paired_hr_rr": raw["paired_vital_coverage"],
         "raw_acquisition": raw["acquisition_coverage"],
@@ -190,6 +219,21 @@ def _event_values(session: dict[str, Any]) -> list[tuple[str, str, str]]:
             "historical_replay_version": SLEEP_HISTORY_BACKFILL_VERSION,
         }
         values.append((iso_utc(when), "sleep_stage_evidence", json.dumps(
+            payload, ensure_ascii=False, separators=(",", ":"))))
+
+    for status_row in session.get("status_rows") or []:
+        when = float(status_row["t"])
+        payload = {
+            **status_row,
+            "timestamp": iso_utc(when),
+            "window_start": iso_utc(when - SLEEP_EVIDENCE_EPOCH_SECONDS),
+            "window_end": iso_utc(when),
+            "decision_kind": "historical_operational_status",
+            "historical_replay_version": SLEEP_HISTORY_BACKFILL_VERSION,
+            "raw_source_modified": False,
+        }
+        payload.pop("t", None)
+        values.append((iso_utc(when), "sleep_stage_status", json.dumps(
             payload, ensure_ascii=False, separators=(",", ":"))))
 
     previous = None
@@ -256,7 +300,9 @@ def main() -> int:
 
     artifact = json.loads(args.artifact.read_text(encoding="utf-8"))
     if args.apply and not args.offline_confirmed:
-        raise SystemExit("--apply requires --offline-confirmed after stopping the Pod service")
+        raise SystemExit(
+            "--apply requires --offline-confirmed after stopping the Pod service"
+        )
     summary_manifest = None
     summary_manifest_sha256 = None
     if args.summary_manifest:
@@ -341,15 +387,26 @@ def main() -> int:
 
     artifact_sessions = artifact.get("sessions") or {}
     if not isinstance(artifact_sessions, dict):
-        raise SystemExit("promotion requires the replay details artifact, not the summary")
+        raise SystemExit(
+            "promotion requires the replay details artifact, not the summary"
+        )
+    reviewed_ids = (
+        ((summary_manifest or {}).get("acceptance") or {}).get(
+            "wellness_derived_promotion_eligible_session_ids"
+        )
+        if summary_manifest else
+        (acceptance.get("wellness_derived_promotion_eligible_session_ids") or [])
+    )
+    reviewed_id_set = set(reviewed_ids or [])
     selected = []
     for session_id, item in artifact_sessions.items():
-        if item.get("quality_tier") not in ALLOWED_TIERS:
+        if session_id not in reviewed_id_set:
             continue
-        if item.get("manual_review_flags"):
-            continue
-        if not (item.get("state_rows") or item.get("evidence_rows")):
-            continue
+        if not promotion_ready(item):
+            raise SystemExit(
+                f"reviewed Session has derived promotion blockers: {session_id} "
+                f"{item.get('promotion_blockers') or []}"
+            )
         db_row = session_guard.execute(
             "SELECT username_key,start_time,end_time,duration FROM sessions "
             "WHERE session_id=?",
@@ -378,21 +435,14 @@ def main() -> int:
         recomputed_tier, tier_evidence = _quality_tier(
             session_guard, bcg_guard, session_id,
         )
-        if recomputed_tier != "A" or item.get("quality_tier") != recomputed_tier:
+        if item.get("quality_tier") != recomputed_tier:
             raise SystemExit(
-                f"recomputed quality tier is not A for {session_id}: "
+                f"recomputed quality tier differs for {session_id}: "
                 f"{recomputed_tier} {tier_evidence}"
             )
         selected.append((session_id, item, _event_values(item)))
 
     selected_ids = [item[0] for item in selected]
-    reviewed_ids = (
-        ((summary_manifest or {}).get("acceptance") or {}).get(
-            "wellness_derived_promotion_eligible_session_ids"
-        )
-        if summary_manifest else
-        (acceptance.get("wellness_derived_promotion_eligible_session_ids") or [])
-    )
     if sorted(selected_ids) != sorted(reviewed_ids or []):
         raise SystemExit(
             "selected Session allowlist does not match reviewed summary manifest"
@@ -411,7 +461,11 @@ def main() -> int:
         "raw_timeline_sha256_before": timeline_before,
     }
     if not args.apply:
-        print(json.dumps(preview, ensure_ascii=False, indent=2))
+        print(json.dumps(
+            public_promotion_summary(preview),
+            ensure_ascii=False,
+            indent=2,
+        ))
         return 0
 
     backup_dir = args.data_dir.parent / "backup"
@@ -465,14 +519,26 @@ def main() -> int:
             ).fetchone()
             if not row or row[1] is None or str(row[0]) < PERSONAL_BASELINE_LEARNING_START_UTC:
                 raise RuntimeError(f"ineligible Session: {session_id}")
-            old_counts = dict(connection.execute(
-                "SELECT type,COUNT(*) FROM events WHERE session_id=? "
-                "AND type IN ('sleep_stage','sleep_stage_evidence') GROUP BY type",
+            old_rows = connection.execute(
+                "SELECT timestamp,type,value FROM events WHERE session_id=? "
+                "AND type IN "
+                "('sleep_stage','sleep_stage_evidence','sleep_stage_status') "
+                "ORDER BY timestamp,id",
                 (session_id,),
-            ).fetchall())
+            ).fetchall()
+            old_counts = dict(Counter(row[1] for row in old_rows))
+            old_derived_sha256 = object_sha256([
+                {
+                    "timestamp": row[0],
+                    "type": row[1],
+                    "value": row[2],
+                }
+                for row in old_rows
+            ])
             connection.execute(
                 "DELETE FROM events WHERE session_id=? "
-                "AND type IN ('sleep_stage','sleep_stage_evidence')",
+                "AND type IN "
+                "('sleep_stage','sleep_stage_evidence','sleep_stage_status')",
                 (session_id,),
             )
             connection.executemany(
@@ -485,7 +551,13 @@ def main() -> int:
                 "promoted_at_utc": now,
                 "quality_tier": item.get("quality_tier"),
                 "old_derived_event_counts": old_counts,
+                "old_derived_event_sha256": old_derived_sha256,
                 "new_derived_event_count": len(events),
+                "new_operational_status_count": len(
+                    item.get("status_rows") or []
+                ),
+                "rollback_backup": str(backup_path),
+                "old_result_recoverable": True,
                 "raw_timeline_modified": False,
                 "raw_bcg_modified": False,
             }
@@ -651,7 +723,11 @@ def main() -> int:
         raise
     close_guards()
     atexit.unregister(close_guards)
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    print(json.dumps(
+        public_promotion_summary(result, manifest_path=manifest_path),
+        ensure_ascii=False,
+        indent=2,
+    ))
     return 0
 
 

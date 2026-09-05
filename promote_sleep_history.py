@@ -129,6 +129,44 @@ def object_sha256(value: Any) -> str:
     ).encode("utf-8")).hexdigest()
 
 
+def cohort_minimum_duration_seconds(artifact: dict[str, Any]) -> float:
+    """Return the reviewed cohort duration floor pinned in the artifact.
+
+    The audit command owns cohort selection. Promotion must reproduce that
+    reviewed selection instead of silently reapplying the legacy 25-minute
+    cutoff, because short recovery Sessions can still contain valid epochs.
+    """
+    value = (artifact.get("cohort") or {}).get(
+        "minimum_minutes_exclusive", 25.0
+    )
+    try:
+        minutes = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("invalid cohort minimum duration") from exc
+    if minutes < 0:
+        raise ValueError("cohort minimum duration cannot be negative")
+    return minutes * 60.0
+
+
+def session_is_in_reviewed_cohort(
+    *,
+    start_time: Any,
+    end_time: Any,
+    duration: Any,
+    minimum_duration_seconds: float,
+) -> bool:
+    """Validate immutable Session boundaries against the reviewed cohort."""
+    try:
+        duration_seconds = float(duration or 0.0)
+    except (TypeError, ValueError):
+        return False
+    return bool(
+        end_time is not None
+        and str(start_time or "") >= PERSONAL_BASELINE_LEARNING_START_UTC
+        and duration_seconds > minimum_duration_seconds
+    )
+
+
 def _quality_tier(
     sessions: sqlite3.Connection,
     bcg: sqlite3.Connection,
@@ -404,6 +442,7 @@ def main() -> int:
         (acceptance.get("wellness_derived_promotion_eligible_session_ids") or [])
     )
     reviewed_id_set = set(reviewed_ids or [])
+    minimum_duration_seconds = cohort_minimum_duration_seconds(artifact)
     selected = []
     for session_id, item in artifact_sessions.items():
         if session_id not in reviewed_id_set:
@@ -418,11 +457,11 @@ def main() -> int:
             "WHERE session_id=?",
             (session_id,),
         ).fetchone()
-        if (
-            db_row is None
-            or db_row[2] is None
-            or str(db_row[1]) < PERSONAL_BASELINE_LEARNING_START_UTC
-            or float(db_row[3] or 0.0) <= 25 * 60.0
+        if db_row is None or not session_is_in_reviewed_cohort(
+            start_time=db_row[1],
+            end_time=db_row[2],
+            duration=db_row[3],
+            minimum_duration_seconds=minimum_duration_seconds,
         ):
             raise SystemExit(f"artifact selected ineligible Session: {session_id}")
         identity = {
@@ -520,10 +559,16 @@ def main() -> int:
         connection.execute("BEGIN IMMEDIATE")
         for session_id, item, events in selected:
             row = connection.execute(
-                "SELECT start_time,end_time FROM sessions WHERE session_id=?",
+                "SELECT start_time,end_time,duration FROM sessions "
+                "WHERE session_id=?",
                 (session_id,),
             ).fetchone()
-            if not row or row[1] is None or str(row[0]) < PERSONAL_BASELINE_LEARNING_START_UTC:
+            if not row or not session_is_in_reviewed_cohort(
+                start_time=row[0],
+                end_time=row[1],
+                duration=row[2],
+                minimum_duration_seconds=minimum_duration_seconds,
+            ):
                 raise RuntimeError(f"ineligible Session: {session_id}")
             old_rows = connection.execute(
                 "SELECT timestamp,type,value FROM events WHERE session_id=? "

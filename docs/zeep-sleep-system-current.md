@@ -30,12 +30,12 @@
 | ชั้นระบบ | Version |
 |---|---|
 | Health pipeline contract | `zeep-sleep-health-pipeline-v1.9-restart-continuity` |
-| Live estimator candidate | `bcg-audio-bed-5state-v1.25-hrrr-fit-fusion` |
-| Evidence definition | `zeep-sleep-state-evidence-v3.3-hrrr-fit-fusion` |
+| Live estimator candidate | `bcg-audio-bed-5state-v1.26-fit-continuity-35` |
+| Evidence definition | `zeep-sleep-state-evidence-v3.4-fit-continuity-35` |
 | Baseline | `zeep-sleep-state-baseline-v1.8-sep1-cutover` |
 | Semi-Markov transition | `zeep-semimarkov-30s-v1.15-restart-continuity` |
 | G2 ontology | `g2-aasm-5class-v1.0` |
-| Historical replay | `zeep-sleep-history-reclass-v24-fit-fusion-score-confidence` |
+| Historical replay | `zeep-sleep-history-reclass-v25-fit-continuity-35` |
 | Sleep / Recovery quality | `zeep-rest-quality-v8.2-score-confidence` |
 | Session report | `zeep-session-report-v10.2-score-confidence` |
 | Environment context | `zeep-environment-context-v2.0-mode-aware-fair-floor` |
@@ -218,10 +218,11 @@ accuracy ดู [AASM Scoring Manual](https://learn.aasm.org/AssetListing/The-AA
 
 `HR/RR Fit` ในหน้า Admin หมายถึงความใกล้ของค่า HR/RR เฉลี่ยกับช่วงอ้างอิง
 ของแต่ละ State เท่านั้น ช่วงเหล่านี้ทับซ้อนกันได้และไม่ใช่ความน่าจะเป็นจาก PSG
-รุ่น v1.25 นำ evidence distribution มาผสานกับ HR/RR Fit distribution โดย Fit มี
-น้ำหนัก 20% หรือ 25% เมื่อ Fit สูงสุดตรงกับ State ที่ยืนยันอยู่ แล้วจึงผ่าน EMA,
-transition, dwell และการยืนยัน 60/120 วินาที การผสานจะตัด probability ของ State
-ที่ physiology gate ปิดเป็นศูนย์ จึงทำให้ Fit มีผลจริงโดยไม่ข้าม safety invariant
+รุ่น v1.26 นำ evidence distribution มาผสานกับ HR/RR Fit distribution โดย Fit มี
+น้ำหนัก 20% หรือ 35% เมื่อ Fit สูงสุดจริงตรงกับ State ที่ยืนยันก่อนหน้าและ State
+นั้นยังผ่าน physiology gate แล้วจึงผ่าน EMA, transition, dwell และการยืนยัน
+60/120 วินาที การผสานจะตัด probability ของ State ที่ physiology gate ปิดเป็นศูนย์
+จึงทำให้ Fit มีผลจริงโดยไม่ข้าม safety invariant
 
 State ที่ Fit สูงสุดยังอาจต่างจาก State ที่ยืนยันเมื่อ BCG waveform, movement,
 ความแปรปรวน, respiratory regularity, gate, ลำดับ State หรือเวลายืนยันยังไม่ผ่าน

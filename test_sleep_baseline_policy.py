@@ -36,7 +36,7 @@ class HrRrFitFusionTests(unittest.TestCase):
             },
             confirmed_state="n2",
             fit_weight=0.20,
-            agreement_weight=0.25,
+            agreement_weight=0.35,
         )
 
         self.assertEqual(metadata["overall_fit_winner"], "n3")
@@ -69,7 +69,7 @@ class HrRrFitFusionTests(unittest.TestCase):
             },
             confirmed_state="n1",
             fit_weight=0.20,
-            agreement_weight=0.25,
+            agreement_weight=0.35,
         )
 
         self.assertFalse(metadata["overall_fit_winner_eligible"])
@@ -103,11 +103,44 @@ class HrRrFitFusionTests(unittest.TestCase):
             },
             confirmed_state="n2",
             fit_weight=0.20,
-            agreement_weight=0.25,
+            agreement_weight=0.35,
         )
 
         self.assertTrue(metadata["fit_agrees_with_confirmed_state"])
-        self.assertEqual(metadata["fit_weight"], 0.25)
+        self.assertEqual(metadata["fit_weight"], 0.35)
+
+    def test_closed_overall_fit_winner_does_not_receive_continuity_weight(self):
+        _, metadata = zeep.fuse_hr_rr_fit_with_stage_probabilities(
+            {
+                "wake": 0.0,
+                "n1": 0.10,
+                "n2": 0.90,
+                "n3": 0.0,
+                "rem": 0.0,
+            },
+            {
+                "wake": 0.0,
+                "n1": 0.05,
+                "n2": 0.40,
+                "n3": 0.95,
+                "rem": 0.0,
+            },
+            eligible_states={
+                "wake": False,
+                "n1": True,
+                "n2": True,
+                "n3": False,
+                "rem": False,
+            },
+            confirmed_state="n2",
+            fit_weight=0.20,
+            agreement_weight=0.35,
+        )
+
+        self.assertEqual(metadata["overall_fit_winner"], "n3")
+        self.assertEqual(metadata["eligible_fit_winner"], "n2")
+        self.assertFalse(metadata["fit_agrees_with_confirmed_state"])
+        self.assertEqual(metadata["fit_weight"], 0.20)
 
 
 class SleepClassificationGateTests(unittest.TestCase):

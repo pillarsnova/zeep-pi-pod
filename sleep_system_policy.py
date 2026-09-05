@@ -14,13 +14,13 @@ from typing import Any
 
 # Every persisted decision/report carries these versions for provenance.
 SLEEP_PIPELINE_CONTRACT_VERSION = "zeep-sleep-health-pipeline-v1.9-restart-continuity"
-SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.25-hrrr-fit-fusion"
-SLEEP_EVIDENCE_VERSION = "zeep-sleep-state-evidence-v3.3-hrrr-fit-fusion"
+SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.26-fit-continuity-35"
+SLEEP_EVIDENCE_VERSION = "zeep-sleep-state-evidence-v3.4-fit-continuity-35"
 ZEEP_SLEEP_BASELINE_VERSION = "zeep-sleep-state-baseline-v1.8-sep1-cutover"
 ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.15-restart-continuity"
 SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
 SLEEP_HISTORY_BACKFILL_VERSION = (
-    "zeep-sleep-history-reclass-v24-fit-fusion-score-confidence"
+    "zeep-sleep-history-reclass-v25-fit-continuity-35"
 )
 SESSION_REPORT_VERSION = "zeep-session-report-v10.2-score-confidence"
 SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.2-score-confidence"
@@ -251,11 +251,12 @@ SLEEP_N3_GATED_MIN_MARGIN = SLEEP_EVIDENCE_MIN_MARGIN
 # evidence distribution and must not be described as a calibrated probability.
 SLEEP_SCORE_SOFTMAX_TEMPERATURE = 4.0
 # HR/RR interval proximity is pooled with gated physiology evidence before
-# temporal smoothing.  Agreement with the current confirmed state receives a
-# small continuity increase; disagreement must still pass the normal gate,
+# temporal smoothing. Agreement between the overall Fit winner and the current
+# confirmed state receives a 35% continuity contribution, but only while that
+# state remains gate-eligible. Disagreement must still pass the normal gate,
 # margin, dwell and confirmation rules.
 SLEEP_HR_RR_FIT_FUSION_WEIGHT = 0.20
-SLEEP_HR_RR_FIT_FUSION_AGREEMENT_WEIGHT = 0.25
+SLEEP_HR_RR_FIT_FUSION_AGREEMENT_WEIGHT = 0.35
 # Backward-compatible constant name: this threshold detects a discontinuity
 # between valid classification windows. It no longer resets the confirmed
 # Sleep State/onset for the same active Session; only pending evidence is reset.

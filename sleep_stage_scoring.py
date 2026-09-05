@@ -196,10 +196,11 @@ def fuse_hr_rr_fit_with_stage_probabilities(
 
     The fusion happens before EMA and semi-Markov confirmation.  HR/RR Fit
     therefore influences the winner while the independent physiology gates
-    retain authority over which states may compete.  A matching confirmed
-    state receives a slightly larger Fit contribution; a mismatch remains
-    free to challenge through the normal confirmation path instead of being
-    copied directly into the output.
+    retain authority over which states may compete. When the overall Fit
+    winner matches the previously confirmed state and that state is still
+    gate-eligible, it receives the versioned continuity contribution. A
+    mismatch remains free to challenge through the normal confirmation path
+    instead of being copied directly into the output.
     """
     eligible = {
         stage: bool(eligible_states.get(stage, False)) for stage in STAGES
@@ -225,7 +226,9 @@ def fuse_hr_rr_fit_with_stage_probabilities(
         if any(eligible_fit.values()) else None
     )
     agrees = bool(
-        confirmed_state in STAGES and eligible_winner == confirmed_state
+        confirmed_state in STAGES
+        and overall_winner == confirmed_state
+        and eligible[confirmed_state]
     )
     requested_weight = agreement_weight if agrees else fit_weight
     applied_weight = _clamp(requested_weight)

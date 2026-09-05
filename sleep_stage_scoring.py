@@ -16,6 +16,88 @@ from sleep_signal_features import sleep_movement_evidence
 STAGES = ("wake", "n1", "n2", "n3", "rem")
 
 
+def interpret_baseline_fit(
+    base_scores: Mapping[str, float],
+    *,
+    confirmed_state: str | None,
+    evidence_candidate: str | None,
+    n3_gate: bool,
+    transition_meta: Mapping[str, Any],
+    hr_weight: float,
+    rr_weight: float,
+) -> dict[str, Any]:
+    """Explain HR/RR similarity without presenting it as a Sleep State.
+
+    HR and RR ranges overlap between sleep stages. Their nearest range is
+    supporting evidence, but it cannot independently establish EEG-defined
+    N1/N2/N3/REM. The returned contract keeps this distinction explicit for
+    Admin diagnostics and prevents a high N3 fit being shown as confirmed N3.
+    """
+    ordered = sorted(
+        STAGES,
+        key=lambda stage: _finite(base_scores.get(stage), 0.0),
+        reverse=True,
+    )
+    winner, runner_up = ordered[:2]
+    weight_total = max(0.0, _finite(hr_weight) + _finite(rr_weight))
+
+    def as_percent(stage: str) -> float:
+        if weight_total <= 0:
+            return 0.0
+        value = _finite(base_scores.get(stage), 0.0) / weight_total * 100
+        return round(value, 1)
+
+    winner_percent = as_percent(winner)
+    runner_up_percent = as_percent(runner_up)
+    agrees = confirmed_state == winner if confirmed_state else None
+    if agrees:
+        explanation_code = "supports_confirmed_state"
+        explanation_th = (
+            f"HR/RR ใกล้ {winner.upper()} และสนับสนุนสถานะที่ยืนยัน"
+        )
+    elif winner == "n3" and not n3_gate:
+        explanation_code = "n3_fit_without_n3_gate"
+        explanation_th = (
+            "HR/RR ใกล้ N3 แต่หลักฐานความนิ่งของ BCG/การหายใจ "
+            "และ N3 gate ยังไม่ครบ"
+        )
+    elif (
+        winner == "n3"
+        and confirmed_state == "n1"
+        and transition_meta.get("blocked_candidate") == "n3"
+    ):
+        explanation_code = "n3_fit_waiting_for_n2_evidence"
+        explanation_th = (
+            "หลักฐานใกล้ N3 แต่ระบบไม่ข้าม N1 ไป N3 โดยตรง "
+            "จึงรอหลักฐาน N2 ตามลำดับ"
+        )
+    elif evidence_candidate == winner and transition_meta.get("held"):
+        explanation_code = "fit_matches_pending_evidence"
+        explanation_th = (
+            f"HR/RR สนับสนุน {winner.upper()} และกำลังรอยืนยันต่อเนื่อง"
+        )
+    else:
+        explanation_code = "support_differs_from_confirmed_state"
+        explanation_th = (
+            f"HR/RR ใกล้ {winner.upper()} แต่สถานะยืนยันใช้ BCG, "
+            "movement, เวลา และลำดับสถานะร่วมด้วย"
+        )
+    return {
+        "winner": winner,
+        "winner_percent": winner_percent,
+        "runner_up": runner_up,
+        "runner_up_percent": runner_up_percent,
+        "margin_percent": round(winner_percent - runner_up_percent, 1),
+        "confirmed_state": confirmed_state,
+        "evidence_candidate": evidence_candidate,
+        "agrees_with_confirmed_state": agrees,
+        "role": "supporting_hr_rr_prior",
+        "can_determine_stage_alone": False,
+        "explanation_code": explanation_code,
+        "explanation_th": explanation_th,
+    }
+
+
 def _clamp(value: float, lower: float = 0.0, upper: float = 1.0) -> float:
     return max(lower, min(upper, float(value)))
 

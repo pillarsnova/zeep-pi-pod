@@ -2733,6 +2733,9 @@ function renderAdminSleepBaseline(sleep={},session={}){
   const currentStage=sleep.classification_active===true
     &&stages.some(stage=>stage.key===sleep.confirmed_state||stage.key===sleep.state)
       ? (sleep.confirmed_state||sleep.state):null;
+  const fitSummary=sleep.baseline_fit_summary||{};
+  const baselineWinner=stages.some(stage=>stage.key===fitSummary.winner)
+    ? fitSummary.winner:null;
   const evidenceStage=stages.some(stage=>stage.key===(sleep.evidence?.candidate||sleep.probability_winner))
     ? (sleep.evidence?.candidate||sleep.probability_winner):null;
   const formatProbability=value=>(value*100).toLocaleString('th-TH-u-nu-latn',{
@@ -2751,10 +2754,11 @@ function renderAdminSleepBaseline(sleep={},session={}){
       const probability=probabilityValue(stage.key);
       const isCurrent=stage.key===currentStage;
       const isEvidence=stage.key===evidenceStage;
-      return `<article class="admin-sleep-stage stage-${stage.key}${isCurrent?' current':''}${isEvidence?' evidence':''}" data-stage="${stage.key}">
+      const isBaselineWinner=stage.key===baselineWinner;
+      return `<article class="admin-sleep-stage stage-${stage.key}${isCurrent?' current':''}${isEvidence?' evidence':''}${isBaselineWinner?' baseline-nearest':''}" data-stage="${stage.key}">
         <div class="admin-sleep-stage-head"><span><b>${stage.code}</b><small>${stage.label}</small></span><em aria-label="หลักฐาน ${stage.label} ${formatProbability(probability)} เปอร์เซ็นต์">${isCurrent?'ยืนยัน · ':isEvidence?'หลักฐาน · ':''}${formatProbability(probability)}%</em></div>
         <div class="admin-sleep-stage-ranges"><span><small>HR</small><b>${formatRange(range.hr)}</b><em>BPM</em></span><span><small>RR</small><b>${formatRange(range.rr)}</b><em>ครั้ง/นาที</em></span></div>
-        <div class="mini">Baseline fit ${Number.isFinite(Number(proximity.weighted_percent))?Number(proximity.weighted_percent).toFixed(1)+'%':'--'} · ΔHR ${Number(proximity.hr?.distance_to_range)||0} · ΔRR ${Number(proximity.rr?.distance_to_range)||0}</div>
+        <div class="mini">${isBaselineWinner?'HR/RR ใกล้สุด · ':''}Fit ${Number.isFinite(Number(proximity.weighted_percent))?Number(proximity.weighted_percent).toFixed(1)+'%':'--'} · ΔHR ${Number(proximity.hr?.distance_to_range)||0} · ΔRR ${Number(proximity.rr?.distance_to_range)||0}</div>
       </article>`;
     }).join('');
   }
@@ -2786,7 +2790,9 @@ function renderAdminSleepBaseline(sleep={},session={}){
     const filterText=Number.isFinite(Number(filter.alpha))
       ? ` · Stability EMA ${Math.round(Number(filter.alpha)*100)}% / margin ${Math.round(Number(filter.candidate_switch_margin||0)*100)}%`
       : '';
-    policyEl.textContent=`G2: W / N1 / N2 / N3 / REM${weightText}${rrGuard}${filterText} · หลักฐาน 30 วิแยกจากสถานะยืนยัน 60 วิ · Safety/Bed Exit ไม่รอ Sleep State${pending}${support} · ยังไม่ใช่ผล PSG`;
+    const fitExplanation=fitSummary.explanation_th
+      ? ` · ${fitSummary.explanation_th}`:'';
+    policyEl.textContent=`G2: W / N1 / N2 / N3 / REM${weightText}${rrGuard}${filterText} · หลักฐาน 30 วิแยกจากสถานะยืนยัน 60 วิ · HR/RR Fit เป็นหลักฐานสนับสนุน ไม่ใช่ State โดยลำพัง${fitExplanation} · Safety/Bed Exit ไม่รอ Sleep State${pending}${support} · ยังไม่ใช่ผล PSG`;
   }
 }
 

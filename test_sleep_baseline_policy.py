@@ -368,6 +368,51 @@ class BaselineProximityTests(unittest.TestCase):
         self.assertEqual(detail["distance_to_range"], 0.0)
         self.assertEqual(outside_detail["distance_to_range"], 10.0)
 
+    def test_n3_fit_does_not_claim_confirmed_n3_when_gate_is_closed(self):
+        summary = zeep.interpret_baseline_fit(
+            {
+                "wake": 0.20,
+                "n1": 0.45,
+                "n2": 0.70,
+                "n3": 0.85,
+                "rem": 0.30,
+            },
+            confirmed_state="n1",
+            evidence_candidate="n1",
+            n3_gate=False,
+            transition_meta={},
+            hr_weight=0.50,
+            rr_weight=0.40,
+        )
+        self.assertEqual(summary["winner"], "n3")
+        self.assertFalse(summary["agrees_with_confirmed_state"])
+        self.assertFalse(summary["can_determine_stage_alone"])
+        self.assertEqual(
+            summary["explanation_code"], "n3_fit_without_n3_gate"
+        )
+
+    def test_matching_fit_is_reported_as_support_not_ground_truth(self):
+        summary = zeep.interpret_baseline_fit(
+            {
+                "wake": 0.20,
+                "n1": 0.40,
+                "n2": 0.82,
+                "n3": 0.70,
+                "rem": 0.30,
+            },
+            confirmed_state="n2",
+            evidence_candidate="n2",
+            n3_gate=False,
+            transition_meta={},
+            hr_weight=0.50,
+            rr_weight=0.40,
+        )
+        self.assertEqual(summary["winner"], "n2")
+        self.assertTrue(summary["agrees_with_confirmed_state"])
+        self.assertEqual(
+            summary["explanation_code"], "supports_confirmed_state"
+        )
+
 
 class SleepProbabilityStabilityTests(unittest.TestCase):
     def test_onset_guard_holds_wake_when_n1_wins_too_early(self):

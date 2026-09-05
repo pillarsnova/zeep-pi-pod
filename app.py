@@ -174,6 +174,7 @@ from sleep_stage_scoring import (
     align_probabilities_to_emitted_stage,
     candidate_from_stage_evidence,
     evidence_candidate_with_abstention,
+    interpret_baseline_fit,
     score_sleep_evidence,
     softmax_stage_evidence,
     smooth_stage_probabilities,
@@ -3101,6 +3102,15 @@ def estimate_sleep_state() -> Dict[str, Any]:
         # Air/light/comfort can make the physiology less representative of an
         # undisturbed sleep window, but cannot select another stage.
         confidence = "medium"
+    baseline_fit_summary = interpret_baseline_fit(
+        base_scores,
+        confirmed_state=confirmed_state,
+        evidence_candidate=decision_candidate,
+        n3_gate=bool(sleep_evidence.get("n3_gate")),
+        transition_meta=transition_meta,
+        hr_weight=SLEEP_BASELINE_HR_WEIGHT,
+        rr_weight=SLEEP_BASELINE_RR_WEIGHT,
+    )
     reason_bits = [f"HR เฉลี่ย {mean_hr:.1f}", f"RR เฉลี่ย {mean_rr:.1f}", f"movement {move_ratio*100:.0f}%"]
     movement_category = sleep_evidence["movement"]["category"]
     if movement_category == "position_change_or_blanket_adjustment_candidate":
@@ -3171,6 +3181,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
         "reason": " · ".join(reason_bits), "mean_hr": round(mean_hr, 1), "mean_rr": round(mean_rr, 1),
         "hr_cv": round(hr_cv, 4), "rr_cv": round(rr_cv, 4), "elapsed_min": round(elapsed_min, 1),
         "baseline_proximity": baseline_proximity,
+        "baseline_fit_summary": baseline_fit_summary,
         "scoring_weights": {
             "hr_baseline": SLEEP_BASELINE_HR_WEIGHT,
             "rr_baseline": SLEEP_BASELINE_RR_WEIGHT,

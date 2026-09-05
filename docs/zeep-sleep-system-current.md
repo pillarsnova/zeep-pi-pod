@@ -458,7 +458,7 @@ health record เดิม การแก้ derived record จริงยั�
 
 | เครื่องมือ | เปลี่ยนอะไร | ไม่เปลี่ยนอะไร |
 |---|---|---|
-| `audit_sleep_history_shadow.py` | อ่าน Raw/Timeline แบบ read-only เพื่อทดสอบ deterministic replay, quality tier, transition และคะแนน | Raw BCG, Timeline, Report และ DB ทุกชนิด |
+| `audit_sleep_history_shadow.py` | อ่าน Raw/Timeline แบบ read-only เพื่อทดสอบ deterministic replay, quality tier, transition และคะแนน; แยก Model State ออกจาก Annotation overlay ที่ใช้กับ Report | Raw BCG, Timeline, Report และ DB ทุกชนิด |
 | `reclassify_sleep_history.py` | Legacy event comparison; ใช้ scorer/policy เดียวกันและมี dry-run/guard | Raw BCG และ Timeline |
 | `promote_sleep_history.py` | Promote valid derived Epoch ของ reviewed Session หลังตรวจ per-Session blocker และ replay/code/input hash บน staging copy; ใช้ช่วงวันที่และ minimum duration ที่ตรึงมากับ reviewed artifact โดยไม่บังคับ cutoff 25 นาทีซ้ำ | Raw BCG, Timeline และช่วง WAIT/OFF/No Data |
 | `compare_sleep_history_replay.py` | เปรียบเทียบ replay manifest สองรุ่นเป็น owner-only JSON/Markdown | DB, Raw, Event และ Report ทุกชนิด |

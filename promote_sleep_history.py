@@ -654,7 +654,12 @@ def main() -> int:
             expected_quality = expected_item.get("quality") or {}
             expected_report = expected_item.get("report") or {}
             expected_counts = Counter(
-                str(row.get("state")) for row in expected_item.get("state_rows") or []
+                str(row.get("state"))
+                for row in (
+                    expected_item.get("report_state_rows")
+                    or expected_item.get("state_rows")
+                    or []
+                )
             )
             checks = {
                 "quality": (expected_quality, rebuilt.get("quality") or {}),

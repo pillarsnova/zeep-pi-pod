@@ -53,6 +53,7 @@ from sleep_history_policy import (
     replay_review_warnings,
     split_issue_codes,
 )
+from sleep_stage_annotations import apply_annotations, load_annotations
 from sleep_system_policy import (
     AGE_SLEEP_BASELINES,
     GENDER_BASELINE_ADJUSTMENTS,
@@ -140,6 +141,54 @@ LOCAL_TIMEZONE = ZoneInfo(PERSONAL_BASELINE_LEARNING_START_TIMEZONE)
 def confidence(evidence: dict[str, Any]) -> str:
     value = float((evidence.get("quality") or {}).get("winner_value") or 0.0)
     return "high" if value >= 0.72 else "medium" if value >= 0.48 else "low"
+
+
+def report_state_rows_with_annotations(
+    state_rows: Iterable[dict[str, Any]],
+    evidence_rows: Iterable[dict[str, Any]],
+    annotations: Iterable[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], int]:
+    """Overlay reviewed annotations for reports without changing model rows.
+
+    Shadow replay remains the model output promoted as versioned derived
+    events. A separately stored annotation may alter the user-facing report
+    and score, so the reviewed artifact must calculate that same overlay before
+    enforcing report parity during promotion.
+    """
+    evidence_by_time = {
+        round(float(row["t"]), 3): row for row in evidence_rows
+    }
+    applied = 0
+    report_rows: list[dict[str, Any]] = []
+    for state_row in state_rows:
+        when = float(state_row["t"])
+        evidence = evidence_by_time.get(round(when, 3), {})
+        model_value = {
+            "state": state_row.get("state"),
+            "probabilities": evidence.get("probabilities") or {},
+            "confidence": confidence(evidence),
+            "metrics": state_row.get("metrics") or {},
+        }
+        timestamp = datetime.fromtimestamp(
+            when, ZoneInfo("UTC")
+        ).isoformat()
+        report_value, annotation = apply_annotations(
+            model_value,
+            timestamp,
+            annotations,
+            sample_interval_s=SLEEP_EVIDENCE_EPOCH_SECONDS,
+        )
+        if annotation is not None:
+            applied += 1
+        report_rows.append({
+            **state_row,
+            "state": report_value["state"],
+            "model_state": state_row.get("state"),
+            "probabilities": report_value.get("probabilities") or {},
+            "confidence": report_value.get("confidence"),
+            "stage_annotation": report_value.get("stage_annotation"),
+        })
+    return report_rows, applied
 
 
 def load_profile_index(path: Optional[Path]) -> dict[str, dict[str, Any]]:
@@ -1189,6 +1238,15 @@ def main() -> int:
                 sessions, row["session_id"], start=start, end=end,
             ),
         )
+        annotation_rows = sessions.execute(
+            "SELECT value FROM events WHERE session_id=? "
+            "AND type='sleep_stage_annotation' ORDER BY timestamp,id",
+            (row["session_id"],),
+        ).fetchall()
+        annotations = load_annotations(annotation_rows)
+        report_state_rows: list[dict[str, Any]] = []
+        annotated_rounds = 0
+        first_sleep_t = None
         new_score = None
         stage_pct = {}
         stage_pct_of_occupied_evidence = {}
@@ -1212,7 +1270,12 @@ def main() -> int:
             "role": "expectation_and_report_context_only_until_validated",
         }
         if replay:
-            counts = Counter(replay["counts"])
+            report_state_rows, annotated_rounds = (
+                report_state_rows_with_annotations(
+                    replay["state_rows"], replay["evidence_rows"], annotations
+                )
+            )
+            counts = Counter(item["state"] for item in report_state_rows)
             total_sleep = sum(counts[stage] for stage in SLEEP_STAGES)
             stage_pct = {
                 stage: round(counts[stage] * 100.0 / total_sleep, 1) if total_sleep else 0.0
@@ -1226,22 +1289,22 @@ def main() -> int:
             sequence = [
                 {"state": item["state"], "timestamp": datetime.fromtimestamp(item["t"]).isoformat(),
                  "metrics": item["metrics"]}
-                for item in replay["state_rows"]
+                for item in report_state_rows
             ]
             first_sleep_t = next(
-                (item["t"] for item in replay["state_rows"]
+                (item["t"] for item in report_state_rows
                  if item["state"] in SLEEP_STAGES),
                 None,
             )
             awakenings = sum(
                 left["state"] in SLEEP_STAGES and right["state"] == "wake"
                 for left, right in zip(
-                    replay["state_rows"], replay["state_rows"][1:]
+                    report_state_rows, report_state_rows[1:]
                 )
             )
             sleep_started = False
             waso_rounds = 0
-            for state_item in replay["state_rows"]:
+            for state_item in report_state_rows:
                 if state_item["state"] in SLEEP_STAGES:
                     sleep_started = True
                 elif sleep_started and state_item["state"] == "wake":
@@ -1254,7 +1317,7 @@ def main() -> int:
                 for item in replay["evidence_rows"]
             }
             stage_by_bucket = {}
-            for state_item in replay["state_rows"]:
+            for state_item in report_state_rows:
                 evidence_item = evidence_by_time.get(
                     round(float(state_item["t"]), 3), {}
                 )
@@ -1331,6 +1394,9 @@ def main() -> int:
                 "promotion_blockers": [],
                 "evidence_rows": replay["evidence_rows"],
                 "state_rows": replay["state_rows"],
+                "report_state_rows": report_state_rows,
+                "sleep_stage_annotations_used": len(annotations),
+                "annotated_rounds": annotated_rounds,
                 "status_rows": replay["status_rows"],
             }
             # Architecture-distribution flags are review prompts for the
@@ -1372,7 +1438,7 @@ def main() -> int:
             first_sleep = next(
                 (
                     item
-                    for item in replay["state_rows"]
+                    for item in report_state_rows
                     if item["state"] in SLEEP_STAGES
                 ),
                 None,
@@ -1385,10 +1451,7 @@ def main() -> int:
                     "start_local_hour": local_start.hour + local_start.minute / 60.0,
                     "stage_pct": stage_pct,
                 })
-        sleep_onset_t = (
-            start + replay["sleep_onset_minutes"] * 60.0
-            if replay and replay.get("sleep_onset_minutes") is not None else None
-        )
+        sleep_onset_t = first_sleep_t
         environment = environment_summary(
             sessions, row["session_id"], start=start, sleep_onset=sleep_onset_t,
         )

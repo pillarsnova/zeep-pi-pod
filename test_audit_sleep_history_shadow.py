@@ -71,6 +71,7 @@ class ShadowPathParityTests(unittest.TestCase):
         self.assertEqual(model_rows[0]["state"], "n1")
         self.assertEqual(report_rows[0]["model_state"], "n1")
         self.assertEqual(report_rows[0]["state"], "wake")
+        self.assertEqual(report_rows[0]["confidence"], "high")
         self.assertEqual(applied, 1)
 
 

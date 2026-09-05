@@ -1329,7 +1329,10 @@ def main() -> int:
                     // SLEEP_EVIDENCE_EPOCH_SECONDS
                 )] = {
                     "sleep": state_item["state"],
-                    "sleep_confidence": confidence(evidence_item),
+                    "sleep_confidence": (
+                        state_item.get("confidence")
+                        or confidence(evidence_item)
+                    ),
                     "acoustic_corroborated": bool(acoustic.get("corroborated")),
                 }
             for report_row in report_sensor_rows:

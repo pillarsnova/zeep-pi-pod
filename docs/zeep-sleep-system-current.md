@@ -490,10 +490,12 @@ health record เดิม การแก้ derived record จริงยั�
 ## 7. Sensor calibration ที่เกี่ยวกับรายงาน
 
 - Humidity ใช้ raw pass-through (`0.0 percentage-point bias`) ใน canonical environment snapshot; raw Hub diagnostics ไม่ถูกแก้
-- Sound รับเฉพาะ A-weighted LAeq ที่ ESP32 ระบุ valid ตาม Sensor Contract v1.1;
-  raw dBFS เก็บเพื่อ Admin audit เท่านั้นและ packet แบบ dBFS-only เป็น INVALID
-- ค่าเสียง valid แสดง 0–120 dBA; ค่า invalid ไม่แสดง ไม่คงค่าก่อนหน้าเป็น
-  ค่าปัจจุบัน และไม่บันทึกลง Session
+- Sound รับเฉพาะ A-weighted LAeq ที่ ESP32 ระบุ valid ตาม Sensor Contract v1.2;
+  raw dBFS เก็บภายในเพื่อวิศวกรรมแต่ไม่แสดงบนการ์ด และ packet แบบ dBFS-only
+  เป็น INVALID
+- ค่าเสียง valid แสดงเฉพาะ 30–130 dBA ตามช่วง CEM DT-8852; ค่าติดลบและ
+  ค่าหลุดช่วงเป็น invalid, ไม่ clamp, ไม่คงค่าก่อนหน้าเป็นค่าปัจจุบัน และ
+  ไม่บันทึกลง Session
 - Monitor comfort target ใช้ ≤35 dBA; Dashboard overall “ยอดเยี่ยม” ใช้ `<40 dBA` จึงเป็นคนละวัตถุประสงค์ ไม่ใช่ calibration คนละชุด
 - Calibration provenance แสดงเฉพาะ Admin
 

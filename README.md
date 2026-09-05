@@ -211,7 +211,7 @@ MOSFET driver / relay เสมอ ห้ามต่อตรงเด็ดข
 ## Serial / รูปแบบข้อมูล ESP32
 
 Datasheet, physical range, field alias, JSON envelope v1 และ byte map BCG ดูที่
-[Sensor Interface Contract v1.1](docs/zeep-sensor-interface-contract-v1.1.md)
+[Sensor Interface Contract v1.2](docs/zeep-sensor-interface-contract-v1.2.md)
 
 - BCG: `/dev/ttyUSB_HRB` @ 115200
 - ESP32 hub: `/dev/ttyACM0` @ 115200 — ส่ง JSON บรรทัดละ 1 object เช่น
@@ -220,7 +220,7 @@ Datasheet, physical range, field alias, JSON envelope v1 และ byte map BCG 
 ชื่อ field ที่รับได้ (ตัวแรกที่เป็นตัวเลขชนะ) — temperature:
 `temperature_c|temperature|temp|temp_c` · humidity: `humidity|hum|rh|humidity_rh` ·
 lux: `lux|light|illuminance` · sound raw: `sound_dbfs` · sound ที่ใช้แสดง:
-`sound_laeq_dba` พร้อม metadata ยืนยันตาม Contract v1.1
+`sound_laeq_dba` พร้อม metadata ยืนยันตาม Contract v1.2
 
 ถ้า ESP32 เงียบเกิน `ESP32_STALE_SECONDS` (ค่าเริ่มต้น 5 วิ) ทั้งที่พอร์ตยังเปิดอยู่
 จอจะแสดงเป็น stale/disconnected แทนการโชว์ค่าเก่าค้างเหมือนเป็นค่าจริง
@@ -229,7 +229,8 @@ lux: `lux|light|illuminance` · sound raw: `sound_dbfs` · sound ที่ใช
 
 Pi **ยกเลิก `abs(sound_dbfs)` ถาวร** เพราะ dBFS เป็นอัตราส่วนเทียบ full scale
 ของสัญญาณดิจิทัล ไม่ใช่ Sound Pressure Level และแปลงเป็น dBA ด้วยค่าสัมบูรณ์
-ไม่ได้ ค่า `sound_dbfs` ยังคงเก็บไว้ให้ Admin ตรวจ Raw เท่านั้น
+ไม่ได้ ค่า `sound_dbfs` ยังคงเก็บภายในเพื่อวิเคราะห์ Firmware แต่ไม่แสดงบน
+การ์ด Dashboard/Calibration
 
 ESP32 Sensor Hub 1 ต้องแก้ I2S word alignment/sign extension, ตัด DC,
 ทำ A-weighting และสะสมพลังงานเป็น LAeq ก่อนส่งค่า 10 วินาที พร้อม metadata:
@@ -237,7 +238,8 @@ ESP32 Sensor Hub 1 ต้องแก้ I2S word alignment/sign extension, ต�
 `sound_window_ms=10000` จึงจะเผยแพร่เป็น `sound_dba_est` ได้
 
 ถ้า ESP32 ส่งเฉพาะ `sound_dbfs`, ส่ง metadata ไม่ครบ, ระบุ invalid, ค่าไม่ finite
-หรืออยู่นอกช่วง 0–120 ระบบจะระบุ SPH0645 เป็น **INVALID** ไม่คงค่าเก่ามาแสดง
+หรืออยู่นอกช่วง 30–130 ระบบจะระบุ SPH0645 เป็น **INVALID** ไม่ clamp เป็น 30
+และไม่คงค่าเก่ามาแสดง
 เป็นค่าปัจจุบัน ไม่บันทึกลง Session และไม่ใช้ประเมินสิ่งรบกวนการนอน
 
 SPH0645 เป็น Sensor เสริมของภาพรวมสภาพแวดล้อม: เมื่อเสียง `INVALID` ระบบยัง
@@ -246,8 +248,9 @@ SPH0645 เป็น Sensor เสริมของภาพรวมสภา�
 ยังทำงานตามเดิม
 
 ข้อกำหนด Firmware และขั้นตอนทดสอบอยู่ที่
-[Sensor Interface Contract v1.1](docs/zeep-sensor-interface-contract-v1.1.md)
-และค่าดิบ/สาเหตุ invalid ดูได้ใน Admin Packet Inspector
+[Sensor Interface Contract v1.2](docs/zeep-sensor-interface-contract-v1.2.md)
+และสาเหตุ invalid ดูได้ใน Admin Packet Inspector; dBFS ติดลบเก็บในระบบ
+วิศวกรรมเท่านั้นและไม่แสดงบนการ์ดใช้งาน
 
 เวลาสอบเทียบ CEM DT-8852 ให้ใช้ A-weighting + SLOW และเลือกช่วงที่ครอบคลุม
 ค่าจริง (`LO 30–80 dBA` สำหรับสภาพแวดล้อมนอน) ห้ามใช้แถวที่หน้ามิเตอร์ขึ้น

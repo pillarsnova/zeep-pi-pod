@@ -136,19 +136,25 @@ def sound_inspector_channel(
     environment: Mapping[str, Any],
     device: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Describe the firmware-owned sound pipeline for Admin inspection."""
+    """Describe the firmware-owned sound pipeline without displaying dBFS.
+
+    dBFS is retained in the incoming packet for engineering diagnostics, but
+    the calibration card only displays validated, non-negative LAeq(A).
+    """
+    measurement_valid = hub1.get("sound_measurement_valid") is True
+    firmware_laeq = hub1.get("sound_laeq_dba") if measurement_valid else None
     return {
         "metric": "sound_dba_est", "device": "SPH0645",
         "device_key": "sph0645", "label": "ระดับเสียง LAeq(A)",
-        "unit": "dBA est.", "raw_unit": "dBFS",
-        "raw": hub1.get("sound_dbfs"), "bias": 0.0,
+        "unit": "dBA est.", "raw_unit": "dBA est.",
+        "raw": firmware_laeq, "bias": 0.0,
         "calibrated": environment.get("sound_dba_est"),
         "editable": False, "source": device.get("source_label"),
         "status": device.get("status", "offline"),
         "data_age_s": device.get("data_age_s"),
         "formula": "ESP32: I2S alignment → A-weighting → LAeq",
-        "firmware_value": hub1.get("sound_laeq_dba"),
-        "measurement_valid": hub1.get("sound_measurement_valid") is True,
+        "firmware_value": firmware_laeq,
+        "measurement_valid": measurement_valid,
         "invalid_reason": hub1.get("sound_invalid_reason"),
-        "lock_reason": "dBFS เป็น dBA ไม่ได้; ต้องคำนวณ LAeq(A) ที่ ESP32",
+        "lock_reason": "แสดงเฉพาะ LAeq(A) 30–130 dBA ที่ ESP32 ยืนยันแล้ว",
     }

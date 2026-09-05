@@ -290,12 +290,12 @@ def hold_last_valid_sound(
     value = current.get("sound_dba_est")
     if (
         current.get("sound_measurement_valid") is True
-        and _valid_sound(value, display_min, display_max)
+        and valid_sound_level(value, display_min, display_max)
     ):
         current["sound_value_held"] = False
         return current
     old = previous.get("sound_dba_est")
-    if _valid_sound(old, display_min, display_max):
+    if valid_sound_level(old, display_min, display_max):
         current["sound_last_valid_dba"] = old
     current.pop("sound_dba_est", None)
     current["sound_value_held"] = False
@@ -305,7 +305,8 @@ def hold_last_valid_sound(
     return current
 
 
-def _valid_sound(value: Any, low: float, high: float) -> bool:
+def valid_sound_level(value: Any, low: float, high: float) -> bool:
+    """Return whether a value is a finite LAeq(A) value in the approved range."""
     return bool(
         isinstance(value, (int, float))
         and not isinstance(value, bool)
@@ -318,7 +319,11 @@ def energy_average_db(
     levels: Sequence[float], *, display_min: float, display_max: float,
 ) -> Optional[float]:
     """Return a numerically stable energy-domain decibel average."""
-    valid = [float(value) for value in levels if _valid_sound(value, display_min, display_max)]
+    valid = [
+        float(value)
+        for value in levels
+        if valid_sound_level(value, display_min, display_max)
+    ]
     if not valid:
         return None
     peak = max(valid)

@@ -12,8 +12,13 @@ from sensor_calibration import (
     load_calibration,
     persist_calibration,
     resolve_biases,
+    sound_inspector_channel,
 )
-from sensor_contracts import ENVIRONMENT_DEVICE_SPECS
+from sensor_contracts import (
+    ENVIRONMENT_DEVICE_SPECS,
+    SOUND_DBA_DISPLAY_MAX,
+    SOUND_DBA_DISPLAY_MIN,
+)
 from sensor_runtime import (
     compose_environment_snapshot,
     energy_average_db,
@@ -70,8 +75,8 @@ class SensorRuntimeTests(unittest.TestCase):
     def test_legacy_dbfs_is_kept_raw_and_marked_invalid(self) -> None:
         normalized = normalize_hub1_sensor(
             {"sound_dbfs": -39.69},
-            sound_display_min=0.0,
-            sound_display_max=120.0,
+            sound_display_min=SOUND_DBA_DISPLAY_MIN,
+            sound_display_max=SOUND_DBA_DISPLAY_MAX,
         )
         self.assertEqual(normalized["sound_dbfs"], -39.69)
         self.assertNotIn("sound_dba_est", normalized)
@@ -88,16 +93,37 @@ class SensorRuntimeTests(unittest.TestCase):
                 "sound_metric": "LAeq",
                 "sound_window_ms": 10_000,
             },
-            sound_display_min=0.0,
-            sound_display_max=120.0,
+            sound_display_min=SOUND_DBA_DISPLAY_MIN,
+            sound_display_max=SOUND_DBA_DISPLAY_MAX,
         )
         self.assertEqual(normalized["sound_dbfs"], -39.69)
         self.assertEqual(normalized["sound_dba_est"], 54.2)
         self.assertTrue(normalized["sound_measurement_valid"])
         self.assertEqual(
-            energy_average_db([40.0, 50.0], display_min=0.0, display_max=120.0),
+            energy_average_db(
+                [40.0, 50.0],
+                display_min=SOUND_DBA_DISPLAY_MIN,
+                display_max=SOUND_DBA_DISPLAY_MAX,
+            ),
             47.4,
         )
+
+    def test_sound_reference_range_boundaries_are_inclusive(self) -> None:
+        base = {
+            "sound_valid": True,
+            "sound_weighting": "A",
+            "sound_metric": "LAeq",
+            "sound_window_ms": 10_000,
+        }
+        for level in (SOUND_DBA_DISPLAY_MIN, SOUND_DBA_DISPLAY_MAX):
+            with self.subTest(level=level):
+                normalized = normalize_hub1_sensor(
+                    {**base, "sound_laeq_dba": level},
+                    sound_display_min=SOUND_DBA_DISPLAY_MIN,
+                    sound_display_max=SOUND_DBA_DISPLAY_MAX,
+                )
+                self.assertEqual(normalized["sound_dba_est"], level)
+                self.assertTrue(normalized["sound_measurement_valid"])
 
     def test_incomplete_or_untrusted_firmware_laeq_is_invalid(self) -> None:
         base = {
@@ -112,14 +138,16 @@ class SensorRuntimeTests(unittest.TestCase):
             ({"sound_weighting": "Z"}, "weighting_must_be_A"),
             ({"sound_metric": "SPL"}, "metric_must_be_LAeq"),
             ({"sound_window_ms": 0}, "invalid_integration_window"),
-            ({"sound_laeq_dba": 121}, "laeq_out_of_range"),
+            ({"sound_laeq_dba": -1}, "laeq_out_of_range"),
+            ({"sound_laeq_dba": 29.9}, "laeq_out_of_range"),
+            ({"sound_laeq_dba": 130.1}, "laeq_out_of_range"),
         )
         for override, reason in cases:
             with self.subTest(reason=reason):
                 normalized = normalize_hub1_sensor(
                     {**base, **override},
-                    sound_display_min=0.0,
-                    sound_display_max=120.0,
+                    sound_display_min=SOUND_DBA_DISPLAY_MIN,
+                    sound_display_max=SOUND_DBA_DISPLAY_MAX,
                 )
                 self.assertNotIn("sound_dba_est", normalized)
                 self.assertFalse(normalized["sound_measurement_valid"])
@@ -130,12 +158,38 @@ class SensorRuntimeTests(unittest.TestCase):
         held = hold_last_valid_sound(
             current,
             {"sound_dba_est": 38.2},
-            display_min=0.0,
-            display_max=120.0,
+            display_min=SOUND_DBA_DISPLAY_MIN,
+            display_max=SOUND_DBA_DISPLAY_MAX,
         )
         self.assertNotIn("sound_dba_est", held)
         self.assertEqual(held["sound_last_valid_dba"], 38.2)
         self.assertFalse(held["sound_measurement_valid"])
+
+    def test_admin_sound_card_never_exposes_negative_dbfs(self) -> None:
+        channel = sound_inspector_channel(
+            {
+                "sound_dbfs": -39.69,
+                "sound_laeq_dba": 39.8,
+                "sound_measurement_valid": True,
+            },
+            {"sound_dba_est": 39.8},
+            {"status": "live", "source_label": "Hub 1 · USB"},
+        )
+        self.assertEqual(channel["raw"], 39.8)
+        self.assertEqual(channel["raw_unit"], "dBA est.")
+        self.assertNotIn(-39.69, channel.values())
+
+        invalid = sound_inspector_channel(
+            {
+                "sound_dbfs": -39.69,
+                "sound_measurement_valid": False,
+                "sound_invalid_reason": "legacy_dbfs_only",
+            },
+            {},
+            {"status": "invalid", "source_label": "Hub 1 · USB"},
+        )
+        self.assertIsNone(invalid["raw"])
+        self.assertIsNone(invalid["calibrated"])
 
     def test_two_hub_composition_has_one_canonical_value_per_metric(self) -> None:
         hub1 = {

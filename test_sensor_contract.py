@@ -142,6 +142,21 @@ class EnvironmentContractTests(unittest.TestCase):
         self.assertEqual(assessment["optional_unavailable_count"], 1)
         self.assertEqual(assessment["blocking_unavailable_count"], 0)
 
+    def test_sound_outside_reference_meter_range_is_not_visible(self):
+        for level in (-39.69, 29.9, 130.1):
+            with self.subTest(level=level):
+                result = app.build_environment_snapshot(
+                    hub1(sound_dba_est=level),
+                    hub2(),
+                    NOW,
+                )
+                self.assertIsNone(result["sound_dba_est"])
+                self.assertEqual(
+                    result["devices"]["sph0645"]["status"],
+                    "invalid",
+                )
+                self.assertEqual(result["live_count"], 5)
+
     def test_session_sample_keeps_live_pm25_and_voc_for_the_final_report(self):
         environment = app.build_environment_snapshot(hub1(), hub2(), NOW)
         fake_snapshot = {

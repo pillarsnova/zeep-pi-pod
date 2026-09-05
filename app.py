@@ -148,6 +148,8 @@ from pod_occupancy import (
 )
 from sensor_contracts import (
     ENVIRONMENT_DEVICE_SPECS,
+    SOUND_DBA_DISPLAY_MAX,
+    SOUND_DBA_DISPLAY_MIN,
     decode_hub_payload,
     parse_lsm800t_frame,
     sensor_contract_snapshot,
@@ -166,6 +168,7 @@ from sensor_runtime import (
     hold_last_valid_sound as hold_sound_value,
     normalize_hub1_sensor,
     summarize_sound_window,
+    valid_sound_level,
 )
 from smart_response import (
     SmartResponsePolicy,
@@ -709,12 +712,8 @@ def update_sensor_bias(metric: str, bias: float, *, operator: str,
         "updated_at": changed_at, "reference_value": reference,
     }
 
-# User-facing range accepted from validated Sensor Hub 1 LAeq(A) telemetry.
-# Values outside this envelope and all legacy dBFS-only packets are invalid.
-SOUND_DBA_DISPLAY_MIN = 0.0
-SOUND_DBA_DISPLAY_MAX = 120.0
 # Operational sleep-comfort target used by Monitor recommendations. This is
-# separate from the sound transform and the 0–120 dBA est. display envelope.
+# separate from validation against the 30–130 dBA reference-meter envelope.
 SOUND_DBA_SLEEP_TARGET = 35.0
 
 # Shared temperature comfort band for the user dashboard and Monitor advice.
@@ -1381,11 +1380,18 @@ def _timeline_restart_frame() -> Optional[Dict[str, Any]]:
     epoch_s = float(sample.get("t") or 0)
     if not math.isfinite(epoch_s) or epoch_s <= 0:
         return None
+    restart_sound = sample.get("dba")
+    if not valid_sound_level(
+        restart_sound,
+        SOUND_DBA_DISPLAY_MIN,
+        SOUND_DBA_DISPLAY_MAX,
+    ):
+        restart_sound = None
     values = {
         "temperature_c": sample.get("temp"),
         "humidity_rh": sample.get("hum"),
         "lux": sample.get("lux"),
-        "sound_dba_est": sample.get("dba"),
+        "sound_dba_est": restart_sound,
         "co2_ppm": sample.get("co2"),
         "pm1_0_ug_m3": None,
         "pm2_5_ug_m3": sample.get("pm2_5"),

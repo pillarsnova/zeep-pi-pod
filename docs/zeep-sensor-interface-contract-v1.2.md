@@ -1,4 +1,4 @@
-# ZEEP Sensor Interface Contract v1.1
+# ZEEP Sensor Interface Contract v1.2
 
 สถานะ: Approved software contract · 2026-09-06
 ขอบเขต: ESP32 Sensor Hub 1 → Pi5 ผ่าน USB Serial JSONL @ 115200 baud
@@ -30,11 +30,13 @@ Sensor Hub 1 ส่วน Pi ทำหน้าที่ตรวจ Contract �
 2. `sound_weighting` ต้องเป็น `A`
 3. `sound_metric` ต้องเป็น `LAeq`
 4. `sound_window_ms` ต้องเป็นค่าบวกและ finite; Production target คือ 10,000 ms
-5. `sound_laeq_dba` ต้อง finite และอยู่ในช่วงระบบ 0–120 dBA est.
+5. `sound_laeq_dba` ต้อง finite และอยู่ในช่วงที่เครื่องอ้างอิงรองรับ
+   30–130 dBA est. (รวมค่าขอบ 30 และ 130)
 
 ไม่ผ่านข้อใดข้อหนึ่ง: `sound_measurement_valid=false`, SPH0645 มีสถานะ
-`invalid`, Dashboard ไม่แสดงตัวเลข, Session ไม่บันทึกเสียง และ Raw ยังคงอยู่
-ใน Admin เพื่อหาสาเหตุ ค่า valid ก่อนหน้าอาจแสดงเป็น
+`invalid`, Dashboard ไม่แสดงตัวเลข, Session ไม่บันทึกเสียง และ dBFS ติดลบ
+ไม่แสดงบนการ์ด Dashboard/Calibration (ยังเก็บภายในเพื่อวิเคราะห์ Firmware)
+ค่า valid ก่อนหน้าอาจแสดงเป็น
 `sound_last_valid_dba` ในข้อมูล Debug แต่ห้ามใช้เป็นค่าปัจจุบัน
 
 ## Firmware processing pipeline

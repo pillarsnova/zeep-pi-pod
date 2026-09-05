@@ -4,7 +4,7 @@
 > 2026-09-06 ระบบยกเลิก `abs(sound_dbfs)` และไม่แปลง dBFS เป็น dBA บน Pi
 > อีกต่อไป สูตรและ offset ด้านล่างเป็นลำดับเหตุการณ์เดิมสำหรับ Audit เท่านั้น
 > Packet แบบเดิมถูกระบุเป็น INVALID จนกว่า ESP32 จะส่ง A-weighted LAeq ตาม
-> Sensor Interface Contract v1.1
+> Sensor Interface Contract v1.2
 
 ## Decision
 

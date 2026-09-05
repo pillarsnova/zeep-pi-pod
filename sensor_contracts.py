@@ -19,9 +19,16 @@ import struct
 from typing import Any, Mapping
 
 
-SENSOR_CONTRACT_VERSION = "zeep-sensor-contract-v1.1"
+SENSOR_CONTRACT_VERSION = "zeep-sensor-contract-v1.2"
 TELEMETRY_SCHEMA = "zeep.sensor.telemetry"
 TELEMETRY_SCHEMA_VERSION = "1.0"
+
+# CEM DT-8852 reference range currently approved for ZEEP field validation.
+# A numeric sound value outside this range is unavailable, not a value to
+# clamp into range.  Keeping the limits here prevents API, Dashboard and
+# Session recording from drifting to different definitions.
+SOUND_DBA_DISPLAY_MIN = 30.0
+SOUND_DBA_DISPLAY_MAX = 130.0
 
 
 SENSOR_CATALOG: dict[str, dict[str, Any]] = {
@@ -76,6 +83,10 @@ SENSOR_CATALOG: dict[str, dict[str, Any]] = {
             "owner": "sensorhub1_firmware",
             "required_weighting": "A",
             "required_metric": "LAeq",
+            "accepted_display_range_dba": [
+                SOUND_DBA_DISPLAY_MIN,
+                SOUND_DBA_DISPLAY_MAX,
+            ],
             "legacy_dbfs_policy": "invalid",
             "pi_abs_transform_allowed": False,
         },
@@ -182,7 +193,13 @@ ENVIRONMENT_DEVICE_SPECS: dict[str, dict[str, Any]] = {
     },
     "sph0645": {
         "model": "SPH0645", "sources": ("hub1",), "status": ("sph0645",),
-        "fields": {"sound_dba_est": (("sound_dba_est",), 0, 120)},
+        "fields": {
+            "sound_dba_est": (
+                ("sound_dba_est",),
+                SOUND_DBA_DISPLAY_MIN,
+                SOUND_DBA_DISPLAY_MAX,
+            ),
+        },
     },
     "mhz19c": {
         "model": "MH-Z19C", "sources": ("hub2", "hub1"),

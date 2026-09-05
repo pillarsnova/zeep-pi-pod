@@ -223,7 +223,7 @@ class RbacApiTests(unittest.TestCase):
         self.assertEqual(sensors.status_code, 200)
         self.assertEqual(
             sensors.json()["data"]["contract_version"],
-            "zeep-sensor-contract-v1.1",
+            "zeep-sensor-contract-v1.2",
         )
         maintenance = admin.get("/api/v1/admin/maintenance")
         self.assertEqual(maintenance.status_code, 200)

@@ -27,7 +27,7 @@ SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.3-nap-goal-duration"
 ENVIRONMENT_CONTEXT_POLICY_VERSION = "zeep-environment-context-v2.0-mode-aware-fair-floor"
 TERMINAL_WAKE_POLICY_VERSION = "zeep-terminal-wake-boundary-v1.0"
 SLEEP_CLASSIFICATION_GAP_VERSION = (
-    "zeep-sleep-classification-gap-v1.4-audited-operational-hold"
+    "zeep-sleep-classification-gap-v1.5-complete-operational-hold"
 )
 
 

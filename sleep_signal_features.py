@@ -626,7 +626,7 @@ def sleep_classification_gap_timeline(
         operational_hold = bool(
             (restart_markers or hold_unclassified_after_first_state)
             and held_stage in {"wake", "n1", "n2", "n3", "rem"}
-            and following_periods
+            and (following_periods or hold_unclassified_after_first_state)
         )
         hold_source = (
             "service_event" if restart_markers

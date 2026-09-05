@@ -402,14 +402,15 @@ class SignalFeatureTests(unittest.TestCase):
             ],
             [],
             session_start=100,
-            classification_end=200,
+            classification_end=230,
             sensor_sample_interval_s=10,
             **controls,
         )
         self.assertEqual([gap["state"] for gap in gaps], [
-            "sensor_gap", "restart_hold",
+            "sensor_gap", "restart_hold", "restart_hold",
         ])
         self.assertEqual(gaps[1]["held_state"], "wake")
+        self.assertEqual(gaps[2]["held_state"], "n1")
         self.assertEqual(
             gaps[1]["operational_hold_source"],
             "session_operational_annotation",

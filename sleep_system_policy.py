@@ -20,10 +20,10 @@ ZEEP_SLEEP_BASELINE_VERSION = "zeep-sleep-state-baseline-v1.8-sep1-cutover"
 ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.15-restart-continuity"
 SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
 SLEEP_HISTORY_BACKFILL_VERSION = (
-    "zeep-sleep-history-reclass-v23-fit-fusion-score-confidence"
+    "zeep-sleep-history-reclass-v24-fit-fusion-score-confidence"
 )
-SESSION_REPORT_VERSION = "zeep-session-report-v10.1-score-confidence"
-SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.1-score-confidence"
+SESSION_REPORT_VERSION = "zeep-session-report-v10.2-score-confidence"
+SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.2-score-confidence"
 ENVIRONMENT_CONTEXT_POLICY_VERSION = "zeep-environment-context-v2.0-mode-aware-fair-floor"
 TERMINAL_WAKE_POLICY_VERSION = "zeep-terminal-wake-boundary-v1.0"
 SLEEP_CLASSIFICATION_GAP_VERSION = "zeep-sleep-classification-gap-v1.2-restart-aware"

@@ -416,7 +416,9 @@ class SleepSessionReportTests(unittest.TestCase):
             rest_mode="nap_recovery", sensor_samples=samples,
             sample_interval_s=30,
         )
-        self.assertFalse(quality["available"])
+        self.assertTrue(quality["available"])
+        self.assertIsInstance(quality["score"], int)
+        self.assertEqual(quality["score_confidence"]["level"], "medium")
         self.assertEqual(
             quality["physiology"]["paired_hr_rr_coverage_pct"], 66.7,
         )

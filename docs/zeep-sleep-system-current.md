@@ -35,9 +35,9 @@
 | Baseline | `zeep-sleep-state-baseline-v1.8-sep1-cutover` |
 | Semi-Markov transition | `zeep-semimarkov-30s-v1.15-restart-continuity` |
 | G2 ontology | `g2-aasm-5class-v1.0` |
-| Historical replay | `zeep-sleep-history-reclass-v23-fit-fusion-score-confidence` |
-| Sleep / Recovery quality | `zeep-rest-quality-v8.1-score-confidence` |
-| Session report | `zeep-session-report-v10.1-score-confidence` |
+| Historical replay | `zeep-sleep-history-reclass-v24-fit-fusion-score-confidence` |
+| Sleep / Recovery quality | `zeep-rest-quality-v8.2-score-confidence` |
+| Session report | `zeep-session-report-v10.2-score-confidence` |
 | Environment context | `zeep-environment-context-v2.0-mode-aware-fair-floor` |
 | Terminal Wake boundary | `zeep-terminal-wake-boundary-v1.0` |
 | Classification gap display | `zeep-sleep-classification-gap-v1.2-restart-aware` |
@@ -339,7 +339,7 @@ stateDiagram-v2
 physiology evidence ก่อนเสมอ การอนุญาต graph นี้ไม่ได้หมายความว่า BCG เทียบเท่า PSG
 ซึ่งยังต้องใช้ EEG/EOG/chin EMG จริง
 
-## 4. Sleep / Recovery Quality v8.1
+## 4. Sleep / Recovery Quality v8.2
 
 ### 4.1 สมการภาพรวม
 
@@ -353,7 +353,7 @@ physiology evidence ก่อนเสมอ การอนุญาต graph �
 คะแนนจาก duration เพียงอย่างเดียว
 
 Coverage ไม่ใช่เงื่อนไขซ่อนคะแนนอีกต่อไป เมื่อมีหลักฐาน HR/RR ที่จับคู่กัน
-เพียงพอและพบข้อมูลตามเป้าหมายของโหมด ระบบจะแสดงคะแนนพร้อมระดับความมั่นใจ
+อย่างน้อย 6 จุดและพบข้อมูลตามเป้าหมายของโหมด ระบบจะแสดงคะแนนพร้อมระดับความมั่นใจ
 `high / medium / low` และหักคะแนนใน component ความครบของข้อมูลตามจริง Tier
 และ coverage ยังแสดงใน Admin QA แต่ไม่มีอำนาจปิดคะแนนทั้ง Session เพียงลำพัง
 
@@ -426,7 +426,7 @@ W/N1/N2/N3/REM ทั้งสองสายแสดง `score_title`, `qualit
 - Cycle นับเมื่อมี accumulated NREM ≥45 นาทีก่อนเข้า REM และไม่เพิ่มหลายรอบจาก REM flicker
 - Arousal proxy ไม่ใช่ EEG cortical arousal และ Cycle proxy ไม่ใช่ AASM cycle count
 
-## 5. Session Report v10.1
+## 5. Session Report v10.2
 
 เมื่อจบ Session ระบบสร้างและ persist รายงานจากข้อมูลชุดเดียวกับ Timeline:
 

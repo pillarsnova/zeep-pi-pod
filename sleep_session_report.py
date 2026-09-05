@@ -461,7 +461,6 @@ def _build_awake_rest_quality(
     score_available = bool(
         not no_sensor_evidence
         and paired_vital_samples >= 6
-        and paired_vital_ratio >= 0.80
         and hr_regularity is not None
         and rr_regularity is not None
     )
@@ -477,7 +476,8 @@ def _build_awake_rest_quality(
         "release_requirements": {
             "minimum_coverage_pct_for_high_confidence": 80,
             "session_coverage_blocks_score": False,
-            "minimum_paired_hr_rr_coverage_pct": 80,
+            "minimum_paired_hr_rr_coverage_pct_for_high_confidence": 80,
+            "paired_hr_rr_coverage_blocks_score": False,
             "minimum_paired_samples": 6,
             "paired_hr_rr_required": True,
             "passed": score_available,
@@ -1050,7 +1050,6 @@ def build_sleep_quality(
     score_available = bool(
         estimated_sleep_s > 0
         and paired_vital_rows >= 6
-        and paired_vital_ratio >= 0.80
     )
     score_confidence = _score_confidence(
         coverage_ratio, paired_vital_ratio
@@ -1065,7 +1064,8 @@ def build_sleep_quality(
             "minimum_confirmed_stage_coverage_pct_for_high_confidence": 80,
             "confirmed_stage_coverage_blocks_score": False,
             "confirmed_sleep_required": True,
-            "minimum_paired_hr_rr_coverage_pct": 80,
+            "minimum_paired_hr_rr_coverage_pct_for_high_confidence": 80,
+            "paired_hr_rr_coverage_blocks_score": False,
             "minimum_paired_samples": 6,
             "paired_hr_rr_required": True,
             "paired_hr_rr_rows": paired_vital_rows,

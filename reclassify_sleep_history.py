@@ -445,8 +445,8 @@ def rescore_event(
         raw,
         alpha=SLEEP_PROBABILITY_EMA_ALPHA,
     )
-    # Match live estimation: keep EMA continuity for every state except a
-    # current N3 winner that has passed the strict physiology gate.
+    # Match live estimation: keep EMA continuity except for gated N1 -> N2
+    # progression and a current N3 winner with strict physiology evidence.
     candidate, probability_transition = candidate_from_stage_evidence(
         raw,
         path.probability_ema,

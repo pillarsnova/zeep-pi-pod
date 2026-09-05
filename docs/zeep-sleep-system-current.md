@@ -29,13 +29,13 @@
 
 | ชั้นระบบ | Version |
 |---|---|
-| Health pipeline contract | `zeep-sleep-health-pipeline-v1.9-restart-continuity` |
-| Live estimator candidate | `bcg-audio-bed-5state-v1.26-fit-continuity-35` |
-| Evidence definition | `zeep-sleep-state-evidence-v3.4-fit-continuity-35` |
+| Health pipeline contract | `zeep-sleep-health-pipeline-v1.10-n2-progression` |
+| Live estimator candidate | `bcg-audio-bed-5state-v1.27-gated-n2-progression` |
+| Evidence definition | `zeep-sleep-state-evidence-v3.5-gated-n2-progression` |
 | Baseline | `zeep-sleep-state-baseline-v1.8-sep1-cutover` |
-| Semi-Markov transition | `zeep-semimarkov-30s-v1.15-restart-continuity` |
+| Semi-Markov transition | `zeep-semimarkov-30s-v1.16-n2-progression` |
 | G2 ontology | `g2-aasm-5class-v1.0` |
-| Historical replay | `zeep-sleep-history-reclass-v25-fit-continuity-35` |
+| Historical replay | `zeep-sleep-history-reclass-v26-gated-n2-progression` |
 | Sleep / Recovery quality | `zeep-rest-quality-v8.3-nap-goal-duration` |
 | Session report | `zeep-session-report-v10.3-nap-goal-duration` |
 | Environment context | `zeep-environment-context-v2.1-optional-acoustic-input` |
@@ -225,11 +225,16 @@ accuracy ดู [AASM Scoring Manual](https://learn.aasm.org/AssetListing/The-AA
 
 `HR/RR Fit` ในหน้า Admin หมายถึงความใกล้ของค่า HR/RR เฉลี่ยกับช่วงอ้างอิง
 ของแต่ละ State เท่านั้น ช่วงเหล่านี้ทับซ้อนกันได้และไม่ใช่ความน่าจะเป็นจาก PSG
-รุ่น v1.26 นำ evidence distribution มาผสานกับ HR/RR Fit distribution โดย Fit มี
+รุ่น v1.27 นำ evidence distribution มาผสานกับ HR/RR Fit distribution โดย Fit มี
 น้ำหนัก 20% หรือ 35% เมื่อ Fit สูงสุดจริงตรงกับ State ที่ยืนยันก่อนหน้าและ State
 นั้นยังผ่าน physiology gate แล้วจึงผ่าน EMA, transition, dwell และการยืนยัน
 60/120 วินาที การผสานจะตัด probability ของ State ที่ physiology gate ปิดเป็นศูนย์
 จึงทำให้ Fit มีผลจริงโดยไม่ข้าม safety invariant
+
+เพื่อไม่ให้ EMA ที่ยังจำ N1 ปิดกั้นการหลับที่ลึกขึ้น รุ่น v1.27 อนุญาตเฉพาะ
+`N1 → N2` ให้ใช้ผู้ชนะจากหลักฐานสด 30 วินาทีเมื่อ N2 gate ผ่านและคะแนนชนะเกิน
+switch margin จากนั้นยังต้องชนะต่อเนื่อง 4 epochs/120 วินาทีก่อนยืนยัน N2;
+กฎนี้ไม่เปิดทางข้าม gate และไม่อนุญาตให้ N2 เกิดจาก HR/RR Fit เพียงอย่างเดียว
 
 State ที่ Fit สูงสุดยังอาจต่างจาก State ที่ยืนยันเมื่อ BCG waveform, movement,
 ความแปรปรวน, respiratory regularity, gate, ลำดับ State หรือเวลายืนยันยังไม่ผ่าน
@@ -606,6 +611,7 @@ systemctl is-active zeep-pod.service
 | Guarded REM/Wake transition release | Estimator v1.18 / Transition v1.10: เปิด N1→REM แบบ REM-gated และ REM→Wake แบบปกติ โดยทุก transition ยังยืนยัน 2 evidence epochs/60 s; ไม่เปิด Wake→REM จากความง่วงหรือ daydream |
 | Balanced N3 evidence release | Estimator v1.19 / Transition v1.11: เฉพาะ N3 ที่ชนะ current 30 s evidence และผ่าน physiology gate เสนอ candidate ก่อน EMA แล้วจึงยืนยัน 2 epochs/60 s; State อื่นยังใช้ EMA และข้อห้ามเมื่อไม่มี HR/RR/on-bed ยังคงเดิม |
 | Sleep-onset guard release | Estimator v1.20 / Transition v1.12: 5 นาทีแรกคง W, ตัด time-only N1 bonus และต้องมี quiet downward HR/RR evidence ต่อเนื่องก่อน W→N1; แก้เคส 2026-09-04 ที่ acquisition drop ทำให้ N1 81.4% และยืนยันในไม่ถึง 2 นาที |
+| Gated N2 progression release | Estimator v1.27 / Transition v1.16: เมื่ออยู่ N1 และ N2 gate ผ่าน ผู้ชนะจากหลักฐานสด 30 วินาทีสามารถเข้าตัวรับรองก่อน EMA ที่ยังค้าง N1; ยังต้องชนะ 4 epochs/120 วินาทีและห้าม HR/RR Fit ข้าม gate |
 | Terminal Wake sequence | รายงานปิดลำดับเป็น `Sleep State สุดท้าย → W · ตื่น → Occupancy/END`; marker 0 s แยกจาก physiology และไม่เปลี่ยน Stage statistics/Score/Baseline |
 | Classification-gap visibility | ลำดับรายงานแสดง WAIT/OFF ทุกช่องว่างที่ยืนยัน State ไม่ได้ แทนการซ่อนเวลา; Raw Timeline/decision และคะแนนไม่ถูกแก้ |
 

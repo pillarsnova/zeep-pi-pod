@@ -13,14 +13,14 @@ from typing import Any
 
 
 # Every persisted decision/report carries these versions for provenance.
-SLEEP_PIPELINE_CONTRACT_VERSION = "zeep-sleep-health-pipeline-v1.9-restart-continuity"
-SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.26-fit-continuity-35"
-SLEEP_EVIDENCE_VERSION = "zeep-sleep-state-evidence-v3.4-fit-continuity-35"
+SLEEP_PIPELINE_CONTRACT_VERSION = "zeep-sleep-health-pipeline-v1.10-n2-progression"
+SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.27-gated-n2-progression"
+SLEEP_EVIDENCE_VERSION = "zeep-sleep-state-evidence-v3.5-gated-n2-progression"
 ZEEP_SLEEP_BASELINE_VERSION = "zeep-sleep-state-baseline-v1.8-sep1-cutover"
-ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.15-restart-continuity"
+ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.16-n2-progression"
 SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
 SLEEP_HISTORY_BACKFILL_VERSION = (
-    "zeep-sleep-history-reclass-v25-fit-continuity-35"
+    "zeep-sleep-history-reclass-v26-gated-n2-progression"
 )
 SESSION_REPORT_VERSION = "zeep-session-report-v10.3-nap-goal-duration"
 SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.3-nap-goal-duration"
@@ -224,13 +224,12 @@ SLEEP_ONSET_MAX_RR_RISE_PER_MIN = 0.50
 SLEEP_ONSET_INITIAL_WAKE_SUPPORT = 0.75
 
 # Probability telemetry is filtered independently from the rolling feature
-# window. EMA remains the default continuity source for Wake/N1/N2/REM. A
-# current N3 winner may bypass EMA only when the strict physiology gate and the
-# normal winner margin both pass; the semi-Markov guard then still requires two
-# consecutive evidence epochs (60 seconds). This targeted exception prevents
-# duplicate historical inertia from making valid N3 runs unreachable without
-# making the other states more reactive. These are engineering controls, not
-# AASM/PSG scoring criteria.
+# window. EMA remains the default continuity source. A current gated N2 winner
+# may bypass a trailing N1 EMA only for natural N1 -> N2 progression; a current
+# N3 winner has the equivalent strict-gate override. The semi-Markov guard still
+# requires the target's configured confirmation (N2: 120 s; N3: 60 s). These
+# targeted exceptions prevent stale EMA inertia from trapping genuine sleep.
+# They are engineering controls, not AASM/PSG scoring criteria.
 SLEEP_PROBABILITY_EMA_ALPHA = 0.20
 SLEEP_PROBABILITY_SWITCH_MARGIN = 0.05
 # These are engineering abstention gates, not calibrated medical probabilities.
@@ -866,8 +865,13 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "method": "ema_after_60s_rolling_features",
             "alpha": SLEEP_PROBABILITY_EMA_ALPHA,
             "candidate_switch_margin": SLEEP_PROBABILITY_SWITCH_MARGIN,
-            "candidate_source": "ema_with_gated_n1_onset_and_n3_current_evidence_override",
+            "candidate_source": (
+                "ema_with_gated_n1_onset_n2_progression_"
+                "and_n3_current_evidence_override"
+            ),
             "ema_role": "default_candidate_stability_and_display",
+            "n2_current_evidence_override_requires_gate": True,
+            "n2_current_evidence_override_from_stage": "n1",
             "n3_current_evidence_override_requires_gate": True,
             "display_winner_margin": SLEEP_DISPLAY_WINNER_MARGIN,
             "instant_strong_wake_bypass": False,

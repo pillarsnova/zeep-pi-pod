@@ -660,6 +660,54 @@ class SleepProbabilityStabilityTests(unittest.TestCase):
         self.assertEqual(display_meta["filtered_winner"], "n2")
         self.assertFalse(display_meta["margin_held"])
 
+    def test_current_gated_n2_progression_is_not_trapped_by_n1_ema(self):
+        """Stable N2 evidence may reach confirmation before EMA catches up."""
+        current_evidence = {
+            "wake": 0.01, "n1": 0.31, "n2": 0.57,
+            "n3": 0.0, "rem": 0.11,
+        }
+        display_ema = {
+            "wake": 0.01, "n1": 0.48, "n2": 0.32,
+            "n3": 0.0, "rem": 0.19,
+        }
+
+        candidate, metadata = zeep.candidate_from_stage_evidence(
+            current_evidence,
+            display_ema,
+            "n1",
+            switch_margin=zeep.SLEEP_PROBABILITY_SWITCH_MARGIN,
+            n3_gate=False,
+            eligible_states={
+                "wake": False, "n1": True, "n2": True,
+                "n3": False, "rem": True,
+            },
+        )
+
+        self.assertEqual(candidate, "n2")
+        self.assertTrue(metadata["gated_n2_current_evidence_override"])
+        self.assertEqual(
+            metadata["candidate_source"],
+            "gated_n2_current_30s_evidence_before_ema",
+        )
+
+    def test_n2_progression_override_cannot_bypass_closed_n2_gate(self):
+        candidate, metadata = zeep.candidate_from_stage_evidence(
+            {"wake": 0.01, "n1": 0.31, "n2": 0.57,
+             "n3": 0.0, "rem": 0.11},
+            {"wake": 0.01, "n1": 0.48, "n2": 0.32,
+             "n3": 0.0, "rem": 0.19},
+            "n1",
+            switch_margin=zeep.SLEEP_PROBABILITY_SWITCH_MARGIN,
+            n3_gate=False,
+            eligible_states={
+                "wake": False, "n1": True, "n2": False,
+                "n3": False, "rem": True,
+            },
+        )
+
+        self.assertEqual(candidate, "n1")
+        self.assertFalse(metadata["gated_n2_current_evidence_override"])
+
     def test_current_n3_winner_cannot_bypass_ema_without_n3_gate(self):
         candidate, metadata = zeep.candidate_from_stage_evidence(
             {"wake": 0.034, "n1": 0.064, "n2": 0.338,

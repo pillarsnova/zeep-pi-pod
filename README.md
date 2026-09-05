@@ -64,6 +64,11 @@ module ที่ import และทดสอบได้โดยไม่เ�
 ผู้ใช้งาน/thirdhand smoke เอกสารเหล่านี้ไม่เปลี่ยน runtime threshold หรือ model
 อัตโนมัติ การนำหลักฐานใหม่มาใช้ต้องผ่าน policy version และ regression test เสมอ
 
+Case study ภาคสนามที่ตัดข้อมูลระบุตัวบุคคลออกแล้ว:
+[CS-01 · การพักค้างคืนสองครั้งและ Wake lock-in](docs/zeep-case-study-cs-01-two-overnight-sessions.md)
+ใช้เป็นข้อกำหนด regression สำหรับ estimator/report เท่านั้น ส่วน mapping ไปยัง
+บัญชีจริงและ Raw Sensor data ต้องอยู่ในระบบจำกัดสิทธิ์นอก Git repository
+
 ### ขอบเขตความรับผิดชอบของ Backend
 
 | ส่วน | หน้าที่ |

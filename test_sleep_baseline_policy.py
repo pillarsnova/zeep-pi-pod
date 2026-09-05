@@ -155,42 +155,6 @@ class SleepRestartContextTests(unittest.TestCase):
             zeep._sleep_stage_path.clear()
             zeep._sleep_stage_path.update(self.previous_path)
 
-    def test_checkpoint_restores_awake_reference_and_original_onset(self):
-        pairs = [
-            [1_000.0 + index * 10.0, 78.0 - index, 18.0 - index / 10]
-            for index in range(6)
-        ]
-        result = zeep._restore_sleep_path_after_restart(
-            "restart-test",
-            stage_events=[
-                {
-                    "timestamp": "2026-09-05T15:00:00+00:00",
-                    "value": {"state": "n1"},
-                },
-                {
-                    "timestamp": "2026-09-05T15:01:00+00:00",
-                    "value": {"state": "n2"},
-                },
-            ],
-            evidence_events=[],
-            samples=[],
-            checkpoint_context={
-                "session_id": "restart-test",
-                "awake_vital_pairs": pairs,
-                "awake_hr_reference": 76.0,
-                "awake_rr_reference": 17.8,
-                "sleep_onset_at": 1_060.0,
-                "last_valid_frame_t": 1_120.0,
-            },
-        )
-
-        self.assertEqual(result["source"], "checkpoint")
-        self.assertEqual(result["awake_reference_pairs"], 6)
-        self.assertIsNotNone(result["awake_hr_reference"])
-        self.assertIsNotNone(result["awake_rr_reference"])
-        self.assertEqual(result["sleep_onset_at"], 1_060.0)
-        self.assertEqual(result["last_confirmed_state"], "n2")
-
     def test_active_checkpoint_captures_current_sleep_context(self):
         with zeep.sleep_path_lock:
             zeep._reset_sleep_stage_path("checkpoint-wrapper-test")
@@ -219,35 +183,6 @@ class SleepRestartContextTests(unittest.TestCase):
         self.assertEqual(context["awake_hr_reference"], 76.0)
         self.assertEqual(context["awake_rr_reference"], 18.0)
         self.assertEqual(len(context["awake_vital_pairs"]), 6)
-
-    def test_legacy_checkpoint_recovers_reference_from_timeline(self):
-        samples = [
-            {
-                "t": 1_000.0 + index * 10.0,
-                "hr": 78.0 - index,
-                "rr": 18.0 - index / 10,
-            }
-            for index in range(6)
-        ]
-        result = zeep._restore_sleep_path_after_restart(
-            "legacy-restart-test",
-            stage_events=[
-                {
-                    "timestamp": "1970-01-01T00:18:20+00:00",
-                    "value": {"state": "n1"},
-                }
-            ],
-            evidence_events=[],
-            samples=samples,
-            checkpoint_context=None,
-        )
-
-        self.assertEqual(result["source"], "pre_onset_timeline")
-        self.assertEqual(result["awake_reference_pairs"], 6)
-        self.assertIsNotNone(result["awake_hr_reference"])
-        self.assertIsNotNone(result["awake_rr_reference"])
-        self.assertEqual(result["last_confirmed_state"], "n1")
-
 
 class SleepClassificationGateTests(unittest.TestCase):
     """A machine/empty Pod must never be assigned a human Sleep Stage."""

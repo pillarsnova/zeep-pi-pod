@@ -2160,7 +2160,9 @@ def _sleep_environment_context(
         "sleep_support_score": round((1.0 - disruption) * 100) if disruption is not None else None,
         "overall_level": assessment["key"],
         "meets_expected": assessment["meets_expected"],
+        "assessment_quality": assessment.get("assessment_quality"),
         "required_count": assessment.get("required_count", 0),
+        "advisory_count": assessment.get("advisory_count", 0),
         "optimisation_count": assessment.get("optimisation_count", 0),
         "direct_stage_influence": False,
         # Retain the field for API compatibility with older Admin clients. It

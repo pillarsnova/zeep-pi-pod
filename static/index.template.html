@@ -2427,8 +2427,8 @@ const dashboardAtmosphereLevels=Object.freeze([
   {key:'critical',label:'วิกฤต',english:'Critical',symbol:'!',description:'มีอย่างน้อยหนึ่งเกณฑ์อยู่ในช่วงรุนแรง ต้องตรวจสาเหตุและแก้ไขทันที',principle:'มีอย่างน้อย 1 ใน 7 ค่าอยู่ระดับวิกฤต'},
   {key:'poor',label:'แย่',english:'Poor',symbol:'↓',description:'สภาพแวดล้อมรบกวนการพักผ่อนอย่างชัดเจน ควรปรับทันที',principle:'ไม่มีค่าวิกฤต แต่มีอย่างน้อย 1 ค่าอยู่ระดับแย่'},
   {key:'fair',label:'พอใช้',english:'Fair',symbol:'–',description:'ใช้งานได้ชั่วคราวแต่มีปัจจัยที่ควรปรับก่อนเริ่มนอน',principle:'ไม่มีค่าระดับแย่/วิกฤต แต่มีอย่างน้อย 1 ค่าอยู่ระดับพอใช้'},
-  {key:'good',label:'ดี',english:'Good',symbol:'✓',description:'สภาพแวดล้อมเหมาะสมโดยรวม แต่ยังมีเกณฑ์ที่ปรับได้อีกเล็กน้อย',principle:'Sensor สดครบ 7 ค่า ทุกค่าอย่างน้อยระดับดี และมีบางค่ายังไม่ยอดเยี่ยม'},
-  {key:'excellent',label:'ยอดเยี่ยม',english:'Excellent',symbol:'★',description:'ทุกเกณฑ์สดและอยู่ในช่วงเป้าหมายสำหรับการพักผ่อน',principle:'Sensor สดครบ 7 ค่า และทั้ง 7 ค่าอยู่ในช่วงยอดเยี่ยมพร้อมกัน'},
+  {key:'good',label:'ดี',english:'Good',symbol:'✓',description:'สภาพแวดล้อมเหมาะสมโดยรวม แต่ยังมีเกณฑ์ที่ปรับได้อีกเล็กน้อย',principle:'เกณฑ์หลักที่พร้อมใช้งานอยู่ระดับดีขึ้นไป; เสียงเป็นข้อมูลเสริม'},
+  {key:'excellent',label:'ยอดเยี่ยม',english:'Excellent',symbol:'★',description:'เกณฑ์หลักที่พร้อมใช้งานอยู่ในช่วงเป้าหมายสำหรับการพักผ่อน',principle:'ทุกเกณฑ์หลักอยู่ระดับยอดเยี่ยม; Sensor เสริมที่ขาดจะแสดงแยกโดยไม่บล็อกภาพรวม'},
 ]);
 function dashboardUpperScore(value,thresholds){
   const index=thresholds.findIndex(limit=>value<=limit);
@@ -2444,7 +2444,7 @@ const dashboardAtmosphereCriteria=Object.freeze([
   {id:'temperature',name:'อุณหภูมิ',deviceKey:'sht3x_dis',source:'SHT3x-DIS',unit:'°C',digits:1,target:'18–27°C',principle:'ประเมิน Thermal comfort จากอุณหภูมิจริงใน ZEEP',bands:'ยอดเยี่ยม 18–27 · ดี 17–28 · พอใช้ 16–29 · แย่ 13–32 · วิกฤตนอกช่วง',read:e=>e.temperature_c,score:v=>dashboardRangeScore(v,[[18,27],[17,28],[16,29],[13,32]]),control:'เครื่องปรับอากาศ',action:v=>v>27?'ลดอุณหภูมิที่เลือกหรือเปิดแอร์':v<18?'เพิ่มอุณหภูมิที่เลือกหรือลดความเย็น':'รักษาอุณหภูมิปัจจุบัน'},
   {id:'humidity',name:'ความชื้น',deviceKey:'sht3x_dis',source:'SHT3x-DIS',unit:'%RH',digits:1,target:'40–60%RH',principle:'ป้องกันอากาศแห้งเกินไปหรือความชื้นสะสมและการควบแน่น',bands:'ยอดเยี่ยม 40–60 · ดี 35–65 · พอใช้ 30–70 · แย่ 20–80 · วิกฤตนอกช่วง',read:e=>e.humidity_rh,score:v=>dashboardRangeScore(v,[[40,60],[35,65],[30,70],[20,80]]),control:'ไอน้ำ · ระบบระบายอากาศ',action:v=>v>60?'ปิดไอน้ำและเร่งระบายอากาศ':v<40?'เปิดไอน้ำเป็นช่วงและติดตามค่า':'รักษาความชื้นปัจจุบัน'},
   {id:'light',name:'ความสว่าง',deviceKey:'opt3001',source:'OPT3001',unit:'lux',digits:1,target:'≤5 lux',principle:'ประเมินแสงรบกวนในโหมดเตรียมนอนและขณะนอน',bands:'ยอดเยี่ยม ≤5 · ดี ≤10 · พอใช้ ≤30 · แย่ ≤100 · วิกฤต >100 lux',read:e=>e.lux,score:v=>dashboardUpperScore(v,[5,10,30,100]),control:'ไฟเพดาน · แสงแดง · ประตู',action:v=>v>5?'ลดหรือปิดไฟ ตรวจแสงรั่วและตำแหน่งประตู':'รักษาระดับแสงปัจจุบัน'},
-  {id:'sound',name:'เสียง',deviceKey:'sph0645',source:'SPH0645',unit:'dBA est.',digits:1,target:'<40 dBA est.',principle:'ESP32 คำนวณ A-weighted LAeq จาก PCM ของ SPH0645 ก่อนส่งให้ Pi',bands:'ยอดเยี่ยม <40 · ดี 40–45 · พอใช้ >45–50 · แย่ >50–60 · วิกฤต >60 dBA est.',read:e=>e.sound_dba_est,score:v=>v<40?4:v<=45?3:v<=50?2:v<=60?1:0,control:'เสียงบรรยากาศ · พัดลม · คอมเพรสเซอร์',action:v=>v>=40?'ลดเสียงเพลงและตรวจพัดลม คอมเพรสเซอร์ หรือการสั่น':'รักษาระดับเสียงปัจจุบัน'},
+  {id:'sound',name:'เสียง',deviceKey:'sph0645',source:'SPH0645',unit:'dBA est.',digits:1,target:'<40 dBA est.',requiredForOverall:false,principle:'ESP32 คำนวณ A-weighted LAeq จาก PCM ของ SPH0645 ก่อนส่งให้ Pi',bands:'ยอดเยี่ยม <40 · ดี 40–45 · พอใช้ >45–50 · แย่ >50–60 · วิกฤต >60 dBA est.',read:e=>e.sound_dba_est,score:v=>v<40?4:v<=45?3:v<=50?2:v<=60?1:0,control:'เสียงบรรยากาศ · พัดลม · คอมเพรสเซอร์',action:v=>v>=40?'ลดเสียงเพลงและตรวจพัดลม คอมเพรสเซอร์ หรือการสั่น':'รักษาระดับเสียงปัจจุบัน'},
   {id:'co2',name:'CO₂',deviceKey:'mhz19c',source:'MH-Z19C',unit:'ppm',digits:0,target:'≤800 ppm',principle:'ใช้ CO₂ เป็นตัวชี้การระบายอากาศ ไม่ใช่ค่าปริมาณออกซิเจน',bands:'ยอดเยี่ยม ≤800 · ดี ≤1,000 · พอใช้ ≤1,150 · แย่ <1,300 · วิกฤต ≥1,300 ppm',read:e=>e.co2_ppm,score:v=>v<=800?4:v<=1000?3:v<=1150?2:v<1300?1:0,control:'พัดลมลมเข้า · พัดลมลมออก',action:v=>v>800?'เพิ่มการเติมและระบายอากาศ พร้อมตรวจ Filter อุดตัน':'รักษาการหมุนเวียนอากาศปัจจุบัน'},
   {id:'pm25',name:'PM2.5',deviceKey:'pms7003',source:'PMS7003',unit:'µg/m³',digits:1,target:'≤15 µg/m³',principle:'ตรวจประสิทธิภาพการกรองฝุ่นละเอียดและการรั่วของอากาศ',bands:'ยอดเยี่ยม ≤15 · ดี ≤25 · พอใช้ ≤37.5 · แย่ ≤50 · วิกฤต >50 µg/m³',read:e=>e.pm2_5_ug_m3,score:v=>dashboardUpperScore(v,[15,25,37.5,50]),control:'Pre-Filter · HEPA · ซีลประตู',action:v=>v>15?'ตรวจหรือเปลี่ยน Pre/HEPA Filter และตรวจรอยรั่ว':'รักษาระบบกรองอากาศปัจจุบัน'},
   {id:'voc',name:'VOC Index',deviceKey:'sgp40',source:'SGP40',unit:'',digits:0,target:'≤120',principle:'เทียบสารระเหยกับ Adaptive baseline ของ SGP40 ซึ่งปรับตัวใกล้ 100',bands:'ยอดเยี่ยม ≤120 · ดี ≤150 · พอใช้ ≤200 · แย่ ≤300 · วิกฤต >300',read:e=>e.voc_index,score:v=>dashboardUpperScore(v,[120,150,200,300]),control:'กลิ่น · พัดลมระบาย · Carbon Filter',action:v=>v>120?'หยุดแหล่งกลิ่นหรือสารระเหย เร่งระบาย และตรวจ Carbon Filter':'รักษาการระบายอากาศปัจจุบัน'},
@@ -2454,34 +2454,39 @@ function assessDashboardAtmosphere(environment={},devices={}){
     const device=devices[criterion.deviceKey]||{};
     const raw=criterion.read(environment),value=Number(raw);
     const live=device.status==='live'&&raw!==null&&raw!==undefined&&raw!==''&&Number.isFinite(value);
-    if(!live)return {...criterion,status:'unavailable',deviceStatus:device.status||'no_data',display:'--'};
+    const requiredForOverall=criterion.requiredForOverall!==false;
+    if(!live)return {...criterion,required_for_overall:requiredForOverall,status:'unavailable',deviceStatus:device.status||'no_data',display:'--'};
     const score=criterion.score(value),level=dashboardAtmosphereLevels[score];
     const decision=score<2?'required':score===2?'optimise':'maintain';
-    return {...criterion,status:'live',deviceStatus:'live',value,score,level,decision,meets_expected:score>=2,display:`${value.toFixed(criterion.digits)}${criterion.unit?` ${criterion.unit}`:''}`,recommendation:decision==='maintain'?'รักษาการตั้งค่าปัจจุบัน':criterion.action(value)};
+    return {...criterion,required_for_overall:requiredForOverall,status:'live',deviceStatus:'live',value,score,level,decision,meets_expected:score>=2,display:`${value.toFixed(criterion.digits)}${criterion.unit?` ${criterion.unit}`:''}`,recommendation:decision==='maintain'?'รักษาการตั้งค่าปัจจุบัน':criterion.action(value)};
   });
   const metrics=evaluations.filter(metric=>metric.status==='live');
   const unavailable=evaluations.filter(metric=>metric.status!=='live');
-  const missingActions=unavailable.map(metric=>({type:'sensor',priority:'required',name:metric.name,current:'ไม่มีข้อมูล Live',target:metric.target,control:metric.source,action:`ตรวจการเชื่อมต่อ ${metric.source} และ freshness ก่อนประเมิน`}));
+  const blockingUnavailable=unavailable.filter(metric=>metric.required_for_overall!==false);
+  const advisoryUnavailable=unavailable.filter(metric=>metric.required_for_overall===false);
+  const blockingMissingActions=blockingUnavailable.map(metric=>({type:'sensor',priority:'required',name:metric.name,current:'ไม่มีข้อมูล Live',target:metric.target,control:metric.source,action:`ตรวจการเชื่อมต่อ ${metric.source} และ freshness ก่อนประเมิน`,blocks_overall:true}));
+  const advisoryActions=advisoryUnavailable.map(metric=>({type:'sensor',priority:'advisory',name:metric.name,current:'ไม่มีข้อมูล Live',target:metric.target,control:metric.source,action:`ตรวจการเชื่อมต่อ ${metric.source} โดยภาพรวมยังทำงานต่อ`,blocks_overall:false}));
   if(!metrics.length){
-    return {key:'unknown',label:'รอข้อมูล',english:'Waiting',symbol:'?',description:'Sensor ยังไม่พร้อมสำหรับประเมินภาพรวม',reason:'รอข้อมูล Sensor 7 เกณฑ์',metrics,evaluations,actions:missingActions};
+    return {key:'unknown',label:'รอข้อมูล',english:'Waiting',symbol:'?',description:'Sensor ยังไม่พร้อมสำหรับประเมินภาพรวม',reason:'รอข้อมูล Sensor 7 เกณฑ์',metrics,evaluations,actions:[...blockingMissingActions,...advisoryActions],required_actions:blockingMissingActions,advisory_actions:advisoryActions,assessment_quality:'insufficient'};
   }
   const score=Math.min(...metrics.map(metric=>metric.score));
   const level=dashboardAtmosphereLevels[score];
   const requiredActions=metrics.filter(metric=>metric.score<2).sort((a,b)=>a.score-b.score).map(metric=>({type:'condition',priority:'required',name:metric.name,current:metric.display,target:metric.target,control:metric.control,action:metric.recommendation,score:metric.score}));
   const optimisationActions=metrics.filter(metric=>metric.score===2).map(metric=>({type:'condition',priority:'optimise',name:metric.name,current:metric.display,target:metric.target,control:metric.control,action:metric.recommendation,score:metric.score}));
-  const actions=[...requiredActions,...missingActions,...optimisationActions];
-  // Missing sensors must never produce a false Good/Excellent result. A live
-  // Poor/Critical reading is still surfaced immediately despite missing peers.
-  if(unavailable.length&&score>=2){
-    return {key:'unknown',label:'รอข้อมูล',english:'Waiting',symbol:'?',description:'ข้อมูลยังไม่ครบ จึงยังยืนยันภาพรวมไม่ได้',reason:`Sensor พร้อม ${metrics.length}/${evaluations.length} เกณฑ์ · ตรวจ ${unavailable[0].source}`,metrics,evaluations,actions,required_actions:[...requiredActions,...missingActions],optimisation_actions:optimisationActions,meets_expected:false};
+  const actions=[...requiredActions,...blockingMissingActions,...advisoryActions,...optimisationActions];
+  // Required Sensor loss blocks a positive claim. SPH0645 is optional for
+  // overall atmosphere, so it lowers coverage without hiding valid results.
+  if(blockingUnavailable.length&&score>=2){
+    return {key:'unknown',label:'รอข้อมูล',english:'Waiting',symbol:'?',description:'ข้อมูลหลักยังไม่ครบ จึงยังยืนยันภาพรวมไม่ได้',reason:`Sensor หลักพร้อม ${metrics.length}/${evaluations.length} เกณฑ์ · ตรวจ ${blockingUnavailable[0].source}`,metrics,evaluations,actions,required_actions:[...requiredActions,...blockingMissingActions],advisory_actions:advisoryActions,optimisation_actions:optimisationActions,meets_expected:false,assessment_quality:'incomplete_required'};
   }
   const limiting=metrics.filter(metric=>metric.score===score);
   const firstRequired=requiredActions[0],firstOptimise=optimisationActions[0];
   return {
     ...level,score,metrics,evaluations,actions,limiting,
-    required_actions:[...requiredActions,...missingActions],optimisation_actions:optimisationActions,
-    meets_expected:!unavailable.length&&!requiredActions.length,
-    reason:firstRequired?`ต้องแก้ ${firstRequired.name} · ${firstRequired.action}`:firstOptimise?`ผ่านขั้นต่ำพอใช้ · ปรับเพิ่มได้ ${firstOptimise.name}`:`ครบ ${metrics.length}/${evaluations.length} เกณฑ์ · รักษาค่าปัจจุบัน`,
+    required_actions:[...requiredActions,...blockingMissingActions],advisory_actions:advisoryActions,optimisation_actions:optimisationActions,
+    meets_expected:!blockingUnavailable.length&&!requiredActions.length,
+    assessment_quality:blockingUnavailable.length?'incomplete_required':advisoryUnavailable.length?'degraded_optional':'complete',
+    reason:firstRequired?`ต้องแก้ ${firstRequired.name} · ${firstRequired.action}`:firstOptimise?`ผ่านขั้นต่ำพอใช้ · ปรับเพิ่มได้ ${firstOptimise.name}`:advisoryUnavailable.length?`ประเมินจาก ${metrics.length}/${evaluations.length} เกณฑ์ · ${advisoryUnavailable[0].name}ไม่มีข้อมูล แต่ไม่บล็อกภาพรวม`:`ครบ ${metrics.length}/${evaluations.length} เกณฑ์ · รักษาค่าปัจจุบัน`,
   };
 }
 function renderAdminAtmosphere(result){
@@ -2489,20 +2494,22 @@ function renderAdminAtmosphere(result){
   if(!summary||!levelEl||!coverage||!icon||!guide||!criteria||!thresholds||!actions)return;
   summary.className=`admin-atmosphere-summary atmosphere-${result.key}`;
   const evaluations=Array.isArray(result.evaluations)?result.evaluations:[];
-  const required=evaluations.filter(metric=>metric.status!=='live'||metric.decision==='required'||Number(metric.score)<2);
-  const unavailable=required.filter(metric=>metric.status!=='live');
+  const unavailable=evaluations.filter(metric=>metric.status!=='live');
+  const blockingUnavailable=unavailable.filter(metric=>metric.required_for_overall!==false);
+  const advisoryUnavailable=unavailable.filter(metric=>metric.required_for_overall===false);
+  const required=evaluations.filter(metric=>(metric.status!=='live'&&metric.required_for_overall!==false)||metric.decision==='required'||Number(metric.score)<2);
   const belowExpected=required.filter(metric=>metric.status==='live');
   const optimise=evaluations.filter(metric=>metric.status==='live'&&(metric.decision==='optimise'||Number(metric.score)===2));
   const passed=evaluations.filter(metric=>metric.status==='live'&&Number(metric.score)>=2).length;
   // The dashboard card above is the single source for the current overall
   // level. This Admin summary reports workload instead of repeating it.
-  levelEl.textContent=unavailable.length?`${unavailable.length} Sensor ไม่พร้อม`:belowExpected.length?`${belowExpected.length} จุดต้องแก้`:optimise.length?`${optimise.length} จุดปรับเพิ่ม`:'ไม่พบจุดผิดปกติ';
-  coverage.textContent=`ผ่านขั้นต่ำ ${passed}/${evaluations.length||7} · ต้องแก้ ${belowExpected.length} · ไม่พร้อม ${unavailable.length} · พอใช้ ${optimise.length}`;
+  levelEl.textContent=blockingUnavailable.length?`${blockingUnavailable.length} Sensor หลักไม่พร้อม`:belowExpected.length?`${belowExpected.length} จุดต้องแก้`:advisoryUnavailable.length?`${advisoryUnavailable.length} Sensor เสริมไม่พร้อม`:optimise.length?`${optimise.length} จุดปรับเพิ่ม`:'ไม่พบจุดผิดปกติ';
+  coverage.textContent=`ผ่านขั้นต่ำ ${passed}/${evaluations.length||7} · ต้องแก้ ${belowExpected.length} · หลักไม่พร้อม ${blockingUnavailable.length} · เสริมไม่พร้อม ${advisoryUnavailable.length}`;
   icon.textContent=result.symbol;
   const levels=Array.isArray(result.levels)&&result.levels.length?result.levels:dashboardAtmosphereLevels;
   guide.innerHTML=[...levels].reverse().map(level=>`<article class="atmosphere-guide-${level.key}${level.key===result.key?' active':''}"><span>${level.symbol}</span><div><b>${level.label} · ${level.english}</b><small>${level.description||level.principle||''}</small></div></article>`).join('');
-  criteria.innerHTML=required.map(metric=>{
-    if(metric.status!=='live')return `<article class="admin-criterion unavailable"><div><b>${metric.name}</b><span>${metric.source} · ${metric.deviceStatus||'ไม่พร้อม'}</span></div><strong>${metric.display||'--'}</strong><small>เป้าหมาย ${metric.target}<br>${metric.principle}<br><em>${metric.bands}</em><br>${metric.deviceStatus==='stale'?'ค่าล่าสุดก่อน Restart · รอข้อมูลสด':'ตรวจ Sensor และ freshness'}</small></article>`;
+  criteria.innerHTML=[...required,...advisoryUnavailable].map(metric=>{
+    if(metric.status!=='live')return `<article class="admin-criterion unavailable"><div><b>${metric.name}</b><span>${metric.source} · ${metric.deviceStatus||'ไม่พร้อม'}</span></div><strong>${metric.display||'--'}</strong><small>เป้าหมาย ${metric.target}<br>${metric.principle}<br><em>${metric.bands}</em><br>${metric.required_for_overall===false?'Sensor เสริม · ไม่บล็อกภาพรวม':metric.deviceStatus==='stale'?'ค่าล่าสุดก่อน Restart · รอข้อมูลสด':'ตรวจ Sensor และ freshness'}</small></article>`;
     return `<article class="admin-criterion criterion-${metric.level.key}"><div><b>${metric.name}</b><span>${metric.source} · ${metric.level.label}</span></div><strong>${metric.display}</strong><small>ผ่านขั้นต่ำ ${metric.expected_floor||metric.target} · เป้าหมายสูงสุด ${metric.target}<br>${metric.recommendation||metric.principle}${metric.control?` · ตรวจที่ ${metric.control}`:''}</small></article>`;
   }).join('')||'<div class="admin-atmosphere-success"><span>✓</span><div><b>ผ่านขั้นต่ำพอใช้ขึ้นไปครบทุกเกณฑ์</b><small>ไม่มีค่าที่ต้องแก้ไข · ระดับพอใช้ยังแสดงเป็นข้อเสนอให้ปรับเพิ่มด้านล่าง</small></div></div>';
   const policyCriteria=Array.isArray(result.criteria)&&result.criteria.length?result.criteria:evaluations;
@@ -2535,7 +2542,7 @@ function renderDashboardAtmosphere(environment={},devices={}){
   levelEl.textContent=result.label;reasonEl.textContent=result.reason;icon.textContent=result.symbol;
   card.setAttribute('aria-label',`ภาพรวมภายใน ZEEP ${result.label} ${result.description} ${result.reason}`);
   const readings=result.metrics.length?result.metrics.map(metric=>`${metric.name} ${metric.display}`).join(' · '):result.reason;
-  card.title=`${result.description} · ${readings} · คะแนนต่ำสุดจาก 7 เกณฑ์เป็นระดับรวม`;
+  card.title=`${result.description} · ${readings} · คะแนนต่ำสุดจาก ${result.metrics.length||0} เกณฑ์ที่พร้อมเป็นระดับรวม`;
   const critical=result.key==='critical';
   card.setAttribute('aria-live',critical?'assertive':'polite');
   if(critical&&!dashboardAtmosphereCriticalActive){
@@ -2650,19 +2657,24 @@ function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
 
   const result=atmosphere||{key:'unknown',evaluations:[]};
   const evaluations=Array.isArray(result.evaluations)?result.evaluations:[];
-  const required=evaluations.filter(metric=>metric.status!=='live'||metric.decision==='required'||Number(metric.score)<2);
-  const unavailable=required.filter(metric=>metric.status!=='live');
+  const unavailable=evaluations.filter(metric=>metric.status!=='live');
+  const blockingUnavailable=unavailable.filter(metric=>metric.required_for_overall!==false);
+  const advisoryUnavailable=unavailable.filter(metric=>metric.required_for_overall===false);
+  const required=evaluations.filter(metric=>(metric.status!=='live'&&metric.required_for_overall!==false)||metric.decision==='required'||Number(metric.score)<2);
   const optimise=evaluations.filter(metric=>metric.status==='live'&&(metric.decision==='optimise'||Number(metric.score)===2));
   const available=evaluations.filter(metric=>metric.status==='live').length;
   const environmentTone=result.key&&result.key!=='unknown'?result.key:'unknown';
   const environmentStatus=result.key==='unknown'?'รอข้อมูล':result.label||ADMIN_LEVEL_COPY[environmentTone]||environmentTone;
-  const environmentSummary=unavailable.length
-    ?`${unavailable.length} Sensor ไม่มีข้อมูล Live · ยังไม่ยืนยันภาพรวม`
+  const environmentSummary=blockingUnavailable.length
+    ?`${blockingUnavailable.length} Sensor หลักไม่มีข้อมูล Live · ยังไม่ยืนยันภาพรวม`
     :required.length?`${required.length} จุดต่ำกว่าเกณฑ์ขั้นต่ำ · เริ่มจาก ${required[0].name}`
+    :advisoryUnavailable.length?`ประเมินได้จาก ${available}/${evaluations.length||7} เกณฑ์ · ${advisoryUnavailable[0].name}เป็น Sensor เสริมที่ไม่มีข้อมูล`
     :optimise.length?`ผ่านขั้นต่ำแล้ว · มี ${optimise.length} จุดที่ปรับให้ดีขึ้นได้`:`Sensor พร้อม ${available}/${evaluations.length||7} เกณฑ์ · ไม่พบจุดที่ต้องแก้`;
   const environmentAction=required.length
     ?(required[0].recommendation||`ตรวจ ${required[0].source||required[0].name}`)
-    :optimise.length?(optimise[0].recommendation||`ปรับ ${optimise[0].name}`):'รักษาการตั้งค่าปัจจุบันและติดตาม freshness ต่อเนื่อง';
+    :optimise.length?(optimise[0].recommendation||`ปรับ ${optimise[0].name}`)
+    :advisoryUnavailable.length?`ตรวจ ${advisoryUnavailable[0].source} ภายหลัง โดยภาพรวมและ Safety ยังทำงานต่อ`
+    :'รักษาการตั้งค่าปัจจุบันและติดตาม freshness ต่อเนื่อง';
   environmentRoot.innerHTML=evaluations.length?adminExplanationRow({
     tone:environmentTone,icon:'unknown',title:'ภาพรวมสภาพแวดล้อม',value:'',status:environmentStatus,
     summary:environmentSummary,detail:`${environmentAction} · ค่าราย Sensor อยู่ด้านบน`,

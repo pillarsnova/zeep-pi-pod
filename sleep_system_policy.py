@@ -24,7 +24,9 @@ SLEEP_HISTORY_BACKFILL_VERSION = (
 )
 SESSION_REPORT_VERSION = "zeep-session-report-v10.3-nap-goal-duration"
 SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.3-nap-goal-duration"
-ENVIRONMENT_CONTEXT_POLICY_VERSION = "zeep-environment-context-v2.0-mode-aware-fair-floor"
+ENVIRONMENT_CONTEXT_POLICY_VERSION = (
+    "zeep-environment-context-v2.1-optional-acoustic-input"
+)
 TERMINAL_WAKE_POLICY_VERSION = "zeep-terminal-wake-boundary-v1.0"
 SLEEP_CLASSIFICATION_GAP_VERSION = (
     "zeep-sleep-classification-gap-v1.5-complete-operational-hold"
@@ -455,6 +457,11 @@ ENVIRONMENT_CONTEXT_CRITERIA = {
         "sample_key": "dba", "environment_key": "sound_dba_est",
         "device_key": "sph0645", "source": "SPH0645",
         "label": "เสียง", "unit": "dBA", "digits": 1, "kind": "upper",
+        # Acoustic comfort remains visible and contributes whenever a valid
+        # firmware LAeq(A) measurement exists. It is not a life-safety input,
+        # so a missing/invalid microphone must degrade coverage without
+        # blocking an otherwise usable Pod atmosphere assessment.
+        "required_for_overall": False,
         "excellent_upper_exclusive": True,
         "mode_bands": {
             "sleep": [40.0, 45.0, 50.0, 60.0],
@@ -609,6 +616,9 @@ def assess_environment_values(
             "expected_floor": criterion["acceptable_floor"],
             "bands": criterion["bands_text"], "principle": criterion["principle"],
             "control": criterion["control"],
+            "required_for_overall": bool(
+                criterion.get("required_for_overall", True)
+            ),
         }
         if not live:
             # A restart cache may carry the last validated numeric value while
@@ -650,23 +660,37 @@ def assess_environment_values(
         })
     metrics = [item for item in evaluations if item["status"] == "live"]
     unavailable = [item for item in evaluations if item["status"] != "live"]
+    blocking_unavailable = [
+        item for item in unavailable if item["required_for_overall"]
+    ]
+    advisory_unavailable = [
+        item for item in unavailable if not item["required_for_overall"]
+    ]
     required = sorted(
         [item for item in metrics if item["decision"] == "required"],
         key=lambda item: item["score"],
     )
     optimise = [item for item in metrics if item["decision"] == "optimise"]
-    missing_actions = [{
+    blocking_missing_actions = [{
         "type": "sensor", "priority": "required", "name": item["name"],
         "current": "ไม่มีข้อมูล Live", "target": item["expected_floor"],
         "control": item["source"],
         "action": f"ตรวจการเชื่อมต่อ {item['source']} และ freshness ก่อนประเมิน",
-    } for item in unavailable]
+        "blocks_overall": True,
+    } for item in blocking_unavailable]
+    advisory_actions = [{
+        "type": "sensor", "priority": "advisory", "name": item["name"],
+        "current": "ไม่มีข้อมูล Live", "target": item["expected_floor"],
+        "control": item["source"],
+        "action": f"ตรวจการเชื่อมต่อ {item['source']} โดยภาพรวมยังทำงานต่อ",
+        "blocks_overall": False,
+    } for item in advisory_unavailable]
     required_actions = [{
         "type": "condition", "priority": "required", "name": item["name"],
         "current": item["display"], "target": item["expected_floor"],
         "control": item["control"], "action": item["recommendation"],
         "score": item["score"],
-    } for item in required] + missing_actions
+    } for item in required] + blocking_missing_actions
     optimisation_actions = [{
         "type": "condition", "priority": "optimise", "name": item["name"],
         "current": item["display"], "target": item["target"],
@@ -680,20 +704,34 @@ def assess_environment_values(
             "reason": f"รอข้อมูล Sensor {len(evaluations)} เกณฑ์",
             "metrics": metrics, "evaluations": evaluations,
             "required_actions": required_actions,
+            "advisory_actions": advisory_actions,
             "optimisation_actions": optimisation_actions,
-            "actions": required_actions + optimisation_actions,
+            "actions": required_actions + advisory_actions + optimisation_actions,
             "meets_expected": False,
+            "assessment_quality": "insufficient",
+            "required_count": len(required_actions),
+            "advisory_count": len(advisory_actions),
+            "available_factor_count": 0,
+            "blocking_unavailable_count": len(blocking_unavailable),
+            "optional_unavailable_count": len(advisory_unavailable),
+            "optimisation_count": 0,
+            "expected_factors": len(evaluations),
         }
     minimum = min(metrics, key=lambda item: item["score"])
     level = minimum["level"]
-    # Missing data blocks a Good/Excellent claim. A known Poor/Critical value
-    # remains visible immediately instead of being hidden behind Unknown.
-    unknown = bool(unavailable and minimum["score"] >= 2)
+    # A missing required factor blocks a Good/Excellent claim. SPH0645 is an
+    # optional acoustic input: its absence lowers coverage and stays visible
+    # to Admin, but does not collapse the whole assessment to Unknown. A known
+    # Poor/Critical value remains visible immediately in either case.
+    unknown = bool(blocking_unavailable and minimum["score"] >= 2)
     if unknown:
         summary = {
             "key": "unknown", "label": "รอข้อมูล", "english": "Waiting", "symbol": "?",
             "description": "ข้อมูลไม่ครบ จึงยังยืนยันภาพรวมไม่ได้",
-            "reason": f"Sensor พร้อม {len(metrics)}/{len(evaluations)} เกณฑ์ · ตรวจ {unavailable[0]['source']}",
+            "reason": (
+                f"Sensor หลักพร้อม {len(metrics)}/{len(evaluations)} เกณฑ์ · "
+                f"ตรวจ {blocking_unavailable[0]['source']}"
+            ),
         }
     else:
         summary = dict(level)
@@ -702,6 +740,9 @@ def assess_environment_values(
             if required else
             f"ผ่านขั้นต่ำพอใช้ · ปรับเพิ่มได้ {optimise[0]['name']}"
             if optimise else
+            f"ประเมินจาก {len(metrics)}/{len(evaluations)} เกณฑ์ · "
+            f"{advisory_unavailable[0]['name']}ไม่มีข้อมูล แต่ไม่บล็อกภาพรวม"
+            if advisory_unavailable else
             f"ครบ {len(metrics)}/{len(evaluations)} เกณฑ์ · รักษาค่าปัจจุบัน"
         )
     return {
@@ -709,11 +750,21 @@ def assess_environment_values(
         "metrics": metrics, "evaluations": evaluations,
         "limiting": [item for item in metrics if item["score"] == minimum["score"]],
         "required_actions": required_actions,
+        "advisory_actions": advisory_actions,
         "optimisation_actions": optimisation_actions,
-        "actions": required_actions + optimisation_actions,
-        "meets_expected": bool(not unavailable and not required),
+        "actions": required_actions + advisory_actions + optimisation_actions,
+        "meets_expected": bool(not blocking_unavailable and not required),
+        "assessment_quality": (
+            "incomplete_required" if blocking_unavailable
+            else "degraded_optional" if advisory_unavailable
+            else "complete"
+        ),
         "passed_expected_count": sum(bool(item.get("meets_expected")) for item in metrics),
         "required_count": len(required_actions),
+        "advisory_count": len(advisory_actions),
+        "available_factor_count": len(metrics),
+        "blocking_unavailable_count": len(blocking_unavailable),
+        "optional_unavailable_count": len(advisory_unavailable),
         "optimisation_count": len(optimisation_actions),
         "expected_factors": len(evaluations),
     }

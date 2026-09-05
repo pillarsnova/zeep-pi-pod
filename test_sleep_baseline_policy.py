@@ -797,6 +797,38 @@ class EnvironmentContextTests(unittest.TestCase):
         self.assertIsNone(context["sleep_support_score"])
         self.assertEqual(context["wake_prior"], 0.0)
 
+    def test_missing_sound_degrades_coverage_without_blocking_overall(self):
+        context = zeep._sleep_environment_context({
+            "temperature_c": 24.0,
+            "humidity_rh": 50.0,
+            "co2_ppm": 700.0,
+            "lux": 1.0,
+            "pm2_5_ug_m3": 8.0,
+            "voc_index": 100.0,
+        })
+
+        self.assertEqual(context["available_factors"], 6)
+        self.assertEqual(context["coverage_percent"], 85.7)
+        self.assertEqual(context["overall_level"], "excellent")
+        self.assertTrue(context["meets_expected"])
+        self.assertEqual(context["required_count"], 0)
+        self.assertEqual(context["advisory_count"], 1)
+
+    def test_missing_required_sensor_still_blocks_positive_overall(self):
+        environment = {
+            "humidity_rh": 50.0,
+            "co2_ppm": 700.0,
+            "lux": 1.0,
+            "sound_dba_est": 35.0,
+            "pm2_5_ug_m3": 8.0,
+            "voc_index": 100.0,
+        }
+        assessment = zeep.assess_environment_values(environment)
+
+        self.assertEqual(assessment["key"], "unknown")
+        self.assertFalse(assessment["meets_expected"])
+        self.assertEqual(assessment["blocking_unavailable_count"], 1)
+
     def test_light_and_sound_context_changes_by_mode_but_never_sleep_state(self):
         values = {
             "temperature_c": 24.0, "humidity_rh": 50.0,

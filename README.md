@@ -240,6 +240,11 @@ ESP32 Sensor Hub 1 ต้องแก้ I2S word alignment/sign extension, ต�
 หรืออยู่นอกช่วง 0–120 ระบบจะระบุ SPH0645 เป็น **INVALID** ไม่คงค่าเก่ามาแสดง
 เป็นค่าปัจจุบัน ไม่บันทึกลง Session และไม่ใช้ประเมินสิ่งรบกวนการนอน
 
+SPH0645 เป็น Sensor เสริมของภาพรวมสภาพแวดล้อม: เมื่อเสียง `INVALID` ระบบยัง
+ประเมินจากอุณหภูมิ ความชื้น แสง CO₂ PM2.5 และ VOC ต่อได้ พร้อมระบุ coverage
+เป็น `degraded_optional`; ระบบไม่สมมติว่าเสียงเงียบ และ Safety CO₂/อุณหภูมิ
+ยังทำงานตามเดิม
+
 ข้อกำหนด Firmware และขั้นตอนทดสอบอยู่ที่
 [Sensor Interface Contract v1.1](docs/zeep-sensor-interface-contract-v1.1.md)
 และค่าดิบ/สาเหตุ invalid ดูได้ใน Admin Packet Inspector

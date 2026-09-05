@@ -38,7 +38,7 @@
 | Historical replay | `zeep-sleep-history-reclass-v25-fit-continuity-35` |
 | Sleep / Recovery quality | `zeep-rest-quality-v8.3-nap-goal-duration` |
 | Session report | `zeep-session-report-v10.3-nap-goal-duration` |
-| Environment context | `zeep-environment-context-v2.0-mode-aware-fair-floor` |
+| Environment context | `zeep-environment-context-v2.1-optional-acoustic-input` |
 | Terminal Wake boundary | `zeep-terminal-wake-boundary-v1.0` |
 | Classification gap display | `zeep-sleep-classification-gap-v1.5-complete-operational-hold` |
 
@@ -246,7 +246,14 @@ Session ต้องเริ่มตั้งแต่ 1 ก.ย. 2569, เป
 
 ### 2.6 Environment Context — ระดับที่ต้องแก้ไขและระดับที่คาดหวัง
 
-หลักตัดสินใช้ค่าที่ต่ำที่สุดของ Sensor 7 เกณฑ์ เพื่อไม่ให้ค่าที่ดีบดบังค่าที่แย่:
+หลักตัดสินใช้ค่าที่ต่ำที่สุดของเกณฑ์ที่มีข้อมูล เพื่อไม่ให้ค่าที่ดีบดบังค่าที่แย่
+โดยอุณหภูมิ ความชื้น แสง CO₂ PM2.5 และ VOC เป็นเกณฑ์หลัก ส่วนเสียงเป็น
+เกณฑ์เสริมเพราะยังรอ firmware A-weighted LAeq ที่ผ่านการตรวจสอบ:
+
+- ถ้า SPH0645 ไม่มีข้อมูลหรือ `INVALID` ภาพรวมยังคำนวณจาก 6 เกณฑ์หลักและระบุ
+  `degraded_optional`; ห้ามสมมติว่าเสียงเงียบและห้ามนำค่าเก่ามาใช้
+- ถ้าเกณฑ์หลักขาด ภาพรวมเชิงบวกยังเป็น `รอข้อมูล`; ค่า Poor/Critical ที่ตรวจพบ
+  แล้วยังคงแสดงทันที และ Safety CO₂/อุณหภูมิไม่ถูกผ่อน
 
 | ระดับ | การตัดสิน | สิ่งที่ระบบแสดง |
 |---|---|---|

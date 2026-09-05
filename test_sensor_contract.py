@@ -133,6 +133,15 @@ class EnvironmentContractTests(unittest.TestCase):
         self.assertEqual(result["devices"]["sph0645"]["status"], "invalid")
         self.assertEqual(result["live_count"], 5)
 
+        assessment = app.assess_environment_values(
+            result,
+            require_live_devices=True,
+        )
+        self.assertNotEqual(assessment["key"], "unknown")
+        self.assertEqual(assessment["assessment_quality"], "degraded_optional")
+        self.assertEqual(assessment["optional_unavailable_count"], 1)
+        self.assertEqual(assessment["blocking_unavailable_count"], 0)
+
     def test_session_sample_keeps_live_pm25_and_voc_for_the_final_report(self):
         environment = app.build_environment_snapshot(hub1(), hub2(), NOW)
         fake_snapshot = {

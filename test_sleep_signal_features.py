@@ -347,6 +347,42 @@ class SignalFeatureTests(unittest.TestCase):
         )
         self.assertEqual(gaps, [])
 
+    def test_report_holds_previous_stage_across_service_restart_for_display(self):
+        gaps = sleep_classification_gap_timeline(
+            [
+                {"state": "n2", "start_time": 100, "end_time": 120},
+                {"state": "n1", "start_time": 160, "end_time": 180},
+            ],
+            [],
+            session_start=100,
+            classification_end=180,
+            sensor_sample_interval_s=10,
+            service_pause_times=[121],
+            service_resume_times=[158],
+        )
+        self.assertEqual(len(gaps), 1)
+        self.assertEqual(gaps[0]["state"], "restart_hold")
+        self.assertEqual(gaps[0]["held_state"], "n2")
+        self.assertTrue(gaps[0]["held_previous_state"])
+        self.assertEqual(
+            gaps[0]["data_status"], "service_restart_hold")
+        self.assertFalse(gaps[0]["sleep_stage"])
+        self.assertTrue(gaps[0]["excluded_from_score"])
+
+    def test_report_keeps_first_wait_even_if_restart_marker_exists(self):
+        gaps = sleep_classification_gap_timeline(
+            [{"state": "wake", "start_time": 140, "end_time": 160}],
+            [],
+            session_start=100,
+            classification_end=160,
+            sensor_sample_interval_s=10,
+            service_pause_times=[110],
+            service_resume_times=[130],
+        )
+        self.assertEqual(len(gaps), 1)
+        self.assertEqual(gaps[0]["state"], "sensor_gap")
+        self.assertFalse(gaps[0]["held_previous_state"])
+
     def test_tiny_bcg_shift_is_not_arousal_proxy_evidence(self):
         proxy = arousal_proxy_evidence({
             "bcg_amplitude_shift_ratio": 0.01,

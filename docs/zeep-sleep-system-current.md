@@ -40,7 +40,7 @@
 | Session report | `zeep-session-report-v10.3-nap-goal-duration` |
 | Environment context | `zeep-environment-context-v2.0-mode-aware-fair-floor` |
 | Terminal Wake boundary | `zeep-terminal-wake-boundary-v1.0` |
-| Classification gap display | `zeep-sleep-classification-gap-v1.2-restart-aware` |
+| Classification gap display | `zeep-sleep-classification-gap-v1.3-operational-restart-hold` |
 
 เวอร์ชันเหล่านี้ไม่ได้มีไว้แสดงอย่างเดียว: ทุก decision/final summary เก็บ version
 เพื่อให้รู้ว่าข้อมูลแต่ละคืนสร้างด้วยหลักการใด ข้อมูลเก่าจึงคง version เดิมตาม
@@ -192,6 +192,9 @@ accuracy ดู [AASM Scoring Manual](https://learn.aasm.org/AssetListing/The-AA
    Stage%, Baseline หรือ Score ซ้ำ เมื่อได้ Evidence สดที่ยืนยันแล้วระบบยกเลิก hold
    ทันที หากไม่มี State เดิมที่ยืนยัน ครั้งแรกยังแสดง `WAIT · กำลังยืนยันสถานะ`
    ตามปกติ และ confirmed Bed Exit มีสิทธิ์แสดง `OFF`/ล้าง hold ทันที
+   รายงานย้อนหลังใช้ event `service_pause`/`service_resume` ระบุช่องว่างจากการ
+   Restart และแสดง State ที่ยืนยันก่อนหน้าเป็น `Operational hold` ด้วยหลักเดียวกัน
+   แต่ช่วงดังกล่าวยังไม่ใช่ Sleep Stage และไม่รวมใน Stage%, Score หรือ Baseline
 9. เมื่อยืนยันว่าไม่มีผู้ใช้งานบนเตียง หน้าจอแสดง `OFF` ซึ่งเป็นสถานะการครอบครอง
    ไม่ใช่ `Wake`; ระบบล้าง rolling physiology เมื่อจบ/เปลี่ยนเจ้าของ Session
 10. เมื่อ completed Session มี Bed Exit ที่ผ่าน debounce และไม่มี HR+RR ที่ valid

@@ -5605,7 +5605,13 @@ function renderReport(rec){
       const coverageText=coverage.sensor_rows
         ? `HR/RR ใช้ได้ ${coverage.valid_hr_rr_pairs||0}/${coverage.sensor_rows} รอบ`
         : 'ไม่มี Timeline Sensor';
-      return `<div class="sleep-period terminal-occupancy-period classification-gap-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)} · ไม่ประเมิน Stage</div></div><div class="stage">${period.label||'WAIT · ไม่มีข้อมูลสถานะ'}</div><div>${coverageText}<div class="mini">ไม่นับ W/N1/N2/N3/REM และคะแนน</div></div><div class="reason"><div class="sleep-period-env">${sensorTiles}</div><div class="sleep-period-note">${period.reason||'หลักฐานไม่พอสำหรับยืนยัน Sleep State'}</div></div></div>`;
+      const restartHeld=period.data_status==='service_restart_hold'
+        && period.held_previous_state===true;
+      const operationLabel=restartHeld?'Operational hold':'ไม่ประเมิน Stage';
+      const scoreLabel=restartHeld
+        ? 'แสดงต่อเนื่องเท่านั้น · ไม่นับคะแนน'
+        : 'ไม่นับ W/N1/N2/N3/REM และคะแนน';
+      return `<div class="sleep-period terminal-occupancy-period classification-gap-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)} · ${operationLabel}</div></div><div class="stage">${period.label||'WAIT · ไม่มีข้อมูลสถานะ'}</div><div>${coverageText}<div class="mini">${scoreLabel}</div></div><div class="reason"><div class="sleep-period-env">${sensorTiles}</div><div class="sleep-period-note">${period.reason||'หลักฐานไม่พอสำหรับยืนยัน Sleep State'}</div></div></div>`;
     }
     return `<div class="sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)} · ${epoch}</div></div><div class="stage">${SLEEP_TH[period.state]?.label||period.state.toUpperCase()}</div><div>มั่นใจ ${confidenceTh[period.confidence]||'ไม่ระบุ'}<div class="mini">P ${Math.round((prob[period.state]||0)*100)}%</div></div><div class="reason"><div class="sleep-period-env">${sensorTiles}</div><div class="sleep-period-note">${sleepReasonExplanation(period.reason)}</div></div></div>`;
   }).join('');

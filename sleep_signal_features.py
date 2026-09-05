@@ -483,6 +483,8 @@ def sleep_classification_gap_timeline(
     classification_end: Any,
     sensor_sample_interval_s: float = 10.0,
     minimum_gap_s: Optional[float] = None,
+    service_pause_times: Iterable[Any] = (),
+    service_resume_times: Iterable[Any] = (),
 ) -> list[dict[str, Any]]:
     """Expose unclassified wall-clock gaps without inventing Sleep Stages.
 
@@ -525,9 +527,10 @@ def sleep_classification_gap_timeline(
     if start_epoch is None or end_epoch is None or end_epoch <= start_epoch:
         return []
 
-    periods: list[tuple[float, float]] = []
+    periods: list[tuple[float, float, str]] = []
     for period in sleep_periods:
-        if str(field(period, "state") or "").casefold() not in {
+        period_state = str(field(period, "state") or "").casefold()
+        if period_state not in {
             "wake", "n1", "n2", "n3", "rem",
         }:
             continue
@@ -535,12 +538,25 @@ def sleep_classification_gap_timeline(
         period_end = epoch(field(period, "end_time", "window_end", "timestamp"))
         if period_start is None or period_end is None:
             continue
-        periods.append((max(start_epoch, period_start), min(end_epoch, period_end)))
+        periods.append((
+            max(start_epoch, period_start),
+            min(end_epoch, period_end),
+            period_state,
+        ))
     periods.sort()
+
+    pause_epochs = [
+        value for item in service_pause_times
+        if (value := epoch(item)) is not None
+    ]
+    resume_epochs = [
+        value for item in service_resume_times
+        if (value := epoch(item)) is not None
+    ]
 
     gaps: list[tuple[float, float]] = []
     cursor = start_epoch
-    for period_start, period_end in periods:
+    for period_start, period_end, _ in periods:
         if period_end <= cursor:
             continue
         if period_start - cursor >= minimum:
@@ -560,6 +576,24 @@ def sleep_classification_gap_timeline(
 
     results: list[dict[str, Any]] = []
     for gap_start, gap_end in gaps:
+        restart_markers = [
+            value for value in (*pause_epochs, *resume_epochs)
+            if gap_start - interval <= value <= gap_end + interval
+        ]
+        previous_periods = [
+            period for period in periods
+            if period[1] <= gap_start + interval
+        ]
+        following_periods = [
+            period for period in periods
+            if period[0] >= gap_end - interval
+        ]
+        held_stage = previous_periods[-1][2] if previous_periods else None
+        restart_hold = bool(
+            restart_markers
+            and held_stage in {"wake", "n1", "n2", "n3", "rem"}
+            and following_periods
+        )
         rows = [
             row for sample_epoch, row in sample_rows
             if gap_start <= sample_epoch < gap_end
@@ -584,7 +618,22 @@ def sleep_classification_gap_timeline(
             }
             for label in bed_labels
         )
-        if not rows:
+        if restart_hold:
+            state = "restart_hold"
+            label = {
+                "wake": "W · ตื่น",
+                "n1": "N1 · หลับตื้น / เคลิ้มหลับ",
+                "n2": "N2 · หลับตื้นต่อเนื่อง",
+                "n3": "N3 · หลับลึก",
+                "rem": "REM · หลับฝัน",
+            }[held_stage] + " · คงสถานะก่อน Restart"
+            reason = (
+                "พบเหตุการณ์หยุด/เริ่ม Service ในช่วงนี้ จึงแสดงสถานะที่"
+                "ยืนยันล่าสุดเพื่อความต่อเนื่องเท่านั้น โดยไม่สร้างหลักฐาน"
+                "Sleep Stage และไม่นำช่วงนี้ไปคิดคะแนนหรือ Baseline"
+            )
+            status = "service_restart_hold"
+        elif not rows:
             state = "sensor_gap"
             label = "WAIT · ไม่มีข้อมูล Sensor"
             reason = "ไม่มี Timeline Sensor ในช่วงนี้"
@@ -632,6 +681,9 @@ def sleep_classification_gap_timeline(
             "reason": reason,
             "decision_kind": "classification_gap",
             "data_status": status,
+            "held_previous_state": restart_hold,
+            "held_state": held_stage if restart_hold else None,
+            "service_restart_marker_count": len(restart_markers),
             "sleep_stage": False,
             "excluded_from_stage_statistics": True,
             "excluded_from_score": True,

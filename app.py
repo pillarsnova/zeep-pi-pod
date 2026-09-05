@@ -109,6 +109,7 @@ from zeep_pod.sessions.lifecycle import (
     SessionCheckpointStore,
     bed_is_occupied,
     evaluate_vital_start_gate,
+    service_resume_event,
 )
 from zeep_pod.sessions.history import (
     USER_HISTORY_FILTER,
@@ -6205,6 +6206,8 @@ def _restore_interrupted_session() -> Optional[str]:
                 "reason": "recording_resumed",
             },
         })
+    database.enqueue(
+        "sessions", "event", service_resume_event(session_id, migration_at_utc))
     log_event("session", "resumed_after_restart", session_id=session_id,
               user=row["user"], samples=len(samples), legacy_closed=was_legacy_closed,
               owner_login_restored=bool(
@@ -8359,6 +8362,10 @@ def history_detail(
     annotation_rows = [event for event in events
                        if event["type"] == "sleep_stage_annotation"]
     annotations = load_annotations(annotation_rows)
+    service_pause_times = [event["timestamp"] for event in events
+                           if event["type"] == "service_pause"]
+    service_resume_times = [event["timestamp"] for event in events
+                            if event["type"] == "service_resume"]
     for event in events:
         if event["type"] == "final_summary":
             continue
@@ -8423,6 +8430,8 @@ def history_detail(
         classification_end=classification_end,
         sensor_sample_interval_s=_sample_interval_seconds(
             final_summary.get("sensor_sample_interval_s"), history_interval_s),
+        service_pause_times=service_pause_times,
+        service_resume_times=service_resume_times,
     )
     if classification_gaps:
         sleep_timeline = sorted(

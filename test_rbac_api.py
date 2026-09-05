@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import json
 import threading
 import time
 import unittest
@@ -527,6 +528,15 @@ class RbacApiTests(unittest.TestCase):
                 restored = pod_app._active_session
             self.assertEqual(restored["phase"], "recording")
             self.assertEqual(restored["record"]["rest_mode"], "overnight")
+            self.assertTrue(pod_app.database.flush(5))
+            resume_events = pod_app.database.read_sessions(
+                "SELECT value FROM events WHERE session_id=? "
+                "AND type='service_resume'",
+                (session_id,),
+            )
+            self.assertEqual(len(resume_events), 1)
+            resume_value = json.loads(resume_events[0]["value"])
+            self.assertTrue(resume_value["excluded_from_score"])
             me = user.get("/api/auth/me")
             self.assertEqual(me.status_code, 200, me.text)
             self.assertTrue(me.json()["pod"]["owns_active_session"])

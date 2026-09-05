@@ -158,6 +158,23 @@ def bed_is_occupied(
     )
 
 
+def service_resume_event(
+    session_id: str,
+    timestamp: str,
+) -> dict[str, Any]:
+    """Build the audit event for a recording restored after restart."""
+    return {
+        "session_id": session_id,
+        "timestamp": timestamp,
+        "type": "service_resume",
+        "value": {
+            "reason": "server_restart",
+            "continuity": "hold_last_confirmed_state_for_display_only",
+            "excluded_from_score": True,
+        },
+    }
+
+
 def evaluate_vital_start_gate(
     bcg: Mapping[str, Any],
     active: Mapping[str, Any] | None,

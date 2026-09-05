@@ -113,7 +113,7 @@ from zeep_pod.sessions.lifecycle import (
 )
 from zeep_pod.sessions.sleep_context import (
     checkpoint_sleep_context,
-    restore_sleep_context,
+    restore_session_sleep_context,
 )
 from zeep_pod.sessions.history import (
     USER_HISTORY_FILTER,
@@ -1678,30 +1678,6 @@ def _active_with_sleep_context(active: Dict[str, Any]) -> Dict[str, Any]:
     if context is not None:
         checkpoint_active["sleep_context"] = context
     return checkpoint_active
-
-
-def _restore_sleep_path_after_restart(
-    session_id: str,
-    *,
-    stage_events: List[Dict[str, Any]],
-    evidence_events: List[Dict[str, Any]],
-    samples: List[Dict[str, Any]],
-    checkpoint_context: Optional[Dict[str, Any]],
-) -> Dict[str, Any]:
-    """Rebuild confirmed path and frozen physiology after a service restart."""
-    restored = restore_sleep_context(
-        session_id,
-        stage_events=stage_events,
-        evidence_events=evidence_events,
-        samples=samples,
-        checkpoint_context=checkpoint_context,
-        heart_rate_range=HR_SANITY_RANGE_BPM,
-        respiration_rate_range=RR_SANITY_RANGE_PER_MIN,
-    )
-    with sleep_path_lock:
-        _reset_sleep_stage_path(session_id)
-        _sleep_stage_path.update(restored["path"])
-    return restored["provenance"]
 
 
 def _update_sleep_session_context(
@@ -6096,60 +6072,23 @@ def _restore_interrupted_session() -> Optional[str]:
         (session_id,),
     )
     counters = {x["type"]: int(x["n"]) for x in event_rows}
-    stage_events = database.read_sessions(
-        "SELECT timestamp,value FROM events WHERE session_id=? AND type='sleep_stage' ORDER BY timestamp",
-        (session_id,),
-    )
-    evidence_events = database.read_sessions(
-        """SELECT timestamp,value FROM events
-           WHERE session_id=? AND type='sleep_stage_evidence'
-           ORDER BY timestamp DESC""",
-        (session_id,),
-    )
-    # Restore the already classified windows as well as their raw Sensor rows.
-    # Without this mapping a service update would retain Timeline data but make
-    # the pre-restart portion disappear from TST/stage percentages at Logout.
-    for event in stage_events:
-        try:
-            value = (
-                json.loads(event["value"])
-                if isinstance(event.get("value"), str)
-                else event.get("value", {})
-            )
-            stage = value.get("state")
-            if stage not in {"wake", "n1", "n2", "n3", "rem"}:
-                continue
-            end_text = value.get("window_end") or event.get("timestamp")
-            end_epoch = datetime.fromisoformat(str(end_text)).timestamp()
-            try:
-                start_epoch = datetime.fromisoformat(
-                    str(value.get("window_start"))).timestamp()
-            except (TypeError, ValueError):
-                start_epoch = end_epoch - _sample_interval_seconds(
-                    value.get("sample_interval_s"), SLEEP_EVIDENCE_EPOCH_SECONDS)
-            for sample in samples:
-                if start_epoch < float(sample["t"]) <= end_epoch + 0.001:
-                    sample.update({
-                        "sleep": stage,
-                        "sleep_confirmed_state": stage,
-                        "sleep_estimator_version": value.get("estimator_version"),
-                        "sleep_evidence_version": value.get("evidence_version"),
-                        "sleep_confidence": value.get("confidence"),
-                        "sleep_probability": (value.get("probabilities") or {}).get(stage),
-                    })
-        except (TypeError, ValueError, json.JSONDecodeError):
-            continue
-    restored_sleep_context = _restore_sleep_path_after_restart(
+    restored = restore_session_sleep_context(
+        database.read_sessions,
         session_id,
-        stage_events=stage_events,
-        evidence_events=evidence_events,
         samples=samples,
         checkpoint_context=(
             checkpoint.get("sleep_context")
             if isinstance(checkpoint, dict)
             else None
         ),
+        heart_rate_range=HR_SANITY_RANGE_BPM,
+        respiration_rate_range=RR_SANITY_RANGE_PER_MIN,
+        fallback_interval_s=SLEEP_EVIDENCE_EPOCH_SECONDS,
     )
+    with sleep_path_lock:
+        _reset_sleep_stage_path(session_id)
+        _sleep_stage_path.update(restored["path"])
+    restored_sleep_context = restored["provenance"]
     started_dt = datetime.fromisoformat(row["start_time"])
     elapsed_s = max(0.0, time.time() - started_dt.timestamp())
     with profile_lock:

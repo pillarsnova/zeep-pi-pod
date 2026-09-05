@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
 SLEEP_STATES = frozenset({"wake", "n1", "n2", "n3", "rem"})
+
+SessionReader = Callable[..., list[dict[str, Any]]]
 
 
 def checkpoint_sleep_context(
@@ -102,6 +104,88 @@ def restore_sleep_context(
             "last_confirmed_state": path.get("last"),
         },
     }
+
+
+def restore_session_sleep_context(
+    read_sessions: SessionReader,
+    session_id: str,
+    *,
+    samples: list[dict[str, Any]],
+    checkpoint_context: Mapping[str, Any] | None,
+    heart_rate_range: tuple[float, float],
+    respiration_rate_range: tuple[float, float],
+    fallback_interval_s: float,
+) -> dict[str, Any]:
+    """Load durable decisions, restore Timeline labels and rebuild context."""
+    stage_events = read_sessions(
+        """SELECT timestamp,value FROM events
+           WHERE session_id=? AND type='sleep_stage' ORDER BY timestamp""",
+        (session_id,),
+    )
+    evidence_events = read_sessions(
+        """SELECT timestamp,value FROM events
+           WHERE session_id=? AND type='sleep_stage_evidence'
+           ORDER BY timestamp DESC""",
+        (session_id,),
+    )
+    _apply_confirmed_stages_to_samples(
+        samples,
+        stage_events,
+        fallback_interval_s=fallback_interval_s,
+    )
+    return restore_sleep_context(
+        session_id,
+        stage_events=stage_events,
+        evidence_events=evidence_events,
+        samples=samples,
+        checkpoint_context=checkpoint_context,
+        heart_rate_range=heart_rate_range,
+        respiration_rate_range=respiration_rate_range,
+    )
+
+
+def _apply_confirmed_stages_to_samples(
+    samples: list[dict[str, Any]],
+    events: Sequence[Mapping[str, Any]],
+    *,
+    fallback_interval_s: float,
+) -> None:
+    """Restore historical labels without creating any new Sleep decisions."""
+    for event in events:
+        value = _event_value(event)
+        stage = value.get("state")
+        if stage not in SLEEP_STATES:
+            continue
+        end_epoch = _event_epoch(event, value)
+        if end_epoch is None:
+            continue
+        start_epoch = _timestamp(value.get("window_start"))
+        if start_epoch is None:
+            interval = value.get("sample_interval_s")
+            if not _finite_number(interval) or float(interval) <= 0:
+                interval = fallback_interval_s
+            start_epoch = end_epoch - float(interval)
+        for sample in samples:
+            timestamp = sample.get("t")
+            if _finite_number(timestamp) and (
+                start_epoch < float(timestamp) <= end_epoch + 0.001
+            ):
+                sample.update(
+                    {
+                        "sleep": stage,
+                        "sleep_confirmed_state": stage,
+                        "sleep_estimator_version": value.get(
+                            "estimator_version"
+                        ),
+                        "sleep_evidence_version": value.get(
+                            "evidence_version"
+                        ),
+                        "sleep_confidence": value.get("confidence"),
+                        "sleep_probability": (
+                            value.get("probabilities") or {}
+                        ).get(stage),
+                    }
+                )
 
 
 def _replay_confirmed_path(
@@ -213,13 +297,19 @@ def _event_epoch(
     value: Mapping[str, Any],
 ) -> float | None:
     for candidate in (value.get("window_end"), event.get("timestamp")):
-        if not candidate:
-            continue
-        try:
-            return datetime.fromisoformat(str(candidate)).timestamp()
-        except (TypeError, ValueError):
-            continue
+        parsed = _timestamp(candidate)
+        if parsed is not None:
+            return parsed
     return None
+
+
+def _timestamp(value: Any) -> float | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value)).timestamp()
+    except (TypeError, ValueError):
+        return None
 
 
 def _upper_quartile(values: Sequence[float]) -> float | None:

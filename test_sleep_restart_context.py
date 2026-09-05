@@ -6,6 +6,7 @@ import unittest
 
 from zeep_pod.sessions.sleep_context import (
     checkpoint_sleep_context,
+    restore_session_sleep_context,
     restore_sleep_context,
 )
 
@@ -94,6 +95,36 @@ class SleepRestartContextTests(unittest.TestCase):
         self.assertEqual(provenance["source"], "pre_onset_timeline")
         self.assertEqual(provenance["awake_reference_pairs"], 6)
         self.assertEqual(provenance["last_confirmed_state"], "n1")
+
+    def test_session_restore_maps_durable_stage_back_to_timeline(self) -> None:
+        stage_event = {
+            "timestamp": "1970-01-01T00:18:20+00:00",
+            "value": {
+                "state": "n2",
+                "window_start": "1970-01-01T00:17:50+00:00",
+                "window_end": "1970-01-01T00:18:20+00:00",
+                "confidence": "high",
+                "probabilities": {"n2": 0.8},
+            },
+        }
+
+        def read_sessions(query, _parameters):
+            return [stage_event] if "type='sleep_stage'" in query else []
+
+        samples = [{"t": 1_090.0, "hr": 65.0, "rr": 15.0, "sleep": None}]
+        restored = restore_session_sleep_context(
+            read_sessions,
+            "session-1",
+            samples=samples,
+            checkpoint_context=None,
+            heart_rate_range=(30.0, 220.0),
+            respiration_rate_range=(4.0, 50.0),
+            fallback_interval_s=30.0,
+        )
+
+        self.assertEqual(samples[0]["sleep"], "n2")
+        self.assertEqual(samples[0]["sleep_confidence"], "high")
+        self.assertEqual(restored["path"]["last"], "n2")
 
 
 if __name__ == "__main__":

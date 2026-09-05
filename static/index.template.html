@@ -1691,11 +1691,29 @@
         <span class="history-self-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-history"/></svg></span>
         <div><b id="historyOwnerTitle">ประวัติของฉัน</b><small>เลือกคืนหรือช่วงพักผ่อนด้านล่างเพื่อดูผลย้อนหลัง</small></div>
       </div>
-      <div class="row" id="historyToolbar" aria-label="เครื่องมือประวัติสำหรับผู้ดูแลระบบ">
-        <select id="historyUser" aria-label="เลือกผู้ใช้ เรียงจาก Session ล่าสุด" title="เรียงจาก Session ล่าสุด" style="flex:1;min-width:180px;margin-top:0"></select>
-        <button class="btn ui-label-button" onclick="refreshHistory(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-history"/></svg><span>โหลดประวัติ</span></button>
-        <button class="btn danger admin-only ui-label-button" onclick="deleteUser(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-trash"/></svg><span>ลบข้อมูลผู้ใช้</span></button>
+      <div id="historyToolbar" class="history-filter-panel" aria-label="ตัวกรองประวัติการพักผ่อน">
+        <div class="history-filter-group history-date-group">
+          <button class="history-day-step" type="button" onclick="shiftHistoryRange(-1)" aria-label="เลื่อนช่วงวันย้อนหลัง"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-previous"/></svg></button>
+          <label><span>จากวันที่</span><input id="historyDateFrom" type="date" onchange="refreshHistory()"></label>
+          <label><span>ถึงวันที่</span><input id="historyDateTo" type="date" onchange="refreshHistory()"></label>
+          <button class="history-today-button" type="button" onclick="setHistoryToday()">วันนี้</button>
+          <button class="history-day-step" type="button" onclick="shiftHistoryRange(1)" aria-label="เลื่อนช่วงวันถัดไป"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-next"/></svg></button>
+        </div>
+        <div class="history-filter-group history-time-group">
+          <label><span>เวลาเริ่ม</span><input id="historyTimeFrom" type="time" value="00:00" onchange="refreshHistory()"></label>
+          <label><span>เวลาสิ้นสุด</span><input id="historyTimeTo" type="time" value="23:59" onchange="refreshHistory()"></label>
+        </div>
+        <div class="history-filter-group history-admin-filter admin-only">
+          <label class="history-name-search"><span>ค้นหาชื่อหรืออีเมล</span><input id="historyNameFilter" type="search" placeholder="ทุกคน" onkeydown="if(event.key==='Enter')refreshHistory()"></label>
+          <label class="history-person-select"><span>เลือกผู้ใช้งาน</span><select id="historyUser" aria-label="เลือกผู้ใช้ เรียงจาก Session ล่าสุด" title="เรียงจาก Session ล่าสุด" onchange="refreshHistory()"></select></label>
+        </div>
+        <div class="history-filter-actions">
+          <button class="btn ui-label-button" onclick="refreshHistory(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-refresh"/></svg><span>แสดงผล</span></button>
+          <button class="btn danger admin-only ui-label-button" onclick="deleteUser(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-trash"/></svg><span>ลบผู้ใช้</span></button>
+        </div>
       </div>
+      <section id="historySummary" class="history-summary" aria-live="polite"><div class="mini">กำลังสรุปข้อมูลวันนี้…</div></section>
+      <div id="historyParticipants" class="history-participants" aria-live="polite"></div>
       <details class="stage-guide">
         <summary>ความหมายของ Sleep Stages</summary>
         <div class="stage-guide-grid">
@@ -4833,6 +4851,8 @@ async function loadUsers(){
     const r = await fetch('/api/users'); const d = await r.json();
     chips.innerHTML = '';
     const kept = sel.value; sel.innerHTML = '';
+    const allUsers=document.createElement('option');
+    allUsers.value='';allUsers.textContent='ผู้ใช้งานทุกคน';sel.appendChild(allUsers);
     const orderedUsers=sortHistoryUsersNewestFirst(d.users);
     orderedUsers.forEach(u=>{
       const c = document.createElement('button'); c.className = 'chip';
@@ -4854,15 +4874,15 @@ async function loadUsers(){
       sel.appendChild(o);
     });
     if (!orderedUsers.length) chips.innerHTML = '<div class="mini" style="margin-top:2px">ยังไม่มีผู้ใช้ — พิมพ์ชื่อด้านล่างเพื่อสร้างใหม่</div>';
-    if (!sel.options.length){
+    if (sel.options.length===1){
       const empty=document.createElement('option');
       empty.value='';empty.textContent='ยังไม่มี Session ที่มีข้อมูล';empty.disabled=true;
-      empty.selected=true;sel.appendChild(empty);
+      sel.innerHTML='';empty.selected=true;sel.appendChild(empty);
     }
     // Sessions may receive its first WebSocket frame before the admin user
     // list finishes loading. Restore the active user after options exist, then
     // load the list automatically instead of leaving a false "no user" state.
-    const preferredUser=kept||sessionState.account_key||sessionState.email||sessionState.username;
+    const preferredUser=kept;
     if(preferredUser&&[...sel.options].some(option=>option.value===preferredUser))sel.value=preferredUser;
     if(document.body.dataset.view==='sessions')refreshHistory();
   } catch {}
@@ -5277,39 +5297,162 @@ function renderSleepQuality(q, ended){
 }
 
 async function refreshHistory(btn){
-  // A regular account is always scoped to its authenticated identity.  The
-  // chooser exists only for Admin, while the API independently enforces the
-  // same ownership rule to prevent cross-account history access.
-  const user = currentPrincipal?.role==='user'
+  ensureHistoryFilterDefaults();
+  const user=currentPrincipal
     ? (currentPrincipal.account_key||currentPrincipal.email||currentPrincipal.username||'')
-    : (document.getElementById('historyUser')?.value||'');
+    : '';
   const list = document.getElementById('sessionList');
-  if (!user){ list.innerHTML = '<div class="mini">ไม่พบบัญชีสำหรับโหลดประวัติ</div>'; return; }
+  if(currentPrincipal?.role==='user'&&!user){
+    list.innerHTML='<div class="mini">ไม่พบบัญชีสำหรับโหลดประวัติ</div>';return;
+  }
   const run = async ()=>{
     list.innerHTML='<div class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังโหลดประวัติ</b><span>กำลังอ่าน Session จากเครื่อง Pi</span></div></div>';
+    document.getElementById('historySummary').innerHTML='<div class="mini">กำลังสรุปช่วงเวลาที่เลือก…</div>';
+    document.getElementById('historyParticipants').innerHTML='';
+    document.getElementById('sessionDetail').innerHTML='';
+    const params=historyFilterParams();
+    const path=currentPrincipal?.role==='admin'
+      ? `/api/admin/history?${params}`
+      : `/api/history/${encodeURIComponent(user)}?${params}`;
     let r;
-    try { r = await fetch(`/api/history/${encodeURIComponent(user)}`); }
+    try { r=await fetch(path,{cache:'no-store'}); }
     catch { toast('เชื่อมต่อ server ไม่ได้', 'error'); return; }
-    if (!r.ok){ toast('โหลดประวัติไม่ได้', 'error'); return; }
+    if (!r.ok){
+      let detail='';try{detail=(await r.json()).detail||'';}catch{}
+      toast(detail||'โหลดประวัติไม่ได้','error');return;
+    }
     renderSessionList(await r.json());
   };
   return btn ? withBusy(btn, run) : run();
 }
 
+function historyLocalToday(){
+  const parts=new Intl.DateTimeFormat('en-CA',{
+    timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit',
+  }).formatToParts(new Date());
+  const part=type=>parts.find(item=>item.type===type)?.value;
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
+function ensureHistoryFilterDefaults(){
+  const from=document.getElementById('historyDateFrom');
+  const to=document.getElementById('historyDateTo');
+  if(!from||!to)return;
+  if(!from.value)from.value=historyLocalToday();
+  if(!to.value)to.value=from.value;
+}
+
+function historyShiftDate(value,days){
+  const date=new Date(`${value}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate()+days);
+  return date.toISOString().slice(0,10);
+}
+
+function shiftHistoryRange(days){
+  ensureHistoryFilterDefaults();
+  const from=document.getElementById('historyDateFrom');
+  const to=document.getElementById('historyDateTo');
+  from.value=historyShiftDate(from.value,days);
+  to.value=historyShiftDate(to.value,days);
+  refreshHistory();
+}
+
+function setHistoryToday(){
+  const today=historyLocalToday();
+  document.getElementById('historyDateFrom').value=today;
+  document.getElementById('historyDateTo').value=today;
+  document.getElementById('historyTimeFrom').value='00:00';
+  document.getElementById('historyTimeTo').value='23:59';
+  refreshHistory();
+}
+
+function historyFilterParams(){
+  const params=new URLSearchParams({
+    date_from:document.getElementById('historyDateFrom').value,
+    date_to:document.getElementById('historyDateTo').value,
+    time_from:document.getElementById('historyTimeFrom').value||'00:00',
+    time_to:document.getElementById('historyTimeTo').value||'23:59',
+    limit:'500',
+  });
+  if(currentPrincipal?.role==='admin'){
+    const account=document.getElementById('historyUser')?.value||'';
+    const query=document.getElementById('historyNameFilter')?.value.trim()||'';
+    if(account)params.set('account_key',account);
+    if(query)params.set('query',query);
+  }
+  return params.toString();
+}
+
+function historyEscape(value){
+  return String(value??'').replace(/[&<>"']/g,character=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;',
+  })[character]);
+}
+
+function historyScoreMarkup(score){
+  const available=score?.available&&score?.score!=null;
+  const title=historyEscape(score?.score_title||'คะแนน');
+  return `<span class="history-score ${available?'available':'unavailable'}"><b>${available?historyEscape(score.score):'—'}</b><small>${title}</small></span>`;
+}
+
+function renderHistorySummary(d){
+  const summary=d.summary||{};
+  const root=document.getElementById('historySummary');
+  const selected=document.getElementById('historyDateFrom').value===historyLocalToday()
+    &&document.getElementById('historyDateTo').value===historyLocalToday();
+  const scope=currentPrincipal?.role==='admin'
+    ? `${summary.people_count||0} คน`
+    : `${summary.session_count||0} ครั้ง`;
+  root.innerHTML=`<div class="history-summary-heading"><span>${selected?'วันนี้':'ช่วงที่เลือก'}</span><b>${scope}</b><small>นับ Session ที่จบแล้วและมีข้อมูล Sensor · Asia/Bangkok</small></div>
+    <div class="history-summary-metrics">
+      <div><span>Session</span><b>${summary.session_count||0}</b></div>
+      <div><span>Sleep Score</span><b>${summary.sleep_score_count||0}</b><small>${summary.average_sleep_score==null?'—':`เฉลี่ย ${historyEscape(summary.average_sleep_score)}`}</small></div>
+      <div><span>Recovery Score</span><b>${summary.recovery_score_count||0}</b><small>${summary.average_recovery_score==null?'—':`เฉลี่ย ${historyEscape(summary.average_recovery_score)}`}</small></div>
+      <div><span>รอคะแนน</span><b>${summary.awaiting_score_count||0}</b></div>
+    </div>`;
+}
+
+function renderHistoryParticipants(d){
+  const root=document.getElementById('historyParticipants');
+  if(currentPrincipal?.role!=='admin'||!(d.participants||[]).length){
+    root.innerHTML='';return;
+  }
+  root.innerHTML=`<div class="history-people-heading"><b>ผู้ใช้งานและคะแนน</b><span>${d.participants.length} คนในช่วงที่เลือก</span></div><div class="history-people-grid">${d.participants.map(person=>{
+    const scores=(person.scores||[]).map(historyScoreMarkup).join('');
+    return `<button type="button" class="history-person" data-history-account="${historyEscape(person.account_key)}"><span class="history-person-avatar">${historyEscape(identityLabel(person,'?').slice(0,1).toUpperCase())}</span><span class="history-person-copy"><b>${historyEscape(identityLabel(person))}</b><small>${person.session_count} Session</small></span><span class="history-person-scores">${scores}</span></button>`;
+  }).join('')}</div>`;
+  root.querySelectorAll('[data-history-account]').forEach(button=>{
+    button.onclick=()=>selectHistoryPerson(button.dataset.historyAccount);
+  });
+}
+
+function selectHistoryPerson(accountKey){
+  const select=document.getElementById('historyUser');
+  if(select&&[...select.options].some(option=>option.value===accountKey)){
+    select.value=accountKey;
+    document.getElementById('historyNameFilter').value='';
+    refreshHistory();
+  }
+}
+
 function renderSessionList(d){
   const root = document.getElementById('sessionList'); root.innerHTML = '';
+  renderHistorySummary(d);
+  renderHistoryParticipants(d);
   if (!d.sessions.length){
-    root.innerHTML = '<div class="mini">ยังไม่มีประวัติการพักผ่อนในบัญชีนี้</div>';
+    root.innerHTML='<div class="history-empty"><b>ไม่พบ Session ในช่วงเวลานี้</b><span>ลองเลือกวัน เวลา หรือชื่อผู้ใช้งานใหม่</span></div>';
     return;
   }
   d.sessions.forEach(sx=>{
     const row = document.createElement('button'); row.className = 'hist-row';
     const hr = sx.summary?.heart_rate_bpm;
+    const identity=currentPrincipal?.role==='admin'
+      ? `<span class="hist-person-label"><b>${historyEscape(identityLabel(sx))}</b><small>${historyEscape(sx.display_name||'')}</small></span>`:'';
     row.innerHTML =
-      `<b>${fmtDateTh(sx.started_at_utc)}</b><span>Sensor บันทึก ${fmtDur(sx.duration_s)}</span>` +
+      `${identity}<b>${fmtDateTh(sx.ended_at_utc||sx.started_at_utc)}</b><span>Sensor บันทึก ${fmtDur(sx.duration_s)}</span>` +
       `${sleepQualityCompact(sx.sleep_quality, sx.ended_at_utc)}` +
       `<span>♥ ${hr ? hr.avg + ' ครั้ง/นาที' : '--'}</span>`;
-    row.onclick = ()=>loadDetail(d.account_key||d.username, sx.session_id, row);
+    row.onclick = ()=>loadDetail(sx.account_key||d.account_key||d.username, sx.session_id, row);
     root.appendChild(row);
   });
 }

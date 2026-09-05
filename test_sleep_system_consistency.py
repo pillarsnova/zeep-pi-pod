@@ -351,6 +351,24 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertIn("u.available_sessions??u.sessions??0", ui)
         self.assertIn("ยังไม่มี Session ที่มีข้อมูล", ui)
 
+    def test_session_history_has_daily_time_and_admin_name_filters(self):
+        ui = (PI5_ROOT / "static" / "index.html").read_text(encoding="utf-8")
+
+        for element_id in (
+            "historyDateFrom",
+            "historyDateTo",
+            "historyTimeFrom",
+            "historyTimeTo",
+            "historyNameFilter",
+            "historySummary",
+            "historyParticipants",
+        ):
+            self.assertIn(f'id="{element_id}"', ui)
+        self.assertIn("/api/admin/history?", ui)
+        self.assertIn("Asia/Bangkok", ui)
+        self.assertIn("Sleep Score", ui)
+        self.assertIn("Recovery Score", ui)
+
     def test_canonical_document_tracks_all_current_policy_versions(self):
         doc = (DOCS_ROOT / "zeep-sleep-system-current.md").read_text(encoding="utf-8")
         for version in policy.sleep_policy_snapshot()["versions"].values():

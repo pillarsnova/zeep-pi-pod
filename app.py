@@ -115,6 +115,11 @@ from zeep_pod.sessions.history import (
     session_availability_by_account,
     users_ordered_by_latest_session as _users_ordered_by_latest_session,
 )
+from zeep_pod.sessions.history_service import (
+    SessionHistoryService,
+    local_history_day,
+    resolve_history_window,
+)
 from maintenance_registry import maintenance_contract_snapshot
 from migration import migrate_jsonl
 from personal import BaselineStore
@@ -8088,94 +8093,96 @@ def sleep_policy_admin():
     return policy
 
 
+def _session_history_service() -> SessionHistoryService:
+    """Build the read service from the current reviewed report contracts."""
+    return SessionHistoryService(
+        database,
+        history_start_utc=PERSONAL_BASELINE_LEARNING_START_UTC,
+        report_version=SESSION_REPORT_VERSION,
+        release_quality=_released_historical_quality,
+        health_reference=_health_reference_from_profile,
+    )
+
+
+def _history_window(
+    date_from: Optional[str],
+    date_to: Optional[str],
+    time_from: str,
+    time_to: str,
+    *,
+    default_today: bool,
+):
+    timezone_name = POD_TIMEZONE or "Asia/Bangkok"
+    if default_today and not date_from and not date_to:
+        date_from = local_history_day(timezone_name)
+        date_to = date_from
+    try:
+        return resolve_history_window(
+            date_from,
+            date_to,
+            time_from,
+            time_to,
+            timezone_name=timezone_name,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.get("/api/admin/history", dependencies=[Depends(require_admin)])
+def admin_history_list(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    time_from: str = "00:00",
+    time_to: str = "23:59",
+    account_key: Optional[str] = None,
+    query: Optional[str] = None,
+    limit: int = 500,
+):
+    """Return a local-day roster and released score for each participant."""
+    window = _history_window(
+        date_from,
+        date_to,
+        time_from,
+        time_to,
+        default_today=True,
+    )
+    with profile_lock:
+        profiles = _load_profiles()
+    return _session_history_service().admin_history(
+        profiles,
+        window=window,
+        account_key=account_key,
+        query=query,
+        limit=limit,
+    )
+
+
 @app.get("/api/history/{username}")
 def history_list(
     username: str,
-    limit: int = 20,
+    limit: int = 200,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    time_from: str = "00:00",
+    time_to: str = "23:59",
     principal: Principal = Depends(require_user),
 ):
     key = _require_username_access(username, principal)
-    limit = max(1, min(200, int(limit)))
+    window = _history_window(
+        date_from,
+        date_to,
+        time_from,
+        time_to,
+        default_today=False,
+    )
     with profile_lock:
         history_profile = _load_profiles().get(key, {})
-    records = database.read_sessions(
-        "SELECT s.* FROM sessions AS s WHERE " + USER_HISTORY_FILTER
-        + " ORDER BY s.start_time DESC LIMIT ?",
-        (key, PERSONAL_BASELINE_LEARNING_START_UTC, limit))
-    total = database.read_sessions(
-        "SELECT COUNT(*) AS n FROM sessions AS s WHERE "
-        + USER_HISTORY_FILTER,
-        (key, PERSONAL_BASELINE_LEARNING_START_UTC))[0]["n"]
-    sessions = []
-    for record in records:
-        agg = database.read_sessions(
-            "SELECT COUNT(*) AS n, AVG(temperature) AS t, AVG(heart_rate) AS hr "
-            "FROM timeline WHERE session_id=?", (record["session_id"],))[0]
-        final_rows = database.read_sessions(
-            "SELECT value FROM events WHERE session_id=? AND type='final_summary' "
-            "ORDER BY timestamp DESC LIMIT 1", (record["session_id"],))
-        final_summary: Dict[str, Any] = {}
-        if final_rows:
-            try:
-                final_summary = json.loads(final_rows[0]["value"] or "{}")
-            except (TypeError, json.JSONDecodeError):
-                final_summary = {}
-        night_summary = final_summary.get("night_summary") or {}
-        sleep_quality = night_summary.get("sleep_quality")
-        sleep_quality = _released_historical_quality(
-            final_summary, sleep_quality,
-        )
-        session_report = final_summary.get("session_report")
-        if not (
-            isinstance(session_report, dict)
-            and session_report.get("version") == SESSION_REPORT_VERSION
-        ):
-            session_report = None
-        health_reference = final_summary.get("health_reference")
-        if not isinstance(health_reference, dict):
-            health_reference = _health_reference_from_profile(history_profile)
-        sessions.append({
-            "session_id": record["session_id"], "username": record["user"],
-            "display_name": history_profile.get("display_name") or record["user"],
-            "email": history_profile.get("email")
-            or history_profile.get("zeep_email")
-            or (key if "@" in key else None),
-            "account_key": key,
-            "gender": record["gender"], "started_at_utc": record["start_time"],
-            "ended_at_utc": record["end_time"], "duration_s": record["duration"],
-            "end_reason": record["end_reason"], "sample_count": agg["n"],
-            "sleep_estimator": final_summary.get("sleep_estimator"),
-            "sleep_estimator_versions": final_summary.get("sleep_estimator_versions") or {},
-            "sleep_provenance_complete": final_summary.get("sleep_provenance_complete"),
-            "sleep_policy_versions": {
-                "evidence": final_summary.get("sleep_evidence_version"),
-                "baseline": final_summary.get("sleep_baseline_version"),
-                "transition": final_summary.get("sleep_transition_policy"),
-                "g2_ontology": final_summary.get("sleep_g2_ontology"),
-                "terminal_wake": final_summary.get("terminal_wake_policy"),
-            },
-            "sleep_quality": sleep_quality,
-            "session_report": session_report if isinstance(session_report, dict) else None,
-            "health_reference": health_reference,
-            "wellness_context_available": bool(final_summary.get("wellness_context")),
-            "summary": {
-                "temperature_c": {"avg": round(agg["t"], 1)} if agg["t"] is not None else None,
-                "heart_rate_bpm": {"avg": round(agg["hr"], 1)} if agg["hr"] is not None else None,
-            },
-        })
-    return {
-        "username": username,
-        "account_key": key,
-        "email": history_profile.get("email")
-        or history_profile.get("zeep_email")
-        or (key if "@" in key else None),
-        "display_name": history_profile.get("display_name") or username,
-        "health_reference": _health_reference_from_profile(history_profile),
-        "sessions": sessions,
-        "total": total,
-        "history_start_utc": PERSONAL_BASELINE_LEARNING_START_UTC,
-        "older_sessions_archived_from_product_results": True,
-    }
+    return _session_history_service().account_history(
+        key,
+        history_profile,
+        window=window,
+        limit=limit,
+    )
 
 
 def _compress_sleep_stage_points(

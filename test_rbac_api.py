@@ -98,6 +98,36 @@ class RbacApiTests(unittest.TestCase):
         self.assertEqual(client.post("/api/safety/disarm").status_code, 403)
         self.assertEqual(client.post("/api/safety/disarm", headers=csrf(client)).status_code, 200)
 
+    def test_daily_history_overview_is_admin_only(self) -> None:
+        anonymous = TestClient(pod_app.app)
+        self.assertEqual(anonymous.get("/api/admin/history").status_code, 401)
+
+        admin = TestClient(pod_app.app)
+        self.assertEqual(
+            admin.post(
+                "/api/admin/auth/login",
+                json={
+                    "identifier": "test-admin",
+                    "password": "test-admin-password",
+                },
+            ).status_code,
+            200,
+        )
+        response = admin.get(
+            "/api/admin/history",
+            params={
+                "date_from": "2026-09-05",
+                "date_to": "2026-09-05",
+                "time_from": "00:00",
+                "time_to": "23:59",
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["range"]["timezone"], "Asia/Bangkok")
+        self.assertIn("people_count", payload["summary"])
+        self.assertIn("participants", payload)
+
     def test_brainwave_sound_lab_is_admin_only_and_plays_on_pi(self) -> None:
         anonymous = TestClient(pod_app.app)
         self.assertEqual(

@@ -34,8 +34,10 @@ Sensor Hub 1 ส่วน Pi ทำหน้าที่ตรวจ Contract �
    30–130 dBA est. (รวมค่าขอบ 30 และ 130)
 
 ไม่ผ่านข้อใดข้อหนึ่ง: `sound_measurement_valid=false`, SPH0645 มีสถานะ
-`invalid`, Dashboard ไม่แสดงตัวเลข, Session ไม่บันทึกเสียง และ dBFS ติดลบ
-ไม่แสดงบนการ์ด Dashboard/Calibration (ยังเก็บภายในเพื่อวิเคราะห์ Firmware)
+`invalid` และ Session ไม่บันทึกเสียง ระหว่างรอ Firmware ใหม่ Dashboard/Control/
+Monitor แสดง signed `sound_dbfs` เป็น `dBFS raw` เพื่อยืนยันว่า Sensor ยังรับ
+สัญญาณ โดยไม่ใช้ `abs()`, ไม่เรียกว่า dBA และไม่ใช้ตัดสินคุณภาพเสียง/Sleep State
+ส่วน Calibration card ยังคงรับเฉพาะ LAeq(A) ที่ผ่าน Contract
 ค่า valid ก่อนหน้าอาจแสดงเป็น
 `sound_last_valid_dba` ในข้อมูล Debug แต่ห้ามใช้เป็นค่าปัจจุบัน
 

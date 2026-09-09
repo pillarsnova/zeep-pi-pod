@@ -183,10 +183,23 @@ def compose_environment_snapshot(
         else "offline"
     )
     raw_values = dict(values)
+    # Temporary observability bridge while Sensor Hub 1 still publishes only
+    # its signed digital level.  dBFS is exposed verbatim for display as a raw
+    # engineering reading; it never replaces the validated LAeq(A) field and
+    # therefore cannot enter Session, environment or Sleep-State scoring.
+    sound_dbfs_raw = first_numeric(hub1, ("sound_dbfs",))
+    if (
+        not sources["hub1"]["live"]
+        or sound_dbfs_raw is None
+        or not math.isfinite(sound_dbfs_raw)
+        or not -160.0 <= sound_dbfs_raw <= 0.0
+    ):
+        sound_dbfs_raw = None
     for metric in calibration_metrics:
         values[metric] = apply_bias(metric, values.get(metric))
     return {
         **values,
+        "sound_dbfs_raw": sound_dbfs_raw,
         "temperature": values.get("temperature_c"),
         "humidity": values.get("humidity_rh"),
         "co2": values.get("co2_ppm"),

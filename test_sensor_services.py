@@ -231,6 +231,65 @@ class SensorRuntimeTests(unittest.TestCase):
         self.assertEqual(result["temperature_c"], 24.0)
         self.assertEqual(result["co2_ppm"], 700.0)
 
+    def test_legacy_dbfs_is_exposed_only_as_raw_display_diagnostic(self) -> None:
+        hub1 = {
+            "connected": True,
+            "last_update": NOW,
+            "temperature": 24.0,
+            "humidity": 50.0,
+            "lux": 2.0,
+            "sound_dbfs": -19.39,
+            "sound_measurement_valid": False,
+            "sound_invalid_reason": "legacy_dbfs_only",
+            "sensor_status": {"sht3x_dis": True, "opt3001": True, "sph0645": True},
+        }
+        hub2 = {
+            "connected": True,
+            "last_update": NOW,
+            "co2_ppm": 700.0,
+            "pm1_0_ug_m3": 1.0,
+            "pm2_5_ug_m3": 2.0,
+            "pm10_ug_m3": 3.0,
+            "voc_index": 100.0,
+            "sgp40_raw": 30_000.0,
+            "sensor_status": {"mhz19c": True, "pms7003": True, "sgp40": True},
+        }
+        biases = {metric: 0.0 for metric in SENSOR_CALIBRATION_SPECS}
+        result = compose_environment_snapshot(
+            hub1,
+            hub2,
+            now=NOW,
+            hub1_stale_s=20.0,
+            hub2_stale_s=20.0,
+            device_specs=ENVIRONMENT_DEVICE_SPECS,
+            calibration_metrics=tuple(SENSOR_CALIBRATION_SPECS),
+            apply_bias=lambda metric, value: apply_additive_bias(
+                metric, value, biases=biases
+            ),
+            bias_value=lambda metric: biases[metric],
+            bias_sources={metric: "default" for metric in biases},
+        )
+        self.assertEqual(result["sound_dbfs_raw"], -19.39)
+        self.assertIsNone(result["sound_dba_est"])
+        self.assertEqual(result["devices"]["sph0645"]["status"], "invalid")
+
+        hub1["last_update"] = NOW - 21.0
+        stale_result = compose_environment_snapshot(
+            hub1,
+            hub2,
+            now=NOW,
+            hub1_stale_s=20.0,
+            hub2_stale_s=20.0,
+            device_specs=ENVIRONMENT_DEVICE_SPECS,
+            calibration_metrics=tuple(SENSOR_CALIBRATION_SPECS),
+            apply_bias=lambda metric, value: apply_additive_bias(
+                metric, value, biases=biases
+            ),
+            bias_value=lambda metric: biases[metric],
+            bias_sources={metric: "default" for metric in biases},
+        )
+        self.assertIsNone(stale_result["sound_dbfs_raw"])
+
 
 class SmartResponseServiceTests(unittest.TestCase):
     def test_shadow_evaluator_reports_critical_air_without_actuation(self) -> None:

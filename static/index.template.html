@@ -1691,13 +1691,13 @@
 
     <div class="card raw-monitor" id="rawMonitorCard" data-pages="monitor">
       <div class="raw-toolbar">
-        <div><div class="section-title" style="margin:0">Sensor Calibration · Packet Inspector</div><div class="mini">ตรวจ Raw และค่าที่ระบบแสดง พร้อมปรับค่าจากเครื่องอ้างอิงเฉพาะช่องที่อนุญาต</div></div>
+        <div><div class="section-title" style="margin:0">Sensor Calibration · Packet Inspector</div><div class="mini">ตรวจค่าดิบ สุขภาพสัญญาณ และค่าที่ระบบอนุญาตให้นำไปแสดง</div></div>
         <button class="btn ui-label-button" onclick="refreshPacketInspector(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-refresh"/></svg><span>Refresh all</span></button>
       </div>
       <div class="calibration-formula"><span>RAW</span><i>→</i><span>TRANSFORM / BIAS</span><i>→</i><strong>OUTPUT</strong><small>ค่าดิบไม่ถูกแก้ไข · ค่าใหม่มีผลกับ Packet ถัดไป · บันทึกลง calibration.json</small></div>
       <div class="calibration-session-note" id="calibrationSessionNote">กำลังตรวจสถานะ Session…</div>
       <div class="calibration-device-grid" id="calibrationInspector"><div class="mini">กำลังโหลด Sensor calibration…</div></div>
-      <div class="calibration-legend"><span><i class="live"></i>LIVE</span><span><i class="stale"></i>STALE / HELD</span><span><i class="locked"></i>ALGORITHM LOCKED</span><small>Reference: Sensor ทั่วไปใช้ Reference − Raw · SPH0645 คำนวณ Error % จากค่าดิบที่ปัดเป็น 1 ตำแหน่ง</small></div>
+      <div class="calibration-legend"><span><i class="live"></i>LIVE</span><span><i class="stale"></i>STALE / HELD</span><span><i class="locked"></i>ALGORITHM LOCKED</span><small>SPH0645: signed dBFS แสดงเฉพาะ Admin และไม่ใช่ dBA · Output ต้องผ่าน A/LAeq contract ก่อน</small></div>
       <div class="raw-subhead"><div><strong>LSM-800-T · Byte-exact Raw Frames</strong><span>66 bytes · 25 BCG samples · HR/RR firmware bytes</span></div><button class="btn compact ui-label-button" onclick="fetchRawPackets(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-refresh"/></svg><span>Raw BCG</span></button></div>
       <div class="mini">แสดงแต่ละ Serial frame ตามที่ได้รับจริง พร้อม Raw HEX และคำวิเคราะห์ โดยไม่มีการนำค่าปรับไปแก้ byte ต้นฉบับ</div>
       <div class="raw-table" id="rawPackets"><div class="mini">กำลังรอ packet…</div></div>
@@ -2344,11 +2344,7 @@ function soundDisplayMetric(environment={}){
   if(environment.sound_dba_est!==null&&environment.sound_dba_est!==undefined&&Number.isFinite(laeq)){
     return {value:laeq,unit:'dBA est.',digits:1,validated:true};
   }
-  const dbfs=Number(environment.sound_dbfs_raw);
-  if(environment.sound_dbfs_raw!==null&&environment.sound_dbfs_raw!==undefined&&Number.isFinite(dbfs)){
-    return {value:dbfs,unit:'dBFS raw',digits:1,validated:false};
-  }
-  return {value:null,unit:'dBFS raw',digits:1,validated:false};
+  return {value:null,unit:'dBA est.',digits:1,validated:false};
 }
 function renderControlCenter(environment={},aircon={},bed={},safety={},gpio={},system={}){
   const devices=environment.devices||{};
@@ -4459,10 +4455,10 @@ function renderAssessment(id,meterId,result){
   root.className=`sensor-assessment ${result.level||''}`;root.querySelector('strong').textContent=result.label;root.querySelector('span').textContent=result.detail;meter.style.width=`${Math.max(0,Math.min(100,result.pct||0))}%`;
 }
 function renderSensorAssessments(e){
-  const t=e.temperature_c,h=e.humidity_rh,l=e.lux,s=e.sound_dba_est,rawSound=e.sound_dbfs_raw,c=e.co2_ppm,p=e.pm2_5_ug_m3,v=e.voc_index;
+  const t=e.temperature_c,h=e.humidity_rh,l=e.lux,s=e.sound_dba_est,c=e.co2_ppm,p=e.pm2_5_ug_m3,v=e.voc_index;
   renderAssessment('shtAssessment','shtMeter',t==null||h==null?{label:'รอข้อมูล',detail:'18–27°C · 40–60%RH',pct:0}:{label:t>29||h>65?'นอก Comfort band':t<18||h<40||t>27||h>60?'ควรติดตาม':'ยอดเยี่ยม',detail:`${fmt(t,1)}°C · ${fmt(h,1)}%RH`,level:t>29||h>65?'bad':t<18||h<40||t>27||h>60?'warn':'good',pct:(t-10)/30*100});
   renderAssessment('optAssessment','optMeter',l==null?{label:'รอข้อมูล',detail:'โหมดนอน ≤5 lux',pct:0}:{label:l<=5?'มืดเหมาะกับโหมดนอน':l<=20?'แสงสลัว':'สว่าง',detail:`${fmt(l,1)} lux`,level:l<=5?'good':l<=20?'warn':'bad',pct:l/50*100});
-  renderAssessment('sphAssessment','sphMeter',s==null?(rawSound==null?{label:'รอข้อมูล',detail:'เป้าหมายระบบ ≤35 dBA est.',pct:0}:{label:'ค่าดิบจากไมโครโฟน',detail:`${fmt(rawSound,1)} dBFS · ไม่ใช้ประเมิน`,level:'warn',pct:0}):{label:s<=35?'อยู่ในเป้าหมาย':s<=45?'สูงกว่าเป้าหมาย':'เสียงสูง',detail:`${fmt(s,1)} dBA est.`,level:s<=35?'good':s<=45?'warn':'bad',pct:s/80*100});
+  renderAssessment('sphAssessment','sphMeter',s==null?{label:'รอข้อมูล',detail:'รอ LAeq(A) ที่ผ่านการยืนยัน · เป้าหมาย ≤35 dBA est.',pct:0}:{label:s<=35?'อยู่ในเป้าหมาย':s<=45?'สูงกว่าเป้าหมาย':'เสียงสูง',detail:`${fmt(s,1)} dBA est.`,level:s<=35?'good':s<=45?'warn':'bad',pct:s/80*100});
   renderAssessment('co2Assessment','co2Meter',c==null?{label:'รอข้อมูล',detail:'เตือน 1,000 ppm',pct:0}:{label:c<800?'การระบายอากาศดี':c<1000?'ควรติดตาม':c<1300?'ควร Boost ลม':'ถึง Critical band',detail:`${fmt(c,0)} ppm`,level:c<800?'good':c<1000?'warn':'bad',pct:(c-400)/900*100});
   renderAssessment('pmsAssessment','pmsMeter',p==null?{label:'รอข้อมูล',detail:'อ้างอิง PM2.5',pct:0}:{label:p<=15?'ฝุ่นต่ำ':p<=35?'ควรติดตาม':'ฝุ่นสูง',detail:`PM2.5 ${fmt(p,0)} µg/m³`,level:p<=15?'good':p<=35?'warn':'bad',pct:p/75*100});
   renderAssessment('sgpAssessment','sgpMeter',v==null?{label:'รอข้อมูล',detail:'เทียบ Adaptive baseline',pct:0}:{label:v<80?'ต่ำกว่า Baseline':v<=150?'ใกล้ Baseline':'VOC เพิ่มขึ้น',detail:`VOC Index ${fmt(v,0)}`,level:v<=150?'good':'warn',pct:v/300*100});
@@ -4680,6 +4676,61 @@ function calibrationReferenceChanged(metric,input){
 
 function calibrationBiasChanged(metric,input){calibrationBiasDraft[metric]=input.value;}
 
+function escapeMarkup(value=''){
+  const entities={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+  return String(value).replace(/[&<>"']/g,character=>entities[character]);
+}
+
+function soundEngineeringValue(item={}){
+  if(item.value===null||item.value===undefined||item.value==='')return '--';
+  const number=Number(item.value);
+  if(!Number.isFinite(number))return '--';
+  if(item.unit==='ratio')return `${(number*100).toFixed(2)} %`;
+  const digits=Math.max(0,Math.min(6,Number(item.digits)||0));
+  return `${number.toFixed(digits)}${item.unit?` ${item.unit}`:''}`;
+}
+
+function renderSoundEngineering(channel={}){
+  const engineering=channel.engineering||{},fields=engineering.fields||[],flags=engineering.flags||[];
+  if(!fields.length&&!flags.length)return '';
+  const fieldMap=new Map(fields.map(item=>[item.key,item]));
+  const primaryKeys=['sound_laeq_dba','sound_dbfs_a','sound_dbfs'];
+  const keyFields=primaryKeys.map(key=>fieldMap.get(key)||{key,label:key,value:null});
+  const detailFields=fields.filter(item=>!primaryKeys.includes(item.key)&&item.value!==null&&item.value!==undefined);
+  const fieldHtml=keyFields.map(item=>`<div class="sound-raw-value ${item.group||''}"><span>${escapeMarkup(item.label)}</span><b>${soundEngineeringValue(item)}</b></div>`).join('');
+  const flagHtml=flags.map(item=>{
+    const known=item.value===true||item.value===false;
+    const state=!known||item.healthy===null||item.healthy===undefined?'unknown':item.healthy?'pass':'fail';
+    const value=!known?'--':item.value?'ON':'OFF';
+    return `<span class="sound-integrity-flag ${state}"><i></i>${escapeMarkup(item.label)} ${value}</span>`;
+  }).join('');
+  const firmwareFlag=engineering.firmware_dba_calibrated;
+  const firmwareDetail=firmwareFlag===true||firmwareFlag===false
+    ? `<span><b>Firmware dBA flag</b>${firmwareFlag?'ON':'OFF'}</span>`:'';
+  const details=detailFields.length||firmwareDetail?`<details class="sound-engineering-details"><summary>Sampling, PCM health & firmware details</summary><div>${detailFields.map(item=>`<span><b>${escapeMarkup(item.label)}</b>${soundEngineeringValue(item)}</span>`).join('')}${firmwareDetail}</div></details>`:'';
+  const pipelineStates={
+    valid:['valid','PIPELINE VALID'],
+    raw_ok_output_blocked:['blocked','RAW OK · OUTPUT BLOCKED'],
+    stale:['stale','STALE · LAST PACKET'],
+    offline:['invalid','OFFLINE'],
+    sensor_fault:['invalid','SENSOR FAULT'],
+    invalid:['invalid','INVALID']
+  };
+  const calibrationStates={
+    verified:['verified','CEM VERIFIED'],
+    pending:['pending','CEM PENDING'],
+    unknown:['unknown','CEM UNKNOWN']
+  };
+  const pipeline=pipelineStates[channel.pipeline_state]||pipelineStates.invalid;
+  const calibration=calibrationStates[channel.calibration_state]||calibrationStates.unknown;
+  const identity=[
+    engineering.profile,
+    engineering.firmware_version,
+    engineering.sequence!=null?`SEQ ${engineering.sequence}`:''
+  ].filter(Boolean).map(escapeMarkup).join(' · ');
+  return `<div class="sound-engineering"><div class="sound-engineering-head"><div><b>SPH0645 · PCM ENGINEERING RAW</b><small>${identity||'Firmware telemetry'}</small></div><div class="sound-review-stack"><span class="sound-review ${pipeline[0]}">${pipeline[1]}</span><span class="sound-calibration-state ${calibration[0]}">${calibration[1]}</span></div></div><div class="sound-raw-grid">${fieldHtml}</div><div class="sound-integrity-flags">${flagHtml}</div>${details}<p>signed dBFS เป็นระดับเทียบ digital full scale จึงติดลบตามปกติ · ห้ามทำ abs() หรือใช้แทน dBA</p></div>`;
+}
+
 function renderCalibrationInspector(data,{force=false}={}){
   calibrationInspectorState=data;
   const root=document.getElementById('calibrationInspector');
@@ -4708,11 +4759,12 @@ function renderCalibrationInspector(data,{force=false}={}){
       const isSoundEstimate=metric==='sound_dba_est';
       const outputLabel=isSoundEstimate?'LAEQ(A)':'CALIBRATED';
       const parameterLabel='NEW BIAS';
-      const values=`<div class="calibration-values">
+      const genericValues=`<div class="calibration-values">
         <div class="calibration-value"><span>RAW</span><b>${raw}</b><small>${rawUnit}</small></div>
         <div class="calibration-value"><span>${channel.bias_label||'BIAS'}</span><b>${channel.editable?(Number(channel.bias)>=0?'+':'')+bias:'LOCK'}</b><small>${channel.editable?parameterUnit:channel.bias_source||'algorithm'}</small></div>
         <div class="calibration-value output"><span>${outputLabel}</span><b>${output}</b><small>${unit}</small></div>
       </div>`;
+      const values=isSoundEstimate?renderSoundEngineering(channel):genericValues;
       if(!channel.editable){
         return `<section class="calibration-channel"><div class="calibration-channel-title"><b>${channel.label}</b><span>${metric}</span></div>${values}<div class="calibration-lock">🔒 ${channel.lock_reason||'ค่าจาก Algorithm แสดงแบบ read-only'}</div></section>`;
       }
@@ -4725,7 +4777,9 @@ function renderCalibrationInspector(data,{force=false}={}){
           <button class="calibration-apply" onclick="applyCalibrationBias('${metric}',this)">APPLY</button>
         </div></section>`;
     }).join('');
-    return `<article class="calibration-device"><header class="calibration-device-head"><div><strong>${device}</strong><small>${source}${Number.isFinite(age)?` · ${age.toFixed(1)}s ago`:''}</small></div><span class="calibration-live ${state}">${state}</span></header>${channelHtml}</article>`;
+    const soundDevice=channels.some(channel=>channel.metric==='sound_dba_est');
+    const genericState=soundDevice?'':`<span class="calibration-live ${state}">${state}</span>`;
+    return `<article class="calibration-device${soundDevice?' sound-calibration-device':''}"><header class="calibration-device-head"><div><strong>${device}</strong><small>${source}${Number.isFinite(age)?` · ${age.toFixed(1)}s ago`:''}</small></div>${genericState}</header>${channelHtml}</article>`;
   }).join('');
 }
 
@@ -6043,13 +6097,13 @@ function render(s, source='ws'){
   const soundInvalidReason=e.sound_invalid_reason||environment.devices?.sph0645?.invalid_values?.sound_dba_est;
   const soundMetric=soundDisplayMetric(environment);
   document.getElementById('sound').title = environment.sound_dba_est==null
-    ? soundMetric.value==null?`INVALID · ${soundInvalidReason||'ESP32 ยังไม่ส่ง LAeq(A) ที่ยืนยันแล้ว'}`:`RAW ${soundMetric.value.toFixed(1)} dBFS · ไม่ใช่ dBA/LAeq`
+    ? `INVALID · ${soundInvalidReason||'ESP32 ยังไม่ส่ง LAeq(A) ที่ยืนยันแล้ว'}`
     : `SPH0645 · LAeq(A) ${e.sound_window_ms||'--'} ms · คำนวณที่ ESP32`;
   const soundQuality=document.getElementById('soundQuality');
   soundQuality.textContent=espFallback
     ? `⚠ SPH0645 · ข้อมูลไม่สด (${espAgeText})`
     : environment.sound_dba_est==null
-    ? espOk&&soundMetric.value!=null?`RAW · ${soundMetric.value.toFixed(1)} dBFS · ยังไม่ใช่ dBA/LAeq`:espOk?`✕ SPH0645 · INVALID · ${soundInvalidReason||'รอ Firmware LAeq(A)'}`:'SPH0645 · ไม่เชื่อมต่อ'
+    ? espOk?`✕ SPH0645 · INVALID · ${soundInvalidReason||'รอ Firmware LAeq(A)'}`:'SPH0645 · ไม่เชื่อมต่อ'
     : sphStatus==='live'
       ? '✓ SPH0645 · LAeq(A) valid'
       : `⚠ SPH0645 · ${sphStatus}`;

@@ -15,6 +15,25 @@ import os
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
+from sound_observability import sound_engineering_snapshot
+
+
+# Calibration trust is deliberately fail-closed.  Substring matching is unsafe
+# here (for example, ``unverified`` contains ``verified``), so only explicitly
+# versioned/approved states may turn the Admin badge green.
+VERIFIED_SOUND_CALIBRATION_STATES = frozenset({
+    "cem_verified",
+    "cem_dt_8852_verified",
+    "approved_cem_calibration",
+    "verified_against_cem_dt_8852",
+})
+PENDING_SOUND_CALIBRATION_STATES = frozenset({
+    "pending",
+    "pending_cem_recalibration",
+    "pending_cem_recalibration_after_sensor_replacement",
+    "sensor_replaced_contract_and_cem_revalidation_required",
+})
+
 
 # Plain dictionaries are retained at this boundary because the Admin API and
 # existing tests expose these fields as JSON.  The source of truth now lives in
@@ -131,18 +150,64 @@ def apply_additive_bias(
     return round(adjusted, 2)
 
 
+def _sound_pipeline_state(
+    measurement_valid: bool,
+    device: Mapping[str, Any],
+    engineering: Mapping[str, Any],
+) -> str:
+    """Classify transport/PCM health separately from CEM calibration."""
+    device_status = str(device.get("status") or "").strip().lower()
+    if device_status == "offline":
+        return "offline"
+    if device_status in {"stale", "held", "warming"}:
+        return "stale"
+    if device_status == "fault":
+        return "sensor_fault"
+    if measurement_valid:
+        return "valid"
+
+    flags = {
+        item["key"]: item["value"]
+        for item in engineering.get("flags", [])
+    }
+    raw_is_healthy = bool(
+        flags.get("capture_ok") is True
+        and flags.get("signal_valid") is True
+        and flags.get("stuck_zero") is not True
+        and flags.get("stuck_constant") is not True
+    )
+    return "raw_ok_output_blocked" if raw_is_healthy else "invalid"
+
+
+def _sound_calibration_state(
+    calibration: Mapping[str, Any] | None,
+) -> str:
+    """Report CEM provenance without treating a firmware flag as approval."""
+    processing = calibration or {}
+    status = str(
+        processing.get("calibration_status")
+        or processing.get("status")
+        or ""
+    ).strip().lower()
+    if processing.get("cem_reference_verified") is True:
+        return "verified"
+    if status in VERIFIED_SOUND_CALIBRATION_STATES:
+        return "verified"
+    if status in PENDING_SOUND_CALIBRATION_STATES:
+        return "pending"
+    return "unknown"
+
+
 def sound_inspector_channel(
     hub1: Mapping[str, Any],
     environment: Mapping[str, Any],
     device: Mapping[str, Any],
+    calibration: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Describe the firmware-owned sound pipeline without displaying dBFS.
-
-    dBFS is retained in the incoming packet for engineering diagnostics, but
-    the calibration card only displays validated, non-negative LAeq(A).
-    """
+    """Describe validated LAeq and Admin-only signed PCM diagnostics."""
     measurement_valid = hub1.get("sound_measurement_valid") is True
     firmware_laeq = hub1.get("sound_laeq_dba") if measurement_valid else None
+    engineering = sound_engineering_snapshot(hub1, device)
     return {
         "metric": "sound_dba_est", "device": "SPH0645",
         "device_key": "sph0645", "label": "ระดับเสียง LAeq(A)",
@@ -156,5 +221,15 @@ def sound_inspector_channel(
         "firmware_value": firmware_laeq,
         "measurement_valid": measurement_valid,
         "invalid_reason": hub1.get("sound_invalid_reason"),
-        "lock_reason": "แสดงเฉพาะ LAeq(A) 30–130 dBA ที่ ESP32 ยืนยันแล้ว",
+        "pipeline_state": _sound_pipeline_state(
+            measurement_valid,
+            device,
+            engineering,
+        ),
+        "calibration_state": _sound_calibration_state(calibration),
+        "engineering": engineering,
+        "lock_reason": (
+            "Firmware LAeq(A) ใช้ตรวจวินิจฉัยเท่านั้น · ค่าเสียงฝั่งสุขภาพ"
+            "และผู้ใช้ถูกปิดจนกว่าจะสอบเทียบผ่าน CEM DT-8852"
+        ),
     }

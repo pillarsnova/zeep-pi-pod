@@ -771,11 +771,14 @@ class RbacApiTests(unittest.TestCase):
         self.assertEqual(sound["raw_unit"], "dBA est.")
         self.assertEqual(sound["unit"], "dBA est.")
         self.assertFalse(sound["editable"])
+        self.assertIn("engineering", sound)
+        self.assertIn("fields", sound["engineering"])
+        self.assertIn("pipeline_state", sound)
+        self.assertEqual(sound["calibration_state"], "pending")
         self.assertEqual(
             sound["formula"],
             "ESP32: I2S alignment → A-weighting → LAeq",
         )
-
         previous_biases = dict(pod_app.SENSOR_BIASES)
         previous_sources = dict(pod_app.SENSOR_BIAS_SOURCES)
         previous_calibration = copy.deepcopy(pod_app.CALIBRATION)
@@ -804,6 +807,44 @@ class RbacApiTests(unittest.TestCase):
                 pod_app.SENSOR_BIAS_SOURCES.update(previous_sources)
                 pod_app.CALIBRATION.clear()
                 pod_app.CALIBRATION.update(previous_calibration)
+
+    def test_user_snapshot_hides_admin_sound_engineering_payload(self) -> None:
+        principal = pod_app.Principal(
+            session_id="user-snapshot-test",
+            subject="user:test@example.com",
+            username="test@example.com",
+            display_name="Test User",
+            account_key="test@example.com",
+            email="test@example.com",
+            role="user",
+            auth_source="zeep",
+            csrf_token="test-token",
+            expires_at=time.time() + 60,
+        )
+        with pod_app.state_lock:
+            original = copy.deepcopy(pod_app.state["sensor"]["esp32"])
+            pod_app.state["sensor"]["esp32"].update({
+                "connected": True,
+                "sound_dbfs": -50.86,
+                "sound_dbfs_a": -58.17,
+                "sound_rms": 0.002864,
+                "mic_zero_ratio": 0.0,
+            })
+        try:
+            filtered = pod_app.snapshot_for(principal)
+            esp32 = filtered["sensor"]["esp32"]
+            environment = filtered["sensor"]["environment"]
+            self.assertNotIn("sound_dbfs", esp32)
+            self.assertNotIn("sound_dbfs_a", esp32)
+            self.assertNotIn("sound_rms", esp32)
+            self.assertNotIn("mic_zero_ratio", esp32)
+            self.assertNotIn("sound_dbfs_raw", environment)
+            sound_device = environment["devices"]["sph0645"]
+            self.assertNotIn("diagnostics", sound_device)
+            self.assertNotIn("invalid_values", sound_device)
+        finally:
+            with pod_app.state_lock:
+                pod_app.state["sensor"]["esp32"] = original
 
     def test_aircon_on_sends_default_temperature_and_biases_user_temperature(self) -> None:
         """Exercise the Pi command sequence without publishing to real MQTT."""

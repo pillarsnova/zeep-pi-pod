@@ -169,6 +169,7 @@ from sensor_calibration import (
     resolve_biases,
     sound_inspector_channel,
 )
+from sound_observability import sanitize_consumer_sound
 from sensor_runtime import (
     compose_environment_snapshot,
     energy_average_db,
@@ -3684,9 +3685,8 @@ def snapshot_for(principal: Principal) -> Dict[str, Any]:
             "session_sample_s", "bed_start_s", "pod_id", "occupancy",
         )
     }
-    environment = ((result.get("sensor") or {}).get("environment") or {})
-    environment.pop("raw_values", None)
-    environment.pop("calibration", None)
+    # Full PCM and firmware telemetry is available only in Admin inspector.
+    sanitize_consumer_sound(result.get("sensor") or {})
     bcg = (result.get("sensor") or {}).get("bcg") or {}
     bcg.pop("samples", None)
     bcg.pop("raw_status_code", None)
@@ -6564,7 +6564,12 @@ def sensor_calibration_inspector_snapshot() -> Dict[str, Any]:
         })
 
     sound_device = devices.get("sph0645") or {}
-    channels.append(sound_inspector_channel(hub1, environment, sound_device))
+    channels.append(sound_inspector_channel(
+        hub1,
+        environment,
+        sound_device,
+        CALIBRATION.get("sound_processing") or {},
+    ))
 
     # These algorithm-owned values are inspected beside the adjustable
     # channels, but are intentionally not offset in software. SGP40 learns its

@@ -3892,6 +3892,13 @@ body[data-view="sessions"] .hist-row > .hist-quality {
   background: linear-gradient(145deg, rgba(9, 27, 39, .96), rgba(4, 15, 24, .94));
 }
 
+.calibration-device.sound-calibration-device { grid-column: 1 / -1; }
+.sound-calibration-device .calibration-device-head strong { font-size: 11px; }
+.sound-calibration-device .calibration-device-head small { font-size: 9px; }
+.sound-calibration-device .calibration-channel-title b { font-size: 10px; }
+.sound-calibration-device .calibration-channel-title span { font-size: 8px; }
+.sound-calibration-device .calibration-lock { font-size: 9px; }
+
 .calibration-device-head {
   display: flex;
   align-items: center;
@@ -3991,6 +3998,110 @@ body[data-view="sessions"] .hist-row > .hist-quality {
   color: #6e858f;
   font-size: 7px;
   line-height: 1.45;
+}
+
+.sound-engineering {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid rgba(56, 202, 230, .2);
+  border-radius: 9px;
+  background:
+    linear-gradient(145deg, rgba(8, 41, 56, .7), rgba(5, 21, 32, .86));
+}
+
+.sound-engineering-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sound-engineering-head b,
+.sound-engineering-head small { display: block; }
+.sound-engineering-head b { color: #80e9f6; font-size: 10px; letter-spacing: .05em; }
+.sound-engineering-head small { margin-top: 3px; color: #6f929f; font: 600 9px "SF Mono", ui-monospace, monospace; }
+
+.sound-review-stack {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.sound-review,
+.sound-calibration-state {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font: 850 8px "SF Mono", ui-monospace, monospace;
+  letter-spacing: .06em;
+}
+
+.sound-review.valid { color: #69e5b7; background: rgba(33, 173, 124, .1); }
+.sound-review.blocked,
+.sound-review.stale { color: #f0b75e; background: rgba(196, 125, 23, .1); }
+.sound-review.invalid { color: #ff8492; background: rgba(202, 53, 72, .1); }
+.sound-calibration-state.verified { color: #69e5b7; background: rgba(33, 173, 124, .1); }
+.sound-calibration-state.pending { color: #f0b75e; background: rgba(196, 125, 23, .1); }
+.sound-calibration-state.unknown { color: #8da8b3; background: rgba(69, 102, 114, .12); }
+
+.sound-raw-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.sound-raw-value {
+  min-width: 0;
+  padding: 8px 9px;
+  border-radius: 8px;
+  background: rgba(17, 55, 70, .45);
+}
+
+.sound-raw-value span,
+.sound-raw-value b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sound-raw-value span { color: #7598a5; font-size: 9px; }
+.sound-raw-value b { margin-top: 3px; color: #d9f5f8; font: 750 13px "SF Mono", ui-monospace, monospace; }
+.sound-raw-value.calibration b { color: #e8b8ff; }
+
+.sound-integrity-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.sound-integrity-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: #6d8792;
+  background: rgba(39, 65, 76, .28);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.sound-integrity-flag i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.sound-integrity-flag.pass { color: #67dfb2; }
+.sound-integrity-flag.fail { color: #ff8290; }
+.sound-integrity-flag.unknown { color: #d6a95f; }
+
+.sound-engineering-details { margin-top: 8px; color: #74939f; font-size: 9px; }
+.sound-engineering-details summary { cursor: pointer; color: #82a6b3; font-weight: 800; }
+.sound-engineering-details > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin-top: 6px; }
+.sound-engineering-details span { display: flex; justify-content: space-between; gap: 4px; padding: 4px 5px; border-radius: 5px; background: rgba(19, 46, 58, .3); }
+.sound-engineering-details b { color: #7695a1; font-weight: 700; }
+.sound-engineering > p { margin: 8px 0 0; color: #78949f; font-size: 9px; line-height: 1.45; }
+
+@media (max-width: 700px) {
+  .sound-engineering-head { display: block; }
+  .sound-review-stack { justify-content: flex-start; margin-top: 7px; }
+  .sound-raw-grid { grid-template-columns: 1fr; }
+  .sound-engineering-details > div { grid-template-columns: 1fr; }
 }
 
 .calibration-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 8px; color: #617b86; font-size: 7px; }

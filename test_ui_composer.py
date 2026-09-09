@@ -29,6 +29,17 @@ class UiComposerTests(unittest.TestCase):
                     template.count(ui_composer.MARKER.format(name=filename)), 1
                 )
 
+    def test_sound_engineering_ui_handles_untrusted_and_missing_raw_values(self):
+        template = ui_composer.TEMPLATE.read_text(encoding="utf-8")
+        self.assertIn("function escapeMarkup(value='')", template)
+        self.assertIn(".filter(Boolean).map(escapeMarkup).join(' · ')", template)
+        self.assertIn(
+            "item.value===null||item.value===undefined||item.value===''",
+            template,
+        )
+        self.assertIn("item.healthy?'pass':'fail'", template)
+        self.assertNotIn("item.value?'pass'", template)
+
 
 if __name__ == "__main__":
     unittest.main()

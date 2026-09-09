@@ -256,6 +256,57 @@ class VersionedTelemetryContractTests(unittest.TestCase):
         self.assertEqual(decoded["temperature_c"], 24.5)
         self.assertEqual(decoded["contract"]["schema"], "legacy.flat")
 
+    def test_released_golden_environment_packet_is_accepted(self):
+        payload = {
+            "event": "environment",
+            "temperature": 24.5,
+            "humidity": 52.0,
+            "light": 1.2,
+            "sound_dbfs": -55.0,
+        }
+
+        self.assertEqual(
+            contracts.classify_hub_payload(
+                payload,
+                expected_hub="sensorhub1",
+            ),
+            ("telemetry", "legacy_environment"),
+        )
+
+    def test_canonical_environment_packet_without_hub_id_is_rejected(self):
+        payload = {
+            "event": "environment",
+            "sensors": {
+                "sht3x_dis": {
+                    "status": "live",
+                    "values": {"temperature_c": 24.5},
+                },
+            },
+        }
+
+        self.assertEqual(
+            contracts.classify_hub_payload(
+                payload,
+                expected_hub="sensorhub1",
+            ),
+            ("rejected", "unexpected_hub:missing"),
+        )
+
+    def test_explicit_wrong_hub_is_rejected_even_for_flat_payload(self):
+        payload = {
+            "event": "environment",
+            "hub_id": "sensorhub2",
+            "temperature": 24.5,
+        }
+
+        self.assertEqual(
+            contracts.classify_hub_payload(
+                payload,
+                expected_hub="sensorhub1",
+            ),
+            ("rejected", "unexpected_hub:sensorhub2"),
+        )
+
     def test_v1_envelope_normalises_to_current_internal_fields(self):
         decoded = contracts.decode_hub_payload({
             "schema": contracts.TELEMETRY_SCHEMA,

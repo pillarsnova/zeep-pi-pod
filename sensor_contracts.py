@@ -279,9 +279,19 @@ def classify_hub_payload(
     if event != ENVIRONMENT_EVENT:
         return "ignored", event
     hub_id = str(payload.get("hub_id") or "").strip()
-    if hub_id != expected_hub:
-        return "rejected", f"unexpected_hub:{hub_id or 'missing'}"
-    return "telemetry", ENVIRONMENT_EVENT
+    if hub_id == expected_hub:
+        return "telemetry", ENVIRONMENT_EVENT
+    if (
+        not hub_id
+        and not isinstance(payload.get("sensors"), Mapping)
+        and LEGACY_HUB1_MEASUREMENT_FIELDS.intersection(payload)
+    ):
+        # Released Golden firmware already labels frames as ``environment``
+        # but predates hub_id and the nested envelope. Keep this bridge narrow:
+        # it must be flat measurement telemetry, never a canonical or control
+        # packet with an omitted identity.
+        return "telemetry", "legacy_environment"
+    return "rejected", f"unexpected_hub:{hub_id or 'missing'}"
 
 
 def decode_hub_payload(

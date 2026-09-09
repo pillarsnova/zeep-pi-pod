@@ -96,6 +96,23 @@ class SensorHub1ReaderTests(unittest.TestCase):
             "t": 123.0, "dba": 42.5, "dbfs": -55.0,
         }])
 
+    def test_released_golden_packet_without_hub_id_updates_state(self) -> None:
+        packet = {
+            "event": "environment",
+            "temperature": 24.5,
+            "humidity": 52.0,
+            "light": 1.2,
+            "sound_dbfs": -55.0,
+        }
+
+        self.assertTrue(self.reader.process_line(self.wire(packet)))
+        self.assertEqual(len(self.payloads), 1)
+        self.assertEqual(self.payloads[0]["last_update"], 123.0)
+        self.assertTrue(self.payloads[0]["connected"])
+        self.assertEqual(self.payloads[0]["temperature"], 24.5)
+        self.assertEqual(self.payloads[0]["humidity"], 52.0)
+        self.assertEqual(self.payloads[0]["light"], 1.2)
+
     def test_invalid_sound_does_not_hide_other_two_sensors(self) -> None:
         packet = canonical_packet(sound_valid=False)
         self.assertTrue(self.reader.process_line(self.wire(packet)))

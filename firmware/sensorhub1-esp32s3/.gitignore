@@ -1,0 +1,7 @@
+.pio/
+.pio-core/
+dist/
+calibration-results/
+*.bin
+*.elf
+*.map

@@ -19,7 +19,8 @@ zeep_pod/
 │   ├── audio.py          # MPV/afplay/ffplay playback adapter
 │   └── gpio.py           # fail-closed physical GPIO outputs
 ├── identity/
-│   └── profile_fields.py # account/profile/health field normalization
+│   ├── profile_fields.py # account/profile/health field normalization
+│   └── zeep_account.py   # bind a ZEEP {tokens, user} payload to local identity
 └── sessions/
     ├── cadence.py        # mixed 5/10-second timeline normalization
     └── lifecycle.py      # checkpoint, bed occupancy and HR/RR start gate
@@ -36,6 +37,9 @@ are migrated. Their current responsibilities are:
 - `sensor_runtime.py`: environment normalization and fail-closed validation of
   ESP32-computed A-weighted LAeq (never converts dBFS to dBA).
 - `access_control.py` and `pod_occupancy.py`: browser identity and Pod lease.
+- `qr_login.py`: QR login handshake. The tablet cannot reach the ZEEP API
+  from the pod hotspot, so the Pi proxies it and keeps `pollSecret` in
+  process memory — it never reaches the browser, the QR image or the log.
 - `database.py` and `bcg_storage.py`: persistence boundaries.
 
 ## Dependency rule

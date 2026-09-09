@@ -61,6 +61,15 @@ class AuthLoginCommand(BaseModel):
     rest_mode: str = "nap_recovery"
 
 
+class QrLoginPollCommand(BaseModel):
+    """Poll a QR login.  ``pollSecret`` stays on the Pi and is never accepted
+    from the browser, so a photographed QR cannot be polled for tokens."""
+
+    login_id: str
+    age_group: Optional[str] = None
+    rest_mode: str = "nap_recovery"
+
+
 class AdminLoginCommand(BaseModel):
     identifier: str
     password: str

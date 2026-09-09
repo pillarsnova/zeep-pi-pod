@@ -17,6 +17,8 @@
 |---|---|---|
 | HTTP contracts | `api_models.py`, `api_v1.py` | รูปแบบ request/response และ versioned envelope |
 | Authentication | `access_control.py`, `admin_accounts.py` | Browser session, RBAC, CSRF และ Admin identity |
+| ZEEP account binding | `zeep_pod/identity/zeep_account.py` | ผูก `{tokens, user}` จาก Password/QR login เข้ากับตัวตนในตู้ |
+| QR login | `qr_login.py` | Pi ทำ handshake แทนแท็บเล็ต และถือ `pollSecret` ไว้เอง |
 | Occupancy | `pod_occupancy.py` | หนึ่งผู้ใช้ต่อหนึ่งตู้และป้องกัน login ซ้ำหลายตู้ |
 | Device protocol | `control_protocol.py` | validate/normalize คำสั่ง Aircon และ Bed |
 | Hardware contracts | `sensor_contracts.py` | sensor model, alias, physical range, frame/telemetry contract |

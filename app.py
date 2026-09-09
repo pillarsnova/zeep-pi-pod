@@ -19,6 +19,7 @@ import secrets
 from collections import Counter, deque
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from functools import partial
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -95,6 +96,7 @@ from zeep_pod.identity.profile_fields import (
     zeep_gender as _zeep_gender,
     zeep_health_reference as _zeep_health_reference,
 )
+from zeep_pod.identity.zeep_account import authenticate_password, identity_from_auth_data
 from zeep_pod.hardware.audio import AudioPlayer
 from zeep_pod.hardware.gpio import GPIOManager
 from zeep_pod.sessions.cadence import (
@@ -128,6 +130,7 @@ from zeep_pod.sessions.history_service import (
 from maintenance_registry import maintenance_contract_snapshot
 from migration import migrate_jsonl
 from personal import BaselineStore
+from qr_login import QrLoginRegistry, create_qr_login_router
 from progressive_profile import (
     admin_progress_summary,
     apply_answer as apply_progressive_answer,
@@ -1054,6 +1057,9 @@ daily_backup = DailyBackup(
 # Browser authentication and physical occupancy intentionally use separate
 # stores.  One pod session can coexist with one or more admin browser sessions.
 auth_sessions = AuthSessionManager(DATA_DIR)
+# In-flight QR logins.  Process memory only: a pollSecret must never reach the
+# browser, the QR image, disk or the log.
+qr_logins = QrLoginRegistry()
 occupancy_store = OccupancyStore(DATA_DIR, OCCUPANCY_LEASE_SECONDS)
 occupancy_client = build_occupancy_client(occupancy_store)
 OCCUPANCY_COORDINATOR_TOKEN = os.getenv("OCCUPANCY_COORDINATOR_TOKEN", "").strip()
@@ -6419,6 +6425,22 @@ def _clear_auth_cookies(response: Response) -> None:
 
 app = FastAPI(title="Zeep Pod Control", docs_url=None, redoc_url=None, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+def _pod_is_occupied() -> bool:
+    with session_lock:
+        return _active_session is not None
+
+
+app.include_router(create_qr_login_router(
+    qr_logins,
+    # Late binding on purpose: both hooks are swapped in regression tests.
+    zeep_request=lambda *a, **kw: _zeep_request(*a, **kw),
+    zeep_offline=ZeepApiOffline,
+    complete_login=lambda *a, **kw: _complete_occupant_login(*a, **kw),
+    pod_occupied=_pod_is_occupied,
+    log_event=log_event,
+))
 app.include_router(create_history_router(database, require_admin=require_admin))
 app.include_router(create_occupancy_router(occupancy_store, OCCUPANCY_COORDINATOR_TOKEN))
 app.include_router(create_api_v1_router(
@@ -6733,6 +6755,7 @@ async def root():
 
 
 @app.get("/login")
+@app.get("/login/qr")
 @app.get("/admin/login")
 async def login_view():
     """Serve the shared shell; the immutable URL selects the login audience."""
@@ -6766,8 +6789,7 @@ async def api_state(principal: Principal = Depends(require_pod_operator)):
 @app.get("/api/public/status")
 def public_status():
     """Non-sensitive boot information used before a browser is authenticated."""
-    with session_lock:
-        occupied = _active_session is not None
+    occupied = _pod_is_occupied()
     with state_lock:
         safety = state.get("safety") or {}
     return {
@@ -7385,80 +7407,30 @@ def _start_pod_session(
     }
 
 
-def _authenticate_zeep_account(identifier: str, password: str) -> tuple[Dict[str, Any], Dict[str, Any]]:
-    """Verify a ZEEP account and return public identity plus profile metadata."""
-    data = _zeep_request(
-        "POST", "/v1/auth/login", json_body={"identifier": identifier, "password": password}
-    ).get("data") or {}
-    tokens = data.get("tokens") or {}
-    user = data.get("user") or {}
-    access_token = tokens.get("accessToken")
-    zeep_username = str(user.get("username") or "").strip()
-    public_id = str(user.get("publicId") or "").strip()
-    if not access_token or not zeep_username or not public_id:
-        raise HTTPException(502, "ZEEP API ตอบข้อมูลตัวตนไม่ครบ")
-
-    me: Dict[str, Any] = {}
-    profile_refreshed = False
-    try:
-        me = _zeep_request("GET", "/v1/users/me", token=access_token).get("data") or {}
-        if not isinstance(me, dict):
-            me = {}
-        profile_refreshed = True
-    except (ZeepApiOffline, HTTPException) as exc:
-        log_event("auth", "zeep_profile_failed", user=zeep_username,
-                  error=str(getattr(exc, "detail", exc)))
-
-    # Email is the canonical local data identity. Prefer the Login contract and
-    # accept /users/me as a fallback, then reject incomplete accounts instead
-    # of silently creating a second history under a mutable display name.
-    try:
-        account_email = _normalize_email(str(user.get("email") or me.get("email") or ""))
-    except HTTPException as exc:
-        raise HTTPException(502, "ZEEP API ตอบ Email สำหรับผูกประวัติไม่ครบ") from exc
-
-    auth = {
-        "public_id": public_id,
-        "username": zeep_username,
-        "email": account_email,
-        "display_name": (user.get("displayName") or "").strip() or zeep_username,
-        "role": user.get("role"),
-        "plan": user.get("plan"),
-        "access_token": access_token,
-        "refresh_token": tokens.get("refreshToken"),
-        # Internal freshness flag only; never returned by the public Login
-        # response.  It prevents a failed profile fetch from looking current.
-        "profile_refreshed": profile_refreshed,
-    }
-    return auth, me
+# Password and QR login bind an account identically; only the HTTP client, the
+# event log and the offline sentinel stay in the composition root.
+_zeep_binding = {"zeep_request": _zeep_request, "log_event": log_event,
+                 "offline_error": ZeepApiOffline}
+_zeep_identity_from_auth_data = partial(identity_from_auth_data, **_zeep_binding)
+_authenticate_zeep_account = partial(authenticate_password, **_zeep_binding)
 
 
-@app.post("/api/auth/login")
-def auth_login(cmd: AuthLoginCommand, response: Response):
-    """Authenticate an occupant, acquire the pod lease, then start a pod session."""
-    identifier = (cmd.identifier or "").strip()
-    if not identifier or not cmd.password:
-        raise HTTPException(422, "กรอก Username/Email และรหัสผ่านให้ครบ")
-    with session_lock:
-        if _active_session is not None:
-            raise HTTPException(409, {
-                "code": "pod_already_occupied", "message": "ตู้นี้กำลังมีผู้ใช้งาน"
-            })
-    try:
-        auth, me = _authenticate_zeep_account(identifier, cmd.password)
-    except ZeepApiOffline as exc:
-        ticket = auth_sessions.issue_offline_ticket(identifier)
-        log_event("auth", "zeep_offline", stage="login", error=str(exc))
-        raise HTTPException(503, {
-            "code": "offline",
-            "message": "ต่อ ZEEP API ไม่ได้ — สามารถใช้ Local fallback ได้ภายใน 5 นาที",
-            "offline_ticket": ticket,
-            "identifier": identifier,
-        }) from exc
+def _complete_occupant_login(
+    auth: Dict[str, Any],
+    me: Dict[str, Any],
+    *,
+    age_group_choice: Optional[str],
+    rest_mode: str,
+    response: Response,
+) -> Dict[str, Any]:
+    """Bind a verified ZEEP identity to this pod: profile, cookie, pod session.
 
+    Password and QR login both land here so the age-group gate, the Pod-only
+    overrides and the revoke-on-failure guarantee cannot drift apart.
+    """
     health_reference = _zeep_health_reference(me)
     age = health_reference.get("age_years")
-    age_group = (cmd.age_group or "").strip() or (_age_group(age) if age is not None else None)
+    age_group = (age_group_choice or "").strip() or (_age_group(age) if age is not None else None)
     account_key = auth["email"]
     # Local research aliases and verified demographic corrections are Pod-only
     # presentation/baseline overrides.  Email/publicId remain canonical and the
@@ -7497,7 +7469,7 @@ def auth_login(cmd: AuthLoginCommand, response: Response):
         result = _start_pod_session(
             auth["username"], health_reference.get("gender"), age, age_group,
             owner=principal, auth=auth, health_reference=health_reference,
-            rest_mode=cmd.rest_mode,
+            rest_mode=rest_mode,
         )
     except Exception:
         auth_sessions.revoke(cookie_token)
@@ -7507,6 +7479,35 @@ def auth_login(cmd: AuthLoginCommand, response: Response):
                       ("public_id", "username", "email", "display_name", "role", "plan")}
     result["principal"] = principal.public_dict()
     return result
+
+
+@app.post("/api/auth/login")
+def auth_login(cmd: AuthLoginCommand, response: Response):
+    """Authenticate an occupant, acquire the pod lease, then start a pod session."""
+    identifier = (cmd.identifier or "").strip()
+    if not identifier or not cmd.password:
+        raise HTTPException(422, "กรอก Username/Email และรหัสผ่านให้ครบ")
+    with session_lock:
+        if _active_session is not None:
+            raise HTTPException(409, {
+                "code": "pod_already_occupied", "message": "ตู้นี้กำลังมีผู้ใช้งาน"
+            })
+    try:
+        auth, me = _authenticate_zeep_account(identifier, cmd.password)
+    except ZeepApiOffline as exc:
+        ticket = auth_sessions.issue_offline_ticket(identifier)
+        log_event("auth", "zeep_offline", stage="login", error=str(exc))
+        raise HTTPException(503, {
+            "code": "offline",
+            "message": "ต่อ ZEEP API ไม่ได้ — สามารถใช้ Local fallback ได้ภายใน 5 นาที",
+            "offline_ticket": ticket,
+            "identifier": identifier,
+        }) from exc
+
+    return _complete_occupant_login(
+        auth, me, age_group_choice=cmd.age_group, rest_mode=cmd.rest_mode,
+        response=response,
+    )
 
 
 @app.post("/api/admin/auth/login")

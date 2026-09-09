@@ -146,6 +146,40 @@ class EnvironmentContractTests(unittest.TestCase):
         self.assertEqual(assessment["optional_unavailable_count"], 1)
         self.assertEqual(assessment["blocking_unavailable_count"], 0)
 
+    def test_reviewed_firmware_preview_never_enters_session_or_score_value(self):
+        preview = app.normalize_esp32_sensor({
+            "profile": "3sensor_v3_4_1",
+            "sound_dba": 53.86,
+            "sound_window_ms": 1_000,
+            "mic_capture_ok": True,
+            "mic_signal_valid": True,
+        })
+        self.assertEqual(preview["sound_dba_firmware_est"], 53.86)
+        self.assertEqual(preview["sound_preview_evidence_count"], 3)
+        preview.update(hub1(
+            sound_dba_est=None,
+            sound_measurement_valid=False,
+            sound_invalid_reason="firmware_invalid",
+        ))
+        preview["sound_dba_firmware_est"] = 53.86
+        preview["sound_preview_evidence_count"] = 3
+        environment = app.build_environment_snapshot(preview, hub2(), NOW)
+        self.assertEqual(environment["sound_dba_firmware_est"], 53.86)
+        self.assertIsNone(environment["sound_dba_est"])
+        self.assertEqual(environment["live_count"], 5)
+
+        fake_snapshot = {
+            "sensor": {
+                "environment": environment,
+                "bcg": {"connected": False},
+            },
+            "sleep": {},
+            "analysis_frame": {},
+        }
+        with patch.object(app, "snapshot", return_value=fake_snapshot):
+            sample = app.take_session_sample()
+        self.assertIsNone(sample["dba"])
+
     def test_sound_outside_reference_meter_range_is_not_visible(self):
         for level in (-39.69, 29.9, 130.1):
             with self.subTest(level=level):

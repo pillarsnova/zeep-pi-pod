@@ -229,7 +229,7 @@ lux: `lux|light|illuminance` · sound raw: `sound_dbfs` · sound ที่ใช
 ทั้งที่พอร์ตยังเปิดอยู่
 จอจะแสดงเป็น stale/disconnected แทนการโชว์ค่าเก่าค้างเหมือนเป็นค่าจริง
 
-## การแสดงค่าเสียง SPH0645
+## การแสดงค่าเสียง SPH0645LM4H-B (Digital MEMS · I²S)
 
 Pi **ยกเลิก `abs(sound_dbfs)` ถาวร** เพราะ dBFS เป็นอัตราส่วนเทียบ full scale
 ของสัญญาณดิจิทัล ไม่ใช่ Sound Pressure Level และแปลงเป็น dBA ด้วยค่าสัมบูรณ์
@@ -242,11 +242,16 @@ ESP32 Sensor Hub 1 ต้องแก้ I2S word alignment/sign extension, ต�
 `sound_window_ms=10000` จึงจะเผยแพร่เป็น `sound_dba_est` ได้
 
 ถ้า ESP32 ส่งเฉพาะ `sound_dbfs`, ส่ง metadata ไม่ครบ, ระบุ invalid, ค่าไม่ finite
-หรืออยู่นอกช่วง 30–130 ระบบจะระบุ SPH0645 เป็น **INVALID** ไม่ clamp เป็น 30
-และไม่คงค่าเก่ามาแสดง
-เป็นค่าปัจจุบัน ไม่บันทึกลง Session และไม่ใช้ประเมินสิ่งรบกวนการนอน
+หรืออยู่นอกช่วง 30–130 ระบบจะระบุ SPH0645LM4H-B เป็น **INVALID** ไม่ clamp
+เป็น 30 และไม่คงค่าเก่ามาแสดงเป็นค่าปัจจุบัน
 
-SPH0645 เป็น Sensor เสริมของภาพรวมสภาพแวดล้อม: เมื่อเสียง `INVALID` ระบบยัง
+ระหว่างรอ CEM revalidation ระบบอนุญาตให้แสดง `sound_dba` จาก ESP32 เป็น
+**ค่าชั่วคราว** ได้เฉพาะเมื่อ `calibration.json` ระบุรุ่น Sensor ตรงกันและมี
+packet ที่ตรวจทานแล้วอย่างน้อย 3 รอบ ค่านี้แสดงให้เห็นการตอบสนองของ Sensor
+เท่านั้น ไม่บันทึกลง Session, ไม่ใช้คิดคะแนน/ภาพรวม/ความปลอดภัย และไม่สั่ง
+Auto Response โดยไม่ใช้ `sound_laeq_dba` หรือ `dBFS` เป็น fallback แทน
+
+SPH0645LM4H-B เป็น Sensor เสริมของภาพรวมสภาพแวดล้อม: เมื่อเสียง `INVALID` ระบบยัง
 ประเมินจากอุณหภูมิ ความชื้น แสง CO₂ PM2.5 และ VOC ต่อได้ พร้อมระบุ coverage
 เป็น `degraded_optional`; ระบบไม่สมมติว่าเสียงเงียบ และ Safety CO₂/อุณหภูมิ
 ยังทำงานตามเดิม

@@ -15,6 +15,11 @@ import os
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
+from sensor_contracts import (
+    SOUND_DBA_DISPLAY_MAX,
+    SOUND_DBA_DISPLAY_MIN,
+    SOUND_SENSOR_MODEL,
+)
 from sound_observability import sound_engineering_snapshot
 
 
@@ -34,6 +39,24 @@ PENDING_SOUND_CALIBRATION_STATES = frozenset({
     "sensor_replaced_contract_and_cem_revalidation_required",
 })
 APPROVED_SOUND_WINDOW_MS = 10_000.0
+SOUND_PREVIEW_MIN_OBSERVATIONS = 3
+
+
+def _first_finite_metric(
+    payload: Mapping[str, Any],
+    *keys: str,
+) -> Optional[float]:
+    for key in keys:
+        value = payload.get(key)
+        if value is None or isinstance(value, bool):
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(number):
+            return number
+    return None
 
 
 # Plain dictionaries are retained at this boundary because the Admin API and
@@ -221,6 +244,53 @@ def sound_runtime_policy(
     }
 
 
+def sound_preview_policy(
+    calibration: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Authorize a display-only ESP32 level after three reviewed packets.
+
+    This policy is deliberately independent from the CEM/LAeq health gate.
+    It only permits a finite firmware value to be shown as provisional when
+    the configured microphone identity and three-packet smoke test are
+    recorded in ``calibration.json``. It never approves Session recording,
+    scoring, environment grading or automatic control.
+    """
+    processing = calibration or {}
+    observation = processing.get("sensor_replacement_observation")
+    if not isinstance(observation, Mapping):
+        observation = {}
+    samples = observation.get("firmware_dba_samples")
+    samples = samples if isinstance(samples, list) else []
+    finite_samples = [
+        float(value)
+        for value in samples
+        if (
+            not isinstance(value, bool)
+            and isinstance(value, (int, float))
+            and math.isfinite(float(value))
+            and SOUND_DBA_DISPLAY_MIN <= float(value) <= SOUND_DBA_DISPLAY_MAX
+        )
+    ]
+    model_matches = (
+        observation.get("configured_sensor_model") == SOUND_SENSOR_MODEL
+    )
+    decision_matches = (
+        observation.get("firmware_dba_decision")
+        == "display_as_provisional_only_do_not_score"
+    )
+    profile = str(observation.get("profile") or "").strip()
+    return {
+        "sound_preview_enabled": bool(
+            model_matches
+            and decision_matches
+            and profile
+            and len(finite_samples) >= SOUND_PREVIEW_MIN_OBSERVATIONS
+        ),
+        "sound_preview_evidence_count": len(finite_samples),
+        "sound_preview_profile": profile or None,
+    }
+
+
 def sound_inspector_channel(
     hub1: Mapping[str, Any],
     environment: Mapping[str, Any],
@@ -229,10 +299,15 @@ def sound_inspector_channel(
 ) -> dict[str, Any]:
     """Describe validated LAeq and Admin-only signed PCM diagnostics."""
     measurement_valid = hub1.get("sound_measurement_valid") is True
-    firmware_laeq = hub1.get("sound_laeq_dba") if measurement_valid else None
+    firmware_laeq = _first_finite_metric(
+        hub1,
+        "sound_dba_firmware_est",
+        "sound_laeq_dba",
+        "sound_dba",
+    )
     engineering = sound_engineering_snapshot(hub1, device)
     return {
-        "metric": "sound_dba_est", "device": "SPH0645",
+        "metric": "sound_dba_est", "device": SOUND_SENSOR_MODEL,
         "device_key": "sph0645", "label": "ระดับเสียง LAeq(A)",
         "unit": "dBA est.", "raw_unit": "dBA est.",
         "raw": firmware_laeq, "bias": 0.0,

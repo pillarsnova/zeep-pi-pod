@@ -168,6 +168,7 @@ from sensor_calibration import (
     persist_calibration,
     resolve_biases,
     sound_inspector_channel,
+    sound_preview_policy,
     sound_runtime_policy,
 )
 from sound_observability import sanitize_consumer_sound
@@ -176,6 +177,7 @@ from sensor_runtime import (
     energy_average_db,
     hold_last_valid_sound as hold_sound_value,
     normalize_hub1_sensor,
+    suppress_sound_preview,
     summarize_sound_window,
     valid_sound_level,
 )
@@ -1448,7 +1450,8 @@ def _timeline_restart_frame() -> Optional[Dict[str, Any]]:
         "sgp40": values["voc_index"] is not None,
     }
     models = {
-        "sht3x_dis": "SHT3x-DIS", "opt3001": "OPT3001", "sph0645": "SPH0645",
+        "sht3x_dis": "SHT3x-DIS", "opt3001": "OPT3001",
+        "sph0645": ENVIRONMENT_DEVICE_SPECS["sph0645"]["model"],
         "mhz19c": "MH-Z19C", "pms7003": "PMS7003", "sgp40": "SGP40",
     }
     devices = {
@@ -3597,6 +3600,8 @@ def snapshot() -> Dict[str, Any]:
                 device["status"] = "warming"
         environment_view["live_count"] = 0
         environment_view["status"] = "warming"
+    if not frame_fresh:
+        suppress_sound_preview(environment_view)
     # Live, historical reports and the Admin policy screen share one versioned
     # evaluator.  The assessment is explanatory context only: it cannot create
     # or change Wake/N1/N2/N3/REM and it does not relax any safety alarm.
@@ -3761,6 +3766,7 @@ def normalize_esp32_sensor(obj: Dict[str, Any]) -> Dict[str, Any]:
         sound_display_min=SOUND_DBA_DISPLAY_MIN,
         sound_display_max=SOUND_DBA_DISPLAY_MAX,
         **sound_runtime_policy(processing),
+        **sound_preview_policy(processing),
     )
 
 

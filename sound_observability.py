@@ -1,4 +1,4 @@
-"""Admin-only observability for SPH0645 engineering telemetry.
+"""Admin-only observability for SPH0645LM4H-B engineering telemetry.
 
 The sound pressure value shown to users has a strict, separate contract in
 ``sensor_runtime``. This module only normalises diagnostic names emitted by
@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import math
 from typing import Any, Mapping, Sequence
+
+from sensor_contracts import SOUND_SENSOR_MODEL
 
 
 FieldSpec = tuple[str, str, Sequence[str], str, int]
@@ -77,7 +79,14 @@ SOUND_ENGINEERING_FIELDS: tuple[FieldSpec, ...] = (
     (
         "calibration",
         "Firmware LAeq(A)",
-        ("sound_laeq_dba", "sound_dba"),
+        ("sound_laeq_dba", "laeq_dba"),
+        "dBA est.",
+        2,
+    ),
+    (
+        "calibration",
+        "Firmware sound_dba",
+        ("sound_dba",),
         "dBA est.",
         2,
     ),
@@ -176,6 +185,7 @@ def sound_engineering_snapshot(
     return {
         "fields": fields,
         "flags": flags,
+        "sensor_model": SOUND_SENSOR_MODEL,
         "firmware_dba_calibrated": _first_boolean(
             (hub1, diagnostics),
             ("sound_dba_calibrated",),

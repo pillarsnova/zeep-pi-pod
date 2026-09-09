@@ -40,6 +40,26 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("item.healthy?'pass':'fail'", template)
         self.assertNotIn("item.value?'pass'", template)
 
+    def test_sound_preview_is_three_packet_display_only_fallback(self):
+        template = ui_composer.TEMPLATE.read_text(encoding="utf-8")
+        self.assertIn("environment.sound_dba_firmware_est", template)
+        self.assertIn("evidenceCount>=3", template)
+        self.assertIn("digits:2", template)
+        self.assertIn("SPH0645LM4H-B · ESP32 โดยตรง", template)
+        self.assertIn("แสดงผลเท่านั้น ไม่ใช้ประเมินภาพรวมหรือคะแนน", template)
+        self.assertIn("ชั่วคราว · ไม่ใช้คะแนน", template)
+        self.assertNotIn(
+            "detail:`${fmt(soundMetric.value,1)} dBA est. · "
+            "แสดงผลเท่านั้น`,level:'warn'",
+            template,
+        )
+        self.assertIn("typeof windowRaw==='boolean'?NaN", template)
+        self.assertIn(
+            "const t=e.temperature_c,h=e.humidity_rh,l=e.lux,"
+            "s=e.sound_dba_est",
+            template,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

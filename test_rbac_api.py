@@ -573,6 +573,9 @@ class RbacApiTests(unittest.TestCase):
             "environment": {
                 "temperature_c": 23.4, "humidity_rh": 51.2, "lux": 0.0,
                 "sound_dba_est": 37.5, "co2_ppm": 812.0,
+                "sound_dba_firmware_est": 53.86,
+                "sound_firmware_window_ms": 1000.0,
+                "sound_preview_evidence_count": 3,
                 "pm2_5_ug_m3": 4.0, "voc_index": 103.0,
                 "devices": devices, "live_count": 6, "total_count": 6,
                 "status": "live",
@@ -632,6 +635,9 @@ class RbacApiTests(unittest.TestCase):
             self.assertEqual(environment["co2_ppm"], 812.0)
             self.assertEqual(environment["devices"]["sht3x_dis"]["status"], "stale")
             self.assertEqual(environment["live_count"], 0)
+            self.assertIsNone(environment["sound_dba_firmware_est"])
+            self.assertIsNone(environment["sound_firmware_window_ms"])
+            self.assertEqual(environment["sound_preview_evidence_count"], 0)
             temp = next(
                 item for item in environment["assessment"]["evaluations"]
                 if item["key"] == "temperature"
@@ -761,7 +767,7 @@ class RbacApiTests(unittest.TestCase):
         models = {channel["device"] for channel in inspector.json()["channels"]}
         self.assertEqual(
             models,
-            {"SHT3x-DIS", "OPT3001", "SPH0645", "MH-Z19C",
+            {"SHT3x-DIS", "OPT3001", "SPH0645LM4H-B", "MH-Z19C",
              "PMS7003", "SGP40", "LSM-800-T"},
         )
         sound = next(
@@ -809,6 +815,7 @@ class RbacApiTests(unittest.TestCase):
                 pod_app.CALIBRATION.update(previous_calibration)
 
     def test_user_snapshot_hides_admin_sound_engineering_payload(self) -> None:
+        now = time.time()
         principal = pod_app.Principal(
             session_id="user-snapshot-test",
             subject="user:test@example.com",
@@ -819,32 +826,61 @@ class RbacApiTests(unittest.TestCase):
             role="user",
             auth_source="zeep",
             csrf_token="test-token",
-            expires_at=time.time() + 60,
+            expires_at=now + 60,
         )
         with pod_app.state_lock:
             original = copy.deepcopy(pod_app.state["sensor"]["esp32"])
             pod_app.state["sensor"]["esp32"].update({
                 "connected": True,
+                "last_update": now,
+                "sound_dba": 53.86,
+                "sound_dba_firmware_est": 53.86,
+                "sound_preview_evidence_count": 3,
                 "sound_dbfs": -50.86,
                 "sound_dbfs_a": -58.17,
                 "sound_rms": 0.002864,
                 "mic_zero_ratio": 0.0,
             })
+            hub1 = copy.deepcopy(pod_app.state["sensor"]["esp32"])
+            hub2 = copy.deepcopy(pod_app.state["sensor"]["sensorhub2"])
+            bcg = copy.deepcopy(pod_app.state["sensor"]["bcg"])
+        environment = pod_app.build_environment_snapshot(hub1, hub2, now)
+        with pod_app.analysis_frame_lock:
+            original_frame = pod_app._analysis_frame
+            pod_app._analysis_frame = {
+                "sequence": int(now // pod_app.SLEEP_SAMPLE_SECONDS),
+                "timestamp": pod_app.datetime.fromtimestamp(
+                    now, pod_app.timezone.utc,
+                ).isoformat(),
+                "epoch_s": now,
+                "refresh_s": pod_app.SLEEP_SAMPLE_SECONDS,
+                "source": "test_sensor_tick",
+                "session_id": None,
+                "environment": environment,
+                "bcg": bcg,
+                "sleep": {},
+            }
         try:
             filtered = pod_app.snapshot_for(principal)
             esp32 = filtered["sensor"]["esp32"]
             environment = filtered["sensor"]["environment"]
             self.assertNotIn("sound_dbfs", esp32)
             self.assertNotIn("sound_dbfs_a", esp32)
+            self.assertNotIn("sound_dba", esp32)
             self.assertNotIn("sound_rms", esp32)
             self.assertNotIn("mic_zero_ratio", esp32)
             self.assertNotIn("sound_dbfs_raw", environment)
+            self.assertEqual(environment["sound_dba_firmware_est"], 53.86)
+            self.assertEqual(environment["sound_preview_evidence_count"], 3)
+            self.assertIsNone(environment["sound_dba_est"])
             sound_device = environment["devices"]["sph0645"]
             self.assertNotIn("diagnostics", sound_device)
             self.assertNotIn("invalid_values", sound_device)
         finally:
             with pod_app.state_lock:
                 pod_app.state["sensor"]["esp32"] = original
+            with pod_app.analysis_frame_lock:
+                pod_app._analysis_frame = original_frame
 
     def test_aircon_on_sends_default_temperature_and_biases_user_temperature(self) -> None:
         """Exercise the Pi command sequence without publishing to real MQTT."""

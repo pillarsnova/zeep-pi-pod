@@ -5,7 +5,7 @@
 
 ## หลักการ
 
-SPH0645 ส่ง PCM แบบ I2S และรายงานระดับเชิงดิจิทัลเป็น dBFS; ค่า dBFS ไม่ใช่
+SPH0645LM4H-B ส่ง PCM แบบ I²S และรายงานระดับเชิงดิจิทัลเป็น dBFS; ค่า dBFS ไม่ใช่
 dBA และห้ามแปลงด้วย `abs()`, การบวก offset แบบไม่มี reference หรือการ clamp
 เพื่อทำให้ดูเหมือนค่าจริง การคำนวณ Acoustic Level เป็นหน้าที่ของ ESP32
 Sensor Hub 1 ส่วน Pi ทำหน้าที่ตรวจ Contract และ fail closed เท่านั้น
@@ -68,13 +68,23 @@ Hub 1 ใน allowlist ชัดเจน เช่น `temperature_c`, `humidit
 5. `sound_laeq_dba` ต้อง finite และอยู่ในช่วงที่เครื่องอ้างอิงรองรับ
    30–130 dBA est. (รวมค่าขอบ 30 และ 130)
 
-ไม่ผ่านข้อใดข้อหนึ่ง: `sound_measurement_valid=false`, SPH0645 มีสถานะ
-`invalid` และ Session ไม่บันทึกเสียง ระหว่างรอ Firmware ใหม่ Dashboard/Control/
-Monitor แสดง signed `sound_dbfs` เป็น `dBFS raw` เพื่อยืนยันว่า Sensor ยังรับ
-สัญญาณ โดยไม่ใช้ `abs()`, ไม่เรียกว่า dBA และไม่ใช้ตัดสินคุณภาพเสียง/Sleep State
-ส่วน Calibration card ยังคงรับเฉพาะ LAeq(A) ที่ผ่าน Contract
+ไม่ผ่านข้อใดข้อหนึ่ง: `sound_measurement_valid=false`, SPH0645LM4H-B มีสถานะ
+`invalid` และ Session ไม่บันทึกเสียง ระหว่างรอ Firmware ใหม่ signed
+`sound_dbfs` แสดงเฉพาะ Admin เป็น `dBFS raw` เพื่อยืนยันทางวิศวกรรม โดยไม่ใช้
+`abs()`, ไม่เรียกว่า dBA และไม่ใช้ตัดสินคุณภาพเสียง/Sleep State ส่วน
+Calibration card ยังคงรับเฉพาะ LAeq(A) ที่ผ่าน Contract
 ค่า valid ก่อนหน้าอาจแสดงเป็น
 `sound_last_valid_dba` ในข้อมูล Debug แต่ห้ามใช้เป็นค่าปัจจุบัน
+
+ข้อยกเว้นชั่วคราวหลังเปลี่ยน Sensor: Dashboard/Control/Monitor แสดง
+`sound_dba` ที่ ESP32 รายงานเป็น `sound_dba_firmware_est` ได้เมื่อทะเบียน
+calibration ระบุรุ่น `SPH0645LM4H-B`, firmware profile ตรงกัน และมี packet
+finite ในช่วง 30–130 dBA ที่ตรวจทานแล้วอย่างน้อย 3 รอบ หน้าจอต้องติดป้าย
+“ชั่วคราว · ไม่ใช้คะแนน” อย่างชัดเจน ค่านี้ห้ามไหลเข้า Session, Score,
+Sleep State, ภาพรวมสภาพแวดล้อม, Safety หรือ Auto Response และต้องถูกซ่อนทันที
+เมื่อ Sensor/Firmware ระบุ capture หรือ signal invalid การยกเว้นนี้ไม่ถือว่า
+ผ่าน A-weighted LAeq/CEM gate ข้างต้น และห้ามใช้ `sound_laeq_dba` หรือ dBFS
+เป็น fallback ให้ช่องชั่วคราวนี้
 
 ## Firmware processing pipeline
 

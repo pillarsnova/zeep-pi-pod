@@ -7,10 +7,16 @@
     "required_window_ms": 10000,
     "legacy_dbfs_policy": "invalid",
     "pi_abs_transform_allowed": false,
+    "provisional_display": {
+      "source_priority": ["sound_dba"],
+      "minimum_reviewed_packets": 3,
+      "use_for_session_score_or_control": false
+    },
     "status": "sensor_replaced_contract_and_cem_revalidation_required",
     "calibration_status": "pending_cem_recalibration_after_sensor_replacement",
     "sensor_replacement_observation": {
       "observed_at": "2026-09-10",
+      "configured_sensor_model": "SPH0645LM4H-B",
       "profile": "3sensor_v3_4_1",
       "raw_dbfs_range": [-51.1, -50.68],
       "a_weighted_dbfs_range": [-58.26, -58.02],
@@ -21,8 +27,13 @@
       "change_ratio_range": [0.97, 0.974],
       "clip_count": 0,
       "read_errors": 0,
+      "firmware_dba_samples": [53.75, 53.76, 53.86],
+      "firmware_dba_mean": 53.79,
+      "firmware_dba_range": [53.75, 53.86],
+      "firmware_dba_span": 0.11,
+      "firmware_dba_unit": "dBA est.",
       "raw_signal_decision": "healthy",
-      "firmware_dba_decision": "provisional_old_offset_do_not_publish"
+      "firmware_dba_decision": "display_as_provisional_only_do_not_score"
     },
     "legacy_configuration": {
       "retired_at": "2026-09-06",

@@ -12,6 +12,12 @@ import math
 import time
 from typing import Any, Callable, Mapping, Optional, Sequence
 
+from sensor_contracts import (
+    SOUND_DBA_DISPLAY_MAX,
+    SOUND_DBA_DISPLAY_MIN,
+    SOUND_SENSOR_MODEL,
+)
+
 
 HUB1_ALIASES: dict[str, tuple[str, ...]] = {
     "temperature": ("temperature_c", "temperature", "temp", "temp_c"),
@@ -84,6 +90,90 @@ def bounded_number(
     if value < low or value > high:
         return None, value
     return value, None
+
+
+def firmware_sound_preview(
+    payload: Mapping[str, Any],
+    *,
+    display_min: float,
+    display_max: float,
+) -> Optional[float]:
+    """Return a bounded display-only level reported by Sensor Hub 1.
+
+    This is intentionally not the validated health value.  It lets operators
+    and users see that the configured SPH0645LM4H-B signal path is responding
+    while the replacement microphone awaits the released 10-second LAeq(A)
+    firmware and CEM verification.  Explicit firmware/capture failures always
+    suppress the preview.
+    """
+    sensor_ready = sensor_flag(
+        payload,
+        ("sph0645", "sph0645lm4h_b", "sound"),
+    )
+    diagnostic = sensor_diagnostic(
+        payload,
+        ("sph0645", "sph0645lm4h_b", "sound"),
+    )
+    diagnostic_detail = diagnostic.get("diagnostics")
+    if not isinstance(diagnostic_detail, Mapping):
+        diagnostic_detail = {}
+    diagnostic_status = str(diagnostic.get("status") or "").strip().lower()
+    top_level_status = str(
+        payload.get("sound_status") or "",
+    ).strip().lower()
+    weighting = str(payload.get("sound_weighting") or "").strip().upper()
+    metric = str(payload.get("sound_metric") or "").strip().upper()
+    invalid_reason = str(
+        payload.get("sound_invalid_reason") or diagnostic.get("reason") or "",
+    ).strip()
+    diagnostic_failed = (
+        diagnostic_status in {
+            "fault", "invalid", "no_data", "offline", "disconnected",
+            "held", "stale", "warming", "recovering",
+        }
+        or diagnostic.get("measurement_valid") is False
+        or diagnostic.get("capture_ok") is False
+        or diagnostic.get("signal_valid") is False
+        or diagnostic_detail.get("measurement_valid") is False
+        or diagnostic_detail.get("capture_ok") is False
+        or diagnostic_detail.get("signal_valid") is False
+    )
+    level = first_numeric(payload, ("sound_dba",))
+    if (
+        level is None
+        or not math.isfinite(level)
+        or not display_min <= level <= display_max
+        or sensor_ready is False
+        or diagnostic_failed
+        or top_level_status in {
+            "fault", "invalid", "no_data", "offline", "disconnected",
+            "held", "stale", "warming", "recovering",
+        }
+        or bool(invalid_reason)
+        or (bool(weighting) and weighting != SOUND_REQUIRED_WEIGHTING)
+        or (bool(metric) and metric != SOUND_REQUIRED_METRIC)
+        or payload.get("measurement_valid") is False
+        or payload.get("sound_measurement_valid") is False
+        or payload.get("sound_valid") is False
+        or payload.get("capture_ok") is False
+        or payload.get("signal_valid") is False
+        or payload.get("mic_capture_ok") is False
+        or payload.get("mic_signal_valid") is False
+        or payload.get("mic_stuck_zero") is True
+        or payload.get("mic_stuck_constant") is True
+    ):
+        return None
+    return round(level, 2)
+
+
+def suppress_sound_preview(environment: dict[str, Any]) -> None:
+    """Remove display-only sound whenever its Sensor frame is not fresh."""
+    environment["sound_dba_firmware_est"] = None
+    environment["sound_firmware_window_ms"] = None
+    environment["sound_preview_evidence_count"] = 0
+    device = (environment.get("devices") or {}).get("sph0645")
+    if isinstance(device, dict):
+        device.update({"preview_available": False, "preview_only": False})
 
 
 def compose_environment_snapshot(
@@ -229,11 +319,48 @@ def compose_environment_snapshot(
         or not -160.0 <= sound_dbfs_raw <= 0.0
     ):
         sound_dbfs_raw = None
+    sound_dba_firmware_est = first_numeric(
+        hub1,
+        ("sound_dba_firmware_est",),
+    )
+    if (
+        not sources["hub1"]["live"]
+        or sound_dba_firmware_est is None
+        or not math.isfinite(sound_dba_firmware_est)
+        or not SOUND_DBA_DISPLAY_MIN
+        <= sound_dba_firmware_est
+        <= SOUND_DBA_DISPLAY_MAX
+    ):
+        sound_dba_firmware_est = None
+    sound_firmware_window_ms = first_numeric(hub1, ("sound_window_ms",))
+    sound_preview_evidence_count = first_numeric(
+        hub1,
+        ("sound_preview_evidence_count",),
+    )
+    if sound_dba_firmware_est is None:
+        sound_firmware_window_ms = None
+    elif sound_firmware_window_ms is not None:
+        sound_firmware_window_ms = round(sound_firmware_window_ms, 1)
+    sound_device = devices.get("sph0645") or {}
+    sound_device["preview_available"] = sound_dba_firmware_est is not None
+    sound_device["preview_only"] = (
+        sound_dba_firmware_est is not None
+        and values.get("sound_dba_est") is None
+    )
     for metric in calibration_metrics:
         values[metric] = apply_bias(metric, values.get(metric))
     return {
         **values,
         "sound_dbfs_raw": sound_dbfs_raw,
+        "sound_dba_firmware_est": sound_dba_firmware_est,
+        "sound_firmware_window_ms": sound_firmware_window_ms,
+        "sound_preview_evidence_count": (
+            int(sound_preview_evidence_count)
+            if sound_dba_firmware_est is not None
+            and sound_preview_evidence_count is not None
+            else 0
+        ),
+        "sound_sensor_model": SOUND_SENSOR_MODEL,
         "temperature": values.get("temperature_c"),
         "humidity": values.get("humidity_rh"),
         "co2": values.get("co2_ppm"),
@@ -261,6 +388,9 @@ def normalize_hub1_sensor(
     sound_display_max: float,
     sound_required_window_ms: float = 10_000.0,
     sound_calibration_verified: bool = False,
+    sound_preview_enabled: bool = False,
+    sound_preview_evidence_count: int = 0,
+    sound_preview_profile: Optional[str] = None,
 ) -> dict[str, Any]:
     """Preserve Hub 1 raw values and validate firmware-computed LAeq(A).
 
@@ -284,6 +414,25 @@ def normalize_hub1_sensor(
         if value is not None:
             result[target] = value
     result.pop("sound_dba_est", None)
+    profile_matches = (
+        not sound_preview_profile
+        or payload.get("profile") == sound_preview_profile
+    )
+    preview = None
+    if sound_preview_enabled and profile_matches:
+        preview = firmware_sound_preview(
+            payload,
+            display_min=sound_display_min,
+            display_max=sound_display_max,
+        )
+    if preview is None:
+        result.pop("sound_dba_firmware_est", None)
+    else:
+        result["sound_dba_firmware_est"] = preview
+    result["sound_preview_evidence_count"] = max(
+        0, int(sound_preview_evidence_count),
+    )
+    result["sound_sensor_model"] = SOUND_SENSOR_MODEL
     result["sound_measurement_valid"] = False
     result["sound_value_held"] = False
 

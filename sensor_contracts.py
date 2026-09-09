@@ -31,7 +31,7 @@ LEGACY_HUB1_MEASUREMENT_FIELDS = frozenset({
     "temperature_c", "temperature", "temp", "temp_c",
     "humidity_rh", "humidity", "hum", "rh",
     "lux", "light", "illuminance",
-    "sound_dbfs", "sound_laeq_dba", "sensor_status",
+    "sound_dbfs", "sound_dba", "sound_laeq_dba", "sensor_status",
 })
 
 # CEM DT-8852 reference range currently approved for ZEEP field validation.
@@ -40,6 +40,7 @@ LEGACY_HUB1_MEASUREMENT_FIELDS = frozenset({
 # Session recording from drifting to different definitions.
 SOUND_DBA_DISPLAY_MIN = 30.0
 SOUND_DBA_DISPLAY_MAX = 130.0
+SOUND_SENSOR_MODEL = "SPH0645LM4H-B"
 
 
 SENSOR_CATALOG: dict[str, dict[str, Any]] = {
@@ -75,7 +76,7 @@ SENSOR_CATALOG: dict[str, dict[str, Any]] = {
         "health_use": "environment_context_and_safety",
     },
     "sph0645": {
-        "model": "SPH0645LM4H-B",
+        "model": SOUND_SENSOR_MODEL,
         "hub": "sensorhub1",
         "transport": "usb_serial_jsonl",
         "manufacturer": {
@@ -87,7 +88,7 @@ SENSOR_CATALOG: dict[str, dict[str, Any]] = {
         },
         "datasheet": "https://www.knowles.com/docs/default-source/model-downloads/sph0645lm4h-b-datasheet-rev-c.pdf",
         "fields": [
-            "sound_dbfs", "sound_laeq_dba", "sound_valid",
+            "sound_dbfs", "sound_dba", "sound_laeq_dba", "sound_valid",
             "sound_weighting", "sound_metric", "sound_window_ms",
         ],
         "zeep_processing": {
@@ -203,7 +204,9 @@ ENVIRONMENT_DEVICE_SPECS: dict[str, dict[str, Any]] = {
         "fields": {"lux": (("lux", "illuminance", "light"), 0, 83865.6)},
     },
     "sph0645": {
-        "model": "SPH0645", "sources": ("hub1",), "status": ("sph0645",),
+        "model": SOUND_SENSOR_MODEL,
+        "sources": ("hub1",),
+        "status": ("sph0645",),
         "fields": {
             "sound_dba_est": (
                 ("sound_dba_est",),

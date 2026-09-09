@@ -12,13 +12,15 @@ from sensor_calibration import (
     load_calibration,
     persist_calibration,
     resolve_biases,
-    sound_runtime_policy,
     sound_inspector_channel,
+    sound_preview_policy,
+    sound_runtime_policy,
 )
 from sensor_contracts import (
     ENVIRONMENT_DEVICE_SPECS,
     SOUND_DBA_DISPLAY_MAX,
     SOUND_DBA_DISPLAY_MIN,
+    SOUND_SENSOR_MODEL,
     classify_hub_payload,
     decode_hub_payload,
 )
@@ -137,6 +139,37 @@ class CalibrationServiceTests(unittest.TestCase):
                 self.assertEqual(policy["sound_required_window_ms"], 10_000.0)
                 self.assertFalse(policy["sound_calibration_verified"])
 
+    def test_sound_preview_requires_three_reviewed_packets_and_exact_model(self) -> None:
+        observation = {
+            "configured_sensor_model": SOUND_SENSOR_MODEL,
+            "profile": "3sensor_v3_4_1",
+            "firmware_dba_samples": [53.75, 53.76, 53.86],
+            "firmware_dba_decision": (
+                "display_as_provisional_only_do_not_score"
+            ),
+        }
+        policy = sound_preview_policy({
+            "sensor_replacement_observation": observation,
+        })
+        self.assertTrue(policy["sound_preview_enabled"])
+        self.assertEqual(policy["sound_preview_evidence_count"], 3)
+        self.assertEqual(policy["sound_preview_profile"], "3sensor_v3_4_1")
+
+        for override in (
+            {"firmware_dba_samples": [53.75, 53.76]},
+            {"configured_sensor_model": "SPH0645"},
+            {"firmware_dba_decision": "unreviewed"},
+            {"profile": ""},
+        ):
+            with self.subTest(override=override):
+                rejected = sound_preview_policy({
+                    "sensor_replacement_observation": {
+                        **observation,
+                        **override,
+                    },
+                })
+                self.assertFalse(rejected["sound_preview_enabled"])
+
 
 class SensorRuntimeTests(unittest.TestCase):
     def test_ten_second_hub_cadence_has_explicit_stale_boundary(self) -> None:
@@ -165,6 +198,106 @@ class SensorRuntimeTests(unittest.TestCase):
         self.assertNotIn("sound_dba_est", normalized)
         self.assertFalse(normalized["sound_measurement_valid"])
         self.assertEqual(normalized["sound_invalid_reason"], "legacy_dbfs_only")
+
+    def test_reviewed_firmware_sound_dba_is_display_only(self) -> None:
+        packet = {
+            "event": "environment",
+            "profile": "3sensor_v3_4_1",
+            "sound_dba": 53.86,
+            "sound_window_ms": 1_000,
+            "mic_capture_ok": True,
+            "mic_signal_valid": True,
+        }
+        disposition, _ = classify_hub_payload(
+            packet,
+            expected_hub="sensorhub1",
+        )
+        self.assertEqual(disposition, "telemetry")
+        normalized = normalize_hub1_sensor(
+            packet,
+            sound_display_min=SOUND_DBA_DISPLAY_MIN,
+            sound_display_max=SOUND_DBA_DISPLAY_MAX,
+            sound_preview_enabled=True,
+            sound_preview_evidence_count=3,
+            sound_preview_profile="3sensor_v3_4_1",
+        )
+        self.assertEqual(normalized["sound_dba_firmware_est"], 53.86)
+        self.assertEqual(normalized["sound_preview_evidence_count"], 3)
+        self.assertNotIn("sound_dba_est", normalized)
+        self.assertFalse(normalized["sound_measurement_valid"])
+
+    def test_firmware_preview_rejects_wrong_profile_or_failed_signal(self) -> None:
+        base = {
+            "profile": "wrong-profile",
+            "sound_dba": 53.86,
+            "mic_capture_ok": True,
+            "mic_signal_valid": True,
+        }
+        overrides = (
+            {},
+            {"profile": "3sensor_v3_4_1", "mic_signal_valid": False},
+            {
+                "profile": "3sensor_v3_4_1",
+                "sensor_status": {"sph0645": False},
+            },
+            {
+                "profile": "3sensor_v3_4_1",
+                "sensor_diagnostics": {
+                    "sph0645": {"measurement_valid": False},
+                },
+            },
+            {
+                "profile": "3sensor_v3_4_1",
+                "sensor_diagnostics": {"sph0645": {"status": "held"}},
+            },
+            {
+                "profile": "3sensor_v3_4_1",
+                "sound_invalid_reason": "pcm_all_zero",
+            },
+            {
+                "profile": "3sensor_v3_4_1",
+                "sound_status": "invalid",
+            },
+            {
+                "profile": "3sensor_v3_4_1",
+                "measurement_valid": False,
+            },
+            {
+                "profile": "3sensor_v3_4_1",
+                "sound_weighting": "Z",
+            },
+            {
+                "profile": "3sensor_v3_4_1",
+                "sound_metric": "PEAK",
+            },
+        )
+        for override in overrides:
+            with self.subTest(override=override):
+                normalized = normalize_hub1_sensor(
+                    {**base, **override},
+                    sound_display_min=SOUND_DBA_DISPLAY_MIN,
+                    sound_display_max=SOUND_DBA_DISPLAY_MAX,
+                    sound_preview_enabled=True,
+                    sound_preview_evidence_count=3,
+                    sound_preview_profile="3sensor_v3_4_1",
+                )
+                self.assertNotIn("sound_dba_firmware_est", normalized)
+
+    def test_firmware_preview_never_substitutes_laeq_for_sound_dba(self) -> None:
+        normalized = normalize_hub1_sensor(
+            {
+                "profile": "3sensor_v3_4_1",
+                "sound_laeq_dba": 61.23,
+                "mic_capture_ok": True,
+                "mic_signal_valid": True,
+            },
+            sound_display_min=SOUND_DBA_DISPLAY_MIN,
+            sound_display_max=SOUND_DBA_DISPLAY_MAX,
+            sound_preview_enabled=True,
+            sound_preview_evidence_count=3,
+            sound_preview_profile="3sensor_v3_4_1",
+        )
+        self.assertNotIn("sound_dba_firmware_est", normalized)
 
     def test_valid_firmware_laeq_is_published_without_pi_transform(self) -> None:
         normalized = normalize_hub1_sensor(
@@ -468,7 +601,8 @@ class SensorRuntimeTests(unittest.TestCase):
         self.assertEqual(fields["sound_calibration_offset_db"], 111.93)
         self.assertEqual(channel["pipeline_state"], "raw_ok_output_blocked")
         self.assertEqual(channel["calibration_state"], "pending")
-        self.assertIsNone(channel["raw"])
+        self.assertEqual(channel["raw"], 53.76)
+        self.assertEqual(channel["device"], SOUND_SENSOR_MODEL)
 
     def test_two_hub_composition_has_one_canonical_value_per_metric(self) -> None:
         hub1 = {
@@ -554,6 +688,56 @@ class SensorRuntimeTests(unittest.TestCase):
         self.assertEqual(result["devices"]["sht3x_dis"]["status"], "live")
         self.assertEqual(result["devices"]["opt3001"]["status"], "live")
         self.assertEqual(result["devices"]["sph0645"]["status"], "invalid")
+        self.assertEqual(result["live_count"], 2)
+
+    def test_provisional_sound_is_visible_but_not_live_or_canonical(self) -> None:
+        hub1 = normalize_hub1_sensor(
+            {
+                "profile": "3sensor_v3_4_1",
+                "connected": True,
+                "last_update": NOW,
+                "temperature_c": 23.0,
+                "humidity_rh": 52.0,
+                "lux": 0.8,
+                "sound_dba": 53.86,
+                "sound_window_ms": 1_000,
+                "mic_capture_ok": True,
+                "mic_signal_valid": True,
+                "sensor_status": {
+                    "sht3x_dis": True,
+                    "opt3001": True,
+                    "sph0645": True,
+                },
+            },
+            sound_display_min=SOUND_DBA_DISPLAY_MIN,
+            sound_display_max=SOUND_DBA_DISPLAY_MAX,
+            sound_preview_enabled=True,
+            sound_preview_evidence_count=3,
+            sound_preview_profile="3sensor_v3_4_1",
+        )
+        biases = {metric: 0.0 for metric in SENSOR_CALIBRATION_SPECS}
+        result = compose_environment_snapshot(
+            hub1,
+            {},
+            now=NOW,
+            hub1_stale_s=25.0,
+            hub2_stale_s=20.0,
+            device_specs=ENVIRONMENT_DEVICE_SPECS,
+            calibration_metrics=tuple(SENSOR_CALIBRATION_SPECS),
+            apply_bias=lambda metric, value: apply_additive_bias(
+                metric,
+                value,
+                biases=biases,
+            ),
+            bias_value=lambda metric: biases[metric],
+            bias_sources={metric: "default" for metric in biases},
+        )
+
+        self.assertEqual(result["sound_dba_firmware_est"], 53.86)
+        self.assertEqual(result["sound_preview_evidence_count"], 3)
+        self.assertIsNone(result["sound_dba_est"])
+        self.assertEqual(result["devices"]["sph0645"]["status"], "invalid")
+        self.assertTrue(result["devices"]["sph0645"]["preview_only"])
         self.assertEqual(result["live_count"], 2)
 
     def test_fresh_cached_environment_value_is_explicitly_degraded(self) -> None:

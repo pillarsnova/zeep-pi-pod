@@ -12,6 +12,7 @@ python ui_composer.py check
 | กลุ่ม | ไฟล์ |
 |---|---|
 | Auth/RBAC/Occupancy/API | `test_access_and_occupancy.py`, `test_rbac_api.py` |
+| QR login | `test_qr_login.py`, `test_qr_login_api.py` |
 | Device command protocol | `test_control_protocol.py`, `test_rbac_api.py` |
 | Sensor/Calibration/Contract | `test_sensor_contract.py`, `test_sensor_services.py`, `test_recalibrate_sound_history.py` |
 | Sleep signal/evidence/policy | `test_sleep_signal_features.py`, `test_sleep_baseline_policy.py`, `test_personal_baseline_policy.py`, `test_sleep_system_consistency.py` |

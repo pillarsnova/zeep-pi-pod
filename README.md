@@ -16,6 +16,7 @@ pi5/
 ├── api_models.py           # Pydantic request contracts ของ HTTP API
 ├── control_protocol.py     # ตรวจคำสั่ง Aircon/Bed และแปลง temperature bias
 ├── access_control.py       # Browser session, User/Admin RBAC, CSRF, offline ticket
+├── qr_login.py             # QR login: registry ของ pollSecret + route ที่ Pi proxy ให้แท็บเล็ต
 ├── pod_occupancy.py        # Lease ป้องกัน login ซ้ำ และ coordinator สำหรับหลายตู้
 ├── api_history.py          # Raw history/export API สำหรับ Admin เท่านั้น
 ├── static/index.html       # Runtime bundle ไฟล์เดียว (สร้างจาก template + Control partials)

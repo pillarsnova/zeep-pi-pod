@@ -12,6 +12,7 @@ from sensor_calibration import (
     load_calibration,
     persist_calibration,
     resolve_biases,
+    sound_runtime_policy,
     sound_inspector_channel,
 )
 from sensor_contracts import (
@@ -106,6 +107,36 @@ class CalibrationServiceTests(unittest.TestCase):
         )
         self.assertEqual(verified["calibration_state"], "verified")
 
+        conflict = sound_inspector_channel(
+            healthy_hub,
+            {"sound_dba_est": 40.0},
+            device,
+            {
+                "calibration_status": "pending_cem_recalibration",
+                "cem_reference_verified": True,
+            },
+        )
+        self.assertEqual(conflict["calibration_state"], "pending")
+
+    def test_sound_runtime_policy_cannot_relax_ten_second_contract(self) -> None:
+        approved = {
+            "calibration_status": "cem_dt_8852_verified",
+            "required_window_ms": 10_000,
+        }
+        self.assertEqual(sound_runtime_policy(approved), {
+            "sound_required_window_ms": 10_000.0,
+            "sound_calibration_verified": True,
+        })
+
+        for invalid_window in (1_000, True, None, float("nan"), float("inf")):
+            with self.subTest(required_window_ms=invalid_window):
+                policy = sound_runtime_policy({
+                    **approved,
+                    "required_window_ms": invalid_window,
+                })
+                self.assertEqual(policy["sound_required_window_ms"], 10_000.0)
+                self.assertFalse(policy["sound_calibration_verified"])
+
 
 class SensorRuntimeTests(unittest.TestCase):
     def test_ten_second_hub_cadence_has_explicit_stale_boundary(self) -> None:
@@ -127,6 +158,8 @@ class SensorRuntimeTests(unittest.TestCase):
             {"sound_dbfs": -39.69},
             sound_display_min=SOUND_DBA_DISPLAY_MIN,
             sound_display_max=SOUND_DBA_DISPLAY_MAX,
+            sound_required_window_ms=10_000,
+            sound_calibration_verified=True,
         )
         self.assertEqual(normalized["sound_dbfs"], -39.69)
         self.assertNotIn("sound_dba_est", normalized)
@@ -146,6 +179,8 @@ class SensorRuntimeTests(unittest.TestCase):
             },
             sound_display_min=SOUND_DBA_DISPLAY_MIN,
             sound_display_max=SOUND_DBA_DISPLAY_MAX,
+            sound_required_window_ms=10_000,
+            sound_calibration_verified=True,
         )
         self.assertEqual(normalized["sound_dbfs"], -39.69)
         self.assertEqual(normalized["sound_dba_est"], 54.2)
@@ -173,6 +208,8 @@ class SensorRuntimeTests(unittest.TestCase):
                     {**base, "sound_laeq_dba": level},
                     sound_display_min=SOUND_DBA_DISPLAY_MIN,
                     sound_display_max=SOUND_DBA_DISPLAY_MAX,
+                    sound_required_window_ms=10_000,
+                    sound_calibration_verified=True,
                 )
                 self.assertEqual(normalized["sound_dba_est"], level)
                 self.assertTrue(normalized["sound_measurement_valid"])
@@ -200,10 +237,45 @@ class SensorRuntimeTests(unittest.TestCase):
                     {**base, **override},
                     sound_display_min=SOUND_DBA_DISPLAY_MIN,
                     sound_display_max=SOUND_DBA_DISPLAY_MAX,
+                    sound_required_window_ms=10_000,
+                    sound_calibration_verified=True,
                 )
                 self.assertNotIn("sound_dba_est", normalized)
                 self.assertFalse(normalized["sound_measurement_valid"])
                 self.assertEqual(normalized["sound_invalid_reason"], reason)
+
+    def test_sound_requires_approved_window_and_cem_calibration(self) -> None:
+        packet = {
+            "sound_laeq_dba": 42.0,
+            "sound_valid": True,
+            "sound_weighting": "A",
+            "sound_metric": "LAeq",
+            "sound_window_ms": 1_000,
+        }
+        short_window = normalize_hub1_sensor(
+            packet,
+            sound_display_min=SOUND_DBA_DISPLAY_MIN,
+            sound_display_max=SOUND_DBA_DISPLAY_MAX,
+            sound_required_window_ms=10_000,
+            sound_calibration_verified=True,
+        )
+        self.assertEqual(
+            short_window["sound_invalid_reason"],
+            "integration_window_must_be_10000_ms",
+        )
+
+        pending_cem = normalize_hub1_sensor(
+            {**packet, "sound_window_ms": 10_000},
+            sound_display_min=SOUND_DBA_DISPLAY_MIN,
+            sound_display_max=SOUND_DBA_DISPLAY_MAX,
+            sound_required_window_ms=10_000,
+            sound_calibration_verified=False,
+        )
+        self.assertEqual(
+            pending_cem["sound_invalid_reason"],
+            "cem_calibration_required",
+        )
+        self.assertNotIn("sound_dba_est", pending_cem)
 
     def test_invalid_sound_never_holds_previous_value_as_current(self) -> None:
         current = {"sound_dbfs": float("nan")}

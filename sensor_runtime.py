@@ -259,14 +259,25 @@ def normalize_hub1_sensor(
     *,
     sound_display_min: float,
     sound_display_max: float,
+    sound_required_window_ms: float = 10_000.0,
+    sound_calibration_verified: bool = False,
 ) -> dict[str, Any]:
     """Preserve Hub 1 raw values and validate firmware-computed LAeq(A).
 
     ``sound_dbfs`` is an electrical full-scale ratio, not sound pressure. It
     is intentionally never converted with ``abs()`` or published as dBA. The
     Pi accepts a health-facing sound value only when ESP32 explicitly marks a
-    finite, in-range, A-weighted LAeq window as valid.
+    finite, in-range, A-weighted LAeq window as valid, the integration window
+    matches the approved contract, and CEM reference calibration is current.
+    Raw engineering telemetry is retained even when any gate fails.
     """
+    try:
+        required_window_ms = float(sound_required_window_ms)
+    except (TypeError, ValueError):
+        required_window_ms = 10_000.0
+    if not math.isfinite(required_window_ms) or required_window_ms <= 0:
+        required_window_ms = 10_000.0
+
     result = dict(payload)
     for target, keys in HUB1_ALIASES.items():
         value = first_numeric(payload, keys)
@@ -307,8 +318,23 @@ def normalize_hub1_sensor(
         invalid_reason = "metric_must_be_LAeq"
     elif window_ms is None or not math.isfinite(window_ms) or window_ms <= 0:
         invalid_reason = "invalid_integration_window"
-    elif not math.isfinite(laeq) or not sound_display_min <= laeq <= sound_display_max:
+    elif not math.isclose(
+        window_ms,
+        required_window_ms,
+        rel_tol=0.0,
+        abs_tol=1.0,
+    ):
+        invalid_reason = (
+            f"integration_window_must_be_"
+            f"{int(required_window_ms)}_ms"
+        )
+    elif (
+        not math.isfinite(laeq)
+        or not sound_display_min <= laeq <= sound_display_max
+    ):
         invalid_reason = "laeq_out_of_range"
+    elif not sound_calibration_verified:
+        invalid_reason = "cem_calibration_required"
 
     if invalid_reason:
         result["sound_status"] = "invalid"

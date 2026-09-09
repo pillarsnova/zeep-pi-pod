@@ -84,6 +84,8 @@ class PiContractTests(unittest.TestCase):
             packet,
             sound_display_min=30.0,
             sound_display_max=130.0,
+            sound_required_window_ms=10_000,
+            sound_calibration_verified=True,
         )
         self.assertTrue(normalized["sound_measurement_valid"])
         self.assertEqual(normalized["sound_dba_est"], 55.0)
@@ -146,6 +148,8 @@ class PiContractTests(unittest.TestCase):
                     decoded,
                     sound_display_min=30.0,
                     sound_display_max=130.0,
+                    sound_required_window_ms=10_000,
+                    sound_calibration_verified=True,
                 )
                 self.assertEqual(
                     normalized["sound_measurement_valid"],

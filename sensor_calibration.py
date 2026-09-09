@@ -33,6 +33,7 @@ PENDING_SOUND_CALIBRATION_STATES = frozenset({
     "pending_cem_recalibration_after_sensor_replacement",
     "sensor_replaced_contract_and_cem_revalidation_required",
 })
+APPROVED_SOUND_WINDOW_MS = 10_000.0
 
 
 # Plain dictionaries are retained at this boundary because the Admin API and
@@ -179,7 +180,7 @@ def _sound_pipeline_state(
     return "raw_ok_output_blocked" if raw_is_healthy else "invalid"
 
 
-def _sound_calibration_state(
+def sound_calibration_state(
     calibration: Mapping[str, Any] | None,
 ) -> str:
     """Report CEM provenance without treating a firmware flag as approval."""
@@ -189,13 +190,35 @@ def _sound_calibration_state(
         or processing.get("status")
         or ""
     ).strip().lower()
-    if processing.get("cem_reference_verified") is True:
-        return "verified"
     if status in VERIFIED_SOUND_CALIBRATION_STATES:
         return "verified"
     if status in PENDING_SOUND_CALIBRATION_STATES:
         return "pending"
     return "unknown"
+
+
+def sound_runtime_policy(
+    calibration: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Translate approved provenance into fail-closed runtime gates."""
+    processing = calibration or {}
+    configured_window = processing.get("required_window_ms")
+    try:
+        required_window_ms = float(configured_window)
+    except (TypeError, ValueError):
+        required_window_ms = float("nan")
+    window_contract_valid = bool(
+        not isinstance(configured_window, bool)
+        and math.isfinite(required_window_ms)
+        and required_window_ms == APPROVED_SOUND_WINDOW_MS
+    )
+    return {
+        "sound_required_window_ms": APPROVED_SOUND_WINDOW_MS,
+        "sound_calibration_verified": (
+            sound_calibration_state(processing) == "verified"
+            and window_contract_valid
+        ),
+    }
 
 
 def sound_inspector_channel(
@@ -226,10 +249,10 @@ def sound_inspector_channel(
             device,
             engineering,
         ),
-        "calibration_state": _sound_calibration_state(calibration),
+        "calibration_state": sound_calibration_state(calibration),
         "engineering": engineering,
         "lock_reason": (
             "Firmware LAeq(A) ใช้ตรวจวินิจฉัยเท่านั้น · ค่าเสียงฝั่งสุขภาพ"
-            "และผู้ใช้ถูกปิดจนกว่าจะสอบเทียบผ่าน CEM DT-8852"
+            "และผู้ใช้ต้องผ่านสัญญา 10 วินาทีและสอบเทียบ CEM DT-8852"
         ),
     }

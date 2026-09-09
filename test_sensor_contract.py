@@ -55,7 +55,7 @@ def hub2(**overrides):
 
 
 class EnvironmentContractTests(unittest.TestCase):
-    def test_sph0645_rejects_legacy_dbfs_and_accepts_firmware_laeq(self):
+    def test_sph0645_blocks_legacy_and_uncalibrated_firmware_laeq(self):
         legacy = app.normalize_esp32_sensor({"sound_dbfs": -39.69})
         valid = app.normalize_esp32_sensor({
             "sound_dbfs": -39.69,
@@ -69,8 +69,12 @@ class EnvironmentContractTests(unittest.TestCase):
         self.assertEqual(legacy["sound_dbfs"], -39.69)
         self.assertNotIn("sound_dba_est", legacy)
         self.assertEqual(legacy["sound_invalid_reason"], "legacy_dbfs_only")
-        self.assertEqual(valid["sound_dba_est"], 54.0)
-        self.assertTrue(valid["sound_measurement_valid"])
+        self.assertNotIn("sound_dba_est", valid)
+        self.assertFalse(valid["sound_measurement_valid"])
+        self.assertEqual(
+            valid["sound_invalid_reason"],
+            "cem_calibration_required",
+        )
 
     def test_six_live_sensors_are_merged_from_two_hubs(self):
         result = app.build_environment_snapshot(hub1(), hub2(), NOW)

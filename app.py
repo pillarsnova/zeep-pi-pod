@@ -168,6 +168,7 @@ from sensor_calibration import (
     persist_calibration,
     resolve_biases,
     sound_inspector_channel,
+    sound_runtime_policy,
 )
 from sound_observability import sanitize_consumer_sound
 from sensor_runtime import (
@@ -3754,10 +3755,12 @@ def sound_window_summary(start_s: float, end_s: float) -> Dict[str, Any]:
 
 def normalize_esp32_sensor(obj: Dict[str, Any]) -> Dict[str, Any]:
     """Compatibility facade for deterministic Hub 1 normalization."""
+    processing = CALIBRATION.get("sound_processing") or {}
     return normalize_hub1_sensor(
         obj,
         sound_display_min=SOUND_DBA_DISPLAY_MIN,
         sound_display_max=SOUND_DBA_DISPLAY_MAX,
+        **sound_runtime_policy(processing),
     )
 
 

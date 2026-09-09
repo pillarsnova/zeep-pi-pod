@@ -97,6 +97,10 @@ from zeep_pod.identity.profile_fields import (
 )
 from zeep_pod.hardware.audio import AudioPlayer
 from zeep_pod.hardware.gpio import GPIOManager
+from zeep_pod.hardware.sensorhub1 import (
+    SensorHub1Reader,
+    SensorHub1StateStore,
+)
 from zeep_pod.sessions.cadence import (
     cadence_interval_at as _cadence_interval_at,
     normalise_cadence_segments as _normalise_cadence_segments,
@@ -308,7 +312,10 @@ PULSE_COOLDOWN_SECONDS = float(os.getenv("PULSE_COOLDOWN_SECONDS", "1.0"))
 # Sensor values older than these are reported as disconnected/stale to the UI.
 # BCG (LSM-800-T) emits a frame only every few seconds — quiet gaps are normal,
 # so its threshold must sit well above the inter-frame interval.
-ESP32_STALE_SECONDS = float(os.getenv("ESP32_STALE_SECONDS", "5"))
+# Sensor Hub 1 publishes one coherent three-sensor snapshot every 10 seconds.
+# Two missed windows plus scheduling/USB jitter mark it stale; each individual
+# sensor still reports its own validity inside every packet.
+ESP32_STALE_SECONDS = float(os.getenv("ESP32_STALE_SECONDS", "25"))
 # LSM-800-T ส่ง frame ห่างมากเมื่อเตียงว่าง — 60 วิคือ "เงียบผิดปกติจริง"
 # (ตอนมีคนบนเตียง frame มาทุก ~2-4 วิ; ค่าสั้นกว่านี้ทำให้ pill กระพริบทั้งที่ปกติ)
 BCG_STALE_SECONDS = float(os.getenv("BCG_STALE_SECONDS", "60"))
@@ -1162,9 +1169,34 @@ def _safety_faults() -> list:
                        "message": (f"CO₂ {float(co2):.0f} ppm · ภาพรวมระดับ"
                                    f"{atmosphere_level} ควรเพิ่มการระบายอากาศ")})
     temp = environment.get("temperature_c")
-    if (isinstance(temp, (int, float)) and not isinstance(temp, bool)
-            and math.isfinite(float(temp))):
+    temp_device = (environment.get("devices") or {}).get("sht3x_dis") or {}
+    temp_status = str(temp_device.get("status") or "offline")
+    temp_numeric = (
+        isinstance(temp, (int, float))
+        and not isinstance(temp, bool)
+        and math.isfinite(float(temp))
+    )
+    temp_usable = temp_numeric and temp_status in {"live", "degraded", "held"}
+    if not temp_usable:
+        faults.append({
+            "code": "temperature_unavailable",
+            "severity": "critical" if occupied else "blocking",
+            "message": (
+                "เซนเซอร์อุณหภูมิไม่มีข้อมูลที่ใช้ได้ "
+                f"({temp_status})"
+            ),
+        })
+    else:
         temperature = float(temp)
+        if temp_status != "live":
+            faults.append({
+                "code": "temperature_sensor_degraded",
+                "severity": "warning",
+                "message": (
+                    "เซนเซอร์อุณหภูมิใช้ค่าล่าสุดที่ยังสด "
+                    f"({temp_status})"
+                ),
+            })
         if (temperature < SAFETY_TEMP_CRITICAL_MIN_C
                 or temperature > SAFETY_TEMP_CRITICAL_MAX_C):
             faults.append({
@@ -3734,71 +3766,24 @@ def hold_last_valid_sound(current: Dict[str, Any], previous: Dict[str, Any]) -> 
 
 
 def esp32_reader():
-    """ESP32 sends one JSON object per line over USB serial."""
-    last_error = None
-    last_sound_status = None
-    while True:
-        try:
-            with serial.Serial(ESP32_PORT, ESP32_BAUD, timeout=1) as ser:
-                log_event("esp32", "connected", port=ESP32_PORT, baud=ESP32_BAUD)
-                last_error = None
-                while True:
-                    raw = ser.readline()
-                    if not raw:
-                        continue
-                    try:
-                        obj = json.loads(raw.decode("utf-8", errors="ignore").strip())
-                        if isinstance(obj, dict):
-                            obj = decode_hub_payload(obj, expected_hub="sensorhub1")
-                            obj = normalize_esp32_sensor(obj)
-                            obj["connected"] = True
-                            obj["last_update"] = time.time()
-                            with state_lock:
-                                obj = hold_last_valid_sound(
-                                    obj, state["sensor"].get("esp32", {}) or {})
-                                state["sensor"]["esp32"] = obj
-                            sound_status = (
-                                bool(obj.get("sound_measurement_valid")),
-                                obj.get("sound_invalid_reason"),
-                            )
-                            if sound_status != last_sound_status:
-                                log_event(
-                                    "sph0645",
-                                    "measurement_valid"
-                                    if sound_status[0] else "measurement_invalid",
-                                    reason=sound_status[1],
-                                    firmware_version=obj.get(
-                                        "sound_firmware_version"),
-                                    weighting=obj.get("sound_weighting"),
-                                    metric=obj.get("sound_metric"),
-                                    window_ms=obj.get("sound_window_ms"),
-                                )
-                                last_sound_status = sound_status
-                            sound_value = obj.get("sound_dba_est")
-                            if (
-                                obj.get("sound_measurement_valid") is True
-                                and isinstance(sound_value, (int, float))
-                                and not isinstance(sound_value, bool)
-                                and math.isfinite(float(sound_value))
-                            ):
-                                with sound_history_lock:
-                                    sound_level_history.append({
-                                        "t": obj["last_update"],
-                                        "dba": float(sound_value),
-                                        "dbfs": obj.get("sound_dbfs"),
-                                    })
-                    except json.JSONDecodeError:
-                        pass
-        except Exception as exc:
-            if str(exc) != last_error:  # log แค่ตอนอาการเปลี่ยน ไม่ spam ทุก 2 วิ
-                log_event("esp32", "disconnected", error=str(exc))
-                last_error = str(exc)
-            with state_lock:
-                old = dict(state["sensor"].get("esp32", {}))
-                old["connected"] = False
-                old["error"] = str(exc)
-                state["sensor"]["esp32"] = old
-            time.sleep(2)
+    """Run the modular Sensor Hub 1 USB adapter."""
+    store = SensorHub1StateStore(
+        sensor_state=state["sensor"], state_lock=state_lock,
+        sound_history=sound_level_history,
+        sound_history_lock=sound_history_lock,
+    )
+    SensorHub1Reader(
+        port=ESP32_PORT,
+        baud=ESP32_BAUD,
+        serial_factory=serial.Serial,
+        normalize=normalize_esp32_sensor,
+        hold_sound=hold_last_valid_sound,
+        previous_payload=store.previous_payload,
+        publish_payload=store.publish_payload,
+        publish_disconnect=store.publish_disconnect,
+        append_sound=store.append_sound,
+        log_event=log_event,
+    ).run_forever()
 
 
 def sensorhub2_mqtt_reader():

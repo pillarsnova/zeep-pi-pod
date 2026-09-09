@@ -1264,11 +1264,16 @@ class RbacApiTests(unittest.TestCase):
             pod_app.state["system"]["gpio_available"] = True
             pod_app.state["session"].update({"active": False, "recording": False})
 
-        def faults_for(co2: float, temperature: float) -> list[dict[str, object]]:
+        def faults_for(
+            co2: float, temperature: float | None,
+        ) -> list[dict[str, object]]:
             environment = {
                 "co2_ppm": co2,
                 "temperature_c": temperature,
-                "devices": {"mhz19c": {"status": "live"}},
+                "devices": {
+                    "mhz19c": {"status": "live"},
+                    "sht3x_dis": {"status": "live"},
+                },
             }
             with (
                 patch.object(pod_app, "SAFETY_THRESHOLD_BASIS_VERSION",
@@ -1293,6 +1298,10 @@ class RbacApiTests(unittest.TestCase):
             critical_codes = {fault["code"] for fault in faults_for(1300, 32.1)}
             self.assertIn("co2_critical", critical_codes)
             self.assertIn("temperature_critical", critical_codes)
+
+            unavailable = faults_for(900, None)
+            unavailable_codes = {fault["code"] for fault in unavailable}
+            self.assertIn("temperature_unavailable", unavailable_codes)
         finally:
             with pod_app.state_lock:
                 pod_app.state["sensor"] = original_sensor

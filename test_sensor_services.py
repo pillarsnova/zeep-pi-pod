@@ -24,6 +24,7 @@ from sensor_runtime import (
     energy_average_db,
     hold_last_valid_sound,
     normalize_hub1_sensor,
+    source_freshness,
 )
 from smart_response import SmartResponsePolicy, evaluate_smart_response
 
@@ -72,6 +73,20 @@ class CalibrationServiceTests(unittest.TestCase):
 
 
 class SensorRuntimeTests(unittest.TestCase):
+    def test_ten_second_hub_cadence_has_explicit_stale_boundary(self) -> None:
+        at_boundary = source_freshness(
+            {"connected": True, "last_update": NOW - 25.0},
+            25.0,
+            NOW,
+        )
+        missed_boundary = source_freshness(
+            {"connected": True, "last_update": NOW - 25.001},
+            25.0,
+            NOW,
+        )
+        self.assertTrue(at_boundary["live"])
+        self.assertFalse(missed_boundary["live"])
+
     def test_legacy_dbfs_is_kept_raw_and_marked_invalid(self) -> None:
         normalized = normalize_hub1_sensor(
             {"sound_dbfs": -39.69},
@@ -92,6 +107,7 @@ class SensorRuntimeTests(unittest.TestCase):
                 "sound_weighting": "A",
                 "sound_metric": "LAeq",
                 "sound_window_ms": 10_000,
+                "sound_invalid_reason": "old_window_error",
             },
             sound_display_min=SOUND_DBA_DISPLAY_MIN,
             sound_display_max=SOUND_DBA_DISPLAY_MAX,
@@ -99,6 +115,7 @@ class SensorRuntimeTests(unittest.TestCase):
         self.assertEqual(normalized["sound_dbfs"], -39.69)
         self.assertEqual(normalized["sound_dba_est"], 54.2)
         self.assertTrue(normalized["sound_measurement_valid"])
+        self.assertNotIn("sound_invalid_reason", normalized)
         self.assertEqual(
             energy_average_db(
                 [40.0, 50.0],
@@ -230,6 +247,88 @@ class SensorRuntimeTests(unittest.TestCase):
         self.assertEqual(result["live_count"], 6)
         self.assertEqual(result["temperature_c"], 24.0)
         self.assertEqual(result["co2_ppm"], 700.0)
+
+    def test_invalid_sph_does_not_hide_live_sht3x_or_opt3001(self) -> None:
+        hub1 = normalize_hub1_sensor(
+            {
+                "connected": True,
+                "last_update": NOW,
+                "temperature_c": 23.0,
+                "humidity_rh": 52.0,
+                "lux": 0.8,
+                "sound_valid": False,
+                "sound_weighting": "A",
+                "sound_metric": "LAeq",
+                "sound_window_ms": 10_000,
+                "sound_invalid_reason": "pcm_all_zero",
+                "sensor_status": {
+                    "sht3x_dis": True,
+                    "opt3001": True,
+                    "sph0645": False,
+                },
+            },
+            sound_display_min=SOUND_DBA_DISPLAY_MIN,
+            sound_display_max=SOUND_DBA_DISPLAY_MAX,
+        )
+        biases = {metric: 0.0 for metric in SENSOR_CALIBRATION_SPECS}
+        result = compose_environment_snapshot(
+            hub1,
+            {},
+            now=NOW,
+            hub1_stale_s=25.0,
+            hub2_stale_s=20.0,
+            device_specs=ENVIRONMENT_DEVICE_SPECS,
+            calibration_metrics=tuple(SENSOR_CALIBRATION_SPECS),
+            apply_bias=lambda metric, value: apply_additive_bias(
+                metric, value, biases=biases),
+            bias_value=lambda metric: biases[metric],
+            bias_sources={metric: "default" for metric in biases},
+        )
+
+        self.assertEqual(result["temperature_c"], 23.0)
+        self.assertEqual(result["humidity_rh"], 52.0)
+        self.assertEqual(result["lux"], 0.8)
+        self.assertIsNone(result["sound_dba_est"])
+        self.assertEqual(result["devices"]["sht3x_dis"]["status"], "live")
+        self.assertEqual(result["devices"]["opt3001"]["status"], "live")
+        self.assertEqual(result["devices"]["sph0645"]["status"], "invalid")
+        self.assertEqual(result["live_count"], 2)
+
+    def test_fresh_cached_environment_value_is_explicitly_degraded(self) -> None:
+        hub1 = {
+            "connected": True,
+            "last_update": NOW,
+            "temperature_c": 23.0,
+            "humidity_rh": 52.0,
+            "sensor_status": {"sht3x_dis": True},
+            "sensor_diagnostics": {
+                "sht3x_dis": {
+                    "status": "degraded",
+                    "reason": "sht_crc_failed",
+                    "age_ms": 2_100,
+                },
+            },
+        }
+        biases = {metric: 0.0 for metric in SENSOR_CALIBRATION_SPECS}
+        result = compose_environment_snapshot(
+            hub1,
+            {},
+            now=NOW,
+            hub1_stale_s=25.0,
+            hub2_stale_s=20.0,
+            device_specs=ENVIRONMENT_DEVICE_SPECS,
+            calibration_metrics=tuple(SENSOR_CALIBRATION_SPECS),
+            apply_bias=lambda metric, value: apply_additive_bias(
+                metric, value, biases=biases),
+            bias_value=lambda metric: biases[metric],
+            bias_sources={metric: "default" for metric in biases},
+        )
+
+        self.assertEqual(result["temperature_c"], 23.0)
+        self.assertEqual(result["devices"]["sht3x_dis"]["status"], "degraded")
+        self.assertEqual(
+            result["devices"]["sht3x_dis"]["reason"], "sht_crc_failed")
+        self.assertEqual(result["status"], "degraded")
 
     def test_legacy_dbfs_is_exposed_only_as_raw_display_diagnostic(self) -> None:
         hub1 = {

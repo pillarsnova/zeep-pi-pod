@@ -14,15 +14,50 @@ Sensor Hub 1 ส่วน Pi ทำหน้าที่ตรวจ Contract �
 
 ```json
 {
-  "sound_dbfs": -65.2,
-  "sound_laeq_dba": 39.8,
-  "sound_valid": true,
-  "sound_weighting": "A",
-  "sound_metric": "LAeq",
-  "sound_window_ms": 10000,
-  "sound_firmware_version": "sph0645-laeq-a-v1.0"
+  "event": "environment",
+  "source": "sensorhub1_firmware",
+  "hub_id": "sensorhub1",
+  "firmware_version": "sensorhub1-integrated-v2.0.0-rc1",
+  "sequence": 42,
+  "publish_period_ms": 10000,
+  "hub_status": "live",
+  "sensors": {
+    "sht3x_dis": {
+      "status": "live",
+      "reason": "ok",
+      "values": {"temperature_c": 24.3, "humidity_rh": 51.2}
+    },
+    "opt3001": {
+      "status": "live",
+      "reason": "ok",
+      "values": {"lux": 0.3}
+    },
+    "sph0645": {
+      "status": "live",
+      "reason": "ok",
+      "values": {
+        "sound_dbfs": -65.2,
+        "sound_laeq_dba": 39.8,
+        "sound_valid": true,
+        "sound_weighting": "A",
+        "sound_metric": "LAeq",
+        "sound_window_ms": 10000
+      }
+    }
+  }
 }
 ```
+
+Pi จะรับเฉพาะ `event=environment` ที่ระบุ `hub_id=sensorhub1`; ข้อความ `boot`,
+`INFO` และ `calibration_response` จะถูกบันทึกเป็น Control-plane event โดยไม่ทับ
+ค่าปัจจุบันของ SHT3x-DIS, OPT3001 หรือ SPH0645 ส่วน packet ผิดรูปแบบจะถูกปฏิเสธ
+เฉพาะ packet นั้นโดยไม่ตัดการเชื่อมต่อ USB Serial ที่ยังทำงานปกติ
+สถานะของทั้งสาม Sensor แยกจากกัน ดังนั้น SPH0645 ผิดพลาดต้องไม่ทำให้ค่า
+SHT3x-DIS หรือ OPT3001 หาย และในทางกลับกัน
+
+ช่วง Rollback เท่านั้น Pi ยังรับ flat packet ที่ไม่มี `event` เมื่อพบ field ของ
+Hub 1 ใน allowlist ชัดเจน เช่น `temperature_c`, `humidity_rh`, `lux` หรือ
+`sound_dbfs`; packet ที่มี event อื่นยังถูกกันออกตามเดิม
 
 เงื่อนไขต้องผ่านพร้อมกัน:
 

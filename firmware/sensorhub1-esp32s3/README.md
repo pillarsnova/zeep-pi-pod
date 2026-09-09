@@ -16,6 +16,19 @@ Target board ที่ตรวจจากอุปกรณ์จริงค�
 และ MAC `44:1b:f6:8c:0c:54` สคริปต์ Production จะปฏิเสธอุปกรณ์ที่ identity ไม่ตรง
 เว้นแต่ผู้ดูแลระบุค่าที่คาดหมายใหม่โดยชัดแจ้ง
 
+## Integrated runtime
+
+- SHT3x-DIS และ OPT3001 poll แยกกันทุก 2 วินาที; cache สดไม่เกิน 6 วินาที
+- SPH0645 ประมวลผลหน้าต่างเสียง 10 วินาทีใน FreeRTOS task แยก
+- Telemetry รวมถูกส่งตาม clock คงที่ทุก 10 วินาที แม้ไมโครโฟนไม่ส่งข้อมูล
+- ทุก Sensor มี `status`, `reason`, `age_ms`, failure และ recovery counter แยกกัน
+- Sensor หนึ่งตัวเสียแล้วอีกสองตัวต้องยังทำงาน; I²C bus reset เฉพาะเมื่ออุปกรณ์
+  I²C ทั้งคู่ใช้งานไม่ได้
+- Pi ถือ Hub stale หลัง 25 วินาที แต่ตัดสินค่าจริงตามสถานะราย Sensor
+
+รายละเอียดลำดับการทำงานและ acceptance matrix อยู่ที่
+[`docs/sensorhub1-three-sensor-runtime.md`](../../docs/sensorhub1-three-sensor-runtime.md)
+
 ## Sound pipeline
 
 1. รับ SPH0645 ที่ 48 kHz/32-bit I²S slot และเลือก LEFT channel

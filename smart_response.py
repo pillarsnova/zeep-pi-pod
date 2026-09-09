@@ -158,11 +158,11 @@ def evaluate_smart_response(
     elif sound > policy.sound_sleep_target_dba:
         recommend(
             "sound", "attention", "เสียงสูงกว่าเป้าหมายกลางคืน",
-            f"ประเมินได้ {sound:.1f} dBA est.; เป้าหมายไม่เกิน {policy.sound_sleep_target_dba:.0f} — ตรวจเทียบ LAeq ที่ตำแหน่งหมอนและลดเสียงอย่างนุ่มนวล",
+            f"วัดได้ {sound:.1f} dBA; เป้าหมายไม่เกิน {policy.sound_sleep_target_dba:.0f} — ตรวจเสียงที่ตำแหน่งหมอนและลดเสียงอย่างนุ่มนวล",
             "เสนอให้ลดระดับเสียง (ยังไม่สั่งจริง)",
         )
     else:
-        recommend("sound", "stable", "ระดับเสียงอยู่ในเป้าหมาย", f"{sound:.1f} dBA est. · เป้าหมาย ≤{policy.sound_sleep_target_dba:.0f} · คงระดับปัจจุบัน")
+        recommend("sound", "stable", "ระดับเสียงอยู่ในเป้าหมาย", f"{sound:.1f} dBA · เป้าหมาย ≤{policy.sound_sleep_target_dba:.0f} · คงระดับปัจจุบัน")
 
     lux = numeric("lux")
     lux_limit = 1.0 if phase == "sleep_session" else 10.0

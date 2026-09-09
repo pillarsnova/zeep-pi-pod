@@ -55,9 +55,9 @@ def hub2(**overrides):
 
 
 class EnvironmentContractTests(unittest.TestCase):
-    def test_sph0645_blocks_legacy_and_uncalibrated_firmware_laeq(self):
-        legacy = app.normalize_esp32_sensor({"sound_dbfs": -39.69})
-        valid = app.normalize_esp32_sensor({
+    def test_sph0645_uses_direct_esp32_sound_dba_only(self):
+        dbfs_only = app.normalize_esp32_sensor({"sound_dbfs": -39.69})
+        laeq_only = app.normalize_esp32_sensor({
             "sound_dbfs": -39.69,
             "sound_laeq_dba": 54.0,
             "sound_valid": True,
@@ -65,16 +65,17 @@ class EnvironmentContractTests(unittest.TestCase):
             "sound_metric": "LAeq",
             "sound_window_ms": 10_000,
         })
+        direct = app.normalize_esp32_sensor({"sound_dba": 53.86})
 
-        self.assertEqual(legacy["sound_dbfs"], -39.69)
-        self.assertNotIn("sound_dba_est", legacy)
-        self.assertEqual(legacy["sound_invalid_reason"], "legacy_dbfs_only")
-        self.assertNotIn("sound_dba_est", valid)
-        self.assertFalse(valid["sound_measurement_valid"])
-        self.assertEqual(
-            valid["sound_invalid_reason"],
-            "cem_calibration_required",
-        )
+        self.assertEqual(dbfs_only["sound_dbfs"], -39.69)
+        self.assertNotIn("sound_dba_est", dbfs_only)
+        self.assertFalse(dbfs_only["sound_measurement_valid"])
+        self.assertNotIn("sound_dba_est", laeq_only)
+        self.assertFalse(laeq_only["sound_measurement_valid"])
+        self.assertEqual(direct["sound_dba_est"], 53.86)
+        self.assertTrue(direct["sound_measurement_valid"])
+        self.assertNotIn("sound_dba_firmware_est", direct)
+        self.assertNotIn("sound_preview_evidence_count", direct)
 
     def test_six_live_sensors_are_merged_from_two_hubs(self):
         result = app.build_environment_snapshot(hub1(), hub2(), NOW)
@@ -146,27 +147,15 @@ class EnvironmentContractTests(unittest.TestCase):
         self.assertEqual(assessment["optional_unavailable_count"], 1)
         self.assertEqual(assessment["blocking_unavailable_count"], 0)
 
-    def test_reviewed_firmware_preview_never_enters_session_or_score_value(self):
-        preview = app.normalize_esp32_sensor({
-            "profile": "3sensor_v3_4_1",
+    def test_direct_esp32_sound_enters_environment_and_session(self):
+        normalized = app.normalize_esp32_sensor({
             "sound_dba": 53.86,
-            "sound_window_ms": 1_000,
-            "mic_capture_ok": True,
-            "mic_signal_valid": True,
         })
-        self.assertEqual(preview["sound_dba_firmware_est"], 53.86)
-        self.assertEqual(preview["sound_preview_evidence_count"], 3)
-        preview.update(hub1(
-            sound_dba_est=None,
-            sound_measurement_valid=False,
-            sound_invalid_reason="firmware_invalid",
-        ))
-        preview["sound_dba_firmware_est"] = 53.86
-        preview["sound_preview_evidence_count"] = 3
-        environment = app.build_environment_snapshot(preview, hub2(), NOW)
-        self.assertEqual(environment["sound_dba_firmware_est"], 53.86)
-        self.assertIsNone(environment["sound_dba_est"])
-        self.assertEqual(environment["live_count"], 5)
+        normalized.update(hub1(sound_dba_est=53.86))
+        environment = app.build_environment_snapshot(normalized, hub2(), NOW)
+        self.assertEqual(environment["sound_dba_est"], 53.86)
+        self.assertNotIn("sound_dba_firmware_est", environment)
+        self.assertEqual(environment["live_count"], 6)
 
         fake_snapshot = {
             "sensor": {
@@ -178,9 +167,98 @@ class EnvironmentContractTests(unittest.TestCase):
         }
         with patch.object(app, "snapshot", return_value=fake_snapshot):
             sample = app.take_session_sample()
-        self.assertIsNone(sample["dba"])
+        self.assertEqual(sample["dba"], 53.86)
 
-    def test_sound_outside_reference_meter_range_is_not_visible(self):
+    def test_direct_sound_rejects_nonfinite_and_out_of_range_values(self):
+        for level in (
+            float("nan"), float("inf"), float("-inf"),
+            -39.69, 29.9, 130.1, "54.0",
+        ):
+            with self.subTest(level=level):
+                normalized = app.normalize_esp32_sensor({
+                    "sound_dba": level,
+                })
+                self.assertNotIn("sound_dba_est", normalized)
+                self.assertFalse(normalized["sound_measurement_valid"])
+
+    def test_nested_fields_are_bound_to_their_physical_sensor(self):
+        decoded = contracts.decode_hub_payload({
+            "schema": contracts.TELEMETRY_SCHEMA,
+            "version": contracts.TELEMETRY_SCHEMA_VERSION,
+            "event": "environment",
+            "hub_id": "sensorhub1",
+            "sensors": {
+                "sht3x_dis": {
+                    "status": "live",
+                    "values": {
+                        "temperature_c": 24.0,
+                        "humidity_rh": 50.0,
+                        "sound_dba": 99.0,
+                    },
+                },
+                "sph0645": {
+                    "status": "live",
+                    "values": {"sound_dba": 42.0},
+                },
+                "opt3001": {
+                    "status": "live",
+                    "values": {"lux": 1.0, "sound_dba": None},
+                },
+            },
+        }, expected_hub="sensorhub1")
+        self.assertEqual(decoded["sound_dba"], 42.0)
+
+        wrong_owner_only = contracts.decode_hub_payload({
+            "schema": contracts.TELEMETRY_SCHEMA,
+            "version": contracts.TELEMETRY_SCHEMA_VERSION,
+            "event": "environment",
+            "hub_id": "sensorhub1",
+            "sensors": {
+                "sht3x_dis": {
+                    "status": "live",
+                    "values": {
+                        "temperature_c": 24.0,
+                        "humidity_rh": 50.0,
+                        "sound_dba": 54.0,
+                    },
+                },
+            },
+        }, expected_hub="sensorhub1")
+        self.assertNotIn("sound_dba", wrong_owner_only)
+
+    def test_valid_direct_value_wins_legacy_firmware_status_consistently(self):
+        decoded = contracts.decode_hub_payload({
+            "schema": contracts.TELEMETRY_SCHEMA,
+            "version": contracts.TELEMETRY_SCHEMA_VERSION,
+            "event": "environment",
+            "hub_id": "sensorhub1",
+            "sensors": {
+                "sht3x_dis": {
+                    "status": "live",
+                    "values": {
+                        "temperature_c": 24.0,
+                        "humidity_rh": 50.0,
+                    },
+                },
+                "sph0645": {
+                    "status": "invalid",
+                    "reason": "pcm_all_zero",
+                    "values": {"sound_dba": 54.0},
+                },
+            },
+        }, expected_hub="sensorhub1")
+        normalized = app.normalize_esp32_sensor(decoded)
+        self.assertEqual(normalized["sound_dba_est"], 54.0)
+        self.assertTrue(normalized["sensor_status"]["sph0645"])
+        self.assertEqual(
+            normalized["sound_firmware_reported_reason"],
+            "pcm_all_zero",
+        )
+        self.assertIsNone(
+            normalized["sensor_diagnostics"]["sph0645"]["reason"],
+        )
+
+    def test_sound_outside_display_range_is_not_visible(self):
         for level in (-39.69, 29.9, 130.1):
             with self.subTest(level=level):
                 result = app.build_environment_snapshot(
@@ -210,6 +288,23 @@ class EnvironmentContractTests(unittest.TestCase):
 
         self.assertEqual(sample["pm2_5"], 5.0)
         self.assertEqual(sample["voc"], 84.0)
+
+    def test_stale_sound_is_not_recorded_in_session_sample(self):
+        stale_hub1 = hub1(
+            last_update=NOW - app.ESP32_STALE_SECONDS - 1,
+        )
+        environment = app.build_environment_snapshot(stale_hub1, hub2(), NOW)
+        fake_snapshot = {
+            "sensor": {
+                "environment": environment,
+                "bcg": {"connected": False},
+            },
+            "sleep": {},
+            "analysis_frame": {},
+        }
+        with patch.object(app, "snapshot", return_value=fake_snapshot):
+            sample = app.take_session_sample()
+        self.assertIsNone(sample["dba"])
 
 
 class SessionTimelineSchemaTests(unittest.TestCase):

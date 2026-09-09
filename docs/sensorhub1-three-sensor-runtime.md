@@ -1,6 +1,9 @@
 # ESP32 Sensor Hub 1 — Three-Sensor Runtime
 
-สถานะ: Integrated candidate · 2026-09-09
+สถานะ: Archived firmware candidate · 2026-09-10
+งาน Firmware ทดแทนถูกยกเลิกและห้าม Flash; รายละเอียด DSP/CEM ด้านล่างเป็น
+Audit history เท่านั้น Runtime ปัจจุบันของ Pi รับ `sound_dba` จาก ESP32 โดยตรง
+ตาม [Sensor Interface Contract v1.2](zeep-sensor-interface-contract-v1.2.md)
 ขอบเขต: ESP32-S3 หนึ่งบอร์ด, Sensor 3 ตัว, USB Serial ไปยัง Raspberry Pi 5
 
 ## หน้าที่ของระบบ
@@ -11,7 +14,7 @@ Sensor Hub 1 อ่านและตรวจสุขภาพอุปกร�
 | --- | --- | --- | --- |
 | SHT3x-DIS | อุณหภูมิ, ความชื้นสัมพัทธ์ | I²C | SDA GPIO 8, SCL GPIO 9, `0x45` |
 | OPT3001 | ความสว่าง | I²C | SDA GPIO 8, SCL GPIO 9, `0x44` |
-| SPH0645LM4H-B | PCM เสียง → LAeq(A) | I²S | BCLK 11, WS 12, DOUT 13, LEFT slot |
+| SPH0645LM4H-B | ระดับเสียง `sound_dba` จาก ESP32 | I²S | BCLK 11, WS 12, DOUT 13, LEFT slot |
 
 GPIO และ address เป็นสัญญาการประกอบ ไม่ใช่ระบบ auto-detect หาก SHT3x กับ
 OPT3001 ถูกตั้ง address ชนกัน Firmware ต้องรายงานผิดพลาดและให้แก้ Harness
@@ -37,11 +40,11 @@ OPT3001 ถูกตั้ง address ชนกัน Firmware ต้องร�
 | --- | --- |
 | `src/main.cpp` | เริ่ม Serial/Sensor และเรียก scheduler เท่านั้น |
 | `src/environment_sensors.cpp` | อ่าน ตรวจ CRC/identity เก็บ cache และกู้คืน SHT3x/OPT3001 |
-| `src/audio_meter.cpp` | รับ signed PCM ตรวจ stream แล้วคำนวณหน้าต่าง LAeq(A) |
+| `src/audio_meter.cpp` | Candidate เก่าที่เคยรับ signed PCM และคำนวณ LAeq(A); ไม่ใช่ Production runtime |
 | `src/telemetry_publisher.cpp` | รวม snapshot โดยไม่ผูกอายุของ Sensor เข้าด้วยกัน และส่ง JSON ทุก 10 วินาที |
 | `zeep_pod/hardware/sensorhub1.py` | รับ JSONL บน Pi กรอง control packet รักษาค่าล่าสุด และส่งสถานะราย Sensor |
 | `sensor_contracts.py` | สัญญา schema, ช่วงค่าที่รับได้ และ legacy migration |
-| `sensor_runtime.py` | สร้าง Environment view เดียวให้ Dashboard, Session และ Safety ใช้ตรงกัน |
+| `sensor_runtime.py` | รับ `sound_dba` โดยตรงและสร้าง Environment view เดียวให้ทุกส่วนใช้ตรงกัน |
 
 ค่าดิบยังแยกจากค่าที่ผ่าน calibration เสมอ Firmware ไม่แก้ bias ของ
 อุณหภูมิ/ความชื้น/แสงเอง ส่วน Pi เป็นเจ้าของ calibration ที่มี version และ
@@ -62,9 +65,9 @@ provenance เพื่อให้ย้อนตรวจได้
    อายุข้อมูล, สถานะ และเหตุผลแยกราย Sensor
 9. Pi รับเฉพาะ `event=environment` จาก `hub_id=sensorhub1`; `boot`, `info`
    และ `calibration_response` ไม่ทับค่าปัจจุบัน
-10. หน้าต่างเสียงล่าสุดอาจถูกส่งซ้ำชั่วคราวได้ไม่เกิน 15 วินาทีเพื่อไม่ให้
-    Dashboard กระพริบ แต่จะเป็น `held` หาก I²S ไม่เดิน และ Pi จะ deduplicate ด้วย
-    `(boot_id, sound_window_sequence)` จึงไม่บันทึกเป็นหลักฐานเสียงรอบใหม่
+10. Pi รับทุก packet ที่มี `sound_dba` ถูกชนิด เป็น finite และอยู่ในช่วง
+    30–130 dBA โดยตรง ไม่ใช้ `boot_id`, sequence, profile, weighting, metric,
+    CEM approval หรือจำนวน packet เป็น gate ของค่าระดับเสียง
 11. Pi ถือ Hub ว่า stale หลัง 25 วินาที เพื่อเผื่อสอง packet ที่หายและ USB jitter
 
 ## Fault isolation และ recovery
@@ -76,8 +79,8 @@ provenance เพื่อให้ย้อนตรวจได้
 - Reset I²C bus เฉพาะเมื่ออุปกรณ์ I²C ทั้งสองตัวใช้งานไม่ได้ และจำกัดไม่เกิน
   หนึ่งครั้งต่อ 30 วินาที เพื่อไม่รบกวน Sensor ที่ยังดี
 - ค่า Environment เก่ากว่า 6 วินาทีเป็น stale และไม่ถูกส่งเป็นค่าปัจจุบัน
-- SPH0645 ต้องผ่าน stream, sample coverage, clipping, silence, stuck PCM,
-  finite และช่วง CEM 30–130 dBA ก่อน `sound_valid=true`
+- Pi รับ `sound_dba` เมื่อเป็น finite และอยู่ในช่วง 30–130 dBA; validation
+  ภายใน Firmware ด้านบนไม่มีอำนาจเป็น Runtime gate ฝั่ง Pi
 - ค่า dBFS เป็นข้อมูลวิศวกรรมแบบ signed เท่านั้น ห้าม `abs()`, clamp หรือแสดง
   เป็น dBA
 
@@ -119,7 +122,7 @@ provenance เพื่อให้ย้อนตรวจได้
       "status": "invalid",
       "reason": "digital_silence",
       "age_ms": 20,
-      "values": {"sound_laeq_dba": null, "sound_valid": false}
+      "values": {"sound_dba": null, "sound_dbfs": -68.0}
     }
   }
 }
@@ -128,9 +131,10 @@ provenance เพื่อให้ย้อนตรวจได้
 Firmware ยังส่ง flat fields เดิมควบคู่ระหว่างช่วง migration แต่ nested
 `sensors` คือแหล่งข้อมูล authoritative ของ packet canonical
 
-## Production acceptance
+## Historical candidate acceptance (ยกเลิกแล้ว)
 
-ก่อน Flash Production ต้องผ่านทั้งหมด:
+รายการด้านล่างเก็บเป็น Audit history ของ Candidate เท่านั้น สคริปต์ Flash ถูก
+ปิดถาวรและห้ามนำรายการนี้ไปใช้เป็นสิทธิ์ติดตั้ง Production:
 
 1. ตรวจไฟ 3.3 V, common ground, decoupling 100 nF และ continuity ของ GPIO
 2. ยืนยัน I²C address สองตัวไม่ชนกัน และ identity/config ของ OPT3001 ถูกต้อง
@@ -141,12 +145,12 @@ Firmware ยังส่ง flat fields เดิมควบคู่ระห�
    ต้องยังรายงานได้
 7. Burn-in พร้อมกัน 30 นาที ไม่มี reboot, task stall หรือ bus lock
 8. เทียบ SHT3x/OPT3001 กับเครื่องอ้างอิงตาม protocol ที่อนุมัติ
-9. เทียบเสียงกับ CEM DT-8852 หลายระดับ; offset ใช้ได้หลัง linearity ผ่านเท่านั้น
+9. เคยกำหนดให้เทียบเสียงกับ CEM DT-8852 หลายระดับ; ขั้นตอน offset นี้ถูกยกเลิก
 10. สำรอง Flash เดิมและยืนยันว่า Pod ไม่มีผู้ใช้งานก่อนติดตั้ง
 
 ขณะจัดทำเอกสารนี้ Software build และ fault-combination contract tests ผ่านแล้ว
-แต่ SPH0645 บอร์ดจริงยังต้องผ่าน electrical/PCM และ CEM gate จึงยังไม่ใช่
-Production release
+Candidate นี้ไม่ใช่ Production release และจะไม่ถูก Flash; Runtime ของ Pi ใช้
+`sound_dba` ที่ Firmware ปัจจุบันส่งมาโดยตรงตาม validation ขั้นต่ำข้างต้น
 
 ## แหล่งข้อมูลหลัก
 

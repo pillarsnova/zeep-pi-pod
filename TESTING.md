@@ -14,11 +14,11 @@ python ui_composer.py check
 | Auth/RBAC/Occupancy/API | `test_access_and_occupancy.py`, `test_rbac_api.py` |
 | QR login | `test_qr_login.py`, `test_qr_login_api.py` |
 | Device command protocol | `test_control_protocol.py`, `test_rbac_api.py` |
-| Sensor/Calibration/Contract | `test_sensor_contract.py`, `test_sensor_services.py`, `test_recalibrate_sound_history.py` |
+| Sensor/Contract | `test_sensor_contract.py`, `test_sensor_services.py` |
 | Sleep signal/evidence/policy | `test_sleep_signal_features.py`, `test_sleep_baseline_policy.py`, `test_personal_baseline_policy.py`, `test_sleep_system_consistency.py` |
 | Session report/annotation/replay | `test_sleep_session_report.py`, `test_sleep_stage_annotations.py`, `test_reclassify_sleep_history.py` |
 | Session upload to ZEEP account | `test_session_ingest.py` |
-| Data maintenance/safety | `test_backup.py`, `test_cleanup_short_sessions.py`, `test_reset_sleep_dataset.py`, `test_trim_session.py`, `test_maintenance_registry.py` |
+| Data maintenance/safety | `test_backup.py`, `test_cleanup_short_sessions.py`, `test_reset_sleep_dataset.py`, `test_trim_session.py`, `test_maintenance_registry.py`, `test_recalibrate_sound_history.py` (retired/read-only) |
 | UI composition | `test_ui_composer.py` |
 | Evidence registry/schema/security | `test_research_evidence_library.py`, `research/evidence-library/update_research_library.py check` |
 

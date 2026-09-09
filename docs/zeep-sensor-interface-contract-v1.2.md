@@ -1,14 +1,15 @@
 # ZEEP Sensor Interface Contract v1.2
 
-สถานะ: Approved software contract · 2026-09-06
+สถานะ: Approved runtime contract · 2026-09-10
 ขอบเขต: ESP32 Sensor Hub 1 → Pi5 ผ่าน USB Serial JSONL @ 115200 baud
 
 ## หลักการ
 
-SPH0645LM4H-B ส่ง PCM แบบ I²S และรายงานระดับเชิงดิจิทัลเป็น dBFS; ค่า dBFS ไม่ใช่
-dBA และห้ามแปลงด้วย `abs()`, การบวก offset แบบไม่มี reference หรือการ clamp
-เพื่อทำให้ดูเหมือนค่าจริง การคำนวณ Acoustic Level เป็นหน้าที่ของ ESP32
-Sensor Hub 1 ส่วน Pi ทำหน้าที่ตรวจ Contract และ fail closed เท่านั้น
+ESP32 เป็นเจ้าของการอ่านและประมวลผล SPH0645LM4H-B แล้วส่งค่าปฏิบัติการใน
+field `sound_dba` ส่วน Pi เชื่อค่าที่ส่งมาโดยตรงและคัดลอกเข้า field ภายใน
+`sound_dba_est` โดยไม่ทำ `abs()`, bias, offset, recalibration หรือคำนวณซ้ำ
+Pi ไม่มี CEM gate, LAeq metadata gate, firmware-profile gate หรือเงื่อนไขรอ
+3 packet อีกต่อไป ผลเทียบ CEM และข้อมูล Firmware รุ่นก่อนเป็น QA history เท่านั้น
 
 ## Packet ที่ Pi ยอมรับ
 
@@ -36,12 +37,8 @@ Sensor Hub 1 ส่วน Pi ทำหน้าที่ตรวจ Contract �
       "status": "live",
       "reason": "ok",
       "values": {
-        "sound_dbfs": -65.2,
-        "sound_laeq_dba": 39.8,
-        "sound_valid": true,
-        "sound_weighting": "A",
-        "sound_metric": "LAeq",
-        "sound_window_ms": 10000
+        "sound_dba": 39.8,
+        "sound_dbfs": -65.2
       }
     }
   }
@@ -56,39 +53,27 @@ Pi จะรับเฉพาะ `event=environment` ที่ระบุ `hub
 SHT3x-DIS หรือ OPT3001 หาย และในทางกลับกัน
 
 ช่วง Rollback เท่านั้น Pi ยังรับ flat packet ที่ไม่มี `event` เมื่อพบ field ของ
-Hub 1 ใน allowlist ชัดเจน เช่น `temperature_c`, `humidity_rh`, `lux` หรือ
-`sound_dbfs`; packet ที่มี event อื่นยังถูกกันออกตามเดิม
+Hub 1 ใน allowlist ชัดเจน เช่น `temperature_c`, `humidity_rh` หรือ `lux` ส่วน
+เสียงต้องมี `sound_dba` จาก ESP32 เสมอ; packet ที่มี event อื่นยังถูกกันออก
+ตามเดิม
 
-เงื่อนไขต้องผ่านพร้อมกัน:
+`sound_dba` ใช้ได้เมื่อมี field นี้, เป็น JSON number แบบ finite และอยู่ในช่วง
+30–130 dBA แบบรวมค่าขอบเท่านั้น เมื่อผ่าน Pi กำหนด
+`sound_dba_est = sound_dba` โดยไม่เปลี่ยนค่า เมื่อไม่ผ่าน Pi ระบุ invalid,
+ไม่ clamp และไม่ใช้ค่าก่อนหน้าเป็นค่าปัจจุบัน
 
-1. `sound_valid` ต้องเป็น JSON boolean `true`
-2. `sound_weighting` ต้องเป็น `A`
-3. `sound_metric` ต้องเป็น `LAeq`
-4. `sound_window_ms` ต้องเป็นค่าบวกและ finite; Production target คือ 10,000 ms
-5. `sound_laeq_dba` ต้อง finite และอยู่ในช่วงที่เครื่องอ้างอิงรองรับ
-   30–130 dBA est. (รวมค่าขอบ 30 และ 130)
+`sound_dbfs` เป็น signed engineering telemetry สำหรับ Admin เท่านั้น ค่าติดลบ
+เป็นเรื่องปกติและห้ามใช้ `abs(sound_dbfs)` หรือ `sound_laeq_dba` เป็น fallback
+metadata รุ่นเก่า เช่น `sound_valid`, weighting, metric, window และ profile ไม่มี
+อำนาจบล็อกหรืออนุมัติ `sound_dba`
 
-ไม่ผ่านข้อใดข้อหนึ่ง: `sound_measurement_valid=false`, SPH0645LM4H-B มีสถานะ
-`invalid` และ Session ไม่บันทึกเสียง ระหว่างรอ Firmware ใหม่ signed
-`sound_dbfs` แสดงเฉพาะ Admin เป็น `dBFS raw` เพื่อยืนยันทางวิศวกรรม โดยไม่ใช้
-`abs()`, ไม่เรียกว่า dBA และไม่ใช้ตัดสินคุณภาพเสียง/Sleep State ส่วน
-Calibration card ยังคงรับเฉพาะ LAeq(A) ที่ผ่าน Contract
-ค่า valid ก่อนหน้าอาจแสดงเป็น
-`sound_last_valid_dba` ในข้อมูล Debug แต่ห้ามใช้เป็นค่าปัจจุบัน
+## ภาคผนวกประวัติ Firmware ที่ยกเลิกแล้ว (ห้ามใช้กับ Production)
 
-ข้อยกเว้นชั่วคราวหลังเปลี่ยน Sensor: Dashboard/Control/Monitor แสดง
-`sound_dba` ที่ ESP32 รายงานเป็น `sound_dba_firmware_est` ได้เมื่อทะเบียน
-calibration ระบุรุ่น `SPH0645LM4H-B`, firmware profile ตรงกัน และมี packet
-finite ในช่วง 30–130 dBA ที่ตรวจทานแล้วอย่างน้อย 3 รอบ หน้าจอต้องติดป้าย
-“ชั่วคราว · ไม่ใช้คะแนน” อย่างชัดเจน ค่านี้ห้ามไหลเข้า Session, Score,
-Sleep State, ภาพรวมสภาพแวดล้อม, Safety หรือ Auto Response และต้องถูกซ่อนทันที
-เมื่อ Sensor/Firmware ระบุ capture หรือ signal invalid การยกเว้นนี้ไม่ถือว่า
-ผ่าน A-weighted LAeq/CEM gate ข้างต้น และห้ามใช้ `sound_laeq_dba` หรือ dBFS
-เป็น fallback ให้ช่องชั่วคราวนี้
+ส่วนนี้เป็นหลักฐานย้อนหลังของ Firmware candidate ที่ถูก hard-disable แล้วเท่านั้น
+ห้าม Flash และห้ามนำขั้นตอนใดในส่วนนี้กลับมาเป็น Runtime gate ค่า Runtime ฝั่ง
+Pi ยึด `sound_dba` ตามกติกาด้านบนเพียงเส้นทางเดียว
 
-## Firmware processing pipeline
-
-Firmware ต้องทำตามลำดับนี้ก่อนสร้าง Packet:
+Firmware candidate เดิมทำงานตามลำดับนี้ก่อนสร้าง Packet:
 
 1. อ่าน I2S ด้วย sample rate คงที่ (แนะนำ 48 kHz) และตรวจจำนวน sample จริง
 2. แก้ word alignment ของ SPH0645 ตาม ESP32/ESP-IDF รุ่นที่ใช้งานจริง
@@ -113,18 +98,17 @@ LAeq = calibration_reference_dba + 10 × log10(mean_square / reference_energy)
 ที่ทราบระดับ ไม่ใช่การใช้ `abs(dBFS)` ค่าชดเชย enclosure/port ให้ version และ
 เก็บ provenance แยกต่อบอร์ด
 
-## สาเหตุ Invalid มาตรฐาน
+## สาเหตุ Invalid ของ Pi Runtime
 
-- `legacy_dbfs_only` — Firmware เก่าส่ง dBFS อย่างเดียว
-- `i2s_alignment_unverified` — ยังไม่ยืนยัน bit/slot alignment
-- `insufficient_samples` — sample coverage ไม่ครบ integration window
-- `dma_overflow` / `short_read` — stream ไม่ต่อเนื่อง
-- `clipping` — sample ชน full scale มากเกินเกณฑ์
-- `below_noise_floor` — ต่ำกว่าขีดความสามารถที่ยืนยันของระบบ
-- `laeq_out_of_range` — ผลนอกช่วงระบบ
-- `firmware_invalid` — Firmware ปฏิเสธด้วย sanity check อื่น
+- `missing_sound_dba` — ไม่มี field `sound_dba`
+- `legacy_dbfs_only` — มีเฉพาะ dBFS ซึ่งใช้แทน dBA ไม่ได้
+- `invalid_sound_dba_type` — field ไม่ใช่ JSON number
+- `non_finite_sound_dba` — ค่าเป็น NaN หรือ infinity
+- `sound_dba_out_of_range` — ค่านอกช่วง 30–130 dBA
 
-## Verification ก่อนเปิดใช้ Production
+## ภาคผนวก Offline QA เดิม (ยกเลิกจาก Production flow)
+
+รายการนี้เก็บเพื่อ Audit เท่านั้น ไม่ใช่เงื่อนไขอนุมัติ/บล็อกค่าของ Pi:
 
 1. ทดสอบ digital silence และ quiet room: ไม่มี sign/overflow spike
 2. ป้อน sine/pink noise หลายระดับและยืนยัน response เพิ่มตามระดับแบบ monotonic

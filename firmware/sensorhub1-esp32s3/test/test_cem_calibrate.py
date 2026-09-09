@@ -13,6 +13,10 @@ SPEC.loader.exec_module(MODULE)
 
 
 class CemCalibrationTests(unittest.TestCase):
+    def test_cli_workflow_is_retired(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "archived firmware calibration"):
+            MODULE.main()
+
     def test_consistent_offset_passes(self) -> None:
         pairs = []
         for reference in (35.0, 45.0, 55.0, 65.0):

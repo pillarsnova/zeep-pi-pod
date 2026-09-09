@@ -29,36 +29,46 @@ class UiComposerTests(unittest.TestCase):
                     template.count(ui_composer.MARKER.format(name=filename)), 1
                 )
 
-    def test_sound_engineering_ui_handles_untrusted_and_missing_raw_values(self):
+    def test_calibration_ui_handles_untrusted_and_missing_raw_values(self):
         template = ui_composer.TEMPLATE.read_text(encoding="utf-8")
         self.assertIn("function escapeMarkup(value='')", template)
-        self.assertIn(".filter(Boolean).map(escapeMarkup).join(' · ')", template)
+        self.assertIn("function calibrationNumber(value,step=0.1)", template)
         self.assertIn(
-            "item.value===null||item.value===undefined||item.value===''",
+            "if(value===null||value===undefined||value==='')return '--';",
             template,
         )
-        self.assertIn("item.healthy?'pass':'fail'", template)
-        self.assertNotIn("item.value?'pass'", template)
+        self.assertIn("if(!Number.isFinite(number))return '--';", template)
+        self.assertNotIn("channel.engineering", template)
 
-    def test_sound_preview_is_three_packet_display_only_fallback(self):
+    def test_sound_ui_uses_direct_canonical_esp32_value(self):
         template = ui_composer.TEMPLATE.read_text(encoding="utf-8")
-        self.assertIn("environment.sound_dba_firmware_est", template)
-        self.assertIn("evidenceCount>=3", template)
-        self.assertIn("digits:2", template)
-        self.assertIn("SPH0645LM4H-B · ESP32 โดยตรง", template)
-        self.assertIn("แสดงผลเท่านั้น ไม่ใช้ประเมินภาพรวมหรือคะแนน", template)
-        self.assertIn("ชั่วคราว · ไม่ใช้คะแนน", template)
-        self.assertNotIn(
-            "detail:`${fmt(soundMetric.value,1)} dBA est. · "
-            "แสดงผลเท่านั้น`,level:'warn'",
+        self.assertIn("const raw=environment.sound_dba_est;", template)
+        self.assertIn(
+            "typeof raw==='number'&&Number.isFinite(raw)&&raw>=30&&raw<=130",
             template,
         )
-        self.assertIn("typeof windowRaw==='boolean'?NaN", template)
+        self.assertIn(
+            "return {value:raw,unit:'dBA',digits:1,source:'esp32'};",
+            template,
+        )
+        self.assertIn("รับ sound_dba จาก ESP32 โดยตรง", template)
+        self.assertIn("SPH0645LM4H-B · ESP32 direct", template)
+        self.assertIn("<span>ESP32 DIRECT</span>", template)
         self.assertIn(
             "const t=e.temperature_c,h=e.humidity_rh,l=e.lux,"
             "s=e.sound_dba_est",
             template,
         )
+        for obsolete in (
+            "environment.sound_dba_firmware_est",
+            "sound_preview_evidence_count",
+            "evidenceCount>=3",
+            "ชั่วคราว · ไม่ใช้คะแนน",
+            "แสดงผลเท่านั้น ไม่ใช้ประเมินภาพรวมหรือคะแนน",
+            "A-weighted LAeq",
+        ):
+            with self.subTest(obsolete=obsolete):
+                self.assertNotIn(obsolete, template)
 
 
 if __name__ == "__main__":

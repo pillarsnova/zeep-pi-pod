@@ -12,11 +12,7 @@ import math
 import time
 from typing import Any, Callable, Mapping, Optional, Sequence
 
-from sensor_contracts import (
-    SOUND_DBA_DISPLAY_MAX,
-    SOUND_DBA_DISPLAY_MIN,
-    SOUND_SENSOR_MODEL,
-)
+from sensor_contracts import SOUND_SENSOR_MODEL
 
 
 HUB1_ALIASES: dict[str, tuple[str, ...]] = {
@@ -25,13 +21,9 @@ HUB1_ALIASES: dict[str, tuple[str, ...]] = {
     "lux": ("lux", "light", "illuminance"),
     "co2": ("co2", "co2_ppm", "carbon_dioxide"),
     "sound_dbfs": ("sound_dbfs",),
-    "sound_laeq_dba": ("sound_laeq_dba", "laeq_dba"),
     "sound_rms": ("sound_rms",),
     "sound_peak": ("sound_peak",),
 }
-
-SOUND_REQUIRED_WEIGHTING = "A"
-SOUND_REQUIRED_METRIC = "LAEQ"
 
 
 def first_numeric(obj: Mapping[str, Any], keys: Sequence[str]) -> Optional[float]:
@@ -41,7 +33,7 @@ def first_numeric(obj: Mapping[str, Any], keys: Sequence[str]) -> Optional[float
             continue
         try:
             return float(value)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             continue
     return None
 
@@ -92,90 +84,6 @@ def bounded_number(
     return value, None
 
 
-def firmware_sound_preview(
-    payload: Mapping[str, Any],
-    *,
-    display_min: float,
-    display_max: float,
-) -> Optional[float]:
-    """Return a bounded display-only level reported by Sensor Hub 1.
-
-    This is intentionally not the validated health value.  It lets operators
-    and users see that the configured SPH0645LM4H-B signal path is responding
-    while the replacement microphone awaits the released 10-second LAeq(A)
-    firmware and CEM verification.  Explicit firmware/capture failures always
-    suppress the preview.
-    """
-    sensor_ready = sensor_flag(
-        payload,
-        ("sph0645", "sph0645lm4h_b", "sound"),
-    )
-    diagnostic = sensor_diagnostic(
-        payload,
-        ("sph0645", "sph0645lm4h_b", "sound"),
-    )
-    diagnostic_detail = diagnostic.get("diagnostics")
-    if not isinstance(diagnostic_detail, Mapping):
-        diagnostic_detail = {}
-    diagnostic_status = str(diagnostic.get("status") or "").strip().lower()
-    top_level_status = str(
-        payload.get("sound_status") or "",
-    ).strip().lower()
-    weighting = str(payload.get("sound_weighting") or "").strip().upper()
-    metric = str(payload.get("sound_metric") or "").strip().upper()
-    invalid_reason = str(
-        payload.get("sound_invalid_reason") or diagnostic.get("reason") or "",
-    ).strip()
-    diagnostic_failed = (
-        diagnostic_status in {
-            "fault", "invalid", "no_data", "offline", "disconnected",
-            "held", "stale", "warming", "recovering",
-        }
-        or diagnostic.get("measurement_valid") is False
-        or diagnostic.get("capture_ok") is False
-        or diagnostic.get("signal_valid") is False
-        or diagnostic_detail.get("measurement_valid") is False
-        or diagnostic_detail.get("capture_ok") is False
-        or diagnostic_detail.get("signal_valid") is False
-    )
-    level = first_numeric(payload, ("sound_dba",))
-    if (
-        level is None
-        or not math.isfinite(level)
-        or not display_min <= level <= display_max
-        or sensor_ready is False
-        or diagnostic_failed
-        or top_level_status in {
-            "fault", "invalid", "no_data", "offline", "disconnected",
-            "held", "stale", "warming", "recovering",
-        }
-        or bool(invalid_reason)
-        or (bool(weighting) and weighting != SOUND_REQUIRED_WEIGHTING)
-        or (bool(metric) and metric != SOUND_REQUIRED_METRIC)
-        or payload.get("measurement_valid") is False
-        or payload.get("sound_measurement_valid") is False
-        or payload.get("sound_valid") is False
-        or payload.get("capture_ok") is False
-        or payload.get("signal_valid") is False
-        or payload.get("mic_capture_ok") is False
-        or payload.get("mic_signal_valid") is False
-        or payload.get("mic_stuck_zero") is True
-        or payload.get("mic_stuck_constant") is True
-    ):
-        return None
-    return round(level, 2)
-
-
-def suppress_sound_preview(environment: dict[str, Any]) -> None:
-    """Remove display-only sound whenever its Sensor frame is not fresh."""
-    environment["sound_dba_firmware_est"] = None
-    environment["sound_firmware_window_ms"] = None
-    environment["sound_preview_evidence_count"] = 0
-    device = (environment.get("devices") or {}).get("sph0645")
-    if isinstance(device, dict):
-        device.update({"preview_available": False, "preview_only": False})
-
-
 def compose_environment_snapshot(
     hub1: Mapping[str, Any],
     hub2: Mapping[str, Any],
@@ -216,6 +124,15 @@ def compose_environment_snapshot(
                 if invalid is not None:
                     invalid_values[field] = invalid
             flag = sensor_flag(payload, spec["status"])
+            if (
+                key == "sph0645"
+                and payload.get("sound_measurement_valid") is True
+                and all(value is not None for value in field_values.values())
+            ):
+                # The direct ``sound_dba`` contract is authoritative. Legacy
+                # per-device flags from older firmware must not reintroduce a
+                # hidden approval gate after the numeric value passed checks.
+                flag = True
             diagnostic = sensor_diagnostic(payload, spec["status"])
             attempts.append({
                 "source": source_id,
@@ -273,10 +190,8 @@ def compose_environment_snapshot(
         else:
             status = "offline"
         if key == "sph0645" and hub1.get("sound_measurement_valid") is False:
-            # A live USB packet is not automatically a valid acoustic
-            # measurement. Legacy dBFS-only packets and malformed LAeq
-            # packets remain visible to Admin as raw diagnostics, but they
-            # must never appear as dBA on health-facing screens.
+            # A missing, non-finite or out-of-range ``sound_dba`` value is
+            # unavailable. Other metadata is intentionally not a runtime gate.
             selected = None
             chosen = primary
             status = "invalid" if primary["live"] else status
@@ -307,10 +222,8 @@ def compose_environment_snapshot(
         else "offline"
     )
     raw_values = dict(values)
-    # Temporary observability bridge while Sensor Hub 1 still publishes only
-    # its signed digital level.  dBFS is exposed verbatim for display as a raw
-    # engineering reading; it never replaces the validated LAeq(A) field and
-    # therefore cannot enter Session, environment or Sleep-State scoring.
+    # Keep signed dBFS for Admin diagnostics only. It is never transformed with
+    # abs() and never substitutes for the ESP32-provided ``sound_dba`` value.
     sound_dbfs_raw = first_numeric(hub1, ("sound_dbfs",))
     if (
         not sources["hub1"]["live"]
@@ -319,47 +232,11 @@ def compose_environment_snapshot(
         or not -160.0 <= sound_dbfs_raw <= 0.0
     ):
         sound_dbfs_raw = None
-    sound_dba_firmware_est = first_numeric(
-        hub1,
-        ("sound_dba_firmware_est",),
-    )
-    if (
-        not sources["hub1"]["live"]
-        or sound_dba_firmware_est is None
-        or not math.isfinite(sound_dba_firmware_est)
-        or not SOUND_DBA_DISPLAY_MIN
-        <= sound_dba_firmware_est
-        <= SOUND_DBA_DISPLAY_MAX
-    ):
-        sound_dba_firmware_est = None
-    sound_firmware_window_ms = first_numeric(hub1, ("sound_window_ms",))
-    sound_preview_evidence_count = first_numeric(
-        hub1,
-        ("sound_preview_evidence_count",),
-    )
-    if sound_dba_firmware_est is None:
-        sound_firmware_window_ms = None
-    elif sound_firmware_window_ms is not None:
-        sound_firmware_window_ms = round(sound_firmware_window_ms, 1)
-    sound_device = devices.get("sph0645") or {}
-    sound_device["preview_available"] = sound_dba_firmware_est is not None
-    sound_device["preview_only"] = (
-        sound_dba_firmware_est is not None
-        and values.get("sound_dba_est") is None
-    )
     for metric in calibration_metrics:
         values[metric] = apply_bias(metric, values.get(metric))
     return {
         **values,
         "sound_dbfs_raw": sound_dbfs_raw,
-        "sound_dba_firmware_est": sound_dba_firmware_est,
-        "sound_firmware_window_ms": sound_firmware_window_ms,
-        "sound_preview_evidence_count": (
-            int(sound_preview_evidence_count)
-            if sound_dba_firmware_est is not None
-            and sound_preview_evidence_count is not None
-            else 0
-        ),
         "sound_sensor_model": SOUND_SENSOR_MODEL,
         "temperature": values.get("temperature_c"),
         "humidity": values.get("humidity_rh"),
@@ -386,119 +263,111 @@ def normalize_hub1_sensor(
     *,
     sound_display_min: float,
     sound_display_max: float,
-    sound_required_window_ms: float = 10_000.0,
-    sound_calibration_verified: bool = False,
-    sound_preview_enabled: bool = False,
-    sound_preview_evidence_count: int = 0,
-    sound_preview_profile: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Preserve Hub 1 raw values and validate firmware-computed LAeq(A).
+    """Copy the ESP32 ``sound_dba`` field into the canonical Pi channel.
 
-    ``sound_dbfs`` is an electrical full-scale ratio, not sound pressure. It
-    is intentionally never converted with ``abs()`` or published as dBA. The
-    Pi accepts a health-facing sound value only when ESP32 explicitly marks a
-    finite, in-range, A-weighted LAeq window as valid, the integration window
-    matches the approved contract, and CEM reference calibration is current.
-    Raw engineering telemetry is retained even when any gate fails.
+    Sensor Hub 1 owns microphone processing. The Pi does not apply ``abs()``,
+    bias, profile matching, CEM approval, weighting checks or packet-count
+    gates. It only rejects missing, non-finite or out-of-display-range values.
+    Signed dBFS and any extra firmware diagnostics remain available to Admin.
     """
-    try:
-        required_window_ms = float(sound_required_window_ms)
-    except (TypeError, ValueError):
-        required_window_ms = 10_000.0
-    if not math.isfinite(required_window_ms) or required_window_ms <= 0:
-        required_window_ms = 10_000.0
-
     result = dict(payload)
     for target, keys in HUB1_ALIASES.items():
         value = first_numeric(payload, keys)
         if value is not None:
             result[target] = value
     result.pop("sound_dba_est", None)
-    profile_matches = (
-        not sound_preview_profile
-        or payload.get("profile") == sound_preview_profile
-    )
-    preview = None
-    if sound_preview_enabled and profile_matches:
-        preview = firmware_sound_preview(
-            payload,
-            display_min=sound_display_min,
-            display_max=sound_display_max,
-        )
-    if preview is None:
-        result.pop("sound_dba_firmware_est", None)
-    else:
-        result["sound_dba_firmware_est"] = preview
-    result["sound_preview_evidence_count"] = max(
-        0, int(sound_preview_evidence_count),
-    )
+    result.pop("sound_dba_firmware_est", None)
+    result.pop("sound_preview_evidence_count", None)
+    # Never republish an unvalidated source value. Python's JSON decoder accepts
+    # NaN/Infinity by default, while Starlette correctly refuses to serialize
+    # them. Removing the source key first keeps one bad microphone sample from
+    # poisoning the complete Hub 1 API state (including SHT3x and OPT3001).
+    result.pop("sound_dba", None)
+    result.pop("sound_laeq_dba", None)
+    result.pop("sound_invalid_value", None)
+    for diagnostic_key in ("sound_dbfs", "sound_rms", "sound_peak"):
+        diagnostic_value = result.get(diagnostic_key)
+        if (
+            not isinstance(diagnostic_value, (int, float))
+            or isinstance(diagnostic_value, bool)
+        ):
+            result.pop(diagnostic_key, None)
+            continue
+        try:
+            diagnostic_is_finite = math.isfinite(float(diagnostic_value))
+        except OverflowError:
+            diagnostic_is_finite = False
+        if not diagnostic_is_finite:
+            result.pop(diagnostic_key, None)
     result["sound_sensor_model"] = SOUND_SENSOR_MODEL
     result["sound_measurement_valid"] = False
     result["sound_value_held"] = False
 
-    laeq = first_numeric(result, ("sound_laeq_dba", "laeq_dba"))
-    if laeq is None:
+    sound_raw = payload.get("sound_dba")
+    sound_dba = None
+    sound_overflow = False
+    if isinstance(sound_raw, (int, float)) and not isinstance(sound_raw, bool):
+        try:
+            sound_dba = float(sound_raw)
+        except OverflowError:
+            sound_overflow = True
+    if sound_raw is None:
         firmware_reason = str(
             payload.get("sound_invalid_reason") or ""
         ).strip()
-        reason = firmware_reason or (
+        invalid_reason = firmware_reason or (
             "legacy_dbfs_only"
             if first_numeric(result, ("sound_dbfs",)) is not None
-            else "missing_laeq"
+            else "missing_sound_dba"
         )
-        result["sound_status"] = "invalid"
-        result["sound_invalid_reason"] = reason
-        return result
+    elif sound_overflow:
+        invalid_reason = "sound_dba_out_of_range"
+    elif sound_dba is None:
+        invalid_reason = "invalid_sound_dba_type"
+    elif not math.isfinite(sound_dba):
+        invalid_reason = "non_finite_sound_dba"
+    elif not sound_display_min <= sound_dba <= sound_display_max:
+        invalid_reason = "sound_dba_out_of_range"
+    else:
+        invalid_reason = None
 
-    declared_valid = payload.get("sound_valid") is True
-    weighting = str(payload.get("sound_weighting") or "").strip().upper()
-    metric = str(payload.get("sound_metric") or "").strip().upper()
-    window_ms = first_numeric(payload, ("sound_window_ms",))
-    if window_ms is None:
-        window_s = first_numeric(payload, ("sound_window_s",))
-        window_ms = window_s * 1000.0 if window_s is not None else None
-
-    invalid_reason: Optional[str] = None
-    if not declared_valid:
-        invalid_reason = str(payload.get("sound_invalid_reason") or "firmware_invalid")
-    elif weighting != SOUND_REQUIRED_WEIGHTING:
-        invalid_reason = "weighting_must_be_A"
-    elif metric != SOUND_REQUIRED_METRIC:
-        invalid_reason = "metric_must_be_LAeq"
-    elif window_ms is None or not math.isfinite(window_ms) or window_ms <= 0:
-        invalid_reason = "invalid_integration_window"
-    elif not math.isclose(
-        window_ms,
-        required_window_ms,
-        rel_tol=0.0,
-        abs_tol=1.0,
-    ):
-        invalid_reason = (
-            f"integration_window_must_be_"
-            f"{int(required_window_ms)}_ms"
-        )
-    elif (
-        not math.isfinite(laeq)
-        or not sound_display_min <= laeq <= sound_display_max
-    ):
-        invalid_reason = "laeq_out_of_range"
-    elif not sound_calibration_verified:
-        invalid_reason = "cem_calibration_required"
-
-    if invalid_reason:
+    if invalid_reason is not None:
         result["sound_status"] = "invalid"
         result["sound_invalid_reason"] = invalid_reason
-        result["sound_invalid_value"] = laeq
+        if sound_dba is not None and math.isfinite(sound_dba):
+            result["sound_invalid_value"] = sound_dba
         return result
 
-    result["sound_laeq_dba"] = round(laeq, 2)
-    result["sound_dba_est"] = round(laeq, 2)
-    result["sound_window_ms"] = round(window_ms, 1)
+    result["sound_dba"] = sound_dba
+    result["sound_dba_est"] = sound_dba
     result["sound_measurement_valid"] = True
     result["sound_status"] = "valid"
-    result["sound_processing_source"] = "esp32_a_weighted_laeq"
+    result["sound_processing_source"] = "esp32_sound_dba_direct"
     result.pop("sound_invalid_reason", None)
     result.pop("sound_invalid_value", None)
+    sensor_status = result.get("sensor_status")
+    if isinstance(sensor_status, Mapping):
+        sensor_status = dict(sensor_status)
+        firmware_status = sensor_status.get("sph0645")
+        if firmware_status is False:
+            result["sound_firmware_reported_status"] = False
+        sensor_status["sph0645"] = True
+        result["sensor_status"] = sensor_status
+    diagnostics = result.get("sensor_diagnostics")
+    if isinstance(diagnostics, Mapping):
+        diagnostics = dict(diagnostics)
+        sph_diagnostic = diagnostics.get("sph0645")
+        if isinstance(sph_diagnostic, Mapping):
+            sph_diagnostic = dict(sph_diagnostic)
+            if sph_diagnostic.get("reason"):
+                result["sound_firmware_reported_reason"] = sph_diagnostic["reason"]
+            diagnostics["sph0645"] = {
+                **sph_diagnostic,
+                "status": "live",
+                "reason": None,
+            }
+        result["sensor_diagnostics"] = diagnostics
     return result
 
 
@@ -533,13 +402,14 @@ def hold_last_valid_sound(
 
 
 def valid_sound_level(value: Any, low: float, high: float) -> bool:
-    """Return whether a value is a finite LAeq(A) value in the approved range."""
-    return bool(
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(float(value))
-        and low <= float(value) <= high
-    )
+    """Return whether a sound value is finite and in the display range."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        number = float(value)
+    except OverflowError:
+        return False
+    return math.isfinite(number) and low <= number <= high
 
 
 def energy_average_db(

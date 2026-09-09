@@ -25,7 +25,7 @@ pi5/
 ├── ui_composer.py          # Build/check bundle โดยไม่เพิ่ม browser-side fetch
 ├── sensor_contracts.py     # Datasheet/as-built/telemetry contract กลาง
 ├── sensor_calibration.py   # Calibration spec, validation และ atomic persistence
-├── sensor_runtime.py       # Normalize/validate/compose Sensor Hub + Sound Leq
+├── sensor_runtime.py       # Normalize/validate/compose Hub + direct sound_dba
 ├── smart_response.py       # Shadow recommendations แบบ pure/read-only
 ├── api_v1.py               # Versioned read API envelope
 ├── sleep_signal_features.py# BCG/movement/arousal/HR-RR engineering proxies
@@ -218,12 +218,12 @@ Datasheet, physical range, field alias, JSON envelope v1 และ byte map BCG 
 
 - BCG: `/dev/ttyUSB_HRB` @ 115200
 - ESP32 hub: `/dev/ttyACM0` @ 115200 — ส่ง JSON บรรทัดละ 1 object เช่น
-  `{"event":"environment","hub_id":"sensorhub1","lux":26.1,"temperature_c":24.1,"humidity_rh":56.0,"sound_dbfs":-29.5,"sound_laeq_dba":40.8,"sound_valid":true,"sound_weighting":"A","sound_metric":"LAeq","sound_window_ms":10000}`
+  `{"event":"environment","hub_id":"sensorhub1","lux":26.1,"temperature_c":24.1,"humidity_rh":56.0,"sound_dba":40.8}`
 
 ชื่อ field ที่รับได้ (ตัวแรกที่เป็นตัวเลขชนะ) — temperature:
 `temperature_c|temperature|temp|temp_c` · humidity: `humidity|hum|rh|humidity_rh` ·
 lux: `lux|light|illuminance` · sound raw: `sound_dbfs` · sound ที่ใช้แสดง:
-`sound_laeq_dba` พร้อม metadata ยืนยันตาม Contract v1.2
+`sound_dba` จาก ESP32 โดยตรง
 
 ถ้า ESP32 เงียบเกิน `ESP32_STALE_SECONDS` (ค่าเริ่มต้น 25 วิ สำหรับ packet 10 วิ)
 ทั้งที่พอร์ตยังเปิดอยู่
@@ -236,35 +236,21 @@ Pi **ยกเลิก `abs(sound_dbfs)` ถาวร** เพราะ dBFS �
 ไม่ได้ ค่า `sound_dbfs` ยังคงเก็บภายในเพื่อวิเคราะห์ Firmware แต่ไม่แสดงบน
 การ์ด Dashboard/Calibration
 
-ESP32 Sensor Hub 1 ต้องแก้ I2S word alignment/sign extension, ตัด DC,
-ทำ A-weighting และสะสมพลังงานเป็น LAeq ก่อนส่งค่า 10 วินาที พร้อม metadata:
-`sound_valid=true`, `sound_weighting="A"`, `sound_metric="LAeq"` และ
-`sound_window_ms=10000` จึงจะเผยแพร่เป็น `sound_dba_est` ได้
-
-ถ้า ESP32 ส่งเฉพาะ `sound_dbfs`, ส่ง metadata ไม่ครบ, ระบุ invalid, ค่าไม่ finite
-หรืออยู่นอกช่วง 30–130 ระบบจะระบุ SPH0645LM4H-B เป็น **INVALID** ไม่ clamp
-เป็น 30 และไม่คงค่าเก่ามาแสดงเป็นค่าปัจจุบัน
-
-ระหว่างรอ CEM revalidation ระบบอนุญาตให้แสดง `sound_dba` จาก ESP32 เป็น
-**ค่าชั่วคราว** ได้เฉพาะเมื่อ `calibration.json` ระบุรุ่น Sensor ตรงกันและมี
-packet ที่ตรวจทานแล้วอย่างน้อย 3 รอบ ค่านี้แสดงให้เห็นการตอบสนองของ Sensor
-เท่านั้น ไม่บันทึกลง Session, ไม่ใช้คิดคะแนน/ภาพรวม/ความปลอดภัย และไม่สั่ง
-Auto Response โดยไม่ใช้ `sound_laeq_dba` หรือ `dBFS` เป็น fallback แทน
+ESP32 Sensor Hub 1 เป็นเจ้าของการประมวลผลไมโครโฟนและส่ง `sound_dba` มาให้
+Pi โดยตรง Pi คัดลอกค่าดังกล่าวเข้า `sound_dba_est` โดยไม่ทำ `abs()`, bias,
+recalibration, profile matching, CEM gate, LAeq metadata gate หรือรอ 3 packet
+ค่าใช้ได้เมื่อเป็นตัวเลข finite ในช่วง 30–130 dBA เท่านั้น ค่านอกช่วงไม่ถูก
+clamp และค่าเดิมไม่ถูกนำมาแสดงเป็นค่าปัจจุบัน
 
 SPH0645LM4H-B เป็น Sensor เสริมของภาพรวมสภาพแวดล้อม: เมื่อเสียง `INVALID` ระบบยัง
 ประเมินจากอุณหภูมิ ความชื้น แสง CO₂ PM2.5 และ VOC ต่อได้ พร้อมระบุ coverage
 เป็น `degraded_optional`; ระบบไม่สมมติว่าเสียงเงียบ และ Safety CO₂/อุณหภูมิ
 ยังทำงานตามเดิม
 
-ข้อกำหนด Firmware และขั้นตอนทดสอบอยู่ที่
+ข้อกำหนดปัจจุบันอยู่ที่
 [Sensor Interface Contract v1.2](docs/zeep-sensor-interface-contract-v1.2.md)
-และสาเหตุ invalid ดูได้ใน Admin Packet Inspector; dBFS ติดลบเก็บในระบบ
-วิศวกรรมเท่านั้นและไม่แสดงบนการ์ดใช้งาน
-
-เวลาสอบเทียบ CEM DT-8852 ให้ใช้ A-weighting + SLOW และเลือกช่วงที่ครอบคลุม
-ค่าจริง (`LO 30–80 dBA` สำหรับสภาพแวดล้อมนอน) ห้ามใช้แถวที่หน้ามิเตอร์ขึ้น
-`UNDER`/`OVER` และต้องเทียบค่าเฉลี่ยช่วงเวลาเดียวกัน รายละเอียด field test ล่าสุด:
-`../docs/sph0645-cem-dt8852-field-calibration-2026-08-26.md`
+ส่วนผลเทียบ CEM เดิมเก็บเป็นหลักฐาน QA ย้อนหลังเท่านั้นและไม่มีอำนาจบล็อก
+Runtime ปัจจุบัน
 
 ## Audio output
 
@@ -366,7 +352,7 @@ modulation** — **ไม่เคลมผลการนอนหรือผ�
 ## Session รายบุคคล (profiles & history)
 
 ผู้ทดสอบ login ที่หน้าจอด้วย username + เพศ (ชาย/หญิง/อื่น ๆ/ไม่ระบุ) — ระหว่าง
-session ระบบเก็บ Temperature/Humidity/Lux/dBA est./HR/RR/bed status/sleep state ทุก
+session ระบบเก็บ Temperature/Humidity/Lux/dBA/HR/RR/bed status/sleep state ทุก
 `SESSION_SAMPLE_SECONDS` (ค่าเริ่มต้น 10 วิ), `SESSION_SAMPLE_LIMIT` (ค่าเริ่มต้น
 12,000 จุด ≈ 33 ชั่วโมง 20 นาที; Session เดิม 5 วิยังคงอ่านตาม cadence เดิม) และนับจำนวนคำสั่ง door/pulse/music
 กด "ออกจากระบบ" → บันทึกลงเครื่อง + แสดงรายงานอ่านง่าย · ถ้า server ถูกปิด

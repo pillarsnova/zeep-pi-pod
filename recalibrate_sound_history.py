@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
-"""Apply an auditable calibration delta to historical ZEEP sound estimates.
+"""Read-only audit of retired historical ZEEP sound corrections.
 
-The SPH0645 raw stream is expressed as dBFS while Session ``timeline.sound``
-stores the calibrated estimate that was active at capture time.  When an
-operator approves a later additive correction, this tool applies that delta
-only to rows before the new calibration became active.  Rows at/after the
-cutoff are left untouched so the correction cannot be applied twice.
+This file is retained so an operator can inspect the scope of a correction
+that was proposed under the former Pi-side sound-calibration policy.  It can
+no longer write to the Session database.  The active contract accepts the
+finite, in-range ``sound_dba`` value sent by ESP32 and copies it unchanged;
+therefore applying a later Pi-side delta would corrupt derived history.
 
-Negative recalculated values follow the live runtime policy: they are invalid
-and therefore hold the preceding valid value within the same Session.  The
-tool also adjusts the matching acoustic evidence and human-readable reason in
-``sleep_stage`` events.  Sleep stages, physiology, raw BCG and all other Sensor
-channels remain unchanged.
+Raw BCG, Session timelines, events and all Sensor channels remain unchanged.
 """
 
 from __future__ import annotations
@@ -28,6 +24,10 @@ from typing import Any
 
 MAINTENANCE_TOOL_NAME = "recalibrate_sound_history.py"
 SOUND_REASON = re.compile(r"(เสียงเฉลี่ย\s+)(-?\d+(?:\.\d+)?)(\s*dBA)")
+RETIRED_REASON = (
+    "historical sound recalibration is retired: the active "
+    "esp32-direct-sound-dba contract forbids Pi-side delta/bias writeback"
+)
 
 
 def _finite_number(value: Any) -> bool:
@@ -100,7 +100,9 @@ def recalibrate_sound_history(
     delta_db: float,
     apply: bool,
 ) -> dict[str, Any]:
-    """Return a preview or atomically apply one historical sound correction."""
+    """Preview a legacy correction; reject every request to write it."""
+    if apply:
+        raise RuntimeError(RETIRED_REASON)
     if not math.isfinite(delta_db) or not -60.0 <= delta_db <= 60.0:
         raise ValueError("delta_db must be finite and between -60 and +60 dB")
     session_id = session_id.strip()
@@ -118,7 +120,7 @@ def recalibrate_sound_history(
     connection = sqlite3.connect(database_path)
     connection.row_factory = sqlite3.Row
     try:
-        connection.execute("BEGIN IMMEDIATE" if apply else "BEGIN")
+        connection.execute("BEGIN")
         existing = connection.execute(
             "SELECT value FROM schema_meta WHERE key=?", (ledger_key,)
         ).fetchone()
@@ -187,30 +189,13 @@ def recalibrate_sound_history(
                 round(sum(after_values) / len(after_values), 2)
                 if after_values else None
             ),
-            "applied": bool(apply),
+            "applied": False,
+            "retired": True,
+            "current_contract": "esp32-direct-sound-dba-v1.0",
+            "writeback_allowed": False,
             "ledger_key": ledger_key,
         }
-        if apply:
-            connection.executemany(
-                "UPDATE timeline SET sound=? WHERE id=?", timeline_updates
-            )
-            connection.executemany(
-                "UPDATE events SET value=? WHERE id=?", event_updates
-            )
-            audit = {
-                **report,
-                "applied_at_utc": datetime.now(timezone.utc).isoformat(),
-                "policy": "additive_delta; negative_result_holds_previous_valid",
-                "raw_bcg_changed": False,
-                "sleep_stage_changed": False,
-            }
-            connection.execute(
-                "INSERT INTO schema_meta(key,value) VALUES(?,?)",
-                (ledger_key, json.dumps(audit, ensure_ascii=False)),
-            )
-            connection.commit()
-        else:
-            connection.rollback()
+        connection.rollback()
         return report
     except Exception:
         connection.rollback()
@@ -225,7 +210,11 @@ def main() -> int:
     parser.add_argument("--session-id", required=True)
     parser.add_argument("--before", required=True, help="Timezone-aware cutoff")
     parser.add_argument("--delta-db", required=True, type=float)
-    parser.add_argument("--apply", action="store_true", help="Commit the correction")
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Retired: always refuses; retained only to make old commands fail safe",
+    )
     args = parser.parse_args()
     report = recalibrate_sound_history(
         args.database, session_id=args.session_id, before=args.before,

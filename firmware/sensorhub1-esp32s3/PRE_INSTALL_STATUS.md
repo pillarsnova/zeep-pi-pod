@@ -1,6 +1,9 @@
 # Sensor Hub 1 pre-install status
 
-Updated: 2026-09-09 (Asia/Bangkok)
+Updated: 2026-09-10 (Asia/Bangkok)
+Status: **ARCHIVED / DO NOT FLASH** — ยกเลิกกระบวนการ Firmware ทดแทนและ
+Production gate ชุดนี้แล้ว ระบบ Pi ปัจจุบันรับ `sound_dba` จาก ESP32 โดยตรง
+ตารางด้านล่างเก็บเป็นหลักฐานย้อนหลังเท่านั้น
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
@@ -16,7 +19,7 @@ Updated: 2026-09-09 (Asia/Bangkok)
 | Physical SPH0645 PCM | **BLOCKED** | DOUT/slot/SEL/electrical gate ยังไม่ผ่านบนบอร์ดจริง |
 | CEM DT-8852 physical multi-level test | **PENDING** | ต้องเก็บ 35/45/55/65 dBA จริง |
 | Integrated burn-in/fault isolation | **PENDING** | 30 นาที + ถอดทีละ Sensor ครบ 8 combination |
-| Production Flash/install | **BLOCKED** | ปลดเมื่อ physical, burn-in และ CEM gates ผ่านทั้งหมด |
+| Production Flash/install | **RETIRED** | ยกเลิกถาวร; สคริปต์ Flash ปฏิเสธการทำงานเสมอ |
 
 Golden backup อยู่บน Pod ที่:
 

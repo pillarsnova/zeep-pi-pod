@@ -15,6 +15,10 @@ from typing import Any
 
 
 TARGET_LEVELS = (35, 45, 55, 65)
+RETIRED_REASON = (
+    "archived firmware calibration workflow: Pi now consumes the installed "
+    "ESP32 sound_dba field directly"
+)
 
 
 def read_firmware_window(port: Any) -> dict:
@@ -137,6 +141,7 @@ def evaluate(pairs: list[dict], firmware_sha256: str) -> dict:
 
 
 def main() -> None:
+    raise SystemExit(RETIRED_REASON)
     try:
         import serial
     except ImportError as error:

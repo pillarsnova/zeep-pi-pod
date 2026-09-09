@@ -253,7 +253,7 @@ Session ต้องเริ่มตั้งแต่ 1 ก.ย. 2569, เป
 
 หลักตัดสินใช้ค่าที่ต่ำที่สุดของเกณฑ์ที่มีข้อมูล เพื่อไม่ให้ค่าที่ดีบดบังค่าที่แย่
 โดยอุณหภูมิ ความชื้น แสง CO₂ PM2.5 และ VOC เป็นเกณฑ์หลัก ส่วนเสียงเป็น
-เกณฑ์เสริมเพราะยังรอ firmware A-weighted LAeq ที่ผ่านการตรวจสอบ:
+เกณฑ์เสริมที่รับจาก `sound_dba` ของ ESP32 โดยตรง:
 
 - ถ้า SPH0645 ไม่มีข้อมูลหรือ `INVALID` ภาพรวมยังคำนวณจาก 6 เกณฑ์หลักและระบุ
   `degraded_optional`; ห้ามสมมติว่าเสียงเงียบและห้ามนำค่าเก่ามาใช้
@@ -490,14 +490,14 @@ health record เดิม การแก้ derived record จริงยั�
 ## 7. Sensor calibration ที่เกี่ยวกับรายงาน
 
 - Humidity ใช้ raw pass-through (`0.0 percentage-point bias`) ใน canonical environment snapshot; raw Hub diagnostics ไม่ถูกแก้
-- Sound รับเฉพาะ A-weighted LAeq ที่ ESP32 ระบุ valid ตาม Sensor Contract v1.2;
-  raw dBFS เก็บภายในเพื่อวิศวกรรมแต่ไม่แสดงบนการ์ด และ packet แบบ dBFS-only
-  เป็น INVALID
-- ค่าเสียง valid แสดงเฉพาะ 30–130 dBA ตามช่วง CEM DT-8852; ค่าติดลบและ
+- Sound รับ `sound_dba` จาก ESP32 โดยตรงตาม Sensor Contract v1.2 โดย Pi ไม่ทำ
+  abs, bias, recalibration หรือ LAeq/CEM/profile gate; raw dBFS เก็บภายในเพื่อ
+  วิศวกรรม และ packet แบบ dBFS-only เป็น INVALID
+- ค่าเสียง valid แสดงเฉพาะ 30–130 dBA; ค่าติดลบและ
   ค่าหลุดช่วงเป็น invalid, ไม่ clamp, ไม่คงค่าก่อนหน้าเป็นค่าปัจจุบัน และ
   ไม่บันทึกลง Session
 - Monitor comfort target ใช้ ≤35 dBA; Dashboard overall “ยอดเยี่ยม” ใช้ `<40 dBA` จึงเป็นคนละวัตถุประสงค์ ไม่ใช่ calibration คนละชุด
-- Calibration provenance แสดงเฉพาะ Admin
+- ผลสอบเทียบเดิมเป็น QA history สำหรับ Admin ไม่ใช่ Runtime gate
 
 ## 8. Implementation map และสถานะการนำไปใช้
 

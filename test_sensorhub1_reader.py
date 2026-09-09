@@ -32,11 +32,7 @@ def canonical_packet(*, sound_valid: bool = True) -> dict:
                 "reason": None if sound_valid else "pcm_all_zero",
                 "values": {
                     "sound_dbfs": -55.0,
-                    "sound_laeq_dba": 42.5 if sound_valid else None,
-                    "sound_valid": sound_valid,
-                    "sound_weighting": "A",
-                    "sound_metric": "LAeq",
-                    "sound_window_ms": 10_000,
+                    "sound_dba": 42.5 if sound_valid else None,
                     "sound_window_sequence": 7,
                 },
             },
@@ -67,9 +63,9 @@ class SensorHub1ReaderTests(unittest.TestCase):
 
     @staticmethod
     def normalize(payload: dict) -> dict:
-        payload["sound_measurement_valid"] = bool(
-            payload.get("sound_valid"))
-        payload["sound_dba_est"] = payload.get("sound_laeq_dba")
+        sound = payload.get("sound_dba")
+        payload["sound_measurement_valid"] = isinstance(sound, (int, float))
+        payload["sound_dba_est"] = sound
         return payload
 
     @staticmethod
@@ -123,18 +119,34 @@ class SensorHub1ReaderTests(unittest.TestCase):
         self.assertEqual(result["sound_invalid_reason"], "pcm_all_zero")
         self.assertEqual(self.sounds, [])
 
-    def test_reused_sound_window_is_recorded_only_once(self) -> None:
+    def test_each_valid_direct_sound_packet_is_recorded_without_metadata_gate(
+        self,
+    ) -> None:
         packet = canonical_packet()
         self.assertTrue(self.reader.process_line(self.wire(packet)))
         self.assertTrue(self.reader.process_line(self.wire(packet)))
         self.assertEqual(len(self.payloads), 2)
-        self.assertEqual(len(self.sounds), 1)
+        self.assertEqual(len(self.sounds), 2)
 
         packet["sensors"]["sph0645"]["values"][
             "sound_window_sequence"
         ] = 8
         self.assertTrue(self.reader.process_line(self.wire(packet)))
-        self.assertEqual(len(self.sounds), 2)
+        self.assertEqual(len(self.sounds), 3)
+
+    def test_huge_sound_number_does_not_disconnect_peer_sensors(self) -> None:
+        packet = {
+            "event": "environment",
+            "temperature": 24.5,
+            "humidity": 52.0,
+            "light": 1.2,
+            "sound_dba": 10 ** 4_000,
+        }
+
+        self.assertTrue(self.reader.process_line(self.wire(packet)))
+        self.assertEqual(self.payloads[0]["temperature"], 24.5)
+        self.assertEqual(self.payloads[0]["humidity"], 52.0)
+        self.assertEqual(self.sounds, [])
 
     def test_state_store_preserves_last_payload_when_disconnected(self) -> None:
         sensors = {"esp32": {"temperature_c": 24.5, "connected": True}}

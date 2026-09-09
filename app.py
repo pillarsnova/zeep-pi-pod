@@ -168,8 +168,6 @@ from sensor_calibration import (
     persist_calibration,
     resolve_biases,
     sound_inspector_channel,
-    sound_preview_policy,
-    sound_runtime_policy,
 )
 from sound_observability import sanitize_consumer_sound
 from sensor_runtime import (
@@ -177,7 +175,6 @@ from sensor_runtime import (
     energy_average_db,
     hold_last_valid_sound as hold_sound_value,
     normalize_hub1_sensor,
-    suppress_sound_preview,
     summarize_sound_window,
     valid_sound_level,
 )
@@ -614,9 +611,9 @@ CONTROLHUB2_ACK_TIMEOUT_SECONDS = float(
 # immediately through the internal bed_stop command.
 BED_MOVE_SECONDS = max(0.5, float(os.getenv("BED_MOVE_SECONDS", "2")))
 
-# Calibration file for environmental channels. SPH0645 processing is owned by
-# Sensor Hub 1 firmware: the Pi accepts only a validated A-weighted LAeq value
-# and keeps dBFS as Admin diagnostics. It never derives dBA with abs(dBFS).
+# Calibration file for environmental channels. Sensor Hub 1 owns SPH0645
+# processing; the Pi consumes its finite, in-range ``sound_dba`` directly.
+# Signed dBFS remains Admin diagnostics and is never converted with abs().
 CALIBRATION_PATH = BASE_DIR / "calibration.json"
 
 
@@ -759,7 +756,7 @@ bcg_raw_history: deque = deque(maxlen=200)
 # Every valid SPH0645 level is retained briefly so the canonical analysis
 # frame can publish an energy average (Leq) instead of whichever serial sample
 # happened to arrive last. This also prevents a single low transient such as
-# 4 dB from pulling an otherwise 45–50 dBA est. window to a false quiet state.
+# 4 dB from pulling an otherwise 45–50 dBA window to a false quiet state.
 sound_history_lock = threading.Lock()
 sound_level_history: deque = deque(maxlen=600)
 
@@ -1004,18 +1001,17 @@ state: Dict[str, Any] = {
         "session_vital_start_packets": SESSION_VITAL_START_PACKETS,
         "player": None,  # filled in once the audio backend is chosen
         "sound_transform": {
-            "formula": "ESP32 I2S alignment -> DC block -> A-weighting -> LAeq",
+            "formula": "ESP32 sound_dba -> Pi direct",
             "source": "sensorhub1_firmware",
-            "required_metric": "LAeq",
-            "required_weighting": "A",
+            "source_field": "sound_dba",
             "legacy_dbfs_policy": "invalid",
             "pi_abs_transform_allowed": False,
-            # Calibration provenance is Admin-only because snapshot_for()
-            # removes sound_transform from the consumer system payload.
-            "status": "firmware_laeq_required",
-            "reference_meter": CALIBRATION.get("reference_meter"),
-            "reference_range": CALIBRATION.get("reference_dba_range"),
-            "photo_audit": CALIBRATION.get("photo_audit"),
+            "pi_bias": 0.0,
+            "status": "direct",
+            "accepted_range_dba": [
+                SOUND_DBA_DISPLAY_MIN,
+                SOUND_DBA_DISPLAY_MAX,
+            ],
         },
         "environment_calibration": {
             "biases": dict(SENSOR_BIASES),
@@ -3224,7 +3220,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
     if environment["lux"] is not None:
         reason_bits.append(f"แสงเฉลี่ย {environment['lux']:.0f} lux")
     if environment["sound_dba"] is not None:
-        reason_bits.append(f"เสียงเฉลี่ย {environment['sound_dba']:.1f} dBA est.")
+        reason_bits.append(f"เสียงเฉลี่ย {environment['sound_dba']:.1f} dBA")
     result.update({
         "state": confirmed_state or "no_data",
         "confirmed_state": confirmed_state,
@@ -3600,8 +3596,6 @@ def snapshot() -> Dict[str, Any]:
                 device["status"] = "warming"
         environment_view["live_count"] = 0
         environment_view["status"] = "warming"
-    if not frame_fresh:
-        suppress_sound_preview(environment_view)
     # Live, historical reports and the Admin policy screen share one versioned
     # evaluator.  The assessment is explanatory context only: it cannot create
     # or change Wake/N1/N2/N3/REM and it does not relax any safety alarm.
@@ -3760,13 +3754,10 @@ def sound_window_summary(start_s: float, end_s: float) -> Dict[str, Any]:
 
 def normalize_esp32_sensor(obj: Dict[str, Any]) -> Dict[str, Any]:
     """Compatibility facade for deterministic Hub 1 normalization."""
-    processing = CALIBRATION.get("sound_processing") or {}
     return normalize_hub1_sensor(
         obj,
         sound_display_min=SOUND_DBA_DISPLAY_MIN,
         sound_display_max=SOUND_DBA_DISPLAY_MAX,
-        **sound_runtime_policy(processing),
-        **sound_preview_policy(processing),
     )
 
 
@@ -4652,10 +4643,6 @@ def sensor_frame_sampler():
         environment = build_environment_snapshot(e, h2, bucket_end)
         sound_summary = sound_window_summary(bucket_start, bucket_end)
         sph0645_status = ((environment.get("devices") or {}).get("sph0645") or {}).get("status")
-        if sound_summary.get("leq_dba") is not None and sph0645_status == "live":
-            # All pages and analytical consumers receive this same analysis
-            # energy average. Raw dBFS and latest estimate remain in Admin state.
-            environment["sound_dba_est"] = sound_summary["leq_dba"]
         with state_lock:
             state["system"]["sound_analysis"] = {
                 **sound_summary,
@@ -6577,7 +6564,6 @@ def sensor_calibration_inspector_snapshot() -> Dict[str, Any]:
         hub1,
         environment,
         sound_device,
-        CALIBRATION.get("sound_processing") or {},
     ))
 
     # These algorithm-owned values are inspected beside the adjustable
@@ -6626,7 +6612,7 @@ def sensor_calibration_inspector_snapshot() -> Dict[str, Any]:
         "calibration_file": str(CALIBRATION_PATH),
         "formula": {
             "default": "calibrated = clamp(raw + bias)",
-            "sound_dba_est": "ESP32 I2S alignment → A-weighting → LAeq",
+            "sound_dba_est": "ESP32 sound_dba → Pi โดยตรง",
         },
     }
 
@@ -8091,7 +8077,7 @@ def sleep_policy_admin():
         },
         "humidity_bias_percentage_points": HUMIDITY_RH_BIAS,
         "sound_display_transform": {
-            "formula": "ESP32 I2S alignment -> A-weighting -> LAeq",
+            "formula": "ESP32 sound_dba -> Pi direct",
             "legacy_dbfs_policy": "invalid",
             "pi_abs_transform_allowed": False,
         },

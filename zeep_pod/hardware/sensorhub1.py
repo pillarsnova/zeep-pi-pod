@@ -87,7 +87,6 @@ class SensorHub1Reader:
         self.clock = clock
         self.sleeper = sleeper
         self.last_sound_status: tuple[bool, Any] | None = None
-        self.last_sound_window_key: tuple[Any, Any] | None = None
 
     def run_forever(self) -> None:
         """Reconnect indefinitely while keeping parse failures packet-local."""
@@ -138,7 +137,7 @@ class SensorHub1Reader:
                 payload, expected_hub="sensorhub1",
             )
             normalized = self.normalize(normalized)
-        except (TypeError, ValueError) as exc:
+        except (TypeError, ValueError, OverflowError) as exc:
             self.log_event(
                 "esp32", "payload_rejected",
                 reason="contract_error", error=str(exc),
@@ -162,33 +161,19 @@ class SensorHub1Reader:
                 "sph0645",
                 "measurement_valid" if status[0] else "measurement_invalid",
                 reason=status[1],
-                firmware_version=payload.get("sound_firmware_version"),
-                weighting=payload.get("sound_weighting"),
-                metric=payload.get("sound_metric"),
-                window_ms=payload.get("sound_window_ms"),
             )
             self.last_sound_status = status
 
         sound = payload.get("sound_dba_est")
-        if (
-            payload.get("sound_measurement_valid") is True
-            and isinstance(sound, (int, float))
-            and not isinstance(sound, bool)
-            and math.isfinite(float(sound))
-        ):
-            boot_id = payload.get("boot_id")
-            window_sequence = payload.get("sound_window_sequence")
-            window_key = (boot_id, window_sequence)
-            if (
-                boot_id is not None
-                and window_sequence is not None
-                and window_key == self.last_sound_window_key
-            ):
-                return
+        sound_is_finite = False
+        if isinstance(sound, (int, float)) and not isinstance(sound, bool):
+            try:
+                sound_is_finite = math.isfinite(float(sound))
+            except OverflowError:
+                sound_is_finite = False
+        if payload.get("sound_measurement_valid") is True and sound_is_finite:
             self.append_sound({
                 "t": payload["last_update"],
                 "dba": float(sound),
                 "dbfs": payload.get("sound_dbfs"),
             })
-            if boot_id is not None and window_sequence is not None:
-                self.last_sound_window_key = window_key

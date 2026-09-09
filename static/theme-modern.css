@@ -3944,6 +3944,8 @@ body[data-view="sessions"] .hist-row > .hist-quality {
   margin-top: 6px;
 }
 
+.calibration-values.sound-direct-value { grid-template-columns: 1fr; }
+
 .calibration-value {
   min-width: 0;
   padding: 6px;

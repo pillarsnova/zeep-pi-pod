@@ -20,26 +20,6 @@ from sensor_contracts import (
     SOUND_DBA_DISPLAY_MIN,
     SOUND_SENSOR_MODEL,
 )
-from sound_observability import sound_engineering_snapshot
-
-
-# Calibration trust is deliberately fail-closed.  Substring matching is unsafe
-# here (for example, ``unverified`` contains ``verified``), so only explicitly
-# versioned/approved states may turn the Admin badge green.
-VERIFIED_SOUND_CALIBRATION_STATES = frozenset({
-    "cem_verified",
-    "cem_dt_8852_verified",
-    "approved_cem_calibration",
-    "verified_against_cem_dt_8852",
-})
-PENDING_SOUND_CALIBRATION_STATES = frozenset({
-    "pending",
-    "pending_cem_recalibration",
-    "pending_cem_recalibration_after_sensor_replacement",
-    "sensor_replaced_contract_and_cem_revalidation_required",
-})
-APPROVED_SOUND_WINDOW_MS = 10_000.0
-SOUND_PREVIEW_MIN_OBSERVATIONS = 3
 
 
 def _first_finite_metric(
@@ -52,7 +32,7 @@ def _first_finite_metric(
             continue
         try:
             number = float(value)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             continue
         if math.isfinite(number):
             return number
@@ -174,160 +154,53 @@ def apply_additive_bias(
     return round(adjusted, 2)
 
 
-def _sound_pipeline_state(
-    measurement_valid: bool,
-    device: Mapping[str, Any],
-    engineering: Mapping[str, Any],
-) -> str:
-    """Classify transport/PCM health separately from CEM calibration."""
-    device_status = str(device.get("status") or "").strip().lower()
-    if device_status == "offline":
-        return "offline"
-    if device_status in {"stale", "held", "warming"}:
-        return "stale"
-    if device_status == "fault":
-        return "sensor_fault"
-    if measurement_valid:
-        return "valid"
-
-    flags = {
-        item["key"]: item["value"]
-        for item in engineering.get("flags", [])
-    }
-    raw_is_healthy = bool(
-        flags.get("capture_ok") is True
-        and flags.get("signal_valid") is True
-        and flags.get("stuck_zero") is not True
-        and flags.get("stuck_constant") is not True
-    )
-    return "raw_ok_output_blocked" if raw_is_healthy else "invalid"
-
-
-def sound_calibration_state(
-    calibration: Mapping[str, Any] | None,
-) -> str:
-    """Report CEM provenance without treating a firmware flag as approval."""
-    processing = calibration or {}
-    status = str(
-        processing.get("calibration_status")
-        or processing.get("status")
-        or ""
-    ).strip().lower()
-    if status in VERIFIED_SOUND_CALIBRATION_STATES:
-        return "verified"
-    if status in PENDING_SOUND_CALIBRATION_STATES:
-        return "pending"
-    return "unknown"
-
-
-def sound_runtime_policy(
-    calibration: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    """Translate approved provenance into fail-closed runtime gates."""
-    processing = calibration or {}
-    configured_window = processing.get("required_window_ms")
-    try:
-        required_window_ms = float(configured_window)
-    except (TypeError, ValueError):
-        required_window_ms = float("nan")
-    window_contract_valid = bool(
-        not isinstance(configured_window, bool)
-        and math.isfinite(required_window_ms)
-        and required_window_ms == APPROVED_SOUND_WINDOW_MS
-    )
-    return {
-        "sound_required_window_ms": APPROVED_SOUND_WINDOW_MS,
-        "sound_calibration_verified": (
-            sound_calibration_state(processing) == "verified"
-            and window_contract_valid
-        ),
-    }
-
-
-def sound_preview_policy(
-    calibration: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    """Authorize a display-only ESP32 level after three reviewed packets.
-
-    This policy is deliberately independent from the CEM/LAeq health gate.
-    It only permits a finite firmware value to be shown as provisional when
-    the configured microphone identity and three-packet smoke test are
-    recorded in ``calibration.json``. It never approves Session recording,
-    scoring, environment grading or automatic control.
-    """
-    processing = calibration or {}
-    observation = processing.get("sensor_replacement_observation")
-    if not isinstance(observation, Mapping):
-        observation = {}
-    samples = observation.get("firmware_dba_samples")
-    samples = samples if isinstance(samples, list) else []
-    finite_samples = [
-        float(value)
-        for value in samples
-        if (
-            not isinstance(value, bool)
-            and isinstance(value, (int, float))
-            and math.isfinite(float(value))
-            and SOUND_DBA_DISPLAY_MIN <= float(value) <= SOUND_DBA_DISPLAY_MAX
-        )
-    ]
-    model_matches = (
-        observation.get("configured_sensor_model") == SOUND_SENSOR_MODEL
-    )
-    decision_matches = (
-        observation.get("firmware_dba_decision")
-        == "display_as_provisional_only_do_not_score"
-    )
-    profile = str(observation.get("profile") or "").strip()
-    return {
-        "sound_preview_enabled": bool(
-            model_matches
-            and decision_matches
-            and profile
-            and len(finite_samples) >= SOUND_PREVIEW_MIN_OBSERVATIONS
-        ),
-        "sound_preview_evidence_count": len(finite_samples),
-        "sound_preview_profile": profile or None,
-    }
-
-
 def sound_inspector_channel(
     hub1: Mapping[str, Any],
     environment: Mapping[str, Any],
     device: Mapping[str, Any],
-    calibration: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Describe validated LAeq and Admin-only signed PCM diagnostics."""
+    """Describe the direct ESP32 sound channel for the Admin inspector."""
     measurement_valid = hub1.get("sound_measurement_valid") is True
-    firmware_laeq = _first_finite_metric(
-        hub1,
-        "sound_dba_firmware_est",
-        "sound_laeq_dba",
-        "sound_dba",
-    )
-    engineering = sound_engineering_snapshot(hub1, device)
+    sound_dba = hub1.get("sound_dba")
+    if (
+        not measurement_valid
+        or not isinstance(sound_dba, (int, float))
+        or isinstance(sound_dba, bool)
+    ):
+        sound_dba = None
+    else:
+        try:
+            sound_dba = float(sound_dba)
+        except OverflowError:
+            sound_dba = None
+        if (
+            sound_dba is None
+            or not math.isfinite(sound_dba)
+            or not SOUND_DBA_DISPLAY_MIN <= sound_dba <= SOUND_DBA_DISPLAY_MAX
+        ):
+            sound_dba = None
+            measurement_valid = False
+    device_status = str(device.get("status") or "offline").strip().lower()
     return {
         "metric": "sound_dba_est", "device": SOUND_SENSOR_MODEL,
-        "device_key": "sph0645", "label": "ระดับเสียง LAeq(A)",
-        "unit": "dBA est.", "raw_unit": "dBA est.",
-        "raw": firmware_laeq, "bias": 0.0,
+        "device_key": "sph0645", "label": "ระดับเสียงจาก ESP32",
+        "unit": "dBA", "raw_unit": "dBA",
+        "raw": sound_dba, "bias": 0.0,
         "calibrated": environment.get("sound_dba_est"),
         "editable": False, "source": device.get("source_label"),
-        "status": device.get("status", "offline"),
+        "status": device_status,
         "data_age_s": device.get("data_age_s"),
-        "formula": "ESP32: I2S alignment → A-weighting → LAeq",
-        "firmware_value": firmware_laeq,
+        "formula": "ESP32 sound_dba → Pi โดยตรง",
+        "firmware_value": sound_dba,
         "measurement_valid": measurement_valid,
         "invalid_reason": hub1.get("sound_invalid_reason"),
-        "pipeline_state": _sound_pipeline_state(
-            measurement_valid,
-            device,
-            engineering,
+        "pipeline_state": (
+            "direct" if measurement_valid and device_status == "live"
+            else device_status if device_status != "live"
+            else "invalid"
         ),
-        "calibration_state": sound_calibration_state(calibration),
-        "engineering": engineering,
         "lock_reason": (
-            "Firmware LAeq(A) ใช้ตรวจวินิจฉัยเท่านั้น · ค่าเสียงฝั่งสุขภาพ"
-            "และผู้ใช้ต้องผ่านสัญญา 10 วินาทีและสอบเทียบ CEM DT-8852"
+            "รับ sound_dba จาก ESP32 โดยตรง · Pi ไม่ทำ abs, bias "
+            "หรือคำนวณเสียงซ้ำ"
         ),
     }

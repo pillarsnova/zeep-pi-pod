@@ -31,16 +31,28 @@ LEGACY_HUB1_MEASUREMENT_FIELDS = frozenset({
     "temperature_c", "temperature", "temp", "temp_c",
     "humidity_rh", "humidity", "hum", "rh",
     "lux", "light", "illuminance",
-    "sound_dbfs", "sound_dba", "sound_laeq_dba", "sensor_status",
 })
 
-# CEM DT-8852 reference range currently approved for ZEEP field validation.
-# A numeric sound value outside this range is unavailable, not a value to
-# clamp into range.  Keeping the limits here prevents API, Dashboard and
-# Session recording from drifting to different definitions.
+# Accepted range for the ESP32 ``sound_dba`` field. A value outside this range
+# is unavailable rather than clamped. Keeping the limits here prevents API,
+# Dashboard and Session recording from drifting to different definitions.
 SOUND_DBA_DISPLAY_MIN = 30.0
 SOUND_DBA_DISPLAY_MAX = 130.0
 SOUND_SENSOR_MODEL = "SPH0645LM4H-B"
+
+# The nested telemetry schema binds every value to its physical owner. This
+# prevents an unrelated sensor block from injecting or overwriting sound_dba
+# (and applies the same isolation rule to every other Hub value).
+SENSOR_VALUE_FIELDS: dict[str, frozenset[str]] = {
+    "sht3x_dis": frozenset({"temperature_c", "humidity_rh"}),
+    "opt3001": frozenset({"lux"}),
+    "sph0645": frozenset({"sound_dba", "sound_dbfs"}),
+    "mhz19c": frozenset({"co2_ppm"}),
+    "pms7003": frozenset({
+        "pm1_0_ug_m3", "pm2_5_ug_m3", "pm10_ug_m3",
+    }),
+    "sgp40": frozenset({"sgp40_raw", "voc_index"}),
+}
 
 
 SENSOR_CATALOG: dict[str, dict[str, Any]] = {
@@ -84,17 +96,14 @@ SENSOR_CATALOG: dict[str, dict[str, Any]] = {
             "nominal_snr_dba": 65,
             "bandwidth_hz": 18000,
             "typical_current_ua": 600,
-            "note": "The microphone outputs digital PCM/dBFS, not dBA. ESP32 must correct I2S alignment, apply A-weighting and integrate LAeq before the Pi can publish the value.",
+            "note": "The microphone outputs digital PCM. Sensor Hub 1 owns its processing and publishes the operational sound_dba value consumed by the Pi.",
         },
         "datasheet": "https://www.knowles.com/docs/default-source/model-downloads/sph0645lm4h-b-datasheet-rev-c.pdf",
-        "fields": [
-            "sound_dbfs", "sound_dba", "sound_laeq_dba", "sound_valid",
-            "sound_weighting", "sound_metric", "sound_window_ms",
-        ],
+        "fields": ["sound_dba", "sound_dbfs"],
         "zeep_processing": {
             "owner": "sensorhub1_firmware",
-            "required_weighting": "A",
-            "required_metric": "LAeq",
+            "source_field": "sound_dba",
+            "pi_transform": "none",
             "accepted_display_range_dba": [
                 SOUND_DBA_DISPLAY_MIN,
                 SOUND_DBA_DISPLAY_MAX,
@@ -255,7 +264,10 @@ def sensor_contract_snapshot() -> dict[str, Any]:
 def _finite(value: Any) -> Any:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return value
-    return value if math.isfinite(float(value)) else None
+    try:
+        return value if math.isfinite(float(value)) else None
+    except OverflowError:
+        return None
 
 
 def classify_hub_payload(
@@ -339,11 +351,9 @@ def decode_hub_payload(
             "ok", "live", "ready", "degraded", "held",
         }
         values = raw.get("values") if isinstance(raw.get("values"), Mapping) else raw
+        owned_fields = SENSOR_VALUE_FIELDS.get(sensor_key, frozenset())
         for key, value in values.items():
-            if key not in {
-                "status", "quality", "unit", "values", "diagnostics",
-                "reason", "invalid_reason",
-            }:
+            if key in owned_fields:
                 flat[str(key)] = _finite(value)
         details = {
             "status": status,
@@ -360,8 +370,8 @@ def decode_hub_payload(
             key: value for key, value in details.items() if value is not None
         }
         if sensor_key == "sph0645" and reason and not sensor_status[sensor_key]:
-            # Firmware owns acoustic validation. Preserve its concrete reason
-            # instead of replacing it later with a generic missing-LAeq label.
+            # Preserve firmware diagnostics for Admin. A finite in-range
+            # ``sound_dba`` remains the sole runtime acceptance decision.
             flat.setdefault("sound_invalid_reason", reason)
     flat.update({
         "sensor_status": sensor_status,

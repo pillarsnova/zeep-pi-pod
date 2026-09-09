@@ -573,9 +573,6 @@ class RbacApiTests(unittest.TestCase):
             "environment": {
                 "temperature_c": 23.4, "humidity_rh": 51.2, "lux": 0.0,
                 "sound_dba_est": 37.5, "co2_ppm": 812.0,
-                "sound_dba_firmware_est": 53.86,
-                "sound_firmware_window_ms": 1000.0,
-                "sound_preview_evidence_count": 3,
                 "pm2_5_ug_m3": 4.0, "voc_index": 103.0,
                 "devices": devices, "live_count": 6, "total_count": 6,
                 "status": "live",
@@ -633,11 +630,12 @@ class RbacApiTests(unittest.TestCase):
             environment = restored["sensor"]["environment"]
             self.assertEqual(environment["temperature_c"], 23.4)
             self.assertEqual(environment["co2_ppm"], 812.0)
+            self.assertEqual(environment["sound_dba_est"], 37.5)
             self.assertEqual(environment["devices"]["sht3x_dis"]["status"], "stale")
             self.assertEqual(environment["live_count"], 0)
-            self.assertIsNone(environment["sound_dba_firmware_est"])
-            self.assertIsNone(environment["sound_firmware_window_ms"])
-            self.assertEqual(environment["sound_preview_evidence_count"], 0)
+            self.assertNotIn("sound_dba_firmware_est", environment)
+            self.assertNotIn("sound_firmware_window_ms", environment)
+            self.assertNotIn("sound_preview_evidence_count", environment)
             temp = next(
                 item for item in environment["assessment"]["evaluations"]
                 if item["key"] == "temperature"
@@ -774,17 +772,18 @@ class RbacApiTests(unittest.TestCase):
             channel for channel in inspector.json()["channels"]
             if channel["metric"] == "sound_dba_est"
         )
-        self.assertEqual(sound["raw_unit"], "dBA est.")
-        self.assertEqual(sound["unit"], "dBA est.")
+        self.assertEqual(sound["raw_unit"], "dBA")
+        self.assertEqual(sound["unit"], "dBA")
         self.assertFalse(sound["editable"])
-        self.assertIn("engineering", sound)
-        self.assertIn("fields", sound["engineering"])
-        self.assertIn("pipeline_state", sound)
-        self.assertEqual(sound["calibration_state"], "pending")
+        self.assertEqual(sound["bias"], 0.0)
         self.assertEqual(
             sound["formula"],
-            "ESP32: I2S alignment → A-weighting → LAeq",
+            "ESP32 sound_dba → Pi โดยตรง",
         )
+        self.assertNotIn("engineering", sound)
+        self.assertNotIn("calibration_state", sound)
+        self.assertNotIn("evidence", sound)
+        self.assertNotIn("reference_meter", sound)
         previous_biases = dict(pod_app.SENSOR_BIASES)
         previous_sources = dict(pod_app.SENSOR_BIAS_SOURCES)
         previous_calibration = copy.deepcopy(pod_app.CALIBRATION)
@@ -814,7 +813,7 @@ class RbacApiTests(unittest.TestCase):
                 pod_app.CALIBRATION.clear()
                 pod_app.CALIBRATION.update(previous_calibration)
 
-    def test_user_snapshot_hides_admin_sound_engineering_payload(self) -> None:
+    def test_user_snapshot_keeps_canonical_sound_and_hides_raw_esp_fields(self) -> None:
         now = time.time()
         principal = pod_app.Principal(
             session_id="user-snapshot-test",
@@ -828,19 +827,18 @@ class RbacApiTests(unittest.TestCase):
             csrf_token="test-token",
             expires_at=now + 60,
         )
+        normalized = pod_app.normalize_esp32_sensor({
+            "connected": True,
+            "last_update": now,
+            "sound_dba": 53.86,
+            "sound_dbfs": -50.86,
+            "sound_dbfs_a": -58.17,
+            "sound_rms": 0.002864,
+            "mic_zero_ratio": 0.0,
+        })
         with pod_app.state_lock:
             original = copy.deepcopy(pod_app.state["sensor"]["esp32"])
-            pod_app.state["sensor"]["esp32"].update({
-                "connected": True,
-                "last_update": now,
-                "sound_dba": 53.86,
-                "sound_dba_firmware_est": 53.86,
-                "sound_preview_evidence_count": 3,
-                "sound_dbfs": -50.86,
-                "sound_dbfs_a": -58.17,
-                "sound_rms": 0.002864,
-                "mic_zero_ratio": 0.0,
-            })
+            pod_app.state["sensor"]["esp32"].update(normalized)
             hub1 = copy.deepcopy(pod_app.state["sensor"]["esp32"])
             hub2 = copy.deepcopy(pod_app.state["sensor"]["sensorhub2"])
             bcg = copy.deepcopy(pod_app.state["sensor"]["bcg"])
@@ -870,9 +868,9 @@ class RbacApiTests(unittest.TestCase):
             self.assertNotIn("sound_rms", esp32)
             self.assertNotIn("mic_zero_ratio", esp32)
             self.assertNotIn("sound_dbfs_raw", environment)
-            self.assertEqual(environment["sound_dba_firmware_est"], 53.86)
-            self.assertEqual(environment["sound_preview_evidence_count"], 3)
-            self.assertIsNone(environment["sound_dba_est"])
+            self.assertNotIn("sound_dba_firmware_est", environment)
+            self.assertNotIn("sound_preview_evidence_count", environment)
+            self.assertEqual(environment["sound_dba_est"], 53.86)
             sound_device = environment["devices"]["sph0645"]
             self.assertNotIn("diagnostics", sound_device)
             self.assertNotIn("invalid_values", sound_device)

@@ -1,10 +1,14 @@
 # SPH0645 ↔ CEM DT-8852 field comparison — 2026-08-26
 
+> **ARCHIVED QA EVIDENCE · NOT A RUNTIME GATE (2026-09-10)**
+> ระบบปัจจุบันรับ `sound_dba` จาก ESP32 โดยตรง เอกสารนี้เก็บเพื่อย้อนตรวจ
+> ประวัติเท่านั้น ไม่ใช้บังคับ bias, profile, LAeq/CEM gate หรือการรอ 3 packet
+
 > **Document status: historical evidence / superseded for runtime.** ตั้งแต่
 > 2026-09-06 ระบบยกเลิก `abs(sound_dbfs)` และไม่แปลง dBFS เป็น dBA บน Pi
 > อีกต่อไป สูตรและ offset ด้านล่างเป็นลำดับเหตุการณ์เดิมสำหรับ Audit เท่านั้น
-> Packet แบบเดิมถูกระบุเป็น INVALID จนกว่า ESP32 จะส่ง A-weighted LAeq ตาม
-> Sensor Interface Contract v1.2
+> ข้อกำหนด A-weighted LAeq เดิมถูกยกเลิกแล้ว Runtime ปัจจุบันรับเฉพาะ
+> `sound_dba` ที่เป็นตัวเลข finite ในช่วง 30–130 ตาม Sensor Interface Contract v1.2
 
 ## Decision
 

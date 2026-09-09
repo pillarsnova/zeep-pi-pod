@@ -46,11 +46,7 @@ class PiContractTests(unittest.TestCase):
                     "reason": "ok" if sph_live else "digital_silence",
                     "values": {
                         "sound_dbfs": -68.0 if sph_live else None,
-                        "sound_laeq_dba": 55.0 if sph_live else None,
-                        "sound_valid": sph_live,
-                        "sound_weighting": "A",
-                        "sound_metric": "LAeq",
-                        "sound_window_ms": 10_000,
+                        "sound_dba": 55.0 if sph_live else None,
                         "sound_window_sequence": 7,
                     },
                 },
@@ -63,17 +59,12 @@ class PiContractTests(unittest.TestCase):
             "event": "environment",
             "source": "sensorhub1_firmware",
             "hub_id": "sensorhub1",
-            "firmware_version": "sensorhub1-sph0645-laeq-v1.0.0",
+            "firmware_version": "sensorhub1-direct-sound-v1.0.0",
             "temperature_c": 24.3,
             "humidity_rh": 51.2,
             "lux": 0.3,
             "sound_dbfs": -68.0,
-            "sound_laeq_dba": 55.0,
-            "sound_valid": True,
-            "sound_weighting": "A",
-            "sound_metric": "LAeq",
-            "sound_window_ms": 10_000,
-            "sound_samples": 480_000,
+            "sound_dba": 55.0,
             "sensor_status": {
                 "sht3x_dis": True,
                 "opt3001": True,
@@ -84,8 +75,6 @@ class PiContractTests(unittest.TestCase):
             packet,
             sound_display_min=30.0,
             sound_display_max=130.0,
-            sound_required_window_ms=10_000,
-            sound_calibration_verified=True,
         )
         self.assertTrue(normalized["sound_measurement_valid"])
         self.assertEqual(normalized["sound_dba_est"], 55.0)
@@ -140,7 +129,7 @@ class PiContractTests(unittest.TestCase):
                 decoded = decode_hub_payload(
                     packet, expected_hub="sensorhub1")
                 self.assertEqual(decoded["boot_id"], 91)
-                self.assertEqual(decoded["sound_window_sequence"], 7)
+                self.assertNotIn("sound_window_sequence", decoded)
                 self.assertEqual(decoded["sensor_status"], live)
                 self.assertEqual(
                     set(decoded["sensor_diagnostics"]), set(live))
@@ -148,8 +137,6 @@ class PiContractTests(unittest.TestCase):
                     decoded,
                     sound_display_min=30.0,
                     sound_display_max=130.0,
-                    sound_required_window_ms=10_000,
-                    sound_calibration_verified=True,
                 )
                 self.assertEqual(
                     normalized["sound_measurement_valid"],
@@ -163,6 +150,34 @@ class PiContractTests(unittest.TestCase):
                     normalized.get("lux") is not None,
                     live["opt3001"],
                 )
+
+    def test_dbfs_or_laeq_without_direct_sound_dba_is_invalid(self) -> None:
+        for packet in (
+            {"sound_dbfs": -39.69},
+            {"sound_laeq_dba": 54.0},
+        ):
+            with self.subTest(packet=packet):
+                normalized = normalize_hub1_sensor(
+                    packet,
+                    sound_display_min=30.0,
+                    sound_display_max=130.0,
+                )
+                self.assertFalse(normalized["sound_measurement_valid"])
+                self.assertNotIn("sound_dba_est", normalized)
+
+    def test_direct_sound_dba_needs_no_profile_window_or_cem_gate(self) -> None:
+        for value in (30.0, 53.86, 130.0):
+            with self.subTest(value=value):
+                normalized = normalize_hub1_sensor(
+                    {"sound_dba": value},
+                    sound_display_min=30.0,
+                    sound_display_max=130.0,
+                )
+
+                self.assertTrue(normalized["sound_measurement_valid"])
+                self.assertEqual(normalized["sound_dba_est"], value)
+                self.assertNotIn("sound_dba_firmware_est", normalized)
+                self.assertNotIn("sound_preview_evidence_count", normalized)
 
 
 if __name__ == "__main__":

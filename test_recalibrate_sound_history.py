@@ -55,6 +55,12 @@ class RecalibrateSoundHistoryTests(unittest.TestCase):
             )
             self.assertEqual(result["timeline_rows"], 2)
             self.assertEqual(result["held_invalid_rows"], 1)
+            self.assertTrue(result["retired"])
+            self.assertFalse(result["writeback_allowed"])
+            self.assertEqual(
+                result["current_contract"],
+                "esp32-direct-sound-dba-v1.0",
+            )
             connection = sqlite3.connect(database)
             try:
                 rows = connection.execute(
@@ -64,15 +70,18 @@ class RecalibrateSoundHistoryTests(unittest.TestCase):
                 connection.close()
             self.assertEqual(rows, [(50.0,), (5.0,), (30.0,)])
 
-    def test_apply_updates_timeline_and_acoustic_evidence_once(self) -> None:
+    def test_apply_is_retired_and_does_not_mutate_history(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             database = Path(temp) / "sessions.db"
             _database(database)
-            result = recalibrate_sound_history(
-                database, session_id="s1", before="2026-08-27T05:51:53+07:00",
-                delta_db=-10, apply=True,
-            )
-            self.assertEqual(result["timeline_rows"], 2)
+            with self.assertRaisesRegex(RuntimeError, "recalibration is retired"):
+                recalibrate_sound_history(
+                    database,
+                    session_id="s1",
+                    before="2026-08-27T05:51:53+07:00",
+                    delta_db=-10,
+                    apply=True,
+                )
             connection = sqlite3.connect(database)
             try:
                 rows = connection.execute(
@@ -83,16 +92,11 @@ class RecalibrateSoundHistoryTests(unittest.TestCase):
                 ).fetchone()[0])
             finally:
                 connection.close()
-            self.assertEqual(rows, [(40.0,), (40.0,), (30.0,)])
-            self.assertEqual(payload["reason"], "เสียงเฉลี่ย 40.0 dBA")
+            self.assertEqual(rows, [(50.0,), (5.0,), (30.0,)])
+            self.assertEqual(payload["reason"], "เสียงเฉลี่ย 50.0 dBA")
             acoustic = payload["metrics"]["auxiliary_evidence"]["acoustic"]
-            self.assertEqual(acoustic["mean_leq_dba"], 40.0)
-            self.assertEqual(acoustic["max_leq_dba"], 42.0)
-            with self.assertRaisesRegex(RuntimeError, "already applied"):
-                recalibrate_sound_history(
-                    database, session_id="s1", before="2026-08-27T05:51:53+07:00",
-                    delta_db=-10, apply=True,
-                )
+            self.assertEqual(acoustic["mean_leq_dba"], 50.0)
+            self.assertEqual(acoustic["max_leq_dba"], 52.0)
 
 
 if __name__ == "__main__":

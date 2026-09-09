@@ -725,7 +725,7 @@
     .dash-session-badge{padding:8px 12px;border:1px solid #765c29;border-radius:999px;color:var(--amber);background:#251d0f;font-size:10px;font-weight:800;white-space:nowrap}.dash-session-badge.live{color:var(--good);border-color:#2e7258;background:#0e2a20}
     .dash-health-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:18px 22px 10px}.dash-health{padding:14px;border:1px solid #294557;border-radius:12px;background:#071521}.dash-health span{display:block;color:#748f9d;font-size:9.5px}.dash-health b{display:block;margin-top:8px;color:#f2fbff;font:800 22px "SF Mono",ui-monospace,monospace}.dash-health small{display:block;margin-top:5px;color:#607986;font-size:8.5px}
     .dash-sensors-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 22px;color:#a9c2cc;font-size:11px;font-weight:800}.dash-sensors-head span{color:#718b98;font-size:9px;font-weight:600}
-    .dash-sensor-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;padding:0 22px 20px}.dash-sensor{position:relative;padding:11px;border:1px solid #243f50;border-radius:10px;background:#081722}.dash-sensor::after{content:"";position:absolute;right:9px;top:9px;width:7px;height:7px;border-radius:50%;background:var(--faint)}.dash-sensor.live::after{background:var(--good);box-shadow:0 0 8px #2effab88}.dash-sensor.offline::after{background:var(--bad)}.dash-sensor.provisional{border-color:#765c29;background:#1c180f}.dash-sensor.provisional::after{background:var(--amber);box-shadow:0 0 8px #f6b94a77}.dash-sensor span{display:block;color:#718b98;font-size:8.5px}.dash-sensor b{display:block;margin-top:7px;color:#e9f7fb;font:800 15px "SF Mono",ui-monospace,monospace}.dash-sensor small.sound-preview-state{display:block;margin-top:5px;color:var(--amber);font-size:8px;line-height:1.25}.dash-foot{padding:11px 22px;border-top:1px solid #213b4b;color:#6f8793;font-size:9px}
+    .dash-sensor-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;padding:0 22px 20px}.dash-sensor{position:relative;padding:11px;border:1px solid #243f50;border-radius:10px;background:#081722}.dash-sensor::after{content:"";position:absolute;right:9px;top:9px;width:7px;height:7px;border-radius:50%;background:var(--faint)}.dash-sensor.live::after{background:var(--good);box-shadow:0 0 8px #2effab88}.dash-sensor.offline::after{background:var(--bad)}.dash-sensor span{display:block;color:#718b98;font-size:8.5px}.dash-sensor b{display:block;margin-top:7px;color:#e9f7fb;font:800 15px "SF Mono",ui-monospace,monospace}.dash-foot{padding:11px 22px;border-top:1px solid #213b4b;color:#6f8793;font-size:9px}
     .unified-control{padding:20px;background:linear-gradient(145deg,#10283a,#0a1826 60%,#10192b)}
     .unified-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.unified-head h3{margin:4px 0 3px;color:#f2fbff;font-size:21px}.unified-head p{margin:0;color:#7d96a3;font-size:10.5px}.unified-room-state{padding:8px 11px;border:1px solid #755a29;border-radius:999px;color:var(--amber);background:#251d0f;font-size:9px;font-weight:800;white-space:nowrap}.unified-room-state.good{color:var(--good);border-color:#2d7257;background:#0e291f}.unified-sensor-strip{display:none}.unified-sensor{padding:9px 10px;border:1px solid #284658;border-radius:9px;background:#071521}.unified-sensor span{display:block;color:#66818f;font-size:8px}.unified-sensor b{display:block;margin-top:4px;color:#dff2f7;font:750 13px "SF Mono",ui-monospace,monospace;white-space:nowrap}
     .controller-map{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:14px}.controller-node{position:relative;min-height:92px;padding:12px;border:1px solid #294758;border-radius:12px;background:#071521}.controller-node::after{content:"";position:absolute;right:11px;top:11px;width:8px;height:8px;border-radius:50%;background:var(--faint)}.controller-node.live::after{background:var(--good);box-shadow:0 0 9px #2effab99}.controller-node.degraded::after{background:var(--amber);box-shadow:0 0 9px #ffb02e66}.controller-node.offline::after{background:var(--bad)}.controller-node .controller-type{color:#6e8997;font:800 8px "SF Mono",ui-monospace,monospace;letter-spacing:.1em}.controller-node b{display:block;margin-top:7px;color:#eaf8fb;font-size:11.5px}.controller-node span{display:block;margin-top:5px;color:#68828f;font-size:8.5px;line-height:1.45}.controller-node strong{display:block;margin-top:8px;color:#9fb7c0;font:750 8.5px "SF Mono",ui-monospace,monospace}.controller-node.live strong{color:var(--good)}.controller-node.degraded strong{color:var(--amber)}.controller-node.offline strong{color:var(--bad)}
@@ -1043,7 +1043,7 @@
             <div class="dash-sensor" id="dashSensorCo2"><div class="dash-metric-head"><span class="dash-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 18h11a4 4 0 0 0 .5-8A6 6 0 0 0 6 8.5 4.8 4.8 0 0 0 6 18Z"/><circle cx="9" cy="13" r="1"/><circle cx="13" cy="12" r="1"/><circle cx="16" cy="14" r="1"/></svg></span><span>CO₂</span></div><b id="dashCo2">-- ppm</b></div>
             <div class="dash-sensor" id="dashSensorPm"><div class="dash-metric-head"><span class="dash-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="7" cy="8" r="2"/><circle cx="15" cy="6" r="1.5"/><circle cx="18" cy="13" r="2"/><circle cx="9" cy="16" r="2.5"/><circle cx="14" cy="18" r="1"/></svg></span><span>PM2.5</span></div><b id="dashPm">-- µg/m³</b></div>
             <div class="dash-sensor" id="dashSensorVoc"><div class="dash-metric-head"><span class="dash-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8c4-4 8 4 12 0 2-2 3-2 4-2M4 13c4-4 8 4 12 0 2-2 3-2 4-2M4 18c4-4 8 4 12 0 2-2 3-2 4-2"/></svg></span><span>VOC Index</span></div><b id="dashVoc">--</b></div>
-            <div class="dash-sensor" id="dashSensorSound"><div class="dash-metric-head"><span class="dash-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 14h4l5 4V6L8 10H4Z"/><path d="M16 9c2 2 2 4 0 6m3-9c4 4 4 8 0 12"/></svg></span><span>เสียง</span></div><b id="dashSound">-- dBA est.</b><small class="sound-preview-state" id="dashSoundState" hidden></small></div>
+            <div class="dash-sensor" id="dashSensorSound"><div class="dash-metric-head"><span class="dash-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 14h4l5 4V6L8 10H4Z"/><path d="M16 9c2 2 2 4 0 6m3-9c4 4 4 8 0 12"/></svg></span><span>เสียง</span></div><b id="dashSound">-- dBA</b></div>
             <div class="dash-sensor dash-atmosphere atmosphere-unknown" id="dashAtmosphereCard" aria-label="ภาพรวมภายใน ZEEP รอข้อมูล">
               <div class="dash-metric-head"><span class="dash-metric-icon dash-atmosphere-icon" id="dashAtmosphereIcon" aria-hidden="true">?</span><span>ภาพรวม</span></div>
               <b id="dashAtmosphereLevel">รอข้อมูล</b>
@@ -1316,7 +1316,7 @@
           <div class="sensor-device-grid">
             <article class="sensor-device offline" data-tone="teal" id="sensorSht"><div class="sensor-device-head"><div class="sensor-model"><div class="sensor-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v10"/><circle cx="12" cy="17" r="4"/><path d="M8 6a4 4 0 0 1 8 0v7.5"/></svg></div><div><b>SHT3x-DIS</b><span>Temperature · Humidity</span></div></div><div class="sensor-live" id="shtStatus">รอข้อมูล</div></div><div class="sensor-values"><div class="sensor-reading"><div class="label">อุณหภูมิ</div><div class="reading"><span id="temperature">--</span><small>°C</small></div></div><div class="sensor-reading"><div class="label">ความชื้น</div><div class="reading"><span id="humidity">--</span><small>%RH</small></div></div></div><div class="sensor-footer"><div class="sensor-assessment" id="shtAssessment"><strong>รอข้อมูล</strong><span>18–27°C · 40–60%RH</span></div><div class="sensor-meter"><i id="shtMeter"></i></div></div></article>
             <article class="sensor-device offline" data-tone="amber" id="sensorOpt"><div class="sensor-device-head"><div class="sensor-model"><div class="sensor-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/></svg></div><div><b>OPT3001</b><span>Ambient Light</span></div></div><div class="sensor-live" id="optStatus">รอข้อมูล</div></div><div class="sensor-values single"><div class="sensor-reading"><div class="label">ความสว่าง</div><div class="reading"><span id="lux">--</span><small>lux</small></div></div></div><div class="sensor-note">Photopic illuminance · ไม่ใช่ mEDI</div><div class="sensor-footer"><div class="sensor-assessment" id="optAssessment"><strong>รอข้อมูล</strong><span>โหมดนอน ≤5 lux</span></div><div class="sensor-meter"><i id="optMeter"></i></div></div></article>
-            <article class="sensor-device offline" data-tone="violet" id="sensorSph"><div class="sensor-device-head"><div class="sensor-model"><div class="sensor-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 14h4l5 4V6L8 10H4Z"/><path d="M16 9c2 2 2 4 0 6m3-9c4 4 4 8 0 12"/></svg></div><div><b>SPH0645LM4H-B</b><span>Digital MEMS · I²S</span></div></div><div class="sensor-live" id="sphStatus">รอข้อมูล</div></div><div class="sensor-values single"><div class="sensor-reading"><div class="label">สัญญาณเสียง</div><div class="reading"><span id="sound">--</span><small id="soundUnit">dBA est.</small></div></div></div><div id="soundQuality" class="sensor-note">รอข้อมูล transform</div><div class="sensor-footer"><div class="sensor-assessment" id="sphAssessment"><strong>รอข้อมูล</strong><span>เป้าหมายระบบ ≤35 dBA est.</span></div><div class="sensor-meter"><i id="sphMeter"></i></div></div></article>
+            <article class="sensor-device offline" data-tone="violet" id="sensorSph"><div class="sensor-device-head"><div class="sensor-model"><div class="sensor-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 14h4l5 4V6L8 10H4Z"/><path d="M16 9c2 2 2 4 0 6m3-9c4 4 4 8 0 12"/></svg></div><div><b>SPH0645LM4H-B</b><span>Digital MEMS · I²S</span></div></div><div class="sensor-live" id="sphStatus">รอข้อมูล</div></div><div class="sensor-values single"><div class="sensor-reading"><div class="label">สัญญาณเสียง</div><div class="reading"><span id="sound">--</span><small id="soundUnit">dBA</small></div></div></div><div id="soundQuality" class="sensor-note">รอ sound_dba จาก ESP32</div><div class="sensor-footer"><div class="sensor-assessment" id="sphAssessment"><strong>รอข้อมูล</strong><span>เป้าหมายระบบ ≤35 dBA</span></div><div class="sensor-meter"><i id="sphMeter"></i></div></div></article>
           </div>
         </section>
         <section class="sensor-group" aria-labelledby="airGroupTitle">
@@ -1455,7 +1455,7 @@
         <div class="control-metric"><div class="control-metric-head"><span class="control-metric-icon">CO₂</span>อากาศ</div><b class="control-metric-value" id="quickCo2">-- ppm</b><small id="quickCo2Note">MH-Z19C</small></div>
         <div class="control-metric"><div class="control-metric-head"><span class="control-metric-icon">PM</span>ฝุ่น PM2.5</div><b class="control-metric-value" id="quickPm25">-- µg/m³</b><small id="quickPm25Note">PMS7003</small></div>
         <div class="control-metric"><div class="control-metric-head"><span class="control-metric-icon">VOC</span>สารระเหย</div><b class="control-metric-value" id="quickVoc">--</b><small id="quickVocNote">SGP40 · baseline 100</small></div>
-        <div class="control-metric"><div class="control-metric-head"><span class="control-metric-icon">dB</span>เสียง</div><b class="control-metric-value" id="quickSound">-- dBA est.</b><small id="quickSoundNote">SPH0645LM4H-B</small></div>
+        <div class="control-metric"><div class="control-metric-head"><span class="control-metric-icon">dB</span>เสียง</div><b class="control-metric-value" id="quickSound">-- dBA</b><small id="quickSoundNote">SPH0645LM4H-B</small></div>
       </div>
 
       <section class="smart-response" id="smartResponsePanel" aria-label="Smart Sleep Response" aria-live="polite">
@@ -1697,7 +1697,7 @@
       <div class="calibration-formula"><span>RAW</span><i>→</i><span>TRANSFORM / BIAS</span><i>→</i><strong>OUTPUT</strong><small>ค่าดิบไม่ถูกแก้ไข · ค่าใหม่มีผลกับ Packet ถัดไป · บันทึกลง calibration.json</small></div>
       <div class="calibration-session-note" id="calibrationSessionNote">กำลังตรวจสถานะ Session…</div>
       <div class="calibration-device-grid" id="calibrationInspector"><div class="mini">กำลังโหลด Sensor calibration…</div></div>
-      <div class="calibration-legend"><span><i class="live"></i>LIVE</span><span><i class="stale"></i>STALE / HELD</span><span><i class="locked"></i>ALGORITHM LOCKED</span><small>SPH0645LM4H-B: signed dBFS แสดงเฉพาะ Admin และไม่ใช่ dBA · Output ต้องผ่าน A/LAeq contract ก่อน</small></div>
+      <div class="calibration-legend"><span><i class="live"></i>LIVE</span><span><i class="stale"></i>STALE / HELD</span><span><i class="locked"></i>ALGORITHM LOCKED</span><small>SPH0645LM4H-B: ระบบรับ sound_dba จาก ESP32 โดยตรง · Pi ไม่ทำ abs, bias หรือคำนวณเสียงซ้ำ</small></div>
       <div class="raw-subhead"><div><strong>LSM-800-T · Byte-exact Raw Frames</strong><span>66 bytes · 25 BCG samples · HR/RR firmware bytes</span></div><button class="btn compact ui-label-button" onclick="fetchRawPackets(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-refresh"/></svg><span>Raw BCG</span></button></div>
       <div class="mini">แสดงแต่ละ Serial frame ตามที่ได้รับจริง พร้อม Raw HEX และคำวิเคราะห์ โดยไม่มีการนำค่าปรับไปแก้ byte ต้นฉบับ</div>
       <div class="raw-table" id="rawPackets"><div class="mini">กำลังรอ packet…</div></div>
@@ -2174,7 +2174,7 @@ function renderSleepState(sl={},session={},bcg={}){
     env.humidity_rh!=null?`💧 ${env.humidity_rh}%RH`:null,
     env.co2_ppm!=null?`☁ CO₂ ${env.co2_ppm} ppm`:null,
     env.lux!=null?`☀ ${env.lux} lux`:null,
-    env.sound_dba!=null?`🔊 ${env.sound_dba} dBA est.`:null,
+    env.sound_dba!=null?`🔊 ${env.sound_dba} dBA`:null,
     env.pm2_5_ug_m3!=null?`🌫 PM2.5 ${env.pm2_5_ug_m3} µg/m³`:null,
   ].filter(Boolean);
   const quality=q.total_buckets?`คุณภาพข้อมูล BCG ${q.valid_buckets}/${q.total_buckets} ช่วง (${q.valid_percent}%) · clipping เฉลี่ย ${q.average_clip_percent ?? 0}%`:'';
@@ -2340,26 +2340,11 @@ function setQuickMetric(valueId, noteId, value, unit, device, digits=0){
   noteEl.textContent=quickDeviceNote(device,noteEl.dataset.fallback||noteEl.textContent.split(' · ')[0]);
 }
 function soundDisplayMetric(environment={}){
-  const validatedRaw=environment.sound_dba_est;
-  const validated=Number(validatedRaw);
-  if(validatedRaw!==null&&validatedRaw!==undefined&&validatedRaw!==''&&typeof validatedRaw!=='boolean'&&Number.isFinite(validated)){
-    return {value:validated,unit:'dBA est.',digits:1,validated:true,provisional:false,source:'validated'};
+  const raw=environment.sound_dba_est;
+  if(typeof raw==='number'&&Number.isFinite(raw)&&raw>=30&&raw<=130){
+    return {value:raw,unit:'dBA',digits:1,source:'esp32'};
   }
-  const provisionalRaw=environment.sound_dba_firmware_est;
-  const provisional=Number(provisionalRaw);
-  const evidenceCount=Number(environment.sound_preview_evidence_count)||0;
-  if(provisionalRaw!==null&&provisionalRaw!==undefined&&provisionalRaw!==''&&typeof provisionalRaw!=='boolean'&&Number.isFinite(provisional)&&provisional>=30&&provisional<=130&&evidenceCount>=3){
-    return {value:provisional,unit:'dBA est.',digits:2,validated:false,provisional:true,source:'firmware',evidenceCount};
-  }
-  return {value:null,unit:'dBA est.',digits:1,validated:false,provisional:false,source:'missing',evidenceCount};
-}
-function soundFirmwareDisplayNote(environment={}){
-  const metric=soundDisplayMetric(environment);
-  if(!metric.provisional)return '';
-  const windowRaw=environment.sound_firmware_window_ms;
-  const windowMs=windowRaw===null||windowRaw===undefined||windowRaw===''||typeof windowRaw==='boolean'?NaN:Number(windowRaw);
-  const windowText=Number.isFinite(windowMs)?`${Math.round(windowMs)} ms`:'ไม่ระบุ Window';
-  return `SPH0645LM4H-B · ESP32 โดยตรง · ${metric.evidenceCount}/3 รอบ · ${windowText} · รอ CEM`;
+  return {value:null,unit:'dBA',digits:1,source:'missing'};
 }
 function renderControlCenter(environment={},aircon={},bed={},safety={},gpio={},system={}){
   const devices=environment.devices||{};
@@ -2370,7 +2355,6 @@ function renderControlCenter(environment={},aircon={},bed={},safety={},gpio={},s
   setQuickMetric('quickVoc','quickVocNote',environment.voc_index,'',devices.sgp40,0);
   const soundMetric=soundDisplayMetric(environment);
   setQuickMetric('quickSound','quickSoundNote',soundMetric.value,soundMetric.unit,devices.sph0645,soundMetric.digits);
-  if(soundMetric.provisional)document.getElementById('quickSoundNote').textContent=soundFirmwareDisplayNote(environment);
 
   const health=document.getElementById('quickEnvironmentStatus');
   const live=Number(environment.live_count)||0,total=Number(environment.total_count)||6;
@@ -2486,7 +2470,7 @@ const dashboardAtmosphereCriteria=Object.freeze([
   {id:'temperature',name:'อุณหภูมิ',deviceKey:'sht3x_dis',source:'SHT3x-DIS',unit:'°C',digits:1,target:'18–27°C',principle:'ประเมิน Thermal comfort จากอุณหภูมิจริงใน ZEEP',bands:'ยอดเยี่ยม 18–27 · ดี 17–28 · พอใช้ 16–29 · แย่ 13–32 · วิกฤตนอกช่วง',read:e=>e.temperature_c,score:v=>dashboardRangeScore(v,[[18,27],[17,28],[16,29],[13,32]]),control:'เครื่องปรับอากาศ',action:v=>v>27?'ลดอุณหภูมิที่เลือกหรือเปิดแอร์':v<18?'เพิ่มอุณหภูมิที่เลือกหรือลดความเย็น':'รักษาอุณหภูมิปัจจุบัน'},
   {id:'humidity',name:'ความชื้น',deviceKey:'sht3x_dis',source:'SHT3x-DIS',unit:'%RH',digits:1,target:'40–60%RH',principle:'ป้องกันอากาศแห้งเกินไปหรือความชื้นสะสมและการควบแน่น',bands:'ยอดเยี่ยม 40–60 · ดี 35–65 · พอใช้ 30–70 · แย่ 20–80 · วิกฤตนอกช่วง',read:e=>e.humidity_rh,score:v=>dashboardRangeScore(v,[[40,60],[35,65],[30,70],[20,80]]),control:'ไอน้ำ · ระบบระบายอากาศ',action:v=>v>60?'ปิดไอน้ำและเร่งระบายอากาศ':v<40?'เปิดไอน้ำเป็นช่วงและติดตามค่า':'รักษาความชื้นปัจจุบัน'},
   {id:'light',name:'ความสว่าง',deviceKey:'opt3001',source:'OPT3001',unit:'lux',digits:1,target:'≤5 lux',principle:'ประเมินแสงรบกวนในโหมดเตรียมนอนและขณะนอน',bands:'ยอดเยี่ยม ≤5 · ดี ≤10 · พอใช้ ≤30 · แย่ ≤100 · วิกฤต >100 lux',read:e=>e.lux,score:v=>dashboardUpperScore(v,[5,10,30,100]),control:'ไฟเพดาน · แสงแดง · ประตู',action:v=>v>5?'ลดหรือปิดไฟ ตรวจแสงรั่วและตำแหน่งประตู':'รักษาระดับแสงปัจจุบัน'},
-  {id:'sound',name:'เสียง',deviceKey:'sph0645',source:'SPH0645LM4H-B',unit:'dBA est.',digits:1,target:'<40 dBA est.',requiredForOverall:false,principle:'ESP32 คำนวณ A-weighted LAeq จาก PCM ของ SPH0645LM4H-B ก่อนส่งให้ Pi',bands:'ยอดเยี่ยม <40 · ดี 40–45 · พอใช้ >45–50 · แย่ >50–60 · วิกฤต >60 dBA est.',read:e=>e.sound_dba_est,score:v=>v<40?4:v<=45?3:v<=50?2:v<=60?1:0,control:'เสียงบรรยากาศ · พัดลม · คอมเพรสเซอร์',action:v=>v>=40?'ลดเสียงเพลงและตรวจพัดลม คอมเพรสเซอร์ หรือการสั่น':'รักษาระดับเสียงปัจจุบัน'},
+  {id:'sound',name:'เสียง',deviceKey:'sph0645',source:'SPH0645LM4H-B',unit:'dBA',digits:1,target:'<40 dBA',requiredForOverall:false,principle:'รับค่า sound_dba ที่ Sensor Hub 1 ส่งจาก ESP32 โดยตรง',bands:'ยอดเยี่ยม <40 · ดี 40–45 · พอใช้ >45–50 · แย่ >50–60 · วิกฤต >60 dBA',read:e=>e.sound_dba_est,score:v=>v<40?4:v<=45?3:v<=50?2:v<=60?1:0,control:'เสียงบรรยากาศ · พัดลม · คอมเพรสเซอร์',action:v=>v>=40?'ลดเสียงเพลงและตรวจพัดลม คอมเพรสเซอร์ หรือการสั่น':'รักษาระดับเสียงปัจจุบัน'},
   {id:'co2',name:'CO₂',deviceKey:'mhz19c',source:'MH-Z19C',unit:'ppm',digits:0,target:'≤800 ppm',principle:'ใช้ CO₂ เป็นตัวชี้การระบายอากาศ ไม่ใช่ค่าปริมาณออกซิเจน',bands:'ยอดเยี่ยม ≤800 · ดี ≤1,000 · พอใช้ ≤1,150 · แย่ <1,300 · วิกฤต ≥1,300 ppm',read:e=>e.co2_ppm,score:v=>v<=800?4:v<=1000?3:v<=1150?2:v<1300?1:0,control:'พัดลมลมเข้า · พัดลมลมออก',action:v=>v>800?'เพิ่มการเติมและระบายอากาศ พร้อมตรวจ Filter อุดตัน':'รักษาการหมุนเวียนอากาศปัจจุบัน'},
   {id:'pm25',name:'PM2.5',deviceKey:'pms7003',source:'PMS7003',unit:'µg/m³',digits:1,target:'≤15 µg/m³',principle:'ตรวจประสิทธิภาพการกรองฝุ่นละเอียดและการรั่วของอากาศ',bands:'ยอดเยี่ยม ≤15 · ดี ≤25 · พอใช้ ≤37.5 · แย่ ≤50 · วิกฤต >50 µg/m³',read:e=>e.pm2_5_ug_m3,score:v=>dashboardUpperScore(v,[15,25,37.5,50]),control:'Pre-Filter · HEPA · ซีลประตู',action:v=>v>15?'ตรวจหรือเปลี่ยน Pre/HEPA Filter และตรวจรอยรั่ว':'รักษาระบบกรองอากาศปัจจุบัน'},
   {id:'voc',name:'VOC Index',deviceKey:'sgp40',source:'SGP40',unit:'',digits:0,target:'≤120',principle:'เทียบสารระเหยกับ Adaptive baseline ของ SGP40 ซึ่งปรับตัวใกล้ 100',bands:'ยอดเยี่ยม ≤120 · ดี ≤150 · พอใช้ ≤200 · แย่ ≤300 · วิกฤต >300',read:e=>e.voc_index,score:v=>dashboardUpperScore(v,[120,150,200,300]),control:'กลิ่น · พัดลมระบาย · Carbon Filter',action:v=>v>120?'หยุดแหล่งกลิ่นหรือสารระเหย เร่งระบาย และตรวจ Carbon Filter':'รักษาการระบายอากาศปัจจุบัน'},
@@ -2779,17 +2763,6 @@ function renderSimpleDashboard(state={},environment={},bcg={},session={}){
   setDashboardSensor('dashSensorVoc','dashVoc',environment.voc_index,'',devices.sgp40,0);
   const soundMetric=soundDisplayMetric(environment);
   setDashboardSensor('dashSensorSound','dashSound',soundMetric.value,soundMetric.unit,devices.sph0645,soundMetric.digits);
-  const soundCard=document.getElementById('dashSensorSound');
-  const soundState=document.getElementById('dashSoundState');
-  soundCard?.classList.toggle('provisional',soundMetric.provisional);
-  if(soundState){
-    soundState.hidden=!soundMetric.provisional;
-    soundState.textContent=soundMetric.provisional?'ชั่วคราว · ไม่ใช้คะแนน':'';
-  }
-  if(soundMetric.provisional){
-    soundCard.classList.remove('offline');
-    soundCard.title=`${soundFirmwareDisplayNote(environment)} · แสดงผลเท่านั้น ไม่ใช้ประเมินภาพรวมหรือคะแนน`;
-  }
   const atmosphere=renderDashboardAtmosphere(environment,devices);
   renderAdminLiveExplanation({bcg,sleep,session,atmosphere});
   document.getElementById('dashSensorSummary').textContent=`Sensor ${environment.live_count||0}/${environment.total_count||6} · ${environment.status||'offline'}`;
@@ -3391,19 +3364,10 @@ function renderUnifiedControl(state={},environment={},aircon={},bed={},music={})
   renderUnifiedAirQuality(environment,devices);
   setUnifiedSensor('zoneSensorLight','unifiedLight',compactMetric(environment.lux,'',1),devices.opt3001);
   const soundMetric=soundDisplayMetric(environment);
-  const soundDevice=soundMetric.provisional
-    ? {...(devices.sph0645||{}),status:'stale'}
-    : devices.sph0645;
-  setUnifiedSensor('zoneSensorSound','unifiedSound',compactMetric(soundMetric.value,'',soundMetric.digits),soundDevice);
+  setUnifiedSensor('zoneSensorSound','unifiedSound',compactMetric(soundMetric.value,'',soundMetric.digits),devices.sph0645);
   const soundState=document.getElementById('unifiedSoundState');
   if(soundState){
-    soundState.textContent=soundMetric.provisional
-      ? 'ชั่วคราว · ไม่ใช้คะแนน'
-      : 'ค่าประเมินเสียง · dBA est.';
-  }
-  if(soundMetric.provisional){
-    const soundCard=document.getElementById('zoneSensorSound');
-    soundCard.title=`${soundFirmwareDisplayNote(environment)} · แสดงผลเท่านั้น`;
+    soundState.textContent='ค่าจาก ESP32 · dBA';
   }
   const bcg=state.sensor?.bcg||{},bcgBase={model:'BCG Sensor',data_age_s:bcg.data_age_s};
   const bcgMetric=value=>({...bcgBase,status:bcg.restored_after_restart&&value!==null&&value!==undefined?'stale':bcg.connected&&value!==null&&value!==undefined?'live':bcg.connected?'no_data':'offline'});
@@ -4479,9 +4443,10 @@ const sensorUi={
 const sensorStatusTh={live:'Live',stale:'ข้อมูลค้าง',held:'คงค่าล่าสุด',warming:'Warm-up',fault:'Sensor fault',invalid:'ค่าผิดช่วง',no_data:'ไม่มีข้อมูล',offline:'Offline'};
 function legacyEnvironment(e={},h2={}){
   const value=(sources,paths)=>{for(const source of sources){const n=sensorNumber(source,paths);if(n!==null)return n;}return null;};
-  const data={temperature_c:value([e],['temperature','temperature_c']),humidity_rh:value([e],['humidity','humidity_rh']),lux:value([e],['lux']),sound_dba_est:value([e],['sound_dba_est']),sound_dba_firmware_est:value([e],['sound_dba_firmware_est']),sound_preview_evidence_count:value([e],['sound_preview_evidence_count']),sound_firmware_window_ms:value([e],['sound_firmware_window_ms','sound_window_ms']),sound_dbfs_raw:value([e],['sound_dbfs_raw','sound_dbfs']),co2_ppm:value([h2,e],['co2_ppm','co2']),pm1_0_ug_m3:value([h2,e],['pm1_0_ug_m3']),pm2_5_ug_m3:value([h2,e],['pm2_5_ug_m3']),pm10_ug_m3:value([h2,e],['pm10_ug_m3']),voc_index:value([h2,e],['voc_index']),sgp40_raw:value([h2,e],['sgp40_raw','sraw_voc'])};
+  const directSound=e.sound_dba_est??e.sound_dba;
+  const data={temperature_c:value([e],['temperature','temperature_c']),humidity_rh:value([e],['humidity','humidity_rh']),lux:value([e],['lux']),sound_dba_est:typeof directSound==='number'&&Number.isFinite(directSound)&&directSound>=30&&directSound<=130?directSound:null,sound_dbfs_raw:value([e],['sound_dbfs_raw','sound_dbfs']),co2_ppm:value([h2,e],['co2_ppm','co2']),pm1_0_ug_m3:value([h2,e],['pm1_0_ug_m3']),pm2_5_ug_m3:value([h2,e],['pm2_5_ug_m3']),pm10_ug_m3:value([h2,e],['pm10_ug_m3']),voc_index:value([h2,e],['voc_index']),sgp40_raw:value([h2,e],['sgp40_raw','sraw_voc'])};
   const d1=e.connected?'live':e.last_update?'stale':'offline',d2=h2.connected?'live':h2.last_update?'stale':'offline';
-  data.devices={sht3x_dis:{model:'SHT3x-DIS',status:data.temperature_c!=null&&data.humidity_rh!=null?d1:'no_data',source:'hub1',source_label:'Pi5 Sensor Set 1 · USB',data_age_s:e.data_age_s},opt3001:{model:'OPT3001',status:data.lux!=null?d1:'no_data',source:'hub1',source_label:'Pi5 Sensor Set 1 · USB',data_age_s:e.data_age_s},sph0645:{model:'SPH0645LM4H-B',status:data.sound_dba_est!=null?d1:data.sound_dba_firmware_est!=null?'invalid':'no_data',source:'hub1',source_label:'Pi5 Sensor Set 1 · USB',data_age_s:e.data_age_s,preview_only:data.sound_dba_est==null&&data.sound_dba_firmware_est!=null},mhz19c:{model:'MH-Z19C',status:data.co2_ppm!=null?d2:'no_data',source:'hub2',source_label:'ESP32 Air Sensor · MQTT',data_age_s:h2.data_age_s},pms7003:{model:'PMS7003',status:data.pm2_5_ug_m3!=null?d2:'no_data',source:'hub2',source_label:'ESP32 Air Sensor · MQTT',data_age_s:h2.data_age_s},sgp40:{model:'SGP40',status:data.voc_index!=null?d2:'no_data',source:'hub2',source_label:'ESP32 Air Sensor · MQTT',data_age_s:h2.data_age_s}};
+  data.devices={sht3x_dis:{model:'SHT3x-DIS',status:data.temperature_c!=null&&data.humidity_rh!=null?d1:'no_data',source:'hub1',source_label:'Pi5 Sensor Set 1 · USB',data_age_s:e.data_age_s},opt3001:{model:'OPT3001',status:data.lux!=null?d1:'no_data',source:'hub1',source_label:'Pi5 Sensor Set 1 · USB',data_age_s:e.data_age_s},sph0645:{model:'SPH0645LM4H-B',status:data.sound_dba_est!=null?d1:'no_data',source:'hub1',source_label:'Pi5 Sensor Set 1 · USB',data_age_s:e.data_age_s},mhz19c:{model:'MH-Z19C',status:data.co2_ppm!=null?d2:'no_data',source:'hub2',source_label:'ESP32 Air Sensor · MQTT',data_age_s:h2.data_age_s},pms7003:{model:'PMS7003',status:data.pm2_5_ug_m3!=null?d2:'no_data',source:'hub2',source_label:'ESP32 Air Sensor · MQTT',data_age_s:h2.data_age_s},sgp40:{model:'SGP40',status:data.voc_index!=null?d2:'no_data',source:'hub2',source_label:'ESP32 Air Sensor · MQTT',data_age_s:h2.data_age_s}};
   data.live_count=Object.values(data.devices).filter(d=>d.status==='live').length;data.total_count=6;data.status=data.live_count===6?'live':data.live_count?'degraded':'offline';return data;
 }
 function setSensorDeviceState(key,device={}){
@@ -4497,10 +4462,9 @@ function renderAssessment(id,meterId,result){
 }
 function renderSensorAssessments(e){
   const t=e.temperature_c,h=e.humidity_rh,l=e.lux,s=e.sound_dba_est,c=e.co2_ppm,p=e.pm2_5_ug_m3,v=e.voc_index;
-  const soundMetric=soundDisplayMetric(e);
   renderAssessment('shtAssessment','shtMeter',t==null||h==null?{label:'รอข้อมูล',detail:'18–27°C · 40–60%RH',pct:0}:{label:t>29||h>65?'นอก Comfort band':t<18||h<40||t>27||h>60?'ควรติดตาม':'ยอดเยี่ยม',detail:`${fmt(t,1)}°C · ${fmt(h,1)}%RH`,level:t>29||h>65?'bad':t<18||h<40||t>27||h>60?'warn':'good',pct:(t-10)/30*100});
   renderAssessment('optAssessment','optMeter',l==null?{label:'รอข้อมูล',detail:'โหมดนอน ≤5 lux',pct:0}:{label:l<=5?'มืดเหมาะกับโหมดนอน':l<=20?'แสงสลัว':'สว่าง',detail:`${fmt(l,1)} lux`,level:l<=5?'good':l<=20?'warn':'bad',pct:l/50*100});
-  renderAssessment('sphAssessment','sphMeter',soundMetric.provisional?{label:'ESP32 โดยตรง · ชั่วคราว',detail:`${fmt(soundMetric.value,soundMetric.digits)} dBA est. · ไม่ใช้คะแนน`,pct:0}:s==null?{label:'รอข้อมูล',detail:'รอ LAeq(A) ที่ผ่านการยืนยัน · เป้าหมาย ≤35 dBA est.',pct:0}:{label:s<=35?'อยู่ในเป้าหมาย':s<=45?'สูงกว่าเป้าหมาย':'เสียงสูง',detail:`${fmt(s,1)} dBA est.`,level:s<=35?'good':s<=45?'warn':'bad',pct:s/80*100});
+  renderAssessment('sphAssessment','sphMeter',s==null?{label:'รอข้อมูล',detail:'รอ sound_dba จาก ESP32 · เป้าหมาย ≤35 dBA',pct:0}:{label:s<=35?'อยู่ในเป้าหมาย':s<=45?'สูงกว่าเป้าหมาย':'เสียงสูง',detail:`${fmt(s,1)} dBA`,level:s<=35?'good':s<=45?'warn':'bad',pct:s/80*100});
   renderAssessment('co2Assessment','co2Meter',c==null?{label:'รอข้อมูล',detail:'เตือน 1,000 ppm',pct:0}:{label:c<800?'การระบายอากาศดี':c<1000?'ควรติดตาม':c<1300?'ควร Boost ลม':'ถึง Critical band',detail:`${fmt(c,0)} ppm`,level:c<800?'good':c<1000?'warn':'bad',pct:(c-400)/900*100});
   renderAssessment('pmsAssessment','pmsMeter',p==null?{label:'รอข้อมูล',detail:'อ้างอิง PM2.5',pct:0}:{label:p<=15?'ฝุ่นต่ำ':p<=35?'ควรติดตาม':'ฝุ่นสูง',detail:`PM2.5 ${fmt(p,0)} µg/m³`,level:p<=15?'good':p<=35?'warn':'bad',pct:p/75*100});
   renderAssessment('sgpAssessment','sgpMeter',v==null?{label:'รอข้อมูล',detail:'เทียบ Adaptive baseline',pct:0}:{label:v<80?'ต่ำกว่า Baseline':v<=150?'ใกล้ Baseline':'VOC เพิ่มขึ้น',detail:`VOC Index ${fmt(v,0)}`,level:v<=150?'good':'warn',pct:v/300*100});
@@ -4723,57 +4687,6 @@ function escapeMarkup(value=''){
   return String(value).replace(/[&<>"']/g,character=>entities[character]);
 }
 
-function soundEngineeringValue(item={}){
-  if(item.value===null||item.value===undefined||item.value==='')return '--';
-  const number=Number(item.value);
-  if(!Number.isFinite(number))return '--';
-  if(item.unit==='ratio')return `${(number*100).toFixed(2)} %`;
-  const digits=Math.max(0,Math.min(6,Number(item.digits)||0));
-  return `${number.toFixed(digits)}${item.unit?` ${item.unit}`:''}`;
-}
-
-function renderSoundEngineering(channel={}){
-  const engineering=channel.engineering||{},fields=engineering.fields||[],flags=engineering.flags||[];
-  if(!fields.length&&!flags.length)return '';
-  const fieldMap=new Map(fields.map(item=>[item.key,item]));
-  const primaryKeys=['sound_dba','sound_laeq_dba','sound_dbfs_a','sound_dbfs'];
-  const keyFields=primaryKeys.map(key=>fieldMap.get(key)||{key,label:key,value:null});
-  const detailFields=fields.filter(item=>!primaryKeys.includes(item.key)&&item.value!==null&&item.value!==undefined);
-  const fieldHtml=keyFields.map(item=>`<div class="sound-raw-value ${item.group||''}"><span>${escapeMarkup(item.label)}</span><b>${soundEngineeringValue(item)}</b></div>`).join('');
-  const flagHtml=flags.map(item=>{
-    const known=item.value===true||item.value===false;
-    const state=!known||item.healthy===null||item.healthy===undefined?'unknown':item.healthy?'pass':'fail';
-    const value=!known?'--':item.value?'ON':'OFF';
-    return `<span class="sound-integrity-flag ${state}"><i></i>${escapeMarkup(item.label)} ${value}</span>`;
-  }).join('');
-  const firmwareFlag=engineering.firmware_dba_calibrated;
-  const firmwareDetail=firmwareFlag===true||firmwareFlag===false
-    ? `<span><b>Firmware dBA flag</b>${firmwareFlag?'ON':'OFF'}</span>`:'';
-  const details=detailFields.length||firmwareDetail?`<details class="sound-engineering-details"><summary>Sampling, PCM health & firmware details</summary><div>${detailFields.map(item=>`<span><b>${escapeMarkup(item.label)}</b>${soundEngineeringValue(item)}</span>`).join('')}${firmwareDetail}</div></details>`:'';
-  const pipelineStates={
-    valid:['valid','PIPELINE VALID'],
-    raw_ok_output_blocked:['blocked','RAW OK · OUTPUT BLOCKED'],
-    stale:['stale','STALE · LAST PACKET'],
-    offline:['invalid','OFFLINE'],
-    sensor_fault:['invalid','SENSOR FAULT'],
-    invalid:['invalid','INVALID']
-  };
-  const calibrationStates={
-    verified:['verified','CEM VERIFIED'],
-    pending:['pending','CEM PENDING'],
-    unknown:['unknown','CEM UNKNOWN']
-  };
-  const pipeline=pipelineStates[channel.pipeline_state]||pipelineStates.invalid;
-  const calibration=calibrationStates[channel.calibration_state]||calibrationStates.unknown;
-  const identity=[
-    engineering.profile,
-    engineering.firmware_version,
-    engineering.sequence!=null?`SEQ ${engineering.sequence}`:''
-  ].filter(Boolean).map(escapeMarkup).join(' · ');
-  const sensorModel=escapeMarkup(engineering.sensor_model||'SPH0645LM4H-B');
-  return `<div class="sound-engineering"><div class="sound-engineering-head"><div><b>${sensorModel} · PCM ENGINEERING RAW</b><small>${identity||'Firmware telemetry'}</small></div><div class="sound-review-stack"><span class="sound-review ${pipeline[0]}">${pipeline[1]}</span><span class="sound-calibration-state ${calibration[0]}">${calibration[1]}</span></div></div><div class="sound-raw-grid">${fieldHtml}</div><div class="sound-integrity-flags">${flagHtml}</div>${details}<p>signed dBFS เป็นระดับเทียบ digital full scale จึงติดลบตามปกติ · ห้ามทำ abs() หรือใช้แทน dBA</p></div>`;
-}
-
 function renderCalibrationInspector(data,{force=false}={}){
   calibrationInspectorState=data;
   const root=document.getElementById('calibrationInspector');
@@ -4800,14 +4713,16 @@ function renderCalibrationInspector(data,{force=false}={}){
       const raw=calibrationNumber(channel.raw,step),bias=calibrationNumber(channel.bias,step),output=calibrationNumber(channel.calibrated,step);
       const unit=channel.unit||'',rawUnit=channel.raw_unit||unit,parameterUnit=channel.parameter_unit||unit;
       const isSoundEstimate=metric==='sound_dba_est';
-      const outputLabel=isSoundEstimate?'LAEQ(A)':'CALIBRATED';
+      const outputLabel=isSoundEstimate?'DIRECT':'CALIBRATED';
       const parameterLabel='NEW BIAS';
       const genericValues=`<div class="calibration-values">
         <div class="calibration-value"><span>RAW</span><b>${raw}</b><small>${rawUnit}</small></div>
         <div class="calibration-value"><span>${channel.bias_label||'BIAS'}</span><b>${channel.editable?(Number(channel.bias)>=0?'+':'')+bias:'LOCK'}</b><small>${channel.editable?parameterUnit:channel.bias_source||'algorithm'}</small></div>
         <div class="calibration-value output"><span>${outputLabel}</span><b>${output}</b><small>${unit}</small></div>
       </div>`;
-      const values=isSoundEstimate?renderSoundEngineering(channel):genericValues;
+      const values=isSoundEstimate?`<div class="calibration-values sound-direct-value">
+        <div class="calibration-value output"><span>ESP32 DIRECT</span><b>${output}</b><small>${unit}</small></div>
+      </div>`:genericValues;
       if(!channel.editable){
         return `<section class="calibration-channel"><div class="calibration-channel-title"><b>${channel.label}</b><span>${metric}</span></div>${values}<div class="calibration-lock">🔒 ${channel.lock_reason||'ค่าจาก Algorithm แสดงแบบ read-only'}</div></section>`;
       }
@@ -5903,7 +5818,7 @@ function renderReport(rec){
       sleepSensorTile('temp','°C','อุณหภูมิเฉลี่ย',temperatureAvg==null?'--':`${temperatureAvg.toFixed(1)} °C`),
       sleepSensorTile('humidity','%RH','ความชื้นเฉลี่ย',humidityAvg==null?'--':`${humidityAvg.toFixed(1)} %RH`),
       sleepSensorTile('co2','CO₂','CO₂ เฉลี่ย',co2Avg==null?'--':`${Math.round(co2Avg)} ppm`),
-      sleepSensorTile('sound','dB','เสียงเฉลี่ยโดยประมาณ',soundAvg==null?'--':`${soundAvg.toFixed(1)} dBA est.`),
+      sleepSensorTile('sound','dB','เสียงเฉลี่ย',soundAvg==null?'--':`${soundAvg.toFixed(1)} dBA`),
       sleepSensorTile('light','lx','แสงเฉลี่ย',lightAvg==null?'--':`${lightAvg.toFixed(1)} lux`),
       sleepSensorTile('heart','HR','ชีพจรเฉลี่ย',heartAvg==null||!Number.isFinite(heartAvg)?'--':`${heartAvg.toFixed(1)} bpm`),
       sleepSensorTile('respiration','RR','หายใจเฉลี่ย',respirationAvg==null||!Number.isFinite(respirationAvg)?'--':`${respirationAvg.toFixed(1)} ครั้ง/นาที`),
@@ -5942,7 +5857,7 @@ function renderReport(rec){
     <div class="report-grid">
       ${statBlock('อุณหภูมิเฉลี่ย', su.temperature_c, ' °C')}
       ${statBlock('ความชื้นเฉลี่ย', su.humidity_rh, ' %RH')}
-      ${statBlock('เสียงเฉลี่ยโดยประมาณ', su.sound_dba_est, ' dBA est.')}
+      ${statBlock('เสียงเฉลี่ย', su.sound_dba_est, ' dBA')}
       ${statBlock('แสงเฉลี่ย', su.lux, ' lx')}
       ${statBlock('HR (Heart Rate) เฉลี่ย', su.heart_rate_bpm, ' ครั้ง/นาที (BPM)')}
       ${statBlock('RR (Respiratory Rate) เฉลี่ย', su.respiration_rate, ' ครั้ง/นาที')}
@@ -6139,20 +6054,16 @@ function render(s, source='ws'){
   const sphStatus=environment.devices?.sph0645?.status||'offline';
   const soundInvalidReason=e.sound_invalid_reason||environment.devices?.sph0645?.invalid_values?.sound_dba_est;
   const soundMetric=soundDisplayMetric(environment);
-  document.getElementById('sound').title = soundMetric.provisional
-    ? `${soundFirmwareDisplayNote(environment)} · ไม่ใช้คะแนน/Session/Auto`
-    : environment.sound_dba_est==null
-      ? `INVALID · ${soundInvalidReason||'ESP32 ยังไม่ส่ง LAeq(A) ที่ยืนยันแล้ว'}`
-      : `SPH0645LM4H-B · LAeq(A) ${e.sound_window_ms||'--'} ms · คำนวณที่ ESP32`;
+  document.getElementById('sound').title = environment.sound_dba_est==null
+    ? `INVALID · ${soundInvalidReason||'ESP32 ยังไม่ส่ง sound_dba'}`
+    : 'SPH0645LM4H-B · รับ sound_dba จาก ESP32 โดยตรง';
   const soundQuality=document.getElementById('soundQuality');
   soundQuality.textContent=espFallback
     ? `⚠ SPH0645LM4H-B · ข้อมูลไม่สด (${espAgeText})`
-    : soundMetric.provisional
-    ? `≈ ${soundMetric.value.toFixed(soundMetric.digits)} dBA est. · ESP32 โดยตรง ${soundMetric.evidenceCount}/3 รอบ · รอ CEM`
     : environment.sound_dba_est==null
-    ? espOk?`✕ SPH0645LM4H-B · INVALID · ${soundInvalidReason||'รอ Firmware LAeq(A)'}`:'SPH0645LM4H-B · ไม่เชื่อมต่อ'
+    ? espOk?`✕ SPH0645LM4H-B · INVALID · ${soundInvalidReason||'รอ sound_dba'}`:'SPH0645LM4H-B · ไม่เชื่อมต่อ'
     : sphStatus==='live'
-      ? '✓ SPH0645LM4H-B · LAeq(A) valid'
+      ? '✓ SPH0645LM4H-B · ESP32 direct'
       : `⚠ SPH0645LM4H-B · ${sphStatus}`;
   soundQuality.className=`sensor-note ${espFallback||environment.sound_dba_est==null||sphStatus!=='live'?'status-warn':'status-good'}`;
   document.getElementById('environmentCard').title=[espFallback?`Pi5 Sensor Set 1 fallback ${espAgeText}`:null,hub2Fallback?`ESP32 Air Sensor fallback ${hub2AgeText}`:null].filter(Boolean).join(' · ');

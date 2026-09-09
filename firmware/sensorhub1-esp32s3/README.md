@@ -1,4 +1,8 @@
-# ZEEP Sensor Hub 1 — ESP32-S3 replacement firmware
+# ZEEP Sensor Hub 1 — ESP32-S3 replacement firmware (ARCHIVED)
+
+> **DO NOT FLASH** · งานทดลองทดแทนนี้ถูกยกเลิกเมื่อ 2026-09-10 และไม่ใช่
+> Runtime contract ปัจจุบัน Pi รับ `sound_dba` จาก ESP32 โดยตรงโดยไม่ใช้
+> LAeq/CEM/profile/3-packet gate เอกสารและ Source ด้านล่างเก็บเพื่อ Audit เท่านั้น
 
 Firmware นี้ใช้กับ Sensor Hub 1 ที่ต่อกับ Pi ผ่าน USB Serial เท่านั้น และไม่รวม
 ระบบเล่นเพลงหรือ Control Deck
@@ -43,8 +47,9 @@ Target board ที่ตรวจจากอุปกรณ์จริงค�
    reference range ของ CEM 30–130 dBA ค่า signed `sound_dbfs` คงไว้เป็น
    diagnostics และไม่ถูก `abs()` หรือใช้แทน dBA
 
-ค่าหลักที่ Pi ยอมรับคือ `sound_laeq_dba`, `sound_weighting=A`,
-`sound_metric=LAeq`, `sound_window_ms=10000` และ `sound_valid=true`
+ใน Candidate ที่ยกเลิกนี้เคยกำหนด `sound_laeq_dba`, weighting, metric และ
+window metadata ไว้ แต่ Pi Runtime ปัจจุบันไม่อ่านเงื่อนไขเหล่านั้นและยึด
+`sound_dba` ตาม Sensor Interface Contract v1.2 เท่านั้น
 
 ## Build โดยยังไม่ติดตั้ง
 
@@ -77,7 +82,10 @@ SHA256 e05a7f648d5873467d55f88518824db8baa9eb86f0e862d1e13c8085604c68a1
 
 ห้ามนำ full-Flash image เข้า Git เพราะอาจมี credential จาก Firmware เดิม
 
-## CEM DT-8852 acceptance test ก่อน Production install
+## Historical CEM protocol (ยกเลิกแล้ว)
+
+ส่วนนี้เก็บเพื่อ Audit เท่านั้น `tools/cem_calibrate.py` จะปฏิเสธการทำงานจาก CLI
+และไม่สามารถสร้างผลเพื่ออนุมัติ Firmware ได้อีก
 
 ใช้บอร์ด/ไมค์ชุดทดสอบที่ wiring เดียวกับ Production และ Firmware binary เดียวกัน:
 
@@ -108,9 +116,10 @@ CAL SOUND OFFSET <ค่า>
 
 แล้วทำ CEM validation ซ้ำเพื่อสร้างผล PASS ที่ผูกกับ SHA-256 ของ binary
 
-## Production gate
+## Production Flash (ปิดถาวร)
 
-`flash_candidate.sh` จะติดตั้งได้ต่อเมื่อ:
+`flash_candidate.sh` ปฏิเสธการทำงานทันทีเสมอ เนื่องจาก Candidate ถูก Archive
+ไว้เป็นหลักฐานเท่านั้น เงื่อนไขด้านล่างคือทะเบียนย้อนหลัง ไม่ใช่ Gate ที่เปิดใช้:
 
 - Pod ว่างและ API ยืนยันได้
 - chip และ MAC ตรงกับเครื่องเป้าหมาย
@@ -118,10 +127,7 @@ CAL SOUND OFFSET <ค่า>
 - CEM result เป็น PASS และอ้าง SHA-256 ของ `firmware.bin` เดียวกัน
 - ผู้ดูแลตั้ง `CONFIRM_FLASH` เป็น MAC ของอุปกรณ์
 
-```bash
-CONFIRM_FLASH=44:1b:f6:8c:0c:54 \
-  ./tools/flash_candidate.sh dist/release calibration-results/cem-result.json
-```
+ห้ามใช้ Binary ใน `dist/release` ติดตั้งทับ Firmware ปัจจุบัน
 
 หากต้อง rollback ให้ใช้ full-Flash backup ที่ checksum ผ่านเท่านั้น:
 

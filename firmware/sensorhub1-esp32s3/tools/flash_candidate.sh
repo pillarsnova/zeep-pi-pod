@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+
+echo "ERROR: archived firmware candidate; Production Flash is permanently disabled" >&2
+echo "Pi runtime now consumes the installed ESP32 sound_dba field directly" >&2
+exit 64
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=flash_common.sh
 source "$SCRIPT_DIR/flash_common.sh"

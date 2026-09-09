@@ -214,16 +214,19 @@ MOSFET driver / relay เสมอ ห้ามต่อตรงเด็ดข
 Datasheet, physical range, field alias, JSON envelope v1 และ byte map BCG ดูที่
 [Sensor Interface Contract v1.2](docs/zeep-sensor-interface-contract-v1.2.md)
 
+[ESP32 Sensor Hub 1 · Three-Sensor Runtime](docs/sensorhub1-three-sensor-runtime.md)
+
 - BCG: `/dev/ttyUSB_HRB` @ 115200
 - ESP32 hub: `/dev/ttyACM0` @ 115200 — ส่ง JSON บรรทัดละ 1 object เช่น
-  `{"lux":26.1,"temperature_c":24.1,"humidity_rh":56.0,"sound_dbfs":-29.5,"sound_laeq_dba":40.8,"sound_valid":true,"sound_weighting":"A","sound_metric":"LAeq","sound_window_ms":10000}`
+  `{"event":"environment","hub_id":"sensorhub1","lux":26.1,"temperature_c":24.1,"humidity_rh":56.0,"sound_dbfs":-29.5,"sound_laeq_dba":40.8,"sound_valid":true,"sound_weighting":"A","sound_metric":"LAeq","sound_window_ms":10000}`
 
 ชื่อ field ที่รับได้ (ตัวแรกที่เป็นตัวเลขชนะ) — temperature:
 `temperature_c|temperature|temp|temp_c` · humidity: `humidity|hum|rh|humidity_rh` ·
 lux: `lux|light|illuminance` · sound raw: `sound_dbfs` · sound ที่ใช้แสดง:
 `sound_laeq_dba` พร้อม metadata ยืนยันตาม Contract v1.2
 
-ถ้า ESP32 เงียบเกิน `ESP32_STALE_SECONDS` (ค่าเริ่มต้น 5 วิ) ทั้งที่พอร์ตยังเปิดอยู่
+ถ้า ESP32 เงียบเกิน `ESP32_STALE_SECONDS` (ค่าเริ่มต้น 25 วิ สำหรับ packet 10 วิ)
+ทั้งที่พอร์ตยังเปิดอยู่
 จอจะแสดงเป็น stale/disconnected แทนการโชว์ค่าเก่าค้างเหมือนเป็นค่าจริง
 
 ## การแสดงค่าเสียง SPH0645

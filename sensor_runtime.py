@@ -61,6 +61,20 @@ def sensor_flag(payload: Mapping[str, Any], keys: Sequence[str]) -> Optional[boo
     return None
 
 
+def sensor_diagnostic(
+    payload: Mapping[str, Any], keys: Sequence[str],
+) -> Mapping[str, Any]:
+    """Return per-device firmware diagnostics without coupling peer sensors."""
+    diagnostics = payload.get("sensor_diagnostics")
+    if not isinstance(diagnostics, Mapping):
+        return {}
+    for key in keys:
+        value = diagnostics.get(key)
+        if isinstance(value, Mapping):
+            return value
+    return {}
+
+
 def bounded_number(
     payload: Mapping[str, Any], aliases: Sequence[str], low: float, high: float,
 ) -> tuple[Optional[float], Optional[float]]:
@@ -112,6 +126,7 @@ def compose_environment_snapshot(
                 if invalid is not None:
                     invalid_values[field] = invalid
             flag = sensor_flag(payload, spec["status"])
+            diagnostic = sensor_diagnostic(payload, spec["status"])
             attempts.append({
                 "source": source_id,
                 "source_label": source["label"],
@@ -119,6 +134,11 @@ def compose_environment_snapshot(
                 "age_s": source["age_s"],
                 "has_history": source["has_history"],
                 "flag": flag,
+                "declared_status": str(
+                    diagnostic.get("status") or "").strip().lower(),
+                "reason": diagnostic.get("reason"),
+                "sensor_age_ms": diagnostic.get("age_ms"),
+                "diagnostics": diagnostic.get("diagnostics"),
                 "valid": all(value is not None for value in field_values.values()),
                 "values": field_values,
                 "invalid_values": invalid_values,
@@ -140,12 +160,20 @@ def compose_environment_snapshot(
             selected_payload = sources[chosen["source"]]["payload"]
             warmup = bool(selected_payload.get("co2_warmup"))
             warmup = warmup or bool((selected_payload.get("warmup") or {}).get("mhz19c"))
-        if selected and selected["live"]:
+        if selected and selected["live"] and selected["declared_status"] in {
+            "degraded", "held",
+        }:
+            status = selected["declared_status"]
+        elif selected and selected["live"]:
             status = "live"
         elif selected:
             status = "stale"
         elif warmup and primary["live"]:
             status = "warming"
+        elif primary["live"] and primary["declared_status"] in {
+            "fault", "invalid", "no_data", "offline", "stale", "warming",
+        }:
+            status = primary["declared_status"]
         elif primary["live"] and primary["flag"] is False:
             status = "fault"
         elif primary["live"]:
@@ -172,14 +200,20 @@ def compose_environment_snapshot(
             "source": chosen["source"],
             "source_label": chosen["source_label"],
             "data_age_s": chosen["age_s"],
+            "sensor_age_ms": chosen["sensor_age_ms"],
+            "reason": chosen["reason"],
+            "diagnostics": chosen["diagnostics"],
             "invalid_values": chosen["invalid_values"],
         }
 
     live_count = sum(1 for item in devices.values() if item["status"] == "live")
-    stale_count = sum(1 for item in devices.values() if item["status"] in ("stale", "held"))
+    usable_degraded_count = sum(
+        1 for item in devices.values()
+        if item["status"] in ("degraded", "stale", "held")
+    )
     overall = (
         "live" if live_count == len(devices)
-        else "degraded" if live_count or stale_count
+        else "degraded" if live_count or usable_degraded_count
         else "offline"
     )
     raw_values = dict(values)
@@ -244,7 +278,10 @@ def normalize_hub1_sensor(
 
     laeq = first_numeric(result, ("sound_laeq_dba", "laeq_dba"))
     if laeq is None:
-        reason = (
+        firmware_reason = str(
+            payload.get("sound_invalid_reason") or ""
+        ).strip()
+        reason = firmware_reason or (
             "legacy_dbfs_only"
             if first_numeric(result, ("sound_dbfs",)) is not None
             else "missing_laeq"
@@ -285,6 +322,8 @@ def normalize_hub1_sensor(
     result["sound_measurement_valid"] = True
     result["sound_status"] = "valid"
     result["sound_processing_source"] = "esp32_a_weighted_laeq"
+    result.pop("sound_invalid_reason", None)
+    result.pop("sound_invalid_value", None)
     return result
 
 

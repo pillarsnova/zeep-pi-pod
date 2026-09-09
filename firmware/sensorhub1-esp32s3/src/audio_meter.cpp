@@ -20,7 +20,11 @@ constexpr float kSensitivityDbfs = -26.0F;
 constexpr float kSineRmsCorrectionDb = 3.0102999566F;
 constexpr float kClipThreshold = 0.98F;
 constexpr float kMaxClipRatio = 0.001F;
-constexpr float kMaxZeroRatio = 0.99F;
+constexpr float kMaxZeroRatio = 0.95F;
+constexpr float kMaxRepeatedRatio = 0.995F;
+constexpr uint32_t kStreamStaleMs = 1500;
+constexpr uint32_t kReadErrorsBeforeRecovery = 20;
+constexpr uint32_t kRecoveryPauseMs = 50;
 
 Preferences preferences;
 
@@ -44,6 +48,11 @@ class Biquad {
     delay_2_ = coefficients_.b2 * input -
                coefficients_.a2 * output;
     return output;
+  }
+
+  void reset() {
+    delay_1_ = 0.0;
+    delay_2_ = 0.0;
   }
 
  private:
@@ -85,8 +94,11 @@ float peak_normalized = 0.0F;
 uint32_t accumulated_samples = 0;
 uint32_t clipped_samples = 0;
 uint32_t zero_samples = 0;
+uint32_t repeated_samples = 0;
 uint32_t read_errors = 0;
 uint32_t window_started_ms = 0;
+int32_t previous_sample_24 = 0;
+bool has_previous_sample = false;
 
 double dcBlock(double input) {
   constexpr double kPole = 0.9992;
@@ -142,15 +154,22 @@ bool AudioMeter::begin() {
     return false;
   }
 
-  healthy_ = xTaskCreatePinnedToCore(
+  resetWindowAccumulator();
+  resetSignalState();
+  driver_ready_ = true;
+  task_running_ = xTaskCreatePinnedToCore(
       taskEntry,
       "sph0645-laeq",
-      8192,
+      12288,
       this,
       4,
       &task_handle_,
       0) == pdPASS;
-  return healthy_;
+  if (!task_running_) {
+    i2s_driver_uninstall(I2S_NUM_0);
+    driver_ready_ = false;
+  }
+  return task_running_;
 }
 
 bool AudioMeter::takeWindow(SoundWindow* output) {
@@ -188,8 +207,33 @@ float AudioMeter::calibrationOffset() const {
   return value;
 }
 
-bool AudioMeter::healthy() const {
-  return healthy_;
+AudioHealth AudioMeter::health(uint32_t now_ms) const {
+  portENTER_CRITICAL(&result_lock_);
+  AudioHealth snapshot;
+  snapshot.driver_ready = driver_ready_;
+  snapshot.task_running = task_running_;
+  snapshot.last_dma_ms = last_dma_ms_;
+  snapshot.last_window_ms = last_window_ms_;
+  snapshot.measurement_valid = last_measurement_valid_;
+  snapshot.consecutive_read_errors = consecutive_read_errors_;
+  snapshot.total_read_errors = total_read_errors_;
+  snapshot.recovery_count = recovery_count_;
+  portEXIT_CRITICAL(&result_lock_);
+
+  snapshot.stream_active = snapshot.last_dma_ms != 0 &&
+      now_ms - snapshot.last_dma_ms <= kStreamStaleMs;
+  if (!snapshot.driver_ready) {
+    snapshot.reason = "i2s_driver_unavailable";
+  } else if (!snapshot.task_running) {
+    snapshot.reason = "audio_task_unavailable";
+  } else if (!snapshot.stream_active) {
+    snapshot.reason = "i2s_no_data";
+  } else if (!snapshot.measurement_valid) {
+    snapshot.reason = "measurement_invalid";
+  } else {
+    snapshot.reason = "ok";
+  }
+  return snapshot;
 }
 
 void AudioMeter::taskEntry(void* context) {
@@ -208,8 +252,22 @@ void AudioMeter::readTask() {
         pdMS_TO_TICKS(250));
     if (result != ESP_OK || bytes_read == 0) {
       ++read_errors;
+      portENTER_CRITICAL(&result_lock_);
+      ++consecutive_read_errors_;
+      ++total_read_errors_;
+      const bool should_recover =
+          consecutive_read_errors_ >= kReadErrorsBeforeRecovery;
+      portEXIT_CRITICAL(&result_lock_);
+      if (should_recover) {
+        recoverStream();
+      }
       continue;
     }
+
+    portENTER_CRITICAL(&result_lock_);
+    last_dma_ms_ = millis();
+    consecutive_read_errors_ = 0;
+    portEXIT_CRITICAL(&result_lock_);
 
     const size_t sample_count = bytes_read / sizeof(int32_t);
     for (size_t index = 0; index < sample_count; ++index) {
@@ -236,6 +294,11 @@ void AudioMeter::readTask() {
       if (sample_24 == 0) {
         ++zero_samples;
       }
+      if (has_previous_sample && sample_24 == previous_sample_24) {
+        ++repeated_samples;
+      }
+      previous_sample_24 = sample_24;
+      has_previous_sample = true;
       ++accumulated_samples;
 
       if (accumulated_samples >= kWindowSamples) {
@@ -255,8 +318,10 @@ void AudioMeter::publishAccumulator() {
   window.clipped_samples = clipped_samples;
   window.zero_samples = zero_samples;
   window.read_errors = read_errors;
+  window.repeated_samples = repeated_samples;
   window.peak = peak_normalized;
   window.calibration_offset_db = calibrationOffset();
+  window.completed_ms = millis();
 
   const double rms = std::sqrt(
       sum_square_unweighted / accumulated_samples);
@@ -274,6 +339,8 @@ void AudioMeter::publishAccumulator() {
                            accumulated_samples;
   const float zero_ratio = static_cast<float>(zero_samples) /
                            accumulated_samples;
+  const float repeated_ratio = static_cast<float>(repeated_samples) /
+                               accumulated_samples;
   if (!isfinite(window.laeq_dba) || !isfinite(window.dbfs)) {
     window.invalid_reason = "non_finite";
   } else if (read_errors > 0) {
@@ -284,6 +351,10 @@ void AudioMeter::publishAccumulator() {
     window.invalid_reason = "clipping";
   } else if (zero_ratio > kMaxZeroRatio) {
     window.invalid_reason = "digital_silence";
+  } else if (repeated_ratio > kMaxRepeatedRatio) {
+    window.invalid_reason = "pcm_stuck";
+  } else if (window.peak <= 0.0F || window.peak > 1.0F) {
+    window.invalid_reason = "pcm_out_of_range";
   } else if (window.laeq_dba < 30.0F || window.laeq_dba > 130.0F) {
     window.invalid_reason = "outside_cem_range";
   } else {
@@ -291,17 +362,51 @@ void AudioMeter::publishAccumulator() {
   }
 
   portENTER_CRITICAL(&result_lock_);
+  window.sequence = ++window_sequence_;
   pending_ = window;
+  last_window_ms_ = window.completed_ms;
+  last_measurement_valid_ = window.valid;
   portEXIT_CRITICAL(&result_lock_);
 
+  // Keep DC-blocker and A-weighting history across adjacent windows. Resetting
+  // the IIR state every 10 seconds creates an artificial filter transient.
+  resetWindowAccumulator();
+}
+
+void AudioMeter::resetWindowAccumulator() {
   sum_square_unweighted = 0.0;
   sum_square_a_weighted = 0.0;
   peak_normalized = 0.0F;
   accumulated_samples = 0;
   clipped_samples = 0;
   zero_samples = 0;
+  repeated_samples = 0;
   read_errors = 0;
   window_started_ms = 0;
+}
+
+void AudioMeter::resetSignalState() {
+  previous_sample_24 = 0;
+  has_previous_sample = false;
+  dc_previous_input = 0.0;
+  dc_previous_output = 0.0;
+  a_weighting_1.reset();
+  a_weighting_2.reset();
+  a_weighting_3.reset();
+}
+
+void AudioMeter::recoverStream() {
+  i2s_stop(I2S_NUM_0);
+  delay(kRecoveryPauseMs);
+  const bool recovered = i2s_start(I2S_NUM_0) == ESP_OK;
+  resetWindowAccumulator();
+  resetSignalState();
+  portENTER_CRITICAL(&result_lock_);
+  ++recovery_count_;
+  consecutive_read_errors_ = 0;
+  driver_ready_ = recovered;
+  last_measurement_valid_ = false;
+  portEXIT_CRITICAL(&result_lock_);
 }
 
 }  // namespace zeep

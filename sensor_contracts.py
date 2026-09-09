@@ -23,6 +23,17 @@ SENSOR_CONTRACT_VERSION = "zeep-sensor-contract-v1.2"
 TELEMETRY_SCHEMA = "zeep.sensor.telemetry"
 TELEMETRY_SCHEMA_VERSION = "1.0"
 
+# Only this event is allowed to replace the live Sensor Hub state.  Boot,
+# command and calibration responses share the serial line, but are control
+# plane messages rather than measurements.
+ENVIRONMENT_EVENT = "environment"
+LEGACY_HUB1_MEASUREMENT_FIELDS = frozenset({
+    "temperature_c", "temperature", "temp", "temp_c",
+    "humidity_rh", "humidity", "hum", "rh",
+    "lux", "light", "illuminance",
+    "sound_dbfs", "sound_laeq_dba", "sensor_status",
+})
+
 # CEM DT-8852 reference range currently approved for ZEEP field validation.
 # A numeric sound value outside this range is unavailable, not a value to
 # clamp into range.  Keeping the limits here prevents API, Dashboard and
@@ -232,6 +243,7 @@ def sensor_contract_snapshot() -> dict[str, Any]:
         "contract_version": SENSOR_CONTRACT_VERSION,
         "telemetry_schema": TELEMETRY_SCHEMA,
         "telemetry_schema_version": TELEMETRY_SCHEMA_VERSION,
+        "accepted_measurement_event": ENVIRONMENT_EVENT,
         "backward_compatible_flat_payloads": True,
         "devices": {key: dict(value) for key, value in SENSOR_CATALOG.items()},
     }
@@ -243,7 +255,38 @@ def _finite(value: Any) -> Any:
     return value if math.isfinite(float(value)) else None
 
 
-def decode_hub_payload(payload: Mapping[str, Any], *, expected_hub: str) -> dict[str, Any]:
+def classify_hub_payload(
+    payload: Mapping[str, Any], *, expected_hub: str,
+) -> tuple[str, str]:
+    """Classify a raw hub frame before it can mutate live sensor state.
+
+    Canonical packets require an environment event from the expected physical
+    hub. A narrowly allowlisted event-less flat packet is retained only as a
+    rollback bridge for released legacy firmware. Other well-formed events are
+    ignored because INFO/calibration replies use the same serial transport. A
+    malformed object or wrong hub is rejected without reconnecting USB.
+    """
+    if not isinstance(payload, Mapping):
+        return "rejected", "payload_not_object"
+    event = str(payload.get("event") or "").strip()
+    if not event:
+        hub_id = str(payload.get("hub_id") or "").strip()
+        if hub_id and hub_id != expected_hub:
+            return "rejected", f"unexpected_hub:{hub_id}"
+        if LEGACY_HUB1_MEASUREMENT_FIELDS.intersection(payload):
+            return "telemetry", "legacy_environment"
+        return "ignored", "missing_event"
+    if event != ENVIRONMENT_EVENT:
+        return "ignored", event
+    hub_id = str(payload.get("hub_id") or "").strip()
+    if hub_id != expected_hub:
+        return "rejected", f"unexpected_hub:{hub_id or 'missing'}"
+    return "telemetry", ENVIRONMENT_EVENT
+
+
+def decode_hub_payload(
+    payload: Mapping[str, Any], *, expected_hub: str,
+) -> dict[str, Any]:
     """Adapt a legacy flat object or the v1 envelope to the legacy internal view.
 
     No calibration or range clipping happens here.  The existing Pi validation
@@ -270,20 +313,61 @@ def decode_hub_payload(payload: Mapping[str, Any], *, expected_hub: str) -> dict
         raise ValueError("telemetry envelope sensors must be an object")
     flat: dict[str, Any] = {}
     sensor_status: dict[str, bool] = {}
+    sensor_diagnostics: dict[str, dict[str, Any]] = {}
     for sensor_id, raw in sensors.items():
         if not isinstance(raw, Mapping):
             continue
+        sensor_key = str(sensor_id)
         status = str(raw.get("status") or "ok").lower()
-        sensor_status[str(sensor_id)] = status in {"ok", "live", "ready"}
+        reason = str(
+            raw.get("reason") or raw.get("invalid_reason") or ""
+        ).strip()
+        sensor_status[sensor_key] = status in {
+            "ok", "live", "ready", "degraded", "held",
+        }
         values = raw.get("values") if isinstance(raw.get("values"), Mapping) else raw
         for key, value in values.items():
-            if key not in {"status", "quality", "unit", "values"}:
+            if key not in {
+                "status", "quality", "unit", "values", "diagnostics",
+                "reason", "invalid_reason",
+            }:
                 flat[str(key)] = _finite(value)
+        details = {
+            "status": status,
+            "reason": reason or None,
+            "quality": _finite(raw.get("quality")),
+            "age_ms": _finite(raw.get("age_ms")),
+            "diagnostics": (
+                dict(raw["diagnostics"])
+                if isinstance(raw.get("diagnostics"), Mapping)
+                else None
+            ),
+        }
+        sensor_diagnostics[sensor_key] = {
+            key: value for key, value in details.items() if value is not None
+        }
+        if sensor_key == "sph0645" and reason and not sensor_status[sensor_key]:
+            # Firmware owns acoustic validation. Preserve its concrete reason
+            # instead of replacing it later with a generic missing-LAeq label.
+            flat.setdefault("sound_invalid_reason", reason)
     flat.update({
         "sensor_status": sensor_status,
+        "sensor_diagnostics": sensor_diagnostics,
+        "event": source.get("event"),
+        "source": source.get("source"),
+        "hub_id": hub_id,
+        "firmware_version": source.get("firmware_version"),
+        "boot_id": source.get("boot_id"),
+        "sound_firmware_version": source.get(
+            "sound_firmware_version", source.get("firmware_version")),
         "sequence": source.get("sequence"),
         "captured_at": source.get("captured_at"),
         "monotonic_ms": source.get("monotonic_ms"),
+        "hub_diagnostics": (
+            dict(source["diagnostics"])
+            if isinstance(source.get("diagnostics"), Mapping)
+            else {}
+        ),
         "contract": {
             "schema": TELEMETRY_SCHEMA,
             "version": TELEMETRY_SCHEMA_VERSION,

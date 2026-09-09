@@ -221,6 +221,33 @@ class SessionTimelineSchemaTests(unittest.TestCase):
 
 
 class VersionedTelemetryContractTests(unittest.TestCase):
+    def test_reader_gate_accepts_only_expected_environment_event(self):
+        expected = {"event": "environment", "hub_id": "sensorhub1"}
+        boot = {"event": "boot", "hub_id": "sensorhub1"}
+        calibration = {"event": "calibration_response"}
+        wrong_hub = {"event": "environment", "hub_id": "sensorhub2"}
+
+        self.assertEqual(
+            contracts.classify_hub_payload(
+                expected, expected_hub="sensorhub1"),
+            ("telemetry", "environment"),
+        )
+        self.assertEqual(
+            contracts.classify_hub_payload(
+                boot, expected_hub="sensorhub1"),
+            ("ignored", "boot"),
+        )
+        self.assertEqual(
+            contracts.classify_hub_payload(
+                calibration, expected_hub="sensorhub1"),
+            ("ignored", "calibration_response"),
+        )
+        self.assertEqual(
+            contracts.classify_hub_payload(
+                wrong_hub, expected_hub="sensorhub1"),
+            ("rejected", "unexpected_hub:sensorhub2"),
+        )
+
     def test_legacy_flat_payload_remains_backward_compatible(self):
         decoded = contracts.decode_hub_payload(
             {"temperature_c": 24.5, "humidity_rh": 52.0},
@@ -245,6 +272,76 @@ class VersionedTelemetryContractTests(unittest.TestCase):
         self.assertEqual(decoded["voc_index"], 96)
         self.assertEqual(decoded["sequence"], 42)
         self.assertTrue(decoded["sensor_status"]["mhz19c"])
+
+    def test_canonical_hub1_packet_preserves_three_sensor_diagnostics(self):
+        decoded = contracts.decode_hub_payload({
+            "schema": contracts.TELEMETRY_SCHEMA,
+            "version": contracts.TELEMETRY_SCHEMA_VERSION,
+            "event": "environment",
+            "source": "sensorhub1_firmware",
+            "hub_id": "sensorhub1",
+            "firmware_version": "sensorhub1-v2.0",
+            "sequence": 81,
+            "monotonic_ms": 810_000,
+            "diagnostics": {"publish_period_ms": 10_000},
+            "sensors": {
+                "sht3x_dis": {
+                    "status": "live",
+                    "age_ms": 120,
+                    "values": {
+                        "temperature_c": 23.4,
+                        "humidity_rh": 51.2,
+                    },
+                },
+                "opt3001": {
+                    "status": "live",
+                    "values": {"lux": 1.7},
+                },
+                "sph0645": {
+                    "status": "invalid",
+                    "reason": "pcm_all_zero",
+                    "diagnostics": {"zero_ratio": 1.0},
+                    "values": {
+                        "sound_valid": False,
+                        "sound_weighting": "A",
+                        "sound_metric": "LAeq",
+                        "sound_window_ms": 10_000,
+                    },
+                },
+            },
+        }, expected_hub="sensorhub1")
+
+        self.assertEqual(decoded["event"], "environment")
+        self.assertEqual(decoded["source"], "sensorhub1_firmware")
+        self.assertEqual(decoded["hub_id"], "sensorhub1")
+        self.assertEqual(decoded["firmware_version"], "sensorhub1-v2.0")
+        self.assertEqual(decoded["hub_diagnostics"]["publish_period_ms"], 10_000)
+        self.assertTrue(decoded["sensor_status"]["sht3x_dis"])
+        self.assertTrue(decoded["sensor_status"]["opt3001"])
+        self.assertFalse(decoded["sensor_status"]["sph0645"])
+        self.assertEqual(decoded["sound_invalid_reason"], "pcm_all_zero")
+        self.assertEqual(
+            decoded["sensor_diagnostics"]["sph0645"]["reason"],
+            "pcm_all_zero",
+        )
+
+        normalized = app.normalize_esp32_sensor(decoded)
+        self.assertEqual(normalized["sound_invalid_reason"], "pcm_all_zero")
+        self.assertIsNone(normalized.get("sound_dba_est"))
+        normalized.update({"connected": True, "last_update": NOW})
+        environment = app.build_environment_snapshot(normalized, {}, NOW)
+        self.assertEqual(
+            environment["devices"]["sht3x_dis"]["status"], "live")
+        self.assertEqual(
+            environment["devices"]["opt3001"]["status"], "live")
+        self.assertEqual(
+            environment["devices"]["sph0645"]["status"], "invalid")
+        self.assertEqual(
+            environment["devices"]["sph0645"]["reason"], "pcm_all_zero")
+        self.assertEqual(environment["live_count"], 2)
+
+    def test_hub1_default_stale_window_covers_two_ten_second_packets(self):
+        self.assertEqual(app.ESP32_STALE_SECONDS, 25.0)
 
     def test_wrong_hub_or_schema_version_is_rejected(self):
         base = {

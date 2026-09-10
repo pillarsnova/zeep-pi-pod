@@ -12,7 +12,8 @@ and this module has to stay importable without it.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict
+from collections.abc import Callable
+from typing import Any
 
 from fastapi import HTTPException
 
@@ -20,12 +21,12 @@ from zeep_pod.identity.profile_fields import normalize_email
 
 
 def identity_from_auth_data(
-    data: Dict[str, Any],
+    data: dict[str, Any],
     *,
-    zeep_request: Callable[..., Dict[str, Any]],
+    zeep_request: Callable[..., dict[str, Any]],
     log_event: Callable[..., None],
     offline_error: type[BaseException],
-) -> tuple[Dict[str, Any], Dict[str, Any]]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """Turn a verified ZEEP auth payload into local identity plus profile.
 
     ``/v1/auth/qr/poll`` hands back the same ``publicUser()`` object as
@@ -40,7 +41,7 @@ def identity_from_auth_data(
     if not access_token or not zeep_username or not public_id:
         raise HTTPException(502, "ZEEP API ตอบข้อมูลตัวตนไม่ครบ")
 
-    me: Dict[str, Any] = {}
+    me: dict[str, Any] = {}
     profile_refreshed = False
     try:
         me = zeep_request("GET", "/v1/users/me", token=access_token).get("data") or {}
@@ -48,8 +49,12 @@ def identity_from_auth_data(
             me = {}
         profile_refreshed = True
     except (offline_error, HTTPException) as exc:
-        log_event("auth", "zeep_profile_failed", user=zeep_username,
-                  error=str(getattr(exc, "detail", exc)))
+        log_event(
+            "auth",
+            "zeep_profile_failed",
+            user=zeep_username,
+            error=str(getattr(exc, "detail", exc)),
+        )
 
     # Email is the canonical local data identity. Prefer the Login contract and
     # accept /users/me as a fallback, then reject incomplete accounts instead
@@ -79,14 +84,22 @@ def authenticate_password(
     identifier: str,
     password: str,
     *,
-    zeep_request: Callable[..., Dict[str, Any]],
+    zeep_request: Callable[..., dict[str, Any]],
     log_event: Callable[..., None],
     offline_error: type[BaseException],
-) -> tuple[Dict[str, Any], Dict[str, Any]]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """Verify a ZEEP account and return public identity plus profile metadata."""
-    data = zeep_request(
-        "POST", "/v1/auth/login", json_body={"identifier": identifier, "password": password}
-    ).get("data") or {}
+    data = (
+        zeep_request(
+            "POST",
+            "/v1/auth/login",
+            json_body={"identifier": identifier, "password": password},
+        ).get("data")
+        or {}
+    )
     return identity_from_auth_data(
-        data, zeep_request=zeep_request, log_event=log_event, offline_error=offline_error
+        data,
+        zeep_request=zeep_request,
+        log_event=log_event,
+        offline_error=offline_error,
     )

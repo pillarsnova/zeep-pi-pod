@@ -11,10 +11,10 @@ from __future__ import annotations
 import json
 import math
 import time
-from typing import Any, Callable, Mapping, MutableMapping, MutableSequence
+from collections.abc import Callable, Mapping, MutableMapping, MutableSequence
+from typing import Any
 
 from sensor_contracts import classify_hub_payload, decode_hub_payload
-
 
 Payload = dict[str, Any]
 EventLogger = Callable[..., None]
@@ -94,10 +94,15 @@ class SensorHub1Reader:
         while True:
             try:
                 with self.serial_factory(
-                    self.port, self.baud, timeout=1,
+                    self.port,
+                    self.baud,
+                    timeout=1,
                 ) as connection:
                     self.log_event(
-                        "esp32", "connected", port=self.port, baud=self.baud,
+                        "esp32",
+                        "connected",
+                        port=self.port,
+                        baud=self.baud,
                     )
                     last_error = None
                     while True:
@@ -117,13 +122,16 @@ class SensorHub1Reader:
             payload = json.loads(raw.decode("utf-8", errors="strict").strip())
         except (UnicodeError, json.JSONDecodeError) as exc:
             self.log_event(
-                "esp32", "payload_rejected",
-                reason="invalid_json", error=str(exc),
+                "esp32",
+                "payload_rejected",
+                reason="invalid_json",
+                error=str(exc),
             )
             return False
 
         disposition, reason = classify_hub_payload(
-            payload, expected_hub="sensorhub1",
+            payload,
+            expected_hub="sensorhub1",
         )
         if disposition == "ignored":
             self.log_event("esp32", "control_event_ignored", event=reason)
@@ -134,13 +142,16 @@ class SensorHub1Reader:
 
         try:
             normalized = decode_hub_payload(
-                payload, expected_hub="sensorhub1",
+                payload,
+                expected_hub="sensorhub1",
             )
             normalized = self.normalize(normalized)
         except (TypeError, ValueError, OverflowError) as exc:
             self.log_event(
-                "esp32", "payload_rejected",
-                reason="contract_error", error=str(exc),
+                "esp32",
+                "payload_rejected",
+                reason="contract_error",
+                error=str(exc),
             )
             return False
 
@@ -172,8 +183,10 @@ class SensorHub1Reader:
             except OverflowError:
                 sound_is_finite = False
         if payload.get("sound_measurement_valid") is True and sound_is_finite:
-            self.append_sound({
-                "t": payload["last_update"],
-                "dba": float(sound),
-                "dbfs": payload.get("sound_dbfs"),
-            })
+            self.append_sound(
+                {
+                    "t": payload["last_update"],
+                    "dba": float(sound),
+                    "dbfs": payload.get("sound_dbfs"),
+                }
+            )

@@ -11,7 +11,6 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-
 SessionReader = Callable[[str, tuple[Any, ...]], list[dict[str, Any]]]
 ProgressSummary = Callable[[dict[str, Any]], dict[str, Any]]
 
@@ -100,12 +99,8 @@ def session_availability_by_account(
             "available_sessions": available,
             "lifetime_sessions": lifetime,
             "archived_sessions": max(0, lifetime - available),
-            "sessions_without_data": int(
-                row.get("sessions_without_data") or 0
-            ),
-            "last_available_session_utc": row.get(
-                "last_available_session_utc"
-            ),
+            "sessions_without_data": int(row.get("sessions_without_data") or 0),
+            "last_available_session_utc": row.get("last_available_session_utc"),
             "last_data_session_utc": row.get("last_data_session_utc"),
         }
     return result
@@ -126,21 +121,15 @@ def apply_session_availability(
     available = int(availability.get("available_sessions") or 0)
     result["sessions"] = available
     result["available_sessions"] = available
-    result["lifetime_sessions"] = int(
-        availability.get("lifetime_sessions") or 0
-    )
-    result["archived_sessions"] = int(
-        availability.get("archived_sessions") or 0
-    )
+    result["lifetime_sessions"] = int(availability.get("lifetime_sessions") or 0)
+    result["archived_sessions"] = int(availability.get("archived_sessions") or 0)
     result["sessions_without_data"] = int(
         availability.get("sessions_without_data") or 0
     )
     result["last_available_session_utc"] = availability.get(
         "last_available_session_utc"
     )
-    result["last_data_session_utc"] = availability.get(
-        "last_data_session_utc"
-    )
+    result["last_data_session_utc"] = availability.get("last_data_session_utc")
     return result
 
 
@@ -148,9 +137,7 @@ def _activity_epoch(value: Any) -> float:
     if not value:
         return 0.0
     try:
-        return datetime.fromisoformat(
-            str(value).replace("Z", "+00:00")
-        ).timestamp()
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
     except (TypeError, ValueError, OverflowError):
         return 0.0
 
@@ -164,21 +151,18 @@ def users_ordered_by_latest_session(
 ) -> list[dict[str, Any]]:
     """Build the Admin chooser from current, data-backed Session metadata."""
     active_record = active_record or {}
-    active_key = str(
-        active_record.get("username_key") or ""
-    ).strip().casefold()
+    active_key = str(active_record.get("username_key") or "").strip().casefold()
     users: list[dict[str, Any]] = []
     for stored_key, stored_profile in profiles.items():
         profile = dict(stored_profile or {})
         if progress_summary is not None:
             profile["progressive_profile_summary"] = progress_summary(profile)
         profile.pop("progressive_profile", None)
-        account_key = str(
-            profile.get("account_key")
-            or stored_key
-            or profile.get("email")
-            or ""
-        ).strip().casefold()
+        account_key = (
+            str(profile.get("account_key") or stored_key or profile.get("email") or "")
+            .strip()
+            .casefold()
+        )
         profile = apply_session_availability(
             profile,
             (availability_by_account or {}).get(account_key, {})
@@ -187,9 +171,10 @@ def users_ordered_by_latest_session(
         )
         is_active = bool(active_key and account_key == active_key)
         latest_utc = (
-            active_record.get("started_at_utc")
-            or active_record.get("armed_at_utc")
-        ) if is_active else None
+            (active_record.get("started_at_utc") or active_record.get("armed_at_utc"))
+            if is_active
+            else None
+        )
         latest_utc = (
             latest_utc
             or profile.get("last_available_session_utc")
@@ -208,9 +193,7 @@ def users_ordered_by_latest_session(
         ).casefold()
     )
     users.sort(
-        key=lambda profile: _activity_epoch(
-            profile.get("history_order_utc")
-        ),
+        key=lambda profile: _activity_epoch(profile.get("history_order_utc")),
         reverse=True,
     )
     users.sort(

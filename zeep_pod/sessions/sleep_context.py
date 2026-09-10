@@ -80,9 +80,7 @@ def restore_sleep_context(
             "awake_rr_reference": saved_rr,
         }
     )
-    saved_last_frame = (
-        context.get("last_valid_frame_t") if context_matches else None
-    )
+    saved_last_frame = context.get("last_valid_frame_t") if context_matches else None
     if _finite_number(saved_last_frame):
         path["last_valid_frame_t"] = float(saved_last_frame)
 
@@ -174,16 +172,12 @@ def _apply_confirmed_stages_to_samples(
                     {
                         "sleep": stage,
                         "sleep_confirmed_state": stage,
-                        "sleep_estimator_version": value.get(
-                            "estimator_version"
-                        ),
-                        "sleep_evidence_version": value.get(
-                            "evidence_version"
-                        ),
+                        "sleep_estimator_version": value.get("estimator_version"),
+                        "sleep_evidence_version": value.get("evidence_version"),
                         "sleep_confidence": value.get("confidence"),
-                        "sleep_probability": (
-                            value.get("probabilities") or {}
-                        ).get(stage),
+                        "sleep_probability": (value.get("probabilities") or {}).get(
+                            stage
+                        ),
                     }
                 )
 

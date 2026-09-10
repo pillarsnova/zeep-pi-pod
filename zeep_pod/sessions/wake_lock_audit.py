@@ -11,12 +11,9 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any
 
-
 AUDIT_POLICY_VERSION = "zeep-wake-lock-shadow-audit-v1.0"
 SLEEP_STATES = frozenset({"n1", "n2", "n3", "rem"})
-OFF_BED_LABELS = frozenset(
-    {"off", "off_bed", "off bed", "empty", "out", "no user"}
-)
+OFF_BED_LABELS = frozenset({"off", "off_bed", "off bed", "empty", "out", "no user"})
 
 
 def _finite_number(value: Any) -> float | None:
@@ -51,9 +48,7 @@ def normalise_stage_event(row: dict[str, Any]) -> dict[str, Any] | None:
     """Return the small, auditable subset needed by the detector."""
     payload = row.get("payload") if isinstance(row.get("payload"), dict) else row
     state = str(payload.get("state") or "").strip().casefold()
-    when = _timestamp(
-        payload.get("window_end") or row.get("timestamp") or row.get("t")
-    )
+    when = _timestamp(payload.get("window_end") or row.get("timestamp") or row.get("t"))
     if state not in {"wake", *SLEEP_STATES} or when is None:
         return None
     metrics = payload.get("metrics")
@@ -71,9 +66,7 @@ def normalise_stage_event(row: dict[str, Any]) -> dict[str, Any] | None:
         "bed_status": metrics.get("bed_status"),
         "movement_ratio": _finite_number(metrics.get("movement_ratio")),
         "mean_hr": _finite_number(metrics.get("mean_hr")),
-        "awake_hr_reference": _finite_number(
-            metrics.get("awake_hr_reference")
-        ),
+        "awake_hr_reference": _finite_number(metrics.get("awake_hr_reference")),
     }
 
 
@@ -167,9 +160,7 @@ def find_suspected_wake_lock_ins(
             findings.append(
                 {
                     "case_ref": _case_reference(session_id),
-                    "start_utc": datetime.fromtimestamp(
-                        bout[0]["t"], UTC
-                    ).isoformat(),
+                    "start_utc": datetime.fromtimestamp(bout[0]["t"], UTC).isoformat(),
                     "end_utc": datetime.fromtimestamp(
                         bout[-1]["t"] + bout[-1]["interval_s"], UTC
                     ).isoformat(),

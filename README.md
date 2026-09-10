@@ -155,6 +155,9 @@ schema/version/request-id โดย Usage Session response ถูกตรวจ
 เผยแพร่ชนิดข้อมูล/enum ผ่าน OpenAPI ส่วน endpoint เดิมด้านล่างยังคงรองรับ
 Tablet ที่ติดตั้งอยู่
 
+บันทึกการส่งมอบระหว่างทีมพร้อมผล Deploy/Rerun ล่าสุดดูที่
+[API & App Handoff — 2026-09-11](docs/zeep-api-app-handoff-2026-09-11.md)
+
 | กลุ่ม | Endpoint |
 |---|---|
 | สถานะ | `GET /api/state` · `WS /ws` |

@@ -5561,8 +5561,9 @@ function drawWrapped(ctx,text,x,y,maxWidth,lineHeight,maxLines=99){
 
 function drawReportHeader(ctx,payload,W,M){
   let y=M;
+  const presentation=reportPresentationMode(payload.session_report||payload.sleep_quality||payload);
   ctx.fillStyle='#19e3ff';ctx.font=reportFont(800,32);
-  ctx.fillText('ZEEP · SLEEP REPORT',M,y);y+=54;
+  ctx.fillText(presentation==='recovery'?'ZEEP · RECOVERY REPORT':'ZEEP · SLEEP REPORT',M,y);y+=54;
   ctx.fillStyle='#eaf7fc';ctx.font=reportFont(800,54);
   y=drawWrapped(ctx,payload.display_name||payload.username||'ผู้ใช้งาน',M,y,W-2*M,66,2)+10;
   ctx.fillStyle='#7fa6b8';ctx.font=reportFont(600,26);
@@ -5599,8 +5600,17 @@ function drawReportScore(ctx,quality,y,W,M){
   return y+h+40;
 }
 
-function drawReportMetrics(ctx,sleep,y,W,M){
-  const boxes=[
+function drawReportMetrics(ctx,report,quality,y,W,M){
+  const presentation=reportPresentationMode(report),sleep=report.sleep||{};
+  const target=quality.duration_target||{};
+  const regularity=quality.physiology?.regularity_factor;
+  const movement=quality.body_response?.movement_pct;
+  const boxes=presentation==='recovery' ? [
+    ['เวลาพักที่นับได้',fmtDur(target.eligible_rest_seconds==null?sleep.recording_s:target.eligible_rest_seconds)],
+    ['เทียบเป้าหมาย',target.completion_pct==null?'--':`${Math.round(Number(target.completion_pct))}%`],
+    ['ความนิ่ง HR/RR',regularity==null?'--':`${Math.round(100*Number(regularity))}%`],
+    ['ความนิ่งร่างกาย',movement==null?'--':`${Math.max(0,Math.round(100-Number(movement)))}%`],
+  ] : [
     ['Sensor ประเมินว่าหลับ',fmtDur(sleep.estimated_sleep_s)],
     ['ช่วงที่ Sensor บันทึก',fmtDur(sleep.recording_s)],
     ['ประสิทธิภาพ',sleep.sleep_efficiency_pct==null?'--':`${sleep.sleep_efficiency_pct}%`],
@@ -5620,40 +5630,35 @@ function drawReportMetrics(ctx,sleep,y,W,M){
 }
 
 function drawReportStages(ctx,report,quality,y,W,M){
-  const stages=(report.stages||[]).filter(stage=>REPORT_STAGE_META[stage.state]);
-  const stageCoverage=Number(report.data_quality?.coverage?.sleep_stage_pct)||0;
+  const presentation=reportPresentationMode(report);
+  const items=reportProfileItems(report,presentation);
   ctx.fillStyle='#9fd7e6';ctx.font=reportFont(700,28);
-  ctx.fillText('สัดส่วน Sleep Stage',M,y);y+=48;
-  // เกณฑ์เดียวกับหน้าจอ: ต่ำกว่า 80% coverage ไม่เผยแพร่สัดส่วน
-  if(!(quality?.available===true&&stageCoverage>=80&&stages.length)){
-    ctx.fillStyle='#f6b94a';ctx.font=reportFont(600,26);
-    return drawWrapped(ctx,`ข้อมูลยืนยันยังไม่ครบ · ต้องมี Sleep State coverage อย่างน้อย 80% จึงแสดงสัดส่วน · ปัจจุบัน ${stageCoverage.toFixed(0)}%`,
-      M,y,W-2*M,38,3)+34;
-  }
+  ctx.fillText(presentation==='recovery'?'รูปแบบการพักที่ตรวจพบ':'สัดส่วน Sleep Stage',M,y);y+=48;
   const barW=W-2*M,barH=44;
   ctx.save();reportRoundRect(ctx,M,y,barW,barH,10);ctx.fillStyle='#122b3a';ctx.fill();ctx.clip();
   let cursor=0;
-  stages.forEach(stage=>{
-    const w=barW*Math.max(0,Number(stage.pct_scored)||0)/100;
-    ctx.fillStyle=REPORT_STAGE_META[stage.state].color;ctx.fillRect(M+cursor,y,w,barH);cursor+=w;
+  items.forEach(item=>{
+    const w=barW*Math.max(0,Number(item.pct)||0)/100;
+    ctx.fillStyle=item.color;ctx.fillRect(M+cursor,y,w,barH);cursor+=w;
   });
   ctx.restore();
   y+=barH+26;
-  stages.forEach((stage,i)=>{
+  items.forEach((item,i)=>{
     const lx=M+(i%2)*(barW/2),ly=y+Math.floor(i/2)*42;
-    ctx.fillStyle=REPORT_STAGE_META[stage.state].color;ctx.fillRect(lx,ly+6,16,16);
+    ctx.fillStyle=item.color;ctx.fillRect(lx,ly+6,16,16);
     ctx.fillStyle='#cfe8f2';ctx.font=reportFont(600,25);
-    drawWrapped(ctx,`${REPORT_STAGE_META[stage.state].label} · ${stage.pct_scored||0}% · ${fmtDur(stage.duration_s)}`,
+    drawWrapped(ctx,`${item.label} · ${item.pct.toFixed(0)}% · ${fmtDur(item.duration_s)}`,
       lx+26,ly,barW/2-40,30,1);
   });
-  return y+Math.ceil(stages.length/2)*42+34;
+  return y+Math.ceil(items.length/2)*42+34;
 }
 
 function drawReportFindings(ctx,report,y,W,M,limit){
   const findings=(Array.isArray(report.findings)?report.findings:[]).slice(0,5);
   if(!findings.length)return y;
+  const presentation=reportPresentationMode(report);
   ctx.fillStyle='#9fd7e6';ctx.font=reportFont(700,28);
-  ctx.fillText('สิ่งที่ควรรู้จากคืนนี้',M,y);y+=48;
+  ctx.fillText(presentation==='recovery'?'สิ่งที่ควรรู้จากการพักครั้งนี้':'สิ่งที่ควรรู้จากคืนนี้',M,y);y+=48;
   for(const item of findings){
     if(y>limit)break;
     ctx.fillStyle=REPORT_PNG_FINDING_COLOR[item.severity]||'#7fa6b8';
@@ -5672,6 +5677,7 @@ async function drawSessionReportPng(payload){
   const W=canvas.width,H=canvas.height,M=80;
   const report=payload.session_report||{},quality=payload.sleep_quality||{};
   const coverage=report.data_quality?.coverage||{};
+  const presentation=reportPresentationMode(report||quality);
   // รอฟอนต์ไทยของแท็บเล็ตให้พร้อมก่อน ไม่งั้น measureText คำนวณจาก fallback
   try{await document.fonts.ready;}catch{}
   const bg=ctx.createLinearGradient(0,0,0,H);
@@ -5680,11 +5686,14 @@ async function drawSessionReportPng(payload){
   ctx.textBaseline='top';ctx.textAlign='left';
   let y=drawReportHeader(ctx,payload,W,M);
   y=drawReportScore(ctx,quality,y,W,M);
-  y=drawReportMetrics(ctx,report.sleep||{},y,W,M);
+  y=drawReportMetrics(ctx,report,quality,y,W,M);
   y=drawReportStages(ctx,report,quality,y,W,M);
   drawReportFindings(ctx,report,y,W,M,H-M-190);
   ctx.fillStyle='#5c8296';ctx.font=reportFont(500,22);
-  drawWrapped(ctx,`${quality.disclaimer||'ประเมินจาก BCG/Sensor ไม่ใช่ผลวินิจฉัยจาก PSG'} · Coverage: Recording ${coverage.recording_pct||0}% · BCG ${coverage.bcg_pct||0}% · Sleep Stage ${coverage.sleep_stage_pct||0}% · Environment ${coverage.environment_pct||0}%`,
+  const evidence=presentation==='recovery'
+    ?`Recovery evidence: Recording ${coverage.recording_pct||0}% · HR/RR ${quality.physiology?.paired_hr_rr_coverage_pct??'--'}% · Environment ${coverage.environment_pct||0}%`
+    :`Coverage: Recording ${coverage.recording_pct||0}% · BCG ${coverage.bcg_pct||0}% · Sleep Stage ${coverage.sleep_stage_pct||0}% · Environment ${coverage.environment_pct||0}%`;
+  drawWrapped(ctx,`${quality.disclaimer||'ประเมินจาก BCG/Sensor ไม่ใช่ผลวินิจฉัยจาก PSG'} · ${evidence}`,
     M,H-M-120,W-2*M,32,3);
   return canvas.toDataURL('image/png');
 }
@@ -5837,9 +5846,10 @@ function sleepQualityCompact(q, ended){
 
 function renderSleepQuality(q, ended){
   const scoreTitle=q?.score_title||(q?.quality_type==='rest_goal'?'Recovery Score':'Sleep Score');
+  const presentation=reportPresentationMode(q);
   if (!ended || !q?.available){
     const reason = !ended ? 'คะแนนจะแสดงเมื่อจบและบันทึก Session' : (q?.reason || 'ข้อมูล Sensor ไม่เพียงพอสำหรับประเมิน');
-    return `<section class="sleep-quality-card quality-unavailable"><div class="sleep-quality-ring"><strong>—</strong><small>/100</small></div><div class="sleep-quality-copy"><span class="sleep-quality-eyebrow">${scoreTitle}</span><h3>ข้อมูลไม่พอ</h3><p>${reason}</p><small>ระบบไม่สร้างคะแนนเมื่อข้อมูล Sensor ไม่เพียงพอ</small></div></section>`;
+    return `<section class="sleep-quality-card quality-unavailable mode-${presentation}"><div class="sleep-quality-ring"><strong>—</strong><small>/100</small></div><div class="sleep-quality-copy"><span class="sleep-quality-eyebrow">${scoreTitle}</span><h3>ข้อมูลไม่พอ</h3><p>${reason}</p><small>ระบบไม่สร้างคะแนนเมื่อข้อมูล Sensor ไม่เพียงพอ</small></div></section>`;
   }
   const components=q.component_points||{},componentMax=q.component_max_points||{};
   const arousal=q.continuity?.arousal_proxy||{};
@@ -5865,7 +5875,7 @@ function renderSleepQuality(q, ended){
     q.physiology?.heart_rate_average==null?null:['ชีพจรเฉลี่ย',`${q.physiology.heart_rate_average} bpm`],
     q.physiology?.respiration_average==null?null:['หายใจเฉลี่ย',`${q.physiology.respiration_average} ครั้ง/นาที`],
     q.body_response?.movement_pct==null?null:['การเคลื่อนไหว',`${q.body_response.movement_pct}%`],
-    ['ลักษณะ Session',q.session_character==='hybrid'?'พักและมีช่วงหลับ':'ตื่นและพัก'],
+    ['ผลที่ตรวจพบ',q.session_character==='hybrid'?'พักและมีช่วงหลับ':'พักขณะตื่น · ไม่จำเป็นต้องหลับ'],
   ];
   const sleepMetrics = [
     ['รูปแบบการพัก', q.rest_mode?.label || 'ประเมินตามเวลาที่บันทึกจริง'],
@@ -5881,7 +5891,7 @@ function renderSleepQuality(q, ended){
   ];
   const metrics=(q.quality_type==='rest_goal'?restMetrics:sleepMetrics)
     .filter(Boolean).map(([label,value])=>`<div><span>${label}</span><b>${value}</b></div>`).join('');
-  return `<section class="sleep-quality-card quality-${sleepQualityTone(q)}" style="--quality-score:${q.score}">
+  return `<section class="sleep-quality-card quality-${sleepQualityTone(q)} mode-${presentation}" style="--quality-score:${q.score}">
     <div class="sleep-quality-ring"><strong>${q.score}</strong><small>/100</small></div>
     <div class="sleep-quality-copy"><span class="sleep-quality-eyebrow">${scoreTitle} · ZEEP WELLNESS · SENSOR</span><h3>${q.level}</h3><p>${q.score_scope || 'ค่าประเมินจาก Sensor'} · ${q.insight || ''}</p><div class="sleep-quality-metrics">${metrics}</div><small>${q.outcome_interpretation?`${q.outcome_interpretation} · `:''}${q.score_basis || ''} · ${q.disclaimer || 'ประเมินจาก BCG/Sensor ไม่ใช่ผลวินิจฉัยจาก PSG'}</small></div>
   </section>`;
@@ -6035,12 +6045,15 @@ function renderSessionList(d){
     return;
   }
   d.sessions.forEach(sx=>{
-    const row = document.createElement('button'); row.className = 'hist-row';
+    const presentation=reportPresentationMode(sx);
+    const modeLabel=presentation==='recovery'?'Nap & Refresh':'Overnight Recovery';
+    const row = document.createElement('button'); row.className = `hist-row mode-${presentation}`;
     const hr = sx.summary?.heart_rate_bpm;
     const identity=currentPrincipal?.role==='admin'
       ? `<span class="hist-person-label"><b>${historyEscape(identityLabel(sx))}</b><small>${historyEscape(sx.display_name||'')}</small></span>`:'';
     row.innerHTML =
-      `${identity}<b>${fmtDateTh(sx.ended_at_utc||sx.started_at_utc)}</b><span>Sensor บันทึก ${fmtDur(sx.duration_s)}</span>` +
+      `${identity}<b>${fmtDateTh(sx.ended_at_utc||sx.started_at_utc)}</b>`+
+      `<span class="hist-mode-label mode-${presentation}"><b>${modeLabel}</b><small>Sensor บันทึก ${fmtDur(sx.duration_s)}</small></span>` +
       `${sleepQualityCompact(sx.sleep_quality, sx.ended_at_utc)}` +
       `<span>♥ ${hr ? hr.avg + ' ครั้ง/นาที' : '--'}</span>`;
     row.onclick = ()=>loadDetail(sx.account_key||d.account_key||d.username, sx.session_id, row);
@@ -6076,25 +6089,130 @@ const REPORT_STAGE_META={
   n3:{label:'N3 · หลับลึก',color:'#9a82ef'},
   rem:{label:'REM · หลับฝัน',color:'#ea79b8'},
 };
+const RECOVERY_PROFILE_META={
+  awake_rest:{label:'พักขณะตื่น',color:'#55dfa5'},
+  drowsy:{label:'เคลิ้ม · N1',color:'#56d7eb'},
+  short_sleep:{label:'พบช่วงหลับ · N2/N3/REM',color:'#8f82ef'},
+  unconfirmed:{label:'ยังยืนยันไม่ได้ · NO DATA/OFF BED',color:'#526b78'},
+};
 const TERMINAL_OCCUPANCY_META={
   no_user_on_bed:{label:'ไม่มีผู้ใช้งานบนเตียง',code:'OFF',color:'#7cc7d8'},
   exited_zeep:{label:'ออกจาก ZEEP',code:'EXIT',color:'#f6b94a'},
 };
 
-function renderSessionOverview(report){
-  if(!report?.available)return '';
-  const sleep=report.sleep||{},data=report.data_quality||{},coverage=data.coverage||{};
-  const stages=(report.stages||[]).filter(stage=>REPORT_STAGE_META[stage.state]);
+function reportPresentationMode(source){
+  const report=source?.session_report||source||{};
+  const quality=report.quality||report.sleep_quality||report;
+  const restMode=report.rest_mode||quality.rest_mode||{};
+  const group=restMode.group||restMode.requested||restMode.resolved||'';
+  const title=String(quality.score_title||restMode.score_title||'').toLowerCase();
+  return quality.quality_type==='rest_goal'||group==='nap_recovery'||title.includes('recovery')
+    ?'recovery':'sleep';
+}
+
+function reportStageDurations(report){
+  const values={wake:0,n1:0,n2:0,n3:0,rem:0};
+  (report?.stages||[]).forEach(stage=>{
+    if(Object.prototype.hasOwnProperty.call(values,stage.state)){
+      values[stage.state]=Math.max(0,Number(stage.duration_s)||0);
+    }
+  });
+  return values;
+}
+
+function reportProfileItems(report,presentation){
+  const sleep=report.sleep||{},durations=reportStageDurations(report);
+  const known=Object.values(durations).reduce((sum,value)=>sum+value,0);
+  const recording=Math.max(0,Number(sleep.recording_s)||0);
+  const denominator=Math.max(recording,known,1);
+  const unconfirmed=Math.max(0,recording-known);
+  let items;
+  if(presentation==='recovery'){
+    items=[
+      {key:'awake_rest',duration_s:durations.wake},
+      {key:'drowsy',duration_s:durations.n1},
+      {key:'short_sleep',duration_s:durations.n2+durations.n3+durations.rem},
+      {key:'unconfirmed',duration_s:unconfirmed},
+    ].map(item=>({...RECOVERY_PROFILE_META[item.key],...item}));
+  }else{
+    items=Object.keys(durations).map(key=>({...REPORT_STAGE_META[key],key,duration_s:durations[key]}));
+    if(unconfirmed>0)items.push({key:'unconfirmed',label:'ยังยืนยันไม่ได้',color:'#526b78',duration_s:unconfirmed});
+  }
+  return items.map(item=>({...item,pct:100*item.duration_s/denominator}));
+}
+
+function reportProfileMarkup(report,presentation){
+  const sleep=report.sleep||{},quality=report.quality||{};
+  const coverage=report.data_quality?.coverage||{};
+  const items=reportProfileItems(report,presentation);
   let cursor=0;
-  const segments=stages.map(stage=>{
-    const start=cursor,end=Math.min(100,cursor+Math.max(0,Number(stage.pct_scored)||0));cursor=end;
-    return `${REPORT_STAGE_META[stage.state].color} ${start}% ${end}%`;
+  const segments=items.filter(item=>item.duration_s>0).map(item=>{
+    const start=cursor,end=Math.min(100,cursor+item.pct);cursor=end;
+    return `${item.color} ${start}% ${end}%`;
   });
   if(cursor<100)segments.push(`#1a2d3a ${cursor}% 100%`);
-  const stageRows=stages.map(stage=>{
-    const meta=REPORT_STAGE_META[stage.state];
-    return `<div class="stage-legend-row" style="--stage-color:${meta.color}"><i></i><span>${meta.label}</span><strong>${stage.pct_scored||0}%</strong><span>${fmtDur(stage.duration_s)}</span></div>`;
+  const rows=items.map(item=>{
+    const percentage=item.pct>=10?item.pct.toFixed(0):item.pct.toFixed(1);
+    return `<div class="stage-legend-row" style="--stage-color:${item.color}"><i></i><span>${item.label}</span><strong>${percentage}%</strong><span>${fmtDur(item.duration_s)}</span></div>`;
   }).join('');
+  const eligible=quality.duration_target?.eligible_rest_seconds;
+  const centreValue=presentation==='recovery'
+    ?fmtDur(eligible==null?sleep.recording_s:eligible)
+    :fmtDur(sleep.estimated_sleep_s);
+  const title=presentation==='recovery'?'รูปแบบการพักที่ตรวจพบ':'สัดส่วน Sleep Stage';
+  const note=presentation==='recovery'
+    ?'ไม่บังคับให้หลับ · Sleep State เป็นข้อมูลประกอบ'
+    :`เทียบเวลาที่บันทึก · Coverage ${Number(coverage.sleep_stage_pct)||0}%`;
+  const centreLabel=presentation==='recovery'?'เวลาพักที่นับได้':'Sensor ประเมินว่าหลับ';
+  const meaning=presentation==='recovery'
+    ?'<div class="profile-meaning-note">พักขณะตื่นไม่ใช่ผลล้มเหลว · คะแนนอ่านจากเวลาพัก ความนิ่ง HR/RR ความนิ่งร่างกาย และสิ่งแวดล้อมร่วมกัน</div>'
+    :'<div class="profile-meaning-note">NREM เป็นผลรวม N1 + N2 + N3 ไม่ใช่ Sleep State เพิ่มเติม</div>';
+  return `<div class="stage-summary ${presentation==='recovery'?'recovery-profile-summary':''}"><div class="report-subhead"><span>${title}</span><small>${note}</small></div><div class="stage-summary-content"><div class="stage-donut" style="--stage-ring:conic-gradient(${segments.join(',')})"><span><b>${centreValue}</b><small>${centreLabel}</small></span></div><div class="stage-legend">${rows}${meaning}</div></div></div>`;
+}
+
+function reportOverviewMetrics(report,presentation){
+  const sleep=report.sleep||{},quality=report.quality||{};
+  let values;
+  if(presentation==='recovery'){
+    const target=quality.duration_target||{};
+    const eligible=target.eligible_rest_seconds==null
+      ?Number(sleep.recording_s)||0:Number(target.eligible_rest_seconds)||0;
+    const completion=target.completion_pct==null?'--':`${Math.round(Number(target.completion_pct))}%`;
+    const regularity=quality.physiology?.regularity_factor;
+    const movement=quality.body_response?.movement_pct;
+    values=[
+      ['◷','เวลาพักที่นับได้',fmtDur(eligible)],
+      ['◎','เทียบเป้าหมาย',completion],
+      ['♥','ความนิ่ง HR/RR',regularity==null?'--':`${Math.round(100*Number(regularity))}%`],
+      ['◇','ความนิ่งร่างกาย',movement==null?'--':`${Math.max(0,Math.round(100-Number(movement)))}%`],
+    ];
+  }else{
+    values=[
+      ['◷','Sensor ประเมินว่าหลับ',fmtDur(sleep.estimated_sleep_s)],
+      ['▣','ช่วงที่ Sensor บันทึก',fmtDur(sleep.recording_s)],
+      ['◎','ประสิทธิภาพ',sleep.sleep_efficiency_pct==null?'--':`${sleep.sleep_efficiency_pct}%`],
+      ['☀','W · ตื่น',fmtDur(sleep.wake_s)],
+    ];
+  }
+  return values.map(([icon,label,value])=>`<div class="session-key-metric"><i>${icon}</i><span><small>${label}</small><b>${value}</b></span></div>`).join('');
+}
+
+function recoveryProtocolBadge(report){
+  const quality=report.quality||{},sleep=report.sleep||{};
+  const minutes=(Number(sleep.recording_s)||0)/60;
+  const status=quality.rest_mode?.protocol_status?.status;
+  if(minutes>90)return {tone:'review',label:'ตรวจ Mode/ระยะเวลา'};
+  if(minutes>45)return {tone:'legacy',label:'Legacy target ไม่ถูกบันทึก'};
+  if(minutes<10)return {tone:'review',label:'สั้นกว่า 10 นาที'};
+  if(status==='recommended')return {tone:'good',label:'เป้าหมาย 25–35 นาที'};
+  return {tone:'',label:'เทียบเป้าหมาย 30 นาที'};
+}
+
+function renderSessionOverview(report){
+  if(!report?.available)return '';
+  const sleep=report.sleep||{},quality=report.quality||{};
+  const data=report.data_quality||{},coverage=data.coverage||{};
+  const presentation=reportPresentationMode(report);
   const findingIcon={critical:'!',poor:'↓',fair:'–',good:'✓',excellent:'★',unavailable:'?'};
   const allFindings=Array.isArray(report.findings)?report.findings:[];
   const findingRow=item=>`<div class="disturbance-item ${item.severity||'unavailable'}"><i>${findingIcon[item.severity]||'·'}</i><div><b>${item.title||'ข้อมูลประกอบ'}</b><small>${item.detail||''}</small></div><span>${item.action||''}</span></div>`;
@@ -6109,37 +6227,46 @@ function renderSessionOverview(report){
   ].join('');
   const environmentAssessment=report.environment_assessment||{};
   const restMode=report.rest_mode||{},restModeGroup=restMode.group||restMode.resolved||'sleep';
-  const stageCoverage=Number(coverage.sleep_stage_pct)||0;
-  const stageReady=report.quality?.available===true&&stageCoverage>=80&&stages.length>0;
-  const stageSummary=stageReady
-    ? `<div class="stage-summary"><div class="report-subhead"><span>สัดส่วน Sleep Stage</span><small>เฉพาะ Sleep State ที่ยืนยันแล้ว</small></div><div class="stage-summary-content"><div class="stage-donut" style="--stage-ring:conic-gradient(${segments.join(',')})"><span><b>${fmtDur(sleep.estimated_sleep_s)}</b><small>Sensor ประเมินว่าหลับ</small></span></div><div class="stage-legend">${stageRows}</div></div></div>`
-    : `<div class="stage-summary"><div class="report-subhead"><span>สัดส่วน Sleep Stage</span><small>ยังไม่เผยแพร่</small></div><div class="flat-message warning"><span class="flat-icon">!</span><div><b>ข้อมูลยืนยันยังไม่ครบ</b><span>ต้องมี Sleep State coverage อย่างน้อย 80% จึงแสดงสัดส่วน · ปัจจุบัน ${stageCoverage.toFixed(0)}%</span></div></div></div>`;
+  const profile=reportProfileMarkup(report,presentation);
   const disturbanceTitle=restModeGroup==='sleep'?'สิ่งที่อาจรบกวนการนอน':'สิ่งที่อาจรบกวนการพัก';
   const environmentStatus=`คาดหวังพอใช้ขึ้นไป · ${environmentAssessment.mode_label||restMode.label||'ตาม Mode'} · ${environmentAssessment.context_only===false?'':'ไม่กำหนด Sleep State'}`;
-  const metrics=[
-    ['◷','Sensor ประเมินว่าหลับ',fmtDur(sleep.estimated_sleep_s)],
-    ['▣','ช่วงที่ Sensor บันทึก',fmtDur(sleep.recording_s)],
-    ['◎','ประสิทธิภาพ',sleep.sleep_efficiency_pct==null?'--':`${sleep.sleep_efficiency_pct}%`],
-    ['☀','W · ตื่น',fmtDur(sleep.wake_s)],
-  ].map(([icon,label,value])=>`<div class="session-key-metric"><i>${icon}</i><span><small>${label}</small><b>${value}</b></span></div>`).join('');
+  const metrics=reportOverviewMetrics(report,presentation);
   const confidence=data.confidence_pct;
   const confidenceText=confidence?` · Confidence สูง ${confidence.high||0}% · กลาง ${confidence.medium||0}% · ต่ำ ${confidence.low||0}%`:'';
+  const scoreConfidence=quality.score_confidence||{};
+  const badgeLevel=presentation==='recovery'&&scoreConfidence.level?scoreConfidence.level:(data.level||'low');
+  const badgeLabel=presentation==='recovery'&&scoreConfidence.label?scoreConfidence.label:(data.label||'ข้อมูลจำกัด');
+  const protocolBadge=presentation==='recovery'?recoveryProtocolBadge(report):null;
   const guidance=report.post_session_guidance||{};
   const guidanceHtml=guidance.primary?`<div class="report-context-note"><b>คำแนะนำหลังออกจาก ZEEP</b> · ${guidance.primary}${guidance.next_session?` · ${guidance.next_session}`:''}${guidance.self_check?`<br><b>เช็กความพร้อม</b> · ${guidance.self_check}`:''}</div>`:'';
-  return `<section class="session-report-overview">
-    <div class="session-report-head"><div><div class="sleep-quality-eyebrow">SESSION SUMMARY · ${report.version||''}</div><h3>Sensor ประเมินว่าหลับ ${fmtDur(sleep.estimated_sleep_s)}</h3></div><span class="report-data-badge ${data.level||'low'}">${data.label||'ข้อมูลจำกัด'}</span></div>
+  const headline=presentation==='recovery'
+    ?`พักใน ZEEP ${fmtDur(sleep.recording_s)} · ไม่จำเป็นต้องหลับ`
+    :`Sensor ประเมินว่าหลับ ${fmtDur(sleep.estimated_sleep_s)}`;
+  const footer=presentation==='recovery'
+    ?`Nap & Refresh ประเมินการพักและการตอบสนอง ไม่ใช้การหลับเป็นเงื่อนไข · HR/RR coverage ${quality.physiology?.paired_hr_rr_coverage_pct??'--'}% · Environment ${coverage.environment_pct||0}%`
+    :`ใช้เวลาก่อนเริ่มหลับ ${sleep.sleep_onset_proxy_s==null?'--':fmtDur(sleep.sleep_onset_proxy_s)} · เข้าสู่ W · ตื่น ${sleep.wake_entries ?? sleep.awakenings ?? 0} ครั้ง · ${data.note||''} · Coverage: Recording ${coverage.recording_pct||0}% · BCG ${coverage.bcg_pct||0}% · Sleep Stage ${coverage.sleep_stage_pct||0}% · Environment ${coverage.environment_pct||0}%${confidenceText}`;
+  return `<section class="session-report-overview mode-${presentation}">
+    <div class="session-report-head"><div><div class="sleep-quality-eyebrow">${presentation==='recovery'?'NAP & REFRESH SUMMARY':'OVERNIGHT SLEEP SUMMARY'} · ${report.version||''}</div><h3>${headline}</h3></div><div class="report-badge-group"><span class="report-data-badge ${badgeLevel}">${badgeLabel}</span>${protocolBadge?`<span class="report-protocol-badge ${protocolBadge.tone}">${protocolBadge.label}</span>`:''}</div></div>
     <div class="session-key-metrics">${metrics}</div>
     <div class="session-report-body">
-      ${stageSummary}
+      ${profile}
       <div class="disturbance-summary"><div class="report-subhead"><span>${disturbanceTitle}</span><small>${environmentStatus}</small></div><div class="disturbance-list">${findings||'<div class="mini">ไม่มีข้อมูลเพียงพอ</div>'}</div></div>
     </div>
     ${guidanceHtml}
-    <div class="report-context-note">ใช้เวลาก่อนเริ่มหลับ ${sleep.sleep_onset_proxy_s==null?'--':fmtDur(sleep.sleep_onset_proxy_s)} · เข้าสู่ W · ตื่น ${sleep.wake_entries ?? sleep.awakenings ?? 0} ครั้ง · ${data.note||''} · Coverage: Recording ${coverage.recording_pct||0}% · BCG ${coverage.bcg_pct||0}% · Sleep Stage ${coverage.sleep_stage_pct||0}% · Environment ${coverage.environment_pct||0}%${confidenceText}</div>
+    <div class="report-context-note">${footer}</div>
   </section>`;
 }
 
 function renderReport(rec){
   const root = document.getElementById('sessionDetail');
+  const presentation=reportPresentationMode(rec.session_report||rec);
+  const reportTitle=presentation==='recovery'?'ผล Nap & Refresh':'ผล Overnight Recovery';
+  const timelineTitle=presentation==='recovery'
+    ?'ลำดับการพัก · Sleep State เป็นข้อมูลประกอบ'
+    :'ลำดับสถานะการนอน';
+  const timelineEmpty=presentation==='recovery'
+    ?'ยังไม่มีข้อมูลยืนยันรูปแบบการพัก'
+    :'ยังไม่มีข้อมูลสถานะการนอน';
   const su = rec.summary || {};
   const bed = su.bed_status_counts || {};
   const bedTotal = Object.values(bed).reduce((a,b)=>a+b, 0);
@@ -6215,7 +6342,7 @@ function renderReport(rec){
   const sessionEnded=rec.ended_at_utc
     ? `<div class="sleep-period terminal-occupancy-period"><div>${new Date(rec.ended_at_utc).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}<div class="mini">เหตุการณ์สุดท้าย</div></div><div class="stage">END · จบ Session</div><div>${rec.end_reason==='logout'?'ผู้ใช้กดจบ':'ผู้ดูแล/ระบบบันทึกการจบ'}</div><div class="reason"><div class="sleep-period-note">${terminalOccupancy?'Session จบหลังลำดับ Wake → ออกจาก ZEEP':'Session จบหลังบันทึก Terminal Wake boundary'}</div></div></div>`:'';
   root.innerHTML = `
-    <div class="section-title" style="margin-top:18px">รายงาน Session · ${identityLabel(rec,'')}</div>
+    <div class="section-title report-mode-title mode-${presentation}" style="margin-top:18px">รายงาน Session · ${identityLabel(rec,'')} · ${reportTitle}</div>
     <div class="mini" style="margin-top:0">${healthReferenceInline(rec)}</div>
     <div class="mini" style="margin-top:3px">ข้อมูลอ้างอิงสุขภาพ · ${fmtDateTh(rec.started_at_utc)} → ${fmtDateTh(rec.ended_at_utc)} · Sensor บันทึก ${fmtDur(rec.duration_s)} · ไม่ใช่การวินิจฉัย</div>
     ${renderSleepQuality(rec.sleep_quality, rec.ended_at_utc)}
@@ -6229,9 +6356,9 @@ function renderReport(rec){
       ${statBlock('RR (Respiratory Rate) เฉลี่ย', su.respiration_rate, ' ครั้ง/นาที')}
     </div>
     <div class="mini">สถานะเตียง: ${bedTxt}</div>
-    ${slTxt ? `<div class="mini">สถานะการนอน (ประเมิน): ${slTxt}</div>` : ''}
-    <details class="report-details"><summary>ลำดับสถานะการนอน · ${rec.sleep_timeline?.length||0} ช่วง · จาก ${rec.sleep_timeline_rounds||rec.sleep_timeline?.length||0} รอบข้อมูล${rec.sleep_classification_gap_count?` · WAIT/OFF ${rec.sleep_classification_gap_count} ช่วง`:''}</summary>
-      ${sleepTimeline?`<div class="sleep-timeline">${sleepTimeline}</div>`:'<div class="mini" style="padding:0 12px 12px">ยังไม่มีข้อมูลสถานะการนอน</div>'}
+    ${slTxt ? `<div class="mini">${presentation==='recovery'?'Sleep State ที่ตรวจพบ (ข้อมูลประกอบ)':'สถานะการนอน (ประเมิน)'}: ${slTxt}</div>` : ''}
+    <details class="report-details"><summary>${timelineTitle} · ${rec.sleep_timeline?.length||0} ช่วง · จาก ${rec.sleep_timeline_rounds||rec.sleep_timeline?.length||0} รอบข้อมูล${rec.sleep_classification_gap_count?` · WAIT/OFF ${rec.sleep_classification_gap_count} ช่วง`:''}</summary>
+      ${sleepTimeline?`<div class="sleep-timeline">${sleepTimeline}</div>`:`<div class="mini" style="padding:0 12px 12px">${timelineEmpty}</div>`}
     </details>
     ${terminalOccupancy||sessionEnded?`<details class="report-details" open><summary>ลำดับจบ Session · Occupancy แยกจาก Sleep Stage</summary><div class="sleep-timeline">${terminalOccupancy}${sessionEnded}</div></details>`:''}
     <div class="mini">การสั่งงานระหว่าง session: ${cntTxt}</div>

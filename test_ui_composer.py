@@ -90,6 +90,32 @@ class UiComposerTests(unittest.TestCase):
         )
         self.assertIn(".audio-zone .stream-loop.on", css)
 
+    def test_history_reports_use_mode_appropriate_result_language(self):
+        template = ui_composer.TEMPLATE.read_text(encoding="utf-8")
+        css = (ui_composer.STATIC / "theme-modern.css").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("function reportPresentationMode(source)", template)
+        self.assertIn("'NAP & REFRESH SUMMARY'", template)
+        self.assertIn("'OVERNIGHT SLEEP SUMMARY'", template)
+        self.assertIn("'รูปแบบการพักที่ตรวจพบ'", template)
+        self.assertIn("awake_rest:{label:'พักขณะตื่น'", template)
+        self.assertIn("drowsy:{label:'เคลิ้ม · N1'", template)
+        self.assertIn("short_sleep:{label:'พบช่วงหลับ · N2/N3/REM'", template)
+        self.assertIn("unconfirmed:{label:'ยังยืนยันไม่ได้", template)
+        self.assertIn("NO DATA/OFF BED", template)
+        self.assertIn("'ไม่บังคับให้หลับ · Sleep State เป็นข้อมูลประกอบ'", template)
+        self.assertIn("NREM เป็นผลรวม N1 + N2 + N3", template)
+        self.assertIn("function recoveryProtocolBadge(report)", template)
+        self.assertIn("'Legacy target ไม่ถูกบันทึก'", template)
+        self.assertIn("'ตรวจ Mode/ระยะเวลา'", template)
+        self.assertNotIn("stageCoverage>=80", template)
+        self.assertNotIn("ต้องมี Sleep State coverage อย่างน้อย 80%", template)
+        self.assertIn(".session-report-overview.mode-recovery", css)
+        self.assertIn(".recovery-profile-summary", css)
+        self.assertIn(".report-protocol-badge.legacy", css)
+
 
 if __name__ == "__main__":
     unittest.main()

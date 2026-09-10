@@ -3814,6 +3814,141 @@ body[data-view="sessions"] .hist-row > .hist-quality {
   background: rgba(75, 98, 110, .18);
 }
 
+.sleep-quality-card.mode-recovery {
+  background:
+    radial-gradient(circle at 0 0, rgba(65, 205, 151, .1), transparent 42%),
+    rgba(7, 25, 29, .88);
+}
+
+/* Mode-aware history reports ----------------------------------------------
+ * Overnight keeps the five-state sleep vocabulary. Nap & Refresh uses a
+ * Recovery Response profile so quiet wakefulness is not presented as a
+ * failed sleep attempt. Both profiles expose unconfirmed time explicitly.
+ */
+.hist-mode-label {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.hist-mode-label b,
+.hist-mode-label small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hist-mode-label b {
+  color: #dff7fc;
+  font-size: 11px;
+}
+
+.hist-mode-label small {
+  color: #718d99;
+  font-size: 8px;
+}
+
+.hist-mode-label.mode-recovery b {
+  color: #68e3b3;
+}
+
+.session-report-overview.mode-recovery {
+  border-color: rgba(86, 220, 168, .25);
+  background:
+    radial-gradient(circle at 0 0, rgba(65, 205, 151, .08), transparent 38%),
+    #07131e;
+}
+
+.session-report-overview.mode-recovery .sleep-quality-eyebrow,
+.session-report-overview.mode-recovery .session-key-metric > i {
+  color: #68e3b3;
+}
+
+.session-report-overview.mode-recovery .session-key-metric > i {
+  background: rgba(42, 125, 96, .22);
+}
+
+.report-badge-group {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.report-protocol-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid rgba(89, 136, 153, .25);
+  border-radius: 999px;
+  color: #829da9;
+  background: rgba(10, 26, 36, .72);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.report-protocol-badge.good {
+  border-color: rgba(75, 212, 155, .32);
+  color: #6fe0ae;
+}
+
+.report-protocol-badge.legacy {
+  border-color: rgba(246, 185, 74, .32);
+  color: #f6c46b;
+}
+
+.report-protocol-badge.review {
+  border-color: rgba(241, 103, 115, .34);
+  color: #f58c96;
+}
+
+.recovery-profile-summary {
+  border-color: rgba(86, 220, 168, .22);
+  background: rgba(7, 27, 28, .86);
+}
+
+.recovery-profile-summary .stage-donut::after {
+  background: #081b1c;
+}
+
+.profile-meaning-note {
+  margin-top: 9px;
+  padding: 8px 9px;
+  border-left: 2px solid #56dca8;
+  color: #83a7a2;
+  font-size: 8.5px;
+  line-height: 1.5;
+  background: rgba(32, 102, 78, .1);
+}
+
+.report-mode-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.report-mode-title::before {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid rgba(86, 215, 235, .24);
+  border-radius: 8px;
+  color: #56d7eb;
+  background: rgba(44, 126, 147, .12);
+  content: "Z";
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.report-mode-title.mode-recovery::before {
+  border-color: rgba(86, 220, 168, .3);
+  color: #68e3b3;
+  background: rgba(42, 125, 96, .15);
+  content: "R";
+}
+
 @media (max-width: 760px) {
   .sleep-quality-card {
     grid-template-columns: 86px minmax(0, 1fr);

@@ -1,13 +1,16 @@
-import unittest
+import sqlite3
 import stat
 import tempfile
+import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
 from audit_sleep_history_shadow import (
     ShadowPath,
+    normalize_session_allowlist,
     private_write_bytes,
     report_state_rows_with_annotations,
+    select_session_rows,
 )
 from sleep_stage_annotations import build_annotation, load_annotations
 
@@ -115,6 +118,109 @@ class ShadowPathParityTests(unittest.TestCase):
         self.assertEqual(report_rows[0]["state"], "wake")
         self.assertEqual(report_rows[0]["confidence"], "high")
         self.assertEqual(applied, 1)
+
+
+class TargetedSessionSelectionTests(unittest.TestCase):
+    CUTOFF_UTC = "2026-08-31T17:00:00+00:00"
+
+    def setUp(self):
+        self.connection = sqlite3.connect(":memory:")
+        self.connection.row_factory = sqlite3.Row
+        self.connection.execute(
+            "CREATE TABLE sessions ("
+            "session_id TEXT PRIMARY KEY, start_time TEXT, end_time TEXT, "
+            "duration REAL)"
+        )
+        rows = [
+            (
+                "eligible-later", "2026-09-01T02:00:00+00:00",
+                "2026-09-01T02:31:00+00:00", 1_860,
+            ),
+            (
+                "eligible-earlier", "2026-09-01T01:00:00+00:00",
+                "2026-09-01T01:30:00+00:00", 1_800,
+            ),
+            (
+                "too-short", "2026-09-01T03:00:00+00:00",
+                "2026-09-01T03:25:00+00:00", 1_500,
+            ),
+            (
+                "active", "2026-09-01T04:00:00+00:00", None, 1_800,
+            ),
+            (
+                "before-cutover", "2026-08-31T16:59:59+00:00",
+                "2026-08-31T17:30:00+00:00", 1_800,
+            ),
+        ]
+        self.connection.executemany(
+            "INSERT INTO sessions VALUES (?,?,?,?)", rows
+        )
+
+    def tearDown(self):
+        self.connection.close()
+
+    def test_omitted_allowlist_preserves_full_eligible_cohort_query(self):
+        rows, provenance = select_session_rows(
+            self.connection,
+            session_ids=None,
+            cutoff_utc=self.CUTOFF_UTC,
+            minimum_minutes=25,
+        )
+
+        self.assertEqual(
+            [row["session_id"] for row in rows],
+            ["eligible-earlier", "eligible-later"],
+        )
+        self.assertEqual(provenance["mode"], "eligible_cohort_query")
+        self.assertFalse(provenance["operator_supplied"])
+        self.assertNotIn("requested_session_ids", provenance)
+
+    def test_explicit_allowlist_selects_only_requested_eligible_sessions(self):
+        rows, provenance = select_session_rows(
+            self.connection,
+            session_ids=["eligible-later", "eligible-earlier"],
+            cutoff_utc=self.CUTOFF_UTC,
+            minimum_minutes=25,
+        )
+
+        self.assertEqual(
+            [row["session_id"] for row in rows],
+            ["eligible-earlier", "eligible-later"],
+        )
+        self.assertEqual(provenance["mode"], "explicit_session_allowlist")
+        self.assertEqual(
+            provenance["requested_session_ids"],
+            ["eligible-later", "eligible-earlier"],
+        )
+        self.assertEqual(
+            provenance["selected_session_ids"],
+            ["eligible-earlier", "eligible-later"],
+        )
+        self.assertEqual(len(provenance["allowlist_sha256"]), 64)
+
+    def test_explicit_allowlist_rejects_every_ineligible_reason_atomically(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "missing=session_not_found.*active=session_not_completed.*"
+            "too-short=session_duration_not_above_minimum.*"
+            "before-cutover=session_before_cutover",
+        ):
+            select_session_rows(
+                self.connection,
+                session_ids=[
+                    "missing", "active", "too-short", "before-cutover",
+                ],
+                cutoff_utc=self.CUTOFF_UTC,
+                minimum_minutes=25,
+            )
+
+    def test_allowlist_normalization_deduplicates_but_rejects_blank(self):
+        self.assertEqual(
+            normalize_session_allowlist([" session-a ", "session-a"]),
+            ["session-a"],
+        )
+        with self.assertRaisesRegex(ValueError, "cannot be blank"):
+            normalize_session_allowlist([" "])
 
 
 if __name__ == "__main__":

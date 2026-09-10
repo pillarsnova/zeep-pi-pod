@@ -1170,6 +1170,135 @@ def latest_summary(connection: sqlite3.Connection, session_id: str) -> dict[str,
     return value if isinstance(value, dict) else {}
 
 
+def normalize_session_allowlist(
+    session_ids: Optional[Iterable[str]],
+) -> list[str]:
+    """Normalize a repeated CLI allowlist without widening its selection.
+
+    Duplicate identifiers are collapsed in operator order.  An explicitly
+    supplied blank identifier is rejected instead of being interpreted as an
+    omitted filter, because silently falling back to the full cohort would be
+    unsafe for a targeted historical replay.
+    """
+    if session_ids is None:
+        return []
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw_session_id in session_ids:
+        session_id = str(raw_session_id or "").strip()
+        if not session_id:
+            raise ValueError("--session-id cannot be blank")
+        if session_id not in seen:
+            normalized.append(session_id)
+            seen.add(session_id)
+    return normalized
+
+
+def _explicit_session_ineligibility(
+    row: sqlite3.Row,
+    *,
+    cutoff_utc: str,
+    minimum_duration_seconds: float,
+) -> Optional[str]:
+    """Return why a requested Session cannot enter a targeted replay."""
+    if row["end_time"] is None:
+        return "session_not_completed"
+    try:
+        duration_seconds = float(row["duration"])
+    except (TypeError, ValueError):
+        return "invalid_session_duration"
+    if not math.isfinite(duration_seconds):
+        return "invalid_session_duration"
+    if duration_seconds <= minimum_duration_seconds:
+        return "session_duration_not_above_minimum"
+    try:
+        if epoch(row["start_time"]) < epoch(cutoff_utc):
+            return "session_before_cutover"
+    except (TypeError, ValueError):
+        return "invalid_session_start_time"
+    return None
+
+
+def select_session_rows(
+    connection: sqlite3.Connection,
+    *,
+    session_ids: Optional[Iterable[str]],
+    cutoff_utc: str,
+    minimum_minutes: float,
+) -> tuple[list[sqlite3.Row], dict[str, Any]]:
+    """Select the replay cohort, failing closed for an explicit allowlist.
+
+    With no ``session_ids`` this deliberately retains the historical cohort
+    query.  With an allowlist, every requested identifier must exist and pass
+    the same completed/cutover/duration boundaries before any replay begins.
+    """
+    try:
+        minimum_minutes_value = float(minimum_minutes)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("minimum minutes must be a number") from exc
+    if not math.isfinite(minimum_minutes_value) or minimum_minutes_value < 0:
+        raise ValueError("minimum minutes must be finite and non-negative")
+    minimum_duration_seconds = minimum_minutes_value * 60.0
+    allowlist = normalize_session_allowlist(session_ids)
+
+    if not allowlist:
+        rows = connection.execute(
+            "SELECT * FROM sessions WHERE end_time IS NOT NULL AND duration>? "
+            "AND start_time>=? ORDER BY start_time",
+            (minimum_duration_seconds, cutoff_utc),
+        ).fetchall()
+        return list(rows), {
+            "mode": "eligible_cohort_query",
+            "operator_supplied": False,
+            "requested_session_count": 0,
+            "selected_session_count": len(rows),
+        }
+
+    selected_by_id: dict[str, sqlite3.Row] = {}
+    rejection_reasons: list[str] = []
+    for session_id in allowlist:
+        row = connection.execute(
+            "SELECT * FROM sessions WHERE session_id=?",
+            (session_id,),
+        ).fetchone()
+        if row is None:
+            rejection_reasons.append(f"{session_id}=session_not_found")
+            continue
+        reason = _explicit_session_ineligibility(
+            row,
+            cutoff_utc=cutoff_utc,
+            minimum_duration_seconds=minimum_duration_seconds,
+        )
+        if reason:
+            rejection_reasons.append(f"{session_id}={reason}")
+            continue
+        selected_by_id[session_id] = row
+
+    if rejection_reasons:
+        raise ValueError(
+            "explicit Session allowlist rejected: "
+            + "; ".join(rejection_reasons)
+        )
+
+    rows = sorted(
+        selected_by_id.values(),
+        key=lambda row: (epoch(row["start_time"]), row["session_id"]),
+    )
+    selected_ids = [str(row["session_id"]) for row in rows]
+    allowlist_sha256 = hashlib.sha256(
+        json.dumps(allowlist, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return rows, {
+        "mode": "explicit_session_allowlist",
+        "operator_supplied": True,
+        "requested_session_count": len(allowlist),
+        "requested_session_ids": allowlist,
+        "selected_session_count": len(rows),
+        "selected_session_ids": selected_ids,
+        "allowlist_sha256": allowlist_sha256,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--sessions-db", required=True, type=Path)
@@ -1186,6 +1315,16 @@ def main() -> int:
         "--details-output", type=Path,
         help="Optional derived evidence/state artifact for reviewed promotion",
     )
+    parser.add_argument(
+        "--session-id",
+        action="append",
+        dest="session_ids",
+        metavar="SESSION_ID",
+        help=(
+            "Replay only this completed, cutover-eligible Session. Repeat the "
+            "option to create an explicit targeted allowlist."
+        ),
+    )
     args = parser.parse_args()
 
     cutoff_local = datetime.fromisoformat(args.start_local_date).replace(
@@ -1197,11 +1336,15 @@ def main() -> int:
     sessions.row_factory = sqlite3.Row
     bcg = sqlite3.connect(f"file:{args.bcg_db}?mode=ro", uri=True)
     bcg.row_factory = sqlite3.Row
-    rows = sessions.execute(
-        "SELECT * FROM sessions WHERE end_time IS NOT NULL AND duration>? "
-        "AND start_time>=? ORDER BY start_time",
-        (args.minimum_minutes * 60.0, cutoff_utc),
-    ).fetchall()
+    try:
+        rows, selection_provenance = select_session_rows(
+            sessions,
+            session_ids=args.session_ids,
+            cutoff_utc=cutoff_utc,
+            minimum_minutes=args.minimum_minutes,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
     profiles = load_profile_index(args.profiles_file)
     results = []
     details: dict[str, Any] = {}
@@ -1607,6 +1750,7 @@ def main() -> int:
             "minimum_minutes_exclusive": args.minimum_minutes,
             "start_local_date_inclusive": args.start_local_date,
             "timezone": str(LOCAL_TIMEZONE),
+            "session_selection": selection_provenance,
         },
         "result": deterministic_result_sha256,
     }
@@ -1640,6 +1784,7 @@ def main() -> int:
             "timezone": str(LOCAL_TIMEZONE),
             "older_sessions_excluded_from_learning": True,
             "raw_files_modified": False,
+            "selection": selection_provenance,
             "sessions": len(results),
             "unique_emails": len(email_counts),
             "tier_counts": dict(tier_counts),

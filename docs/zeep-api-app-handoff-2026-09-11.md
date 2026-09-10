@@ -256,7 +256,8 @@ Sleep Stage แบบ PSG
   โดยไม่ได้เขียน Raw หรือ Profile answers ใหม่
 - Backup: `backup/sessions-pre-wellness-replay-20260911-052650.db`
 - Private audit: `data/wellness-history-promotion-latest.json`
-- Replay artifacts: `private-data/replay-audits/` permission 0700;
+- Replay artifacts: `/home/pod1/zeep-private/replay-audits/20260911/`
+  permission 0700;
   files permission 0600
 - `sessions.db` integrity: `ok`
 - `bcg.db` integrity: `ok`
@@ -378,4 +379,3 @@ Deployment กลางอีกครั้ง:
 - ไม่แก้ Cloud ingest contract เดิม
 - ไม่ Rerun Session อื่นนอกจาก coded Session ที่ระบุในหัวข้อ 5
 - ไม่ถือผลว่า Clinical/AASM validated
-

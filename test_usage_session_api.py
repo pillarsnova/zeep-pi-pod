@@ -7,7 +7,8 @@ from types import SimpleNamespace
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.testclient import TestClient
 
-from zeep_pod.sessions.usage_api import create_usage_sessions_router
+from zeep_pod.sessions.response_models import UsageSessionListResponse
+from zeep_pod.sessions.usage_api import USAGE_LIST_EXAMPLE, create_usage_sessions_router
 
 
 def _session(session_id: str, email: str, mode: str) -> dict:
@@ -29,7 +30,21 @@ def _session(session_id: str, email: str, mode: str) -> dict:
         "component_max_points": {
             "goal_duration" if is_nap else "sleep_opportunity": 25,
         },
-        "score_confidence": {"level": "high"},
+        "score_confidence": {
+            "level": "high",
+            "session_coverage_pct": 95,
+            "paired_hr_rr_coverage_pct": 92,
+            "participant_email": "must-not-leak",
+            "rr_series": [15.0, 15.2],
+        },
+        "physiology": {
+            "available": True,
+            "heart_rate_average": 58.4,
+            "respiration_average": 15.2,
+            "paired_hr_rr_samples": 220,
+            "hr_series": [58.0, 59.0],
+            "participant_phone": "must-not-leak",
+        },
         "data_coverage": {
             "pct": 95,
             "score_component": not is_nap,
@@ -53,13 +68,58 @@ def _session(session_id: str, email: str, mode: str) -> dict:
         "sample_count": 2520,
         "rest_mode": mode,
         "sleep_quality": quality,
+        "sleep_policy_versions": {
+            "evidence": "evidence-v-test",
+            "participant_email": "must-not-leak",
+        },
+        "sleep_estimator_versions": {
+            "bcg-audio-bed-test": 840,
+            "participant_email": 1,
+            "not-a-count": "must-not-leak",
+        },
         "session_report": {
             "version": "report-v-test",
             "quality": quality,
             "rest_mode": quality["rest_mode"],
+            "sleep": {
+                "recording_s": 25200,
+                "estimated_sleep_s": 23400,
+                "sleep_efficiency_pct": 92.9,
+                "hr_series": [58.0, 59.0],
+                "participant_phone": "must-not-leak",
+            },
+            "stages": [
+                {
+                    "state": "N2",
+                    "samples": 400,
+                    "duration_s": 12000,
+                    "pct_scored": 51.3,
+                    "pct_sleep": 55.1,
+                    "series": ["N2", "N2"],
+                }
+            ],
+            "environment": [
+                {
+                    "key": "temp",
+                    "label": "อุณหภูมิ",
+                    "unit": "°C",
+                    "available": True,
+                    "average": 22.4,
+                    "values": [22.3, 22.5],
+                    "patient_name": "must-not-leak",
+                }
+            ],
+            "environment_assessment": {
+                "version": "environment-v-test",
+                "overall_level": "good",
+                "overall_label": "ดี",
+                "patient_name": "must-not-leak",
+            },
             "findings": [
                 {
                     "key": "temperature",
+                    "title": "อุณหภูมิคงที่",
+                    "detail": "อยู่ในช่วงของโหมด",
                     "profile": {"medical_answer": "must-not-leak"},
                     "unexpected_raw_payload": "must-not-leak",
                     "nested": {
@@ -79,6 +139,7 @@ def _session(session_id: str, email: str, mode: str) -> dict:
             "data_quality": {
                 "level": "high",
                 "coverage": {"recording_pct": 100, "bcg_pct": 95},
+                "date_of_birth": "must-not-leak",
             },
             "samples": [{"raw": "must-not-leak"}],
         },
@@ -123,10 +184,34 @@ class FakeHistory:
 
     @staticmethod
     def _listing(rows, limit, offset):
+        sleep_scores = [
+            row["sleep_quality"]["score"]
+            for row in rows
+            if row["sleep_quality"]["quality_type"] == "sleep"
+        ]
+        recovery_scores = [
+            row["sleep_quality"]["score"]
+            for row in rows
+            if row["sleep_quality"]["quality_type"] == "rest_goal"
+        ]
         return {
             "sessions": rows[offset : offset + limit],
             "total": len(rows),
-            "summary": {"session_count": len(rows)},
+            "summary": {
+                "people_count": len({row["account_key"] for row in rows}),
+                "session_count": len(rows),
+                "sleep_score_count": len(sleep_scores),
+                "recovery_score_count": len(recovery_scores),
+                "awaiting_score_count": 0,
+                "average_sleep_score": (
+                    sum(sleep_scores) / len(sleep_scores) if sleep_scores else None
+                ),
+                "average_recovery_score": (
+                    sum(recovery_scores) / len(recovery_scores)
+                    if recovery_scores
+                    else None
+                ),
+            },
             "range": None,
             "history_start_utc": "2026-09-01T00:00:00+00:00",
         }
@@ -250,6 +335,24 @@ class UsageSessionApiTests(unittest.TestCase):
             payload["report"]["quality"]["component_points"],
             {"sleep_opportunity": 20},
         )
+        self.assertEqual(
+            payload["report"]["quality"]["physiology"]["heart_rate_average"],
+            58.4,
+        )
+        self.assertEqual(payload["report"]["sleep"]["estimated_sleep_s"], 23400)
+        self.assertEqual(payload["report"]["stages"][0]["state"], "N2")
+        self.assertEqual(payload["report"]["environment"][0]["average"], 22.4)
+        self.assertEqual(
+            payload["report"]["environment_assessment"]["overall_level"],
+            "good",
+        )
+        self.assertEqual(payload["report"]["findings"][0]["title"], "อุณหภูมิคงที่")
+        self.assertEqual(
+            payload["sleep_policy_versions"], {"evidence": "evidence-v-test"}
+        )
+        self.assertEqual(
+            payload["sleep_estimator_versions"], {"bcg-audio-bed-test": 840}
+        )
         rendered = str(payload).casefold()
         self.assertNotIn("must-not-leak", rendered)
         self.assertNotIn("bcg_base64", rendered)
@@ -267,6 +370,12 @@ class UsageSessionApiTests(unittest.TestCase):
         self.assertNotIn("apikey", rendered)
         self.assertNotIn("clientapikey", rendered)
         self.assertNotIn("privatekey", rendered)
+        self.assertNotIn("hr_series", rendered)
+        self.assertNotIn("participant_phone", rendered)
+        self.assertNotIn("series", rendered)
+        self.assertNotIn("values", rendered)
+        self.assertNotIn("patient_name", rendered)
+        self.assertNotIn("date_of_birth", rendered)
 
     def test_unavailable_score_never_releases_engineering_fallback(self) -> None:
         session = self.history.sessions["a-session"]
@@ -426,6 +535,122 @@ class UsageSessionApiTests(unittest.TestCase):
         self.assertEqual(recovery["score"]["type"], "recovery_score")
         self.assertFalse(sleep["restore_summary"]["creates_independent_score"])
         self.assertFalse(recovery["restore_summary"]["whole_day_readiness_available"])
+
+    def test_summary_quality_is_a_nested_positive_allowlist(self) -> None:
+        payload = self.client.get(
+            "/api/v1/usage-sessions/a-session/summary",
+            headers=self._headers("a@example.test"),
+        ).json()["data"]
+
+        self.assertEqual(payload["data_quality"]["confidence"]["level"], "high")
+        self.assertEqual(
+            payload["data_quality"]["confidence"]["paired_hr_rr_coverage_pct"],
+            92,
+        )
+        rendered = str(payload).casefold()
+        self.assertNotIn("participant_email", rendered)
+        self.assertNotIn("rr_series", rendered)
+        self.assertNotIn("must-not-leak", rendered)
+
+    def test_nap_protocol_status_is_a_nested_positive_allowlist(self) -> None:
+        session = self.history.sessions["b-session"]
+        quality = session["sleep_quality"]
+        quality["duration_target"] = {
+            "key": "nap_30m",
+            "label": "Nap & Refresh · 30 นาที",
+            "seconds": 1800,
+            "recommended_range_minutes": [20, 35],
+            "completion_pct": 100,
+        }
+        quality["rest_mode"]["protocol_status"] = {
+            "available": True,
+            "canonical_mode": "nap_recovery",
+            "observed_seconds": 1800,
+            "recommended_range_seconds": [1200, 2100],
+            "within_operational_window": True,
+            "within_recommended_range": True,
+            "status": "recommended",
+            "review_required": False,
+            "score_releasable": True,
+            "target": {
+                "available": True,
+                "group": "nap_recovery",
+                "key": "nap_30m",
+                "label": "Nap & Refresh · 30 นาที",
+                "seconds": 1800,
+                "participant_phone": "must-not-leak",
+            },
+            "participant_email": "must-not-leak",
+            "co2_series": [700, 710],
+            "future_protocol_field": "must-not-leak",
+        }
+        session["session_report"]["quality"] = quality
+        session["session_report"]["rest_mode"] = quality["rest_mode"]
+
+        response = self.client.get(
+            "/api/v1/usage-sessions/b-session/summary",
+            headers=self._headers("b@example.test"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        target = response.json()["data"]["mode"]["target"]
+        self.assertEqual(target["protocol_status"]["status"], "recommended")
+        self.assertEqual(target["protocol_status"]["target"]["seconds"], 1800)
+        rendered = str(target).casefold()
+        self.assertNotIn("must-not-leak", rendered)
+        self.assertNotIn("participant", rendered)
+        self.assertNotIn("co2_series", rendered)
+        self.assertNotIn("future_protocol_field", rendered)
+
+    def test_openapi_publishes_typed_usage_response_contracts(self) -> None:
+        document = self.client.app.openapi()
+        paths = document["paths"]
+        expected = {
+            "/api/v1/usage-sessions": "UsageSessionListResponse",
+            "/api/v1/usage-sessions/{session_id}/summary": (
+                "UsageSessionSummaryResponse"
+            ),
+            "/api/v1/usage-sessions/{session_id}": "UsageSessionDetailResponse",
+        }
+        for path, schema_name in expected.items():
+            with self.subTest(path=path):
+                schema = paths[path]["get"]["responses"]["200"]["content"][
+                    "application/json"
+                ]["schema"]
+                self.assertEqual(
+                    schema["$ref"],
+                    f"#/components/schemas/{schema_name}",
+                )
+
+        rendered = str(document["components"]["schemas"])
+        for enum_value in (
+            "sleep_score",
+            "recovery_score",
+            "unresolved_score",
+            "sleep_restore_good",
+            "rest_good",
+            "not_measured",
+        ):
+            self.assertIn(enum_value, rendered)
+
+    def test_openapi_list_example_matches_the_published_response_model(self) -> None:
+        validate = getattr(UsageSessionListResponse, "model_validate", None)
+        if validate:
+            parsed = validate(USAGE_LIST_EXAMPLE)
+        else:  # pragma: no cover - Pydantic v1 deployment compatibility
+            parsed = UsageSessionListResponse.parse_obj(USAGE_LIST_EXAMPLE)
+
+        self.assertEqual(parsed.kind, "usage_session_list")
+        self.assertEqual(parsed.data.summary.session_count, 2)
+
+        document = self.client.app.openapi()
+        published_example = document["paths"]["/api/v1/usage-sessions"]["get"][
+            "responses"
+        ]["200"]["content"]["application/json"]["example"]
+        if validate:
+            validate(published_example)
+        else:  # pragma: no cover - Pydantic v1 deployment compatibility
+            UsageSessionListResponse.parse_obj(published_example)
 
 
 if __name__ == "__main__":

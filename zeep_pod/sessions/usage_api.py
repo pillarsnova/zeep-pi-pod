@@ -13,6 +13,11 @@ from zeep_pod.sessions.history_service import (
     SessionHistoryService,
     resolve_history_window,
 )
+from zeep_pod.sessions.response_models import (
+    UsageSessionDetailResponse,
+    UsageSessionListResponse,
+    UsageSessionSummaryResponse,
+)
 from zeep_pod.sessions.usage_service import UsageSessionService
 
 USAGE_LIST_EXAMPLE = {
@@ -25,13 +30,24 @@ USAGE_LIST_EXAMPLE = {
         "contract_version": "zeep.usage-session.v1",
         "history_name": "usage_history",
         "items": [],
+        "summary": {
+            "people_count": 2,
+            "session_count": 2,
+            "sleep_score_count": 1,
+            "recovery_score_count": 1,
+            "awaiting_score_count": 0,
+            "average_sleep_score": 82.0,
+            "average_recovery_score": 78.0,
+        },
         "pagination": {
             "limit": 50,
-            "offset": 0,
+            "offset": 2,
             "returned": 0,
-            "total": 0,
+            "total": 2,
             "has_more": False,
         },
+        "range": None,
+        "history_start_utc": "2026-09-01T00:00:00+00:00",
     },
 }
 
@@ -236,6 +252,8 @@ def create_usage_sessions_router(
         "",
         _build_list_endpoint(context, principal),
         methods=["GET"],
+        response_model=UsageSessionListResponse,
+        response_model_exclude_unset=True,
         summary="List finalized usage Sessions",
         description=(
             "Users receive only their own email-linked Sessions; authenticated "
@@ -254,6 +272,8 @@ def create_usage_sessions_router(
         "/{session_id}/summary",
         _build_detail_endpoint(context, principal, include_report=False),
         methods=["GET"],
+        response_model=UsageSessionSummaryResponse,
+        response_model_exclude_unset=True,
         summary="Get one finalized Session summary",
         description=(
             "Mode-specific score, Restore Summary and quality metadata; no raw "
@@ -265,6 +285,8 @@ def create_usage_sessions_router(
         "/{session_id}",
         _build_detail_endpoint(context, principal, include_report=True),
         methods=["GET"],
+        response_model=UsageSessionDetailResponse,
+        response_model_exclude_unset=True,
         summary="Get one finalized Session report",
         description=(
             "Returns the compact versioned Session report without raw Sensor "

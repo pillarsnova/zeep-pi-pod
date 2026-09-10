@@ -10,7 +10,12 @@
 > **Code:**
 > [`restore_summary.py`](../zeep_pod/sessions/restore_summary.py) ·
 > [`restore_summary_baseline.py`](../zeep_pod/sessions/restore_summary_baseline.py) ·
-> [`sleep_session_report.py`](../sleep_session_report.py)
+> [`sleep_session_report.py`](../sleep_session_report.py) ·
+> [`restore_response_models.py`](../zeep_pod/sessions/restore_response_models.py)
+>
+> **API schema:**
+> [Usage Session API Schema Reference v1](zeep-api-schema-reference-v1.md) ·
+> `/openapi.json`
 
 ## TL;DR
 

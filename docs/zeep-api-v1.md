@@ -5,6 +5,10 @@
 เจ้าของข้อมูล: ZEEP Platform + Pi Team
 เส้นทางหลัก: `/api/v1/usage-sessions`
 
+เอกสารชนิดข้อมูล, enum, nullable rule และตัวอย่าง canonical payload ฉบับเต็ม:
+[ZEEP Usage Session API Schema Reference v1](zeep-api-schema-reference-v1.md)
+โดย schema ที่เครื่องอ่านได้เผยแพร่ผ่าน `/openapi.json`
+
 ## TL;DR
 
 API ชุดนี้ใช้ส่งผลสรุปจาก Pi ไปให้แอป ZEEP หรือระบบภายในอ่าน โดยไม่ส่ง

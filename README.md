@@ -146,10 +146,14 @@ G2 primary ontology แก้เป็น `W / N1 / N2 / N3 / REM` แบบ one
 
 ### API ทั้งหมด
 
-สัญญาใหม่ดู [ZEEP Pod API v1](docs/zeep-api-v1.md): `GET /api/v1/state`,
+สัญญาใหม่ดู [ZEEP Pod API v1](docs/zeep-api-v1.md) และ
+[Usage Session Schema Reference](docs/zeep-api-schema-reference-v1.md):
+`GET /api/v1/state`,
 `GET /api/v1/usage-sessions` และผลสรุปราย Session ที่
 `/api/v1/usage-sessions/{session_id}/summary` ทุก route ใช้ envelope ที่มี
-schema/version/request-id ส่วน endpoint เดิมด้านล่างยังคงรองรับ Tablet ที่ติดตั้งอยู่
+schema/version/request-id โดย Usage Session response ถูกตรวจด้วย Pydantic และ
+เผยแพร่ชนิดข้อมูล/enum ผ่าน OpenAPI ส่วน endpoint เดิมด้านล่างยังคงรองรับ
+Tablet ที่ติดตั้งอยู่
 
 | กลุ่ม | Endpoint |
 |---|---|

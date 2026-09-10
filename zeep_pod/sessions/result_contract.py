@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from sleep_system_policy import REST_SESSION_GROUPS, rest_mode_group
+from zeep_pod.sessions.protocol_publication import public_protocol_status
 from zeep_pod.sessions.restore_summary import build_restore_summary
 from zeep_pod.sessions.result_context import (
     canonical_restore_contexts,
@@ -178,7 +179,9 @@ def _canonical_mode(
         "resolved": resolved,
         "sleep_required": bool(policy.get("sleep_required", False)),
         "protocol_status": (
-            _mapping(quality_mode.get("protocol_status")) if not conflicts else {}
+            public_protocol_status(quality_mode.get("protocol_status"))
+            if not conflicts
+            else {}
         ),
         "review_required": bool(conflicts or group == "unknown"),
         "validation_status": (
@@ -289,7 +292,7 @@ def _target_contract(
         ),
         "recommended_range_minutes": target.get("recommended_range_minutes"),
         "completion_pct": target.get("completion_pct"),
-        "protocol_status": _mapping(mode.get("protocol_status")),
+        "protocol_status": public_protocol_status(mode.get("protocol_status")),
     }
 
 

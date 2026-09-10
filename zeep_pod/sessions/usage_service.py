@@ -7,6 +7,11 @@ from collections.abc import Mapping
 from typing import Any
 
 from zeep_pod.sessions.history_service import HistoryWindow, SessionHistoryService
+from zeep_pod.sessions.quality_publication import (
+    public_quality_payload,
+    public_result_data_quality,
+)
+from zeep_pod.sessions.report_publication import public_report_field
 from zeep_pod.sessions.result_contract import build_result_contract
 
 USAGE_SESSION_CONTRACT_VERSION = "zeep.usage-session.v1"
@@ -19,6 +24,7 @@ PUBLIC_REPORT_FIELDS = (
     "estimator_version",
     "headline",
     "insight",
+    "reason",
     "quality",
     "rest_mode",
     "sleep",
@@ -29,51 +35,6 @@ PUBLIC_REPORT_FIELDS = (
     "post_session_guidance",
     "restore_summary",
     "data_quality",
-    "disclaimer",
-)
-PUBLIC_QUALITY_FIELDS = (
-    "available",
-    "score",
-    "reason",
-    "score_title",
-    "score_scope",
-    "validation_status",
-    "clinical_validated",
-    "quality_type",
-    "session_character",
-    "sleep_detected",
-    "level",
-    "level_key",
-    "insight",
-    "estimated_sleep_s",
-    "actual_scored_s",
-    "wake_s",
-    "wake_pct_recorded",
-    "sleep_efficiency_pct",
-    "awakenings",
-    "wake_entries",
-    "deep_pct",
-    "rem_pct",
-    "stage_pct_of_sleep",
-    "rest_mode",
-    "duration_target",
-    "physiology",
-    "body_response",
-    "environment_support",
-    "sleep_opportunity",
-    "architecture",
-    "continuity",
-    "data_coverage",
-    "cycles",
-    "component_points",
-    "component_max_points",
-    "component_order",
-    "component_labels",
-    "score_confidence",
-    "score_basis",
-    "formula_version",
-    "version",
-    "outcome_interpretation",
     "disclaimer",
 )
 BLOCKED_QUALITY_FIELDS = {
@@ -126,18 +87,23 @@ PRIVATE_REPORT_SEGMENTS = {
     "base64",
     "blob",
     "bytes",
+    "birth",
     "cookie",
     "credential",
     "credentials",
+    "email",
     "packet",
     "packets",
+    "participant",
     "password",
     "profile",
+    "phone",
     "questionnaire",
     "raw",
     "samples",
     "secret",
     "token",
+    "user",
     "waveform",
 }
 PRIVATE_REPORT_COMPACT_FIELDS = {
@@ -178,6 +144,31 @@ def _public_report_value(value: Any) -> Any:
     return value
 
 
+def _public_policy_versions(value: Any) -> dict[str, str | None]:
+    source = _mapping(value)
+    allowed = {"evidence", "baseline", "transition", "g2_ontology", "terminal_wake"}
+    return {
+        key: source[key]
+        for key in allowed
+        if key in source and (source[key] is None or isinstance(source[key], str))
+    }
+
+
+def _public_estimator_versions(value: Any) -> dict[str, int]:
+    source = _mapping(value)
+    public: dict[str, int] = {}
+    for raw_key, count in source.items():
+        key = str(raw_key)
+        if _private_report_key(key):
+            continue
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,159}", key) is None:
+            continue
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            continue
+        public[key] = count
+    return public
+
+
 def _private_report_key(key: Any) -> bool:
     # Normalize both snake_case and camelCase before applying the deny layer.
     # A compact comparison also catches initialisms such as ``BCGBase64``.
@@ -206,11 +197,7 @@ def _public_quality(
     """
     if not isinstance(source, Mapping):
         return {}
-    public = {
-        key: _public_report_value(source[key])
-        for key in PUBLIC_QUALITY_FIELDS
-        if key in source
-    }
+    public = public_quality_payload(source)
     released_score = _mapping(result.get("score"))
     canonical_mode = _mapping(result.get("mode"))
     available = released_score.get("available") is True
@@ -250,11 +237,14 @@ def _public_report(
     for key in PUBLIC_REPORT_FIELDS:
         if key not in source:
             continue
-        public[key] = (
-            _public_quality(source[key], result)
-            if key == "quality"
-            else _public_report_value(source[key])
-        )
+        if key == "quality":
+            public[key] = _public_quality(source[key], result)
+        elif key == "rest_mode":
+            public[key] = _public_report_value(result.get("mode") or {})
+        elif key == "restore_summary":
+            public[key] = _public_report_value(result.get("restore_summary") or {})
+        else:
+            public[key] = public_report_field(key, source[key])
     canonical_mode = _mapping(result.get("mode"))
     released_score = _mapping(result.get("score"))
     public["rest_mode"] = canonical_mode
@@ -290,7 +280,7 @@ def _session_item(
         "mode": _public_report_value(result["mode"]),
         "score": _public_report_value(result["score"]),
         "restore_summary": _public_report_value(result["restore_summary"]),
-        "data_quality": _public_report_value(result["data_quality"]),
+        "data_quality": public_result_data_quality(result["data_quality"]),
         "versions": _public_report_value(result["versions"]),
         "result_provenance": _public_report_value(result["provenance"]),
         "session_closed": result["session_closed"],
@@ -305,10 +295,10 @@ def _session_item(
             item["report"]["restore_summary"] = _public_report_value(
                 result["restore_summary"]
             )
-        item["sleep_policy_versions"] = _public_report_value(
+        item["sleep_policy_versions"] = _public_policy_versions(
             session.get("sleep_policy_versions") or {}
         )
-        item["sleep_estimator_versions"] = _public_report_value(
+        item["sleep_estimator_versions"] = _public_estimator_versions(
             session.get("sleep_estimator_versions") or {}
         )
     return item

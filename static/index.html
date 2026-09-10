@@ -1039,7 +1039,7 @@
     <a href="/dashboard" data-view="dashboard" aria-label="ภาพรวม" title="ภาพรวม"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10M9.5 20v-6h5v6"/></svg></span><span><b>ภาพรวม</b></span></a>
     <a href="/control" data-view="control" aria-label="ควบคุม" title="ควบคุม"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M10 14v6"/></svg></span><span><b>ควบคุม</b></span></a>
     <a href="/monitor" data-view="monitor" class="admin-only" aria-label="ระบบ" title="ระบบ"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h4l2.2-5 4.2 10 2.2-5H21"/><path d="M4 4h16v16H4z"/></svg></span><span><b>ระบบ</b></span></a>
-    <a href="/sessions" data-view="sessions" aria-label="ประวัติ" title="ประวัติ"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg></span><span><b>ประวัติ</b></span></a>
+    <a href="/sessions" data-view="sessions" aria-label="ประวัติการใช้งาน" title="ประวัติการใช้งาน"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg></span><span><b>ประวัติใช้งาน</b></span></a>
     <!-- This shared action stays available on every view, including Focus
          Mode, so touch users always have an obvious way to exit fullscreen. -->
     <button id="appFullscreenBtn" class="app-fullscreen-button" type="button" onclick="toggleAppFullscreen()" aria-pressed="false" aria-label="เปิดแอปแบบเต็มจอ" title="เปิดทุกหน้าแบบเต็มจอ"><span class="nav-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-fullscreen"/></svg></span><span><b data-fullscreen-label>เต็มจอ</b></span></button>
@@ -2039,12 +2039,12 @@
     </div>
 
     <div class="card history" id="historyCard" data-pages="sessions">
-      <div class="tablet-deck-head history-deck-head"><h3>ประวัติการนอน</h3><span>SESSION HISTORY</span></div>
+      <div class="tablet-deck-head history-deck-head"><h3>ประวัติการใช้งาน</h3><span>USAGE HISTORY</span></div>
       <div class="history-self-context" id="historySelfContext" aria-live="polite">
         <span class="history-self-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-history"/></svg></span>
-        <div><b id="historyOwnerTitle">ประวัติของฉัน</b><small>เลือกคืนหรือช่วงพักผ่อนด้านล่างเพื่อดูผลย้อนหลัง</small></div>
+        <div><b id="historyOwnerTitle">ประวัติการใช้งานของฉัน</b><small>เลือก Overnight Recovery หรือ Nap & Refresh เพื่อดูผลย้อนหลัง</small></div>
       </div>
-      <div id="historyToolbar" class="history-filter-panel" aria-label="ตัวกรองประวัติการพักผ่อน">
+      <div id="historyToolbar" class="history-filter-panel" aria-label="ตัวกรองประวัติการใช้งาน">
         <div class="history-filter-group history-date-group">
           <button class="history-day-step" type="button" onclick="shiftHistoryRange(-1)" aria-label="เลื่อนช่วงวันย้อนหลัง"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-previous"/></svg></button>
           <label><span>จากวันที่</span><input id="historyDateFrom" type="date" onchange="refreshHistory()"></label>
@@ -2068,7 +2068,7 @@
       <section id="historySummary" class="history-summary" aria-live="polite"><div class="mini">กำลังสรุปข้อมูลวันนี้…</div></section>
       <div id="historyParticipants" class="history-participants" aria-live="polite"></div>
       <details class="stage-guide">
-        <summary>ความหมายของ Sleep Stages</summary>
+        <summary>ความหมาย Sleep Stages สำหรับ Overnight</summary>
         <div class="stage-guide-grid">
           <div><b>W</b><strong>ตื่น</strong><span>ช่วงที่ระบบประเมินว่ายังตื่นหรือกลับเข้าสู่สถานะตื่น</span></div>
           <div><b>N1</b><strong>หลับตื้น / เคลิ้มหลับ</strong><span>เริ่มเข้าสู่การนอน ร่างกายผ่อนคลาย และปลุกให้ตื่นได้ง่าย</span></div>
@@ -2078,7 +2078,7 @@
         </div>
         <div class="stage-guide-note">ค่าบน ZEEP เป็นการประเมินจาก BCG และ Sensor ไม่ใช่ผล Sleep Stage จากการตรวจ PSG</div>
       </details>
-      <div id="sessionList" class="hist-list"><div class="mini">กำลังโหลดประวัติการพักผ่อน…</div></div>
+      <div id="sessionList" class="hist-list"><div class="mini">กำลังโหลดประวัติการใช้งาน…</div></div>
       <div id="sessionDetail"></div>
     </div>
   </div>
@@ -5236,7 +5236,7 @@ async function loadUsers(){
   if(currentPrincipal?.role==='user'){
     chips.innerHTML='';sel.innerHTML='';
     const ownerTitle=document.getElementById('historyOwnerTitle');
-    if(ownerTitle)ownerTitle.textContent=`ประวัติของ ${identityLabel(currentPrincipal)}`;
+    if(ownerTitle)ownerTitle.textContent=`ประวัติการใช้งานของ ${identityLabel(currentPrincipal)}`;
     if(document.body.dataset.view==='sessions')refreshHistory();
     return;
   }
@@ -5720,14 +5720,17 @@ function showSessionEndScreen(payload){
 
 function renderSessionEndScreen(payload){
   const overlay=document.getElementById('sessionEndScreen');
+  const presentation=reportPresentationMode(payload.session_report||payload);
+  const restoreSummaryHtml=renderRestoreSummary(payload,presentation);
   document.getElementById('sessionEndMeta').textContent=[
     payload.display_name||payload.username||'ผู้ใช้งาน',
     sessionEndDateText(payload.ended_at_utc),
     `ระยะเวลา ${fmtDur(payload.duration_s)}`,
   ].filter(Boolean).join(' · ');
   document.getElementById('sessionEndSummary').innerHTML=
-    renderSleepQuality(payload.sleep_quality,payload.ended_at_utc||true)
-    +renderSessionOverview(payload.session_report);
+    renderSleepQuality(payload.sleep_quality,payload.ended_at_utc||true,presentation)
+    +restoreSummaryHtml
+    +renderSessionOverview(payload.session_report,Boolean(restoreSummaryHtml));
   overlay.classList.remove('hide');overlay.setAttribute('aria-hidden','false');
   const label=document.getElementById('sessionEndCountdown');
   sessionEndDeadline=Date.now()+SESSION_END_NO_QR_HOLD_MS;
@@ -6113,16 +6116,21 @@ function sleepQualityTone(q){
   return ['very_good','good','fair','low'].includes(q?.level_key) ? q.level_key : 'unavailable';
 }
 
-function sleepQualityCompact(q, ended){
+function sleepQualityCompact(q, ended, presentationOverride){
   if (!ended) return '<span class="hist-quality quality-unavailable"><strong>LIVE</strong><span><b>กำลังบันทึก</b><small>คุณภาพหลังจบ Session</small></span></span>';
-  const title=q?.score_title||(q?.quality_type==='rest_goal'?'Recovery Score':'Sleep Score');
+  const presentation=presentationOverride||reportPresentationMode(q);
+  const title=presentation==='recovery'
+    ?'Recovery Score'
+    :presentation==='sleep'?'Sleep Score':(q?.score_title||'คะแนน');
   if (!q?.available) return `<span class="hist-quality quality-unavailable"><strong>—</strong><span><b>ข้อมูลไม่พอ</b><small>${title}</small></span></span>`;
   return `<span class="hist-quality quality-${sleepQualityTone(q)}"><strong>${q.score}</strong><span><b>${q.level}</b><small>${title}</small></span></span>`;
 }
 
-function renderSleepQuality(q, ended){
-  const scoreTitle=q?.score_title||(q?.quality_type==='rest_goal'?'Recovery Score':'Sleep Score');
-  const presentation=reportPresentationMode(q);
+function renderSleepQuality(q, ended, presentationOverride){
+  const presentation=presentationOverride||reportPresentationMode(q);
+  const scoreTitle=presentation==='recovery'
+    ?'Recovery Score'
+    :presentation==='sleep'?'Sleep Score':(q?.score_title||'คะแนน Session');
   if (!ended || !q?.available){
     const reason = !ended ? 'คะแนนจะแสดงเมื่อจบและบันทึก Session' : (q?.reason || 'ข้อมูล Sensor ไม่เพียงพอสำหรับประเมิน');
     return `<section class="sleep-quality-card quality-unavailable mode-${presentation}"><div class="sleep-quality-ring"><strong>—</strong><small>/100</small></div><div class="sleep-quality-copy"><span class="sleep-quality-eyebrow">${scoreTitle}</span><h3>ข้อมูลไม่พอ</h3><p>${reason}</p><small>ระบบไม่สร้างคะแนนเมื่อข้อมูล Sensor ไม่เพียงพอ</small></div></section>`;
@@ -6167,9 +6175,12 @@ function renderSleepQuality(q, ended){
   ];
   const metrics=(q.quality_type==='rest_goal'?restMetrics:sleepMetrics)
     .filter(Boolean).map(([label,value])=>`<div><span>${label}</span><b>${value}</b></div>`).join('');
+  const technicalNote=currentPrincipal?.role==='admin'
+    ?`${q.outcome_interpretation?`${q.outcome_interpretation} · `:''}${q.score_basis || ''} · ${q.disclaimer || 'ประเมินจาก BCG/Sensor ไม่ใช่ผลวินิจฉัยจาก PSG'}`
+    :'ผลประเมินเพื่อ Wellness · ไม่ใช่การวินิจฉัยหรือทดแทนผลตรวจทางการแพทย์';
   return `<section class="sleep-quality-card quality-${sleepQualityTone(q)} mode-${presentation}" style="--quality-score:${q.score}">
     <div class="sleep-quality-ring"><strong>${q.score}</strong><small>/100</small></div>
-    <div class="sleep-quality-copy"><span class="sleep-quality-eyebrow">${scoreTitle} · ZEEP WELLNESS · SENSOR</span><h3>${q.level}</h3><p>${q.score_scope || 'ค่าประเมินจาก Sensor'} · ${q.insight || ''}</p><div class="sleep-quality-metrics">${metrics}</div><small>${q.outcome_interpretation?`${q.outcome_interpretation} · `:''}${q.score_basis || ''} · ${q.disclaimer || 'ประเมินจาก BCG/Sensor ไม่ใช่ผลวินิจฉัยจาก PSG'}</small></div>
+    <div class="sleep-quality-copy"><span class="sleep-quality-eyebrow">${scoreTitle} · ZEEP WELLNESS · SENSOR</span><h3>${q.level}</h3><p>${q.score_scope || 'ค่าประเมินจาก Sensor'} · ${q.insight || ''}</p><div class="sleep-quality-metrics">${metrics}</div><small>${technicalNote}</small></div>
   </section>`;
 }
 
@@ -6183,7 +6194,7 @@ async function refreshHistory(btn){
     list.innerHTML='<div class="mini">ไม่พบบัญชีสำหรับโหลดประวัติ</div>';return;
   }
   const run = async ()=>{
-    list.innerHTML='<div class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังโหลดประวัติ</b><span>กำลังอ่าน Session จากเครื่อง Pi</span></div></div>';
+    list.innerHTML='<div class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังโหลดประวัติการใช้งาน</b><span>กำลังอ่าน Session จากเครื่อง Pi</span></div></div>';
     document.getElementById('historySummary').innerHTML='<div class="mini">กำลังสรุปช่วงเวลาที่เลือก…</div>';
     document.getElementById('historyParticipants').innerHTML='';
     document.getElementById('sessionDetail').innerHTML='';
@@ -6266,6 +6277,101 @@ function historyEscape(value){
   })[character]);
 }
 
+function restoreSummarySource(source){
+  const payload=source?.data||source||{};
+  const report=payload.session_report||payload;
+  const summary=payload.restore_summary||report.restore_summary;
+  if(!summary||typeof summary!=='object')return null;
+  return summary;
+}
+
+function restorePlainText(value,keys=[]){
+  if(value===null||value===undefined)return '';
+  if(['string','number'].includes(typeof value))return String(value).trim();
+  if(typeof value!=='object')return '';
+  for(const key of [...keys,'label','title','summary','text','meaning','observation']){
+    const candidate=value[key];
+    if(['string','number'].includes(typeof candidate)&&String(candidate).trim()){
+      return String(candidate).trim();
+    }
+  }
+  return '';
+}
+
+function restoreDriverText(value){
+  // Driver copy describes an observation in the same Session. It must never
+  // turn a time-aligned Sensor association into a medical causal claim.
+  const copy=restorePlainText(value,['message','observation','name'])
+    .replace(/(?:เป็น)?สาเหตุ(?:ของ|ที่ทำให้)?/g,'พบสัมพันธ์ใกล้เวลากับ')
+    .replace(/ส่งผลให้|ทำให้/g,'พบร่วมกับ');
+  return historyEscape(copy.length>140?`${copy.slice(0,137)}…`:copy);
+}
+
+function restoreSummaryTone(status){
+  const key=String(status?.key||status||'').toLowerCase();
+  if([
+    'excellent','very_good','good','restored','strong',
+    'sleep_restore_very_good','sleep_restore_good','rest_goal_full','rest_good',
+  ].includes(key))return 'good';
+  if(['fair','moderate','partial','pace_morning','rest_partial'].includes(key))return 'fair';
+  if([
+    'low','poor','attention','needs_attention','prioritise_rest','rest_more',
+  ].includes(key))return 'attention';
+  return 'neutral';
+}
+
+function renderRestoreSummary(source,presentation){
+  const payload=source?.data||source||{};
+  const report=payload.session_report||payload;
+  const summary=restoreSummarySource(source);
+  if(!summary)return '';
+  const unavailable=summary.available===false;
+  const status=summary.status||{};
+  const statusKey=String(status?.key||status||'').toLowerCase();
+  const statusLabel=restorePlainText(status?.label||status?.title)
+    ||({excellent:'ยอดเยี่ยม',very_good:'ดีมาก',good:'ดี',fair:'พอใช้',low:'ควรติดตาม'})[statusKey]
+    ||(unavailable?'ยังสรุปไม่ได้':'สรุปผลแล้ว');
+  const statusMeaning=restorePlainText(status?.meaning||status?.description);
+  const drivers=summary.drivers||{};
+  const positives=Array.isArray(drivers.positive)
+    ?drivers.positive:Array.isArray(summary.positive_drivers)?summary.positive_drivers:[];
+  const attentions=Array.isArray(drivers.attention)
+    ?drivers.attention:Array.isArray(summary.attention_drivers)?summary.attention_drivers:[];
+  const driverGroup=(title,items,tone)=>{
+    const rows=items.map(restoreDriverText).filter(Boolean).slice(0,2);
+    if(!rows.length)return '';
+    return `<div class="restore-driver-group ${tone}"><b>${title}</b><ul>${rows.map(row=>`<li>${row}</li>`).join('')}</ul></div>`;
+  };
+  const driverMarkup=unavailable
+    ?'<div class="restore-summary-empty">หลักฐานยังไม่พอสำหรับสรุปปัจจัยของ Session นี้</div>'
+    :[
+      driverGroup('ข้อมูลที่สัมพันธ์กับผล',positives,'positive'),
+      driverGroup('จุดที่ควรติดตาม',attentions,'attention'),
+    ].join('')||'<div class="restore-summary-empty">ยังไม่มีปัจจัยเด่นที่ควรสรุปจาก Session นี้</div>';
+  const recommendation=restorePlainText(summary.recommendation,['primary'])
+    ||restorePlainText(report.post_session_guidance,['primary']);
+  const personalBaseline=summary.personal_baseline||{};
+  const maturity=personalBaseline.maturity||personalBaseline;
+  const maturityLabel=restorePlainText(maturity)
+    ||(personalBaseline.available===false?'ยังไม่มี Baseline ส่วนบุคคล':'Baseline กำลังสะสม');
+  const sessionsUsed=Number(maturity.sessions_used??personalBaseline.sessions_used);
+  const baselineText=Number.isFinite(sessionsUsed)&&sessionsUsed>0
+    ?`${maturityLabel} · ${Math.round(sessionsUsed)} Session`:maturityLabel;
+  const confidence=summary.confidence||payload.data_quality?.confidence
+    ||report.data_quality?.confidence||{};
+  const confidenceLabel=restorePlainText(confidence)||'ยังไม่ระบุ';
+  const scope=summary.session_scope||summary.scope||{};
+  const scopeLabel=restorePlainText(scope)||(
+    presentation==='recovery'?'Nap & Refresh':'Overnight Recovery');
+  return `<section class="restore-summary-card mode-${presentation}">
+    <div class="restore-summary-head"><div><span>RESTORE SUMMARY</span><h3>สรุปผลหลังใช้งาน</h3><small>${historyEscape(scopeLabel)} · ประเมินเฉพาะ Session นี้</small></div><strong class="restore-status ${restoreSummaryTone(status)}">${historyEscape(statusLabel)}</strong></div>
+    ${statusMeaning?`<p class="restore-status-meaning">${historyEscape(statusMeaning)}</p>`:''}
+    <div class="restore-summary-grid"><div class="restore-drivers">${driverMarkup}</div><div class="restore-recommendation"><b>คำแนะนำถัดไป</b><p>${recommendation?historyEscape(recommendation):'ยังไม่มีคำแนะนำเฉพาะจากผลครั้งนี้'}</p></div></div>
+    <div class="restore-summary-meta"><span><b>Baseline</b>${historyEscape(baselineText)}</span><span><b>ความมั่นใจ</b>${historyEscape(confidenceLabel)}</span></div>
+    <div class="restore-claim-note">ปัจจัยแสดงความสัมพันธ์ใกล้เวลาใน Session · ไม่ยืนยันเหตุ–ผล · ไม่ใช่ความพร้อมตลอดทั้งวัน</div>
+  </section>`;
+}
+
 function historyScoreMarkup(score){
   const available=score?.available&&score?.score!=null;
   const title=historyEscape(score?.score_title||'คะแนน');
@@ -6280,7 +6386,7 @@ function renderHistorySummary(d){
   const scope=currentPrincipal?.role==='admin'
     ? `${summary.people_count||0} คน`
     : `${summary.session_count||0} ครั้ง`;
-  root.innerHTML=`<div class="history-summary-heading"><span>${selected?'วันนี้':'ช่วงที่เลือก'}</span><b>${scope}</b><small>นับ Session ที่จบแล้วและมีข้อมูล Sensor · Asia/Bangkok</small></div>
+  root.innerHTML=`<div class="history-summary-heading"><span>${selected?'วันนี้':'ช่วงที่เลือก'}</span><b>${scope}</b><small>นับการใช้งานที่จบแล้วและมีข้อมูล Sensor · Asia/Bangkok</small></div>
     <div class="history-summary-metrics">
       <div><span>Session</span><b>${summary.session_count||0}</b></div>
       <div><span>Sleep Score</span><b>${summary.sleep_score_count||0}</b><small>${summary.average_sleep_score==null?'—':`เฉลี่ย ${historyEscape(summary.average_sleep_score)}`}</small></div>
@@ -6332,22 +6438,72 @@ function renderSessionList(d){
     row.innerHTML =
       `${identity}<b>${fmtDateTh(sx.ended_at_utc||sx.started_at_utc)}</b>`+
       `<span class="hist-mode-label mode-${presentation}"><b>${modeLabel}</b><small>Sensor บันทึก ${fmtDur(sx.duration_s)}</small></span>` +
-      `${sleepQualityCompact(sx.sleep_quality, sx.ended_at_utc)}` +
+      `${sleepQualityCompact(sx.sleep_quality, sx.ended_at_utc, presentation)}` +
       `<span>♥ ${hr ? hr.avg + ' ครั้ง/นาที' : '--'}</span>`;
     row.onclick = ()=>loadDetail(sx.account_key||d.account_key||d.username, sx.session_id, row);
     root.appendChild(row);
   });
 }
 
+function normalizeUsageDetail(payload){
+  const data=payload?.data||payload||{};
+  if(!data.report&&!data.score)return data;
+  const report={...(data.report||{})};
+  const score=data.score||{};
+  const quality=report.quality||{
+    available:score.available===true,
+    score:score.value,
+    level:score.level,
+    score_title:score.title,
+    formula_version:score.formula_version,
+    quality_type:score.type==='recovery_score'
+      ?'rest_goal':score.type==='sleep_score'?'sleep':undefined,
+    reason:score.reason,
+  };
+  report.quality=quality;
+  report.rest_mode=report.rest_mode||data.mode||{};
+  report.restore_summary=data.restore_summary||report.restore_summary;
+  report.data_quality={
+    ...(report.data_quality||{}),
+    level:report.data_quality?.level||data.data_quality?.level,
+    label:report.data_quality?.label||data.data_quality?.label,
+    coverage:report.data_quality?.coverage||data.data_quality?.coverage||{},
+    confidence:report.data_quality?.confidence
+      ||data.data_quality?.confidence||{},
+  };
+  return {
+    ...data,
+    account_key:data.user?.canonical_identifier||data.user?.email,
+    email:data.user?.email,
+    display_name:data.user?.display_name,
+    sleep_quality:quality,
+    session_report:report,
+    summary:data.summary||{},
+    samples:[],
+    sleep_timeline:[],
+    terminal_occupancy_timeline:[],
+  };
+}
+
 async function loadDetail(user, sid, row){
   document.querySelectorAll('.hist-row').forEach(x=>x.classList.remove('sel'));
   row?.classList.add('sel');
-  document.getElementById('sessionDetail').innerHTML='<div class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังสร้างรายงาน</b><span>กำลังอ่าน Timeline และ Sleep State ทุกช่วงเวลา</span></div></div>';
+  document.getElementById('sessionDetail').innerHTML='<div class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังสร้างผลการใช้งาน</b><span>กำลังอ่านผลและ Timeline ของ Session</span></div></div>';
+  const userView=currentPrincipal?.role!=='admin';
+  const modernPath=`/api/v1/usage-sessions/${encodeURIComponent(sid)}`;
+  const legacyPath=`/api/history/${encodeURIComponent(user)}/${encodeURIComponent(sid)}`;
   let r;
-  try { r = await fetch(`/api/history/${encodeURIComponent(user)}/${encodeURIComponent(sid)}`); }
+  try {
+    r=await fetch(userView?modernPath:legacyPath,{cache:'no-store'});
+    // Older Pi images do not expose v1 yet. Keep the existing own-account API
+    // as a transition fallback, while renderReport still hides diagnostics.
+    if(userView&&!r.ok&&[404,405].includes(r.status)){
+      r=await fetch(legacyPath,{cache:'no-store'});
+    }
+  }
   catch { toast('เชื่อมต่อ server ไม่ได้', 'error'); return; }
   if (!r.ok){ toast('โหลดรายละเอียดไม่ได้', 'error'); return; }
-  renderReport(await r.json());
+  renderReport(normalizeUsageDetail(await r.json()));
   // On a tablet the history list can fill most of the viewport. Bring the
   // completed report into view so the newly requested quality result is not
   // hidden below the fixed navigation bar.
@@ -6509,8 +6665,9 @@ function recoveryProtocolBadge(report){
   return {tone:'legacy',label:'Target ยังไม่ยืนยัน'};
 }
 
-function renderSessionOverview(report){
+function renderSessionOverview(report,hasRestoreSummary=false){
   if(!report?.available)return '';
+  const adminView=currentPrincipal?.role==='admin';
   const sleep=report.sleep||{},quality=report.quality||{};
   const data=report.data_quality||{},coverage=data.coverage||{};
   const presentation=reportPresentationMode(report);
@@ -6536,7 +6693,9 @@ function renderSessionOverview(report){
   const restMode=report.rest_mode||{},restModeGroup=restMode.group||restMode.resolved||'sleep';
   const profile=reportProfileMarkup(report,presentation);
   const disturbanceTitle=restModeGroup==='sleep'?'สิ่งที่อาจรบกวนการนอน':'สิ่งที่อาจรบกวนการพัก';
-  const environmentStatus=`คาดหวังพอใช้ขึ้นไป · ${environmentAssessment.mode_label||restMode.label||'ตาม Mode'} · ${environmentAssessment.context_only===false?'':'ไม่กำหนด Sleep State'}`;
+  const environmentStatus=adminView
+    ?`คาดหวังพอใช้ขึ้นไป · ${environmentAssessment.mode_label||restMode.label||'ตาม Mode'} · ${environmentAssessment.context_only===false?'':'ไม่กำหนด Sleep State'}`
+    :`เทียบกับเกณฑ์ของ ${environmentAssessment.mode_label||restMode.label||'รูปแบบการพักครั้งนี้'}`;
   const metrics=reportOverviewMetrics(report,presentation);
   const confidence=data.confidence_pct;
   const confidenceText=confidence?` · Confidence สูง ${confidence.high||0}% · กลาง ${confidence.medium||0}% · ต่ำ ${confidence.low||0}%`:'';
@@ -6545,15 +6704,20 @@ function renderSessionOverview(report){
   const badgeLabel=presentation==='recovery'&&scoreConfidence.label?scoreConfidence.label:(data.label||'ข้อมูลจำกัด');
   const protocolBadge=presentation==='recovery'?recoveryProtocolBadge(report):null;
   const guidance=report.post_session_guidance||{};
-  const guidanceHtml=guidance.primary?`<div class="report-context-note"><b>คำแนะนำหลังออกจาก ZEEP</b> · ${guidance.primary}${guidance.next_session?` · ${guidance.next_session}`:''}${guidance.self_check?`<br><b>เช็กความพร้อม</b> · ${guidance.self_check}`:''}</div>`:'';
+  const guidanceHtml=!hasRestoreSummary&&guidance.primary?`<div class="report-context-note"><b>คำแนะนำหลังออกจาก ZEEP</b> · ${guidance.primary}${guidance.next_session?` · ${guidance.next_session}`:''}${guidance.self_check?`<br><b>เช็กความพร้อม</b> · ${guidance.self_check}`:''}</div>`:'';
   const headline=presentation==='recovery'
     ?`พักใน ZEEP ${fmtDur(sleep.recording_s)} · ไม่จำเป็นต้องหลับ`
     :`Sensor ประเมินว่าหลับ ${fmtDur(sleep.estimated_sleep_s)}`;
-  const footer=presentation==='recovery'
-    ?`Nap & Refresh ประเมินการพักและการตอบสนอง ไม่ใช้การหลับเป็นเงื่อนไข · HR/RR coverage ${quality.physiology?.paired_hr_rr_coverage_pct??'--'}% · Environment ${coverage.environment_pct||0}%`
-    :`ใช้เวลาก่อนเริ่มหลับ ${sleep.sleep_onset_proxy_s==null?'--':fmtDur(sleep.sleep_onset_proxy_s)} · เข้าสู่ W · ตื่น ${sleep.wake_entries ?? sleep.awakenings ?? 0} ครั้ง · ${data.note||''} · Coverage: Recording ${coverage.recording_pct||0}% · BCG ${coverage.bcg_pct||0}% · Sleep Stage ${coverage.sleep_stage_pct||0}% · Environment ${coverage.environment_pct||0}%${confidenceText}`;
+  const footer=adminView
+    ?(presentation==='recovery'
+      ?`Nap & Refresh ประเมินการพักและการตอบสนอง ไม่ใช้การหลับเป็นเงื่อนไข · HR/RR coverage ${quality.physiology?.paired_hr_rr_coverage_pct??'--'}% · Environment ${coverage.environment_pct||0}%`
+      :`ใช้เวลาก่อนเริ่มหลับ ${sleep.sleep_onset_proxy_s==null?'--':fmtDur(sleep.sleep_onset_proxy_s)} · เข้าสู่ W · ตื่น ${sleep.wake_entries ?? sleep.awakenings ?? 0} ครั้ง · ${data.note||''} · Coverage: Recording ${coverage.recording_pct||0}% · BCG ${coverage.bcg_pct||0}% · Sleep Stage ${coverage.sleep_stage_pct||0}% · Environment ${coverage.environment_pct||0}%${confidenceText}`)
+    :(presentation==='recovery'
+      ?'Nap & Refresh ประเมินการพักและการตอบสนอง · ไม่บังคับให้หลับ'
+      :`ประเมินเฉพาะการพัก Overnight ครั้งนี้ · ตื่น ${sleep.wake_entries ?? sleep.awakenings ?? 0} ครั้ง`);
+  const version=adminView&&report.version?` · ${historyEscape(report.version)}`:'';
   return `<section class="session-report-overview mode-${presentation}">
-    <div class="session-report-head"><div><div class="sleep-quality-eyebrow">${presentation==='recovery'?'NAP & REFRESH SUMMARY':'OVERNIGHT SLEEP SUMMARY'} · ${report.version||''}</div><h3>${headline}</h3></div><div class="report-badge-group"><span class="report-data-badge ${badgeLevel}">${badgeLabel}</span>${protocolBadge?`<span class="report-protocol-badge ${protocolBadge.tone}">${protocolBadge.label}</span>`:''}</div></div>
+    <div class="session-report-head"><div><div class="sleep-quality-eyebrow">${presentation==='recovery'?'NAP & REFRESH SUMMARY':'OVERNIGHT SLEEP SUMMARY'}${version}</div><h3>${headline}</h3></div><div class="report-badge-group"><span class="report-data-badge ${badgeLevel}">${badgeLabel}</span>${protocolBadge?`<span class="report-protocol-badge ${protocolBadge.tone}">${protocolBadge.label}</span>`:''}</div></div>
     <div class="session-key-metrics">${metrics}</div>
     <div class="session-report-body">
       ${profile}
@@ -6566,6 +6730,7 @@ function renderSessionOverview(report){
 
 function renderReport(rec){
   const root = document.getElementById('sessionDetail');
+  const adminView=currentPrincipal?.role==='admin';
   const presentation=reportPresentationMode(rec.session_report||rec);
   const reportTitle=presentation==='recovery'
     ?'ผล Nap & Refresh'
@@ -6580,7 +6745,7 @@ function renderReport(rec){
   const bed = su.bed_status_counts || {};
   const bedTotal = Object.values(bed).reduce((a,b)=>a+b, 0);
   const bedTxt = bedTotal
-    ? Object.entries(bed).map(([k,v])=>`${k} ${Math.round(v*100/bedTotal)}%`).join(' · ')
+    ? Object.entries(bed).map(([k,v])=>`${sleepBedStatusLabel(k)} ${Math.round(v*100/bedTotal)}%`).join(' · ')
     : 'ไม่มีข้อมูลจาก BCG';
   const cnt = rec.counters || {};
   const cntTxt = [['door','ประตู'],['pulse','Aroma/ไอน้ำ'],['music','เปิดเพลง'],['output','สวิตช์']]
@@ -6604,6 +6769,9 @@ function renderReport(rec){
     if(period.decision_kind==='terminal_wake_boundary'){
       const time=start.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
       const source=period.confirmed_by==='confirmed_terminal_bed_exit'?'ก่อนออกจาก ZEEP':'ก่อนจบ Session';
+      if(!adminView){
+        return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">จุดสิ้นสุดการพัก</div></div><div class="stage">W · ตื่น</div><div class="user-period-summary">${source}</div></div>`;
+      }
       return `<div class="sleep-period terminal-wake-period"><div>${time}<div class="mini">เหตุการณ์เปลี่ยนสถานะ</div></div><div class="stage">W · ตื่น</div><div>${source}<div class="mini">ไม่นับเวลา/สัดส่วน Sleep Stage</div></div><div class="reason"><div class="sleep-period-note">${period.reason||'สิ้นสุดลำดับการนอนก่อนจบ Session'} · เป็น Operational marker ไม่ใช่ผล AASM/PSG</div></div></div>`;
     }
     const temperatureAvg=averageTemperature(period.start_time,period.end_time);
@@ -6638,7 +6806,13 @@ function renderReport(rec){
       const scoreLabel=restartHeld
         ? 'แสดงต่อเนื่องเท่านั้น · ไม่นับคะแนน'
         : 'ไม่นับ W/N1/N2/N3/REM และคะแนน';
+      if(!adminView){
+        return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)}</div></div><div class="stage">${historyEscape(period.label||'ยังยืนยันไม่ได้')}</div><div class="user-period-summary">ข้อมูลช่วงนี้ไม่พอสำหรับยืนยัน Sleep State</div></div>`;
+      }
       return `<div class="sleep-period terminal-occupancy-period classification-gap-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)} · ${operationLabel}</div></div><div class="stage">${period.label||'WAIT · ไม่มีข้อมูลสถานะ'}</div><div>${coverageText}<div class="mini">${scoreLabel}</div></div><div class="reason"><div class="sleep-period-env">${sensorTiles}</div><div class="sleep-period-note">${period.reason||'หลักฐานไม่พอสำหรับยืนยัน Sleep State'}</div></div></div>`;
+    }
+    if(!adminView){
+      return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)}</div></div><div class="stage">${SLEEP_TH[period.state]?.label||String(period.state||'').toUpperCase()}</div><div class="user-period-summary">สถานะที่ระบบยืนยันจากแนวโน้มภายใน Session</div></div>`;
     }
     return `<div class="sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)} · ${epoch}</div></div><div class="stage">${SLEEP_TH[period.state]?.label||period.state.toUpperCase()}</div><div>มั่นใจ ${confidenceTh[period.confidence]||'ไม่ระบุ'}<div class="mini">P ${Math.round((prob[period.state]||0)*100)}%</div></div><div class="reason"><div class="sleep-period-env">${sensorTiles}</div><div class="sleep-period-note">${sleepReasonExplanation(period.reason)}</div></div></div>`;
   }).join('');
@@ -6646,16 +6820,33 @@ function renderReport(rec){
     const meta=TERMINAL_OCCUPANCY_META[period.state]||{label:period.label||period.state,code:'—'};
     const start=new Date(period.start_time),end=new Date(period.end_time);
     const time=`${start.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}–${end.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`;
+    if(!adminView){
+      return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)}</div></div><div class="stage">${meta.code} · ${meta.label}</div><div class="user-period-summary">แยกออกจากผล Sleep State</div></div>`;
+    }
     return `<div class="sleep-period terminal-occupancy-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)} · Occupancy</div></div><div class="stage">${meta.code} · ${meta.label}</div><div>HR — · RR —<div class="mini">ไม่นับเป็น Sleep Stage</div></div><div class="reason"><div class="sleep-period-note">${period.reason||'แยกสถานะผู้ใช้งานออกจากผลการนอน'}</div></div></div>`;
   }).join('');
   const sessionEnded=rec.ended_at_utc
-    ? `<div class="sleep-period terminal-occupancy-period"><div>${new Date(rec.ended_at_utc).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}<div class="mini">เหตุการณ์สุดท้าย</div></div><div class="stage">END · จบ Session</div><div>${rec.end_reason==='logout'?'ผู้ใช้กดจบ':'ผู้ดูแล/ระบบบันทึกการจบ'}</div><div class="reason"><div class="sleep-period-note">${terminalOccupancy?'Session จบหลังลำดับ Wake → ออกจาก ZEEP':'Session จบหลังบันทึก Terminal Wake boundary'}</div></div></div>`:'';
+    ?(adminView
+      ? `<div class="sleep-period terminal-occupancy-period"><div>${new Date(rec.ended_at_utc).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}<div class="mini">เหตุการณ์สุดท้าย</div></div><div class="stage">END · จบ Session</div><div>${rec.end_reason==='logout'?'ผู้ใช้กดจบ':'ผู้ดูแล/ระบบบันทึกการจบ'}</div><div class="reason"><div class="sleep-period-note">${terminalOccupancy?'Session จบหลังลำดับ Wake → ออกจาก ZEEP':'Session จบหลังบันทึก Terminal Wake boundary'}</div></div></div>`
+      :`<div class="sleep-period user-sleep-period"><div>${new Date(rec.ended_at_utc).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}<div class="mini">สิ้นสุดการใช้งาน</div></div><div class="stage">END · จบ Session</div><div class="user-period-summary">บันทึกผลเรียบร้อย</div></div>`):'';
+  const restoreSummaryHtml=renderRestoreSummary(rec,presentation);
+  const timelineCount=`${rec.sleep_timeline?.length||0} ช่วง`;
+  const timelineMeta=adminView
+    ?`${timelineCount} · จาก ${rec.sleep_timeline_rounds||rec.sleep_timeline?.length||0} รอบข้อมูล${rec.sleep_classification_gap_count?` · WAIT/OFF ${rec.sleep_classification_gap_count} ช่วง`:''}`
+    :timelineCount;
+  const timelineDetails=adminView||sleepTimeline
+    ?`<details class="report-details"><summary>${timelineTitle} · ${timelineMeta}</summary>${sleepTimeline?`<div class="sleep-timeline">${sleepTimeline}</div>`:`<div class="mini" style="padding:0 12px 12px">${timelineEmpty}</div>`}</details>`
+    :'';
+  const operationalNotes=adminView
+    ?`<div class="mini">สถานะเตียง: ${bedTxt}</div><div class="mini">การสั่งงานระหว่าง Session: ${cntTxt}</div>`
+    :'';
   root.innerHTML = `
-    <div class="section-title report-mode-title mode-${presentation}" style="margin-top:18px">รายงาน Session · ${identityLabel(rec,'')} · ${reportTitle}</div>
+    <div class="section-title report-mode-title mode-${presentation}" style="margin-top:18px">ผลการใช้งาน · ${identityLabel(rec,'')} · ${reportTitle}</div>
     <div class="mini" style="margin-top:0">${healthReferenceInline(rec)}</div>
     <div class="mini" style="margin-top:3px">ข้อมูลอ้างอิงสุขภาพ · ${fmtDateTh(rec.started_at_utc)} → ${fmtDateTh(rec.ended_at_utc)} · Sensor บันทึก ${fmtDur(rec.duration_s)} · ไม่ใช่การวินิจฉัย</div>
-    ${renderSleepQuality(rec.sleep_quality, rec.ended_at_utc)}
-    ${renderSessionOverview(rec.session_report)}
+    ${renderSleepQuality(rec.sleep_quality, rec.ended_at_utc, presentation)}
+    ${restoreSummaryHtml}
+    ${renderSessionOverview(rec.session_report,Boolean(restoreSummaryHtml))}
     <div class="report-grid">
       ${statBlock('อุณหภูมิเฉลี่ย', su.temperature_c, ' °C')}
       ${statBlock('ความชื้นเฉลี่ย', su.humidity_rh, ' %RH')}
@@ -6664,13 +6855,10 @@ function renderReport(rec){
       ${statBlock('HR (Heart Rate) เฉลี่ย', su.heart_rate_bpm, ' ครั้ง/นาที (BPM)')}
       ${statBlock('RR (Respiratory Rate) เฉลี่ย', su.respiration_rate, ' ครั้ง/นาที')}
     </div>
-    <div class="mini">สถานะเตียง: ${bedTxt}</div>
+    ${operationalNotes}
     ${slTxt ? `<div class="mini">${presentation==='recovery'?'Sleep State ที่ตรวจพบ (ข้อมูลประกอบ)':'สถานะการนอน (ประเมิน)'}: ${slTxt}</div>` : ''}
-    <details class="report-details"><summary>${timelineTitle} · ${rec.sleep_timeline?.length||0} ช่วง · จาก ${rec.sleep_timeline_rounds||rec.sleep_timeline?.length||0} รอบข้อมูล${rec.sleep_classification_gap_count?` · WAIT/OFF ${rec.sleep_classification_gap_count} ช่วง`:''}</summary>
-      ${sleepTimeline?`<div class="sleep-timeline">${sleepTimeline}</div>`:`<div class="mini" style="padding:0 12px 12px">${timelineEmpty}</div>`}
-    </details>
-    ${terminalOccupancy||sessionEnded?`<details class="report-details" open><summary>ลำดับจบ Session · Occupancy แยกจาก Sleep Stage</summary><div class="sleep-timeline">${terminalOccupancy}${sessionEnded}</div></details>`:''}
-    <div class="mini">การสั่งงานระหว่าง session: ${cntTxt}</div>
+    ${timelineDetails}
+    ${terminalOccupancy||sessionEnded?`<details class="report-details" open><summary>${adminView?'ลำดับจบ Session · Occupancy แยกจาก Sleep Stage':'ช่วงสิ้นสุดการใช้งาน'}</summary><div class="sleep-timeline">${terminalOccupancy}${sessionEnded}</div></details>`:''}
     <div class="mini">ค่าชีพจรและการหายใจเป็นค่าประเมินจาก BCG</div>
     ${hasChart ? '<canvas id="histCanvas"></canvas><div class="legend-row"><span><i class="legend-dot" style="background:#19e3ff"></i>อุณหภูมิ</span><span><i class="legend-dot" style="background:#ffb02e"></i>ชีพจร</span></div>' : ''}
   `;
@@ -6713,7 +6901,7 @@ async function deleteUser(btn){
   if (sessionState.active && sessionState.username === user){
     toast('ผู้ใช้นี้กำลังอยู่ใน session — ออกจากระบบก่อนลบ', 'error'); return;
   }
-  if (!await confirmAction({title:'ลบข้อมูลผู้ใช้',message:`Profile และประวัติ Session ทั้งหมดของ “${user}” จะถูกลบถาวรและไม่สามารถย้อนกลับได้`,confirmText:'ลบถาวร',tone:'danger',icon:'×'})) return;
+  if (!await confirmAction({title:'ลบข้อมูลผู้ใช้',message:`Profile และประวัติการใช้งานทั้งหมดของ “${user}” จะถูกลบถาวรและไม่สามารถย้อนกลับได้`,confirmText:'ลบถาวร',tone:'danger',icon:'×'})) return;
   await withBusy(btn, async ()=>{
     const opt = {method:'DELETE', headers:authenticatedHeaders({})};
     let r;
@@ -6829,7 +7017,7 @@ function render(s, source='ws'){
   if(!environmentLive&&!b.connected){
     setPageMessage('danger','เซ็นเซอร์ไม่พร้อม','Sensor Hub ทั้งสองชุดและ BCG ยังไม่มีข้อมูลสด กรุณาตรวจหน้า Monitor');
   }else if(!se.active){
-    setPageMessage('info',currentPrincipal?.role==='admin'?'ตู้ว่างและพร้อมตรวจสอบ':'Session สิ้นสุดแล้ว',currentPrincipal?.role==='admin'?'ยังไม่มีผู้ใช้งานในตู้นี้':'ดูประวัติการนอนได้ หรือออกจากบัญชีเพื่อเริ่ม Session ใหม่');
+    setPageMessage('info',currentPrincipal?.role==='admin'?'ตู้ว่างและพร้อมตรวจสอบ':'Session สิ้นสุดแล้ว',currentPrincipal?.role==='admin'?'ยังไม่มีผู้ใช้งานในตู้นี้':'ดูประวัติการใช้งานได้ หรือออกจากบัญชีเพื่อเริ่ม Session ใหม่');
   }else if(!se.recording){
     setPageMessage('warning','รอสัญญาณชีพก่อนบันทึก',`${sessionStartGateText(se,sys)} · ระบบจะยังไม่สร้าง Timeline จนกว่า HR และ RR จะพร้อม`);
   }else if(environmentLive<environmentTotal||!b.connected){

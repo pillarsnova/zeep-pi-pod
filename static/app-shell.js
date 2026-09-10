@@ -38,9 +38,9 @@
       document: 'Monitor & Logs',
     },
     sessions: {
-      title: 'ประวัติการนอน',
-      subtitle: 'ดู Session และผลการนอนย้อนหลังของผู้ใช้งาน',
-      document: 'Sessions & Reports',
+      title: 'ประวัติการใช้งาน',
+      subtitle: 'ดูผล Overnight Recovery และ Nap & Refresh ย้อนหลัง',
+      document: 'Usage History & Reports',
     },
   });
 

@@ -421,6 +421,32 @@
     @keyframes blink{50%{opacity:0}}
     .boot-sub{font-size:11px;letter-spacing:.26em;text-transform:uppercase;color:var(--faint)}
 
+    /* ---------- end-of-Session result + QR (sits above Login, below modals) ---------- */
+    #sessionEndScreen{position:fixed;inset:0;z-index:70;display:flex;align-items:flex-start;justify-content:center;
+      padding:18px;overflow:auto;
+      background:radial-gradient(760px 460px at 50% 20%,#0a3b57 0%,transparent 62%),
+      linear-gradient(180deg,#020610fa,#04101ffa)}
+    #sessionEndScreen.hide{display:none}
+    .session-end-card{width:min(1080px,96vw);margin:auto;padding:24px;
+      background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);
+      clip-path:polygon(18px 0,100% 0,100% calc(100% - 18px),calc(100% - 18px) 100%,0 100%,0 18px)}
+    .session-end-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:16px}
+    .session-end-head h2{margin:2px 0 4px;font-size:22px}
+    .session-end-body{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}
+    @media(max-width:900px){.session-end-body{grid-template-columns:1fr}}
+    .session-end-share{position:sticky;top:0;padding:18px;border:1px solid var(--line);border-radius:14px;
+      background:#08141f99;text-align:center}
+    .session-end-share h4{margin:0 0 6px;font-size:14px}
+    .session-end-share .mini{margin-bottom:12px}
+    .session-end-save-hint{color:var(--cyan)}
+    .session-end-qr{display:grid;place-items:center;min-height:230px;padding:10px;border-radius:12px;background:#f6fbfd}
+    .session-end-qr img{width:100%;max-width:230px;height:auto;display:block}
+    .session-end-qr.pending,.session-end-qr.failed{background:#0a1a26;color:var(--muted);font-size:12px;line-height:1.7;padding:18px}
+    .session-end-qr.failed{color:var(--amber)}
+    .session-end-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:18px}
+    .session-end-actions .btn{min-height:46px;padding:11px 20px}
+    #sessionEndCanvas{display:none}
+
     /* ---------- login overlay (per-person test session) ---------- */
     #login{position:fixed;inset:0;z-index:55;display:flex;align-items:center;justify-content:center;
       padding:18px;transition:opacity .4s;
@@ -932,6 +958,32 @@
     <div class="mini">ข้อมูล Session เก็บในเครื่อง Pi ของตู้นี้</div>
   </div>
 </div>
+<!-- ผลการนอนหลังจบ Session: จอตู้เป็นจอรวม ผู้ใช้จึงต้องหยิบผลกลับไปเองด้วย QR -->
+<div id="sessionEndScreen" class="hide" role="dialog" aria-modal="true" aria-labelledby="sessionEndTitle">
+  <div class="session-end-card">
+    <div class="session-end-head">
+      <div>
+        <div class="sleep-quality-eyebrow">SESSION COMPLETE · ZEEP</div>
+        <h2 id="sessionEndTitle">บันทึก Session เรียบร้อยแล้ว</h2>
+        <div class="mini" id="sessionEndMeta"></div>
+      </div>
+      <div class="mini" id="sessionEndCountdown" aria-live="polite"></div>
+    </div>
+    <div class="session-end-body">
+      <div id="sessionEndSummary"></div>
+      <div class="session-end-share">
+        <h4>เก็บผลการนอนไว้กับตัว</h4>
+        <div class="mini" id="sessionEndShareNote">สแกนด้วยมือถือของคุณ (ใช้เน็ตมือถือ ไม่ใช่ Wi-Fi ของตู้)</div>
+        <div class="mini session-end-save-hint">เปิดแล้ว <b>กดค้างที่รูป</b> → บันทึกลงในรูปภาพ</div>
+        <div class="session-end-qr pending" id="sessionEndQr">กำลังสร้าง QR…</div>
+      </div>
+    </div>
+    <div class="session-end-actions">
+      <button class="btn primary" id="sessionEndCloseBtn" onclick="closeSessionEndScreen()">ปิดและกลับหน้าเข้าสู่ระบบ</button>
+    </div>
+  </div>
+</div>
+<canvas id="sessionEndCanvas" width="1080" height="1920"></canvas>
 <div id="toasts"></div>
 <div id="confirmModal" class="modal-layer hide" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
   <div id="confirmCard" class="modal-card">
@@ -5608,11 +5660,308 @@ function afterLoginStarted(r, message){
   if (sel){ sel.value = r.session.account_key||r.session.email||r.session.username; refreshHistory(); }
 }
 
+/* ---- จบ Session: สรุปผลบนจอตู้ + QR ให้ผู้ใช้เอาผลกลับไปเอง ----
+   จอตู้เป็นจอรวม ผู้ใช้จึงเห็นผลคืนนี้ได้แค่ตรงนี้ที่เดียว. แท็บเล็ตอยู่บน hotspot
+   ที่ออกอินเทอร์เน็ตไม่ได้ จึงวาดรูปเองด้วย Canvas (เบราว์เซอร์จัดรูปภาษาไทยได้ถูก
+   โดยไม่ต้องฝังฟอนต์) แล้วให้ Pi เป็นคนอัปโหลดและสร้าง QR ให้ */
+// หน้าจอนี้อยู่ได้นานเท่าที่ลิงก์ใน QR ยังสแกนได้จริง: ผู้ใช้ที่ลุกไปล้างหน้าแล้ว
+// กลับมาสแกนต้องยังทัน. เริ่มที่ค่าสั้นก่อน แล้วขยายเมื่อ QR ขึ้นจริงเท่านั้น —
+// ถ้าสร้าง QR ไม่สำเร็จก็ไม่มีอะไรให้รอ และไม่ควรทิ้งชื่อ + ผลการนอนไว้บนจอรวม
+const SESSION_END_NO_QR_HOLD_MS=180000;
+const SESSION_END_QR_FALLBACK_MINUTES=60;
+const REPORT_PNG_FONT='"Noto Sans Thai","Inter",system-ui,sans-serif';
+const REPORT_PNG_FINDING_COLOR={critical:'#ff5f6d',poor:'#f6785a',fair:'#f6b94a',good:'#4fd39b',excellent:'#19e3ff',unavailable:'#7fa6b8'};
+let featureReportShare=false;
+// ธง: WS จะปิด 4403 ระหว่างที่ finalize ยังทำงานอยู่ — เป็นเรื่องปกติของ flow นี้
+// ไม่ใช่การถูก Admin ไล่ออก จึงต้องไม่พาออกจากหน้าจอก่อน QR มาถึง
+let sessionEndInProgress=false;
+// overlay มาถึงได้สองทาง (response ของ logout / WS session_ended) — อันแรกชนะ
+let sessionEndShown=false;
+let sessionEndTimer=null;
+let sessionEndDeadline=0;
+
+function sessionEndDateText(iso){
+  const d=iso?new Date(iso):new Date();
+  if(isNaN(d))return '';
+  try{return d.toLocaleString('th-TH',{dateStyle:'long',timeStyle:'short'});}
+  catch{return d.toISOString().slice(0,16).replace('T',' ');}
+}
+
+function closeSessionEndScreen(){
+  if(sessionEndTimer){clearInterval(sessionEndTimer);sessionEndTimer=null;}
+  location.replace('/login?logged_out=session_saved');
+}
+
+// เรียกได้จากทั้ง user path และ admin path · คืน true เมื่อรับช่วงหน้าจอไปแล้ว
+function showSessionEndScreen(payload){
+  if(sessionEndShown)return true;
+  if(!featureReportShare||payload?.session_report?.available!==true)return false;
+  sessionEndShown=true;sessionEndInProgress=true;
+  currentPrincipal=null;authenticatedAppStarted=false;
+  authPod={occupied:false,owns_active_session:false};
+  sessionState={...sessionState,active:false,recording:false};
+  stopRestFallback();clearTimeout(wsReconnectTimer);
+  if(activeWS?.readyState===WebSocket.OPEN)activeWS.close();
+  renderSessionEndScreen(payload);
+  runSessionEndShare(payload);
+  return true;
+}
+
+function renderSessionEndScreen(payload){
+  const overlay=document.getElementById('sessionEndScreen');
+  document.getElementById('sessionEndMeta').textContent=[
+    payload.display_name||payload.username||'ผู้ใช้งาน',
+    sessionEndDateText(payload.ended_at_utc),
+    `ระยะเวลา ${fmtDur(payload.duration_s)}`,
+  ].filter(Boolean).join(' · ');
+  document.getElementById('sessionEndSummary').innerHTML=
+    renderSleepQuality(payload.sleep_quality,payload.ended_at_utc||true)
+    +renderSessionOverview(payload.session_report);
+  overlay.classList.remove('hide');overlay.setAttribute('aria-hidden','false');
+  const label=document.getElementById('sessionEndCountdown');
+  sessionEndDeadline=Date.now()+SESSION_END_NO_QR_HOLD_MS;
+  const tick=()=>{
+    const left=Math.max(0,Math.round((sessionEndDeadline-Date.now())/1000));
+    // นาทีสุดท้าย ๆ เท่านั้นที่ควรนับถอยหลังเป็นวินาที ก่อนหน้านั้นบอกเป็นอายุ
+    // ของ QR ซึ่งเป็นสิ่งที่ผู้ใช้สนใจจริง ไม่ใช่เวลาที่จอจะดับ
+    label.textContent=left>300
+      ? `QR ใช้ได้อีก ${Math.ceil(left/60)} นาที`
+      : `หน้าจอนี้จะปิดเองใน ${Math.floor(left/60)}:${String(left%60).padStart(2,'0')}`;
+    if(left<=0)closeSessionEndScreen();
+  };
+  tick();sessionEndTimer=setInterval(tick,1000);
+}
+
+function setSessionEndQr(state,html){
+  const box=document.getElementById('sessionEndQr');
+  box.className=`session-end-qr ${state}`;box.innerHTML=html;
+}
+
+async function runSessionEndShare(payload){
+  const note=document.getElementById('sessionEndShareNote');
+  const ticket=payload?.report_share?.ticket;
+  const fallback='ดูผลย้อนหลังได้ในแอป ZEEP ด้วยบัญชีเดิม';
+  if(!ticket){setSessionEndQr('failed',`Session นี้ไม่ได้ผูกกับบัญชี ZEEP<br>${fallback}`);return;}
+  let image;
+  try{image=await drawSessionReportPng(payload);}
+  catch{setSessionEndQr('failed',`สร้างรูปผลการนอนไม่สำเร็จ<br>${fallback}`);return;}
+  let result=null;
+  try{
+    // ไม่ใช้ post(): cookie ถูกเพิกถอนไปแล้ว ticket คือสิทธิ์ และความล้มเหลว
+    // ตรงนี้ต้องไม่เด้ง toast ทับหน้าสรุปผล
+    const r=await fetch('/api/session/report-share',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ticket,image_base64:image}),
+    });
+    if(r.ok)result=await r.json();
+  }catch{result=null;}
+  if(!result?.ok||!result.qr_data_url){
+    setSessionEndQr('failed',`สร้าง QR ไม่สำเร็จ — ต่ออินเทอร์เน็ตไม่ได้<br>${fallback}`);
+    return;
+  }
+  const minutes=Number(result.expires_in_minutes)||SESSION_END_QR_FALLBACK_MINUTES;
+  setSessionEndQr('','<img alt="QR ผลการนอน" src="'+result.qr_data_url+'">');
+  if(note)note.textContent=`สแกนด้วยมือถือของคุณ · ลิงก์หมดอายุใน ${minutes} นาที`;
+  // ยืดหน้าจอให้เท่าอายุลิงก์จริงที่ backend ตอบมา ไม่ใช่ค่าที่เดาไว้ฝั่งนี้
+  sessionEndDeadline=Date.now()+minutes*60000;
+}
+
+/* ---- Canvas 2D: รูปผลการนอน 1080×1920 ที่ผู้ใช้เอากลับไปได้ ----
+   เป็น layout ชุดที่สองที่ต้องดูแลคู่กับ renderSessionOverview() — ราคาที่จ่าย
+   เพื่อให้สระ/วรรณยุกต์ไทยถูกต้องโดยไม่ต้องเพิ่ม dependency ฝั่ง Pi */
+function reportFont(weight,size){return `${weight} ${size}px ${REPORT_PNG_FONT}`;}
+
+function reportRoundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();
+}
+
+const THAI_MARK=/[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]/;
+const THAI_LEAD_VOWEL=/[\u0E40-\u0E44]/;
+
+// ภาษาไทยไม่มีช่องว่างระหว่างคำ จึงต้องตัดบรรทัดเองทีละกลุ่มอักขระ. หนึ่งกลุ่ม
+// คือพยัญชนะ + สระบน/ล่าง + วรรณยุกต์ที่เกาะอยู่ และสระหน้า (เ แ โ ใ ไ) ต้องอยู่
+// ติดกับพยัญชนะที่ตามมาเสมอ — ตัดคั่นตรงนั้นจะได้ "ไ" ค้างท้ายบรรทัด
+function textClusters(text){
+  const chars=Array.from(String(text??''));
+  const clusters=[];
+  for(let i=0;i<chars.length;i++){
+    let cluster=chars[i];
+    if(THAI_LEAD_VOWEL.test(chars[i])&&i+1<chars.length)cluster+=chars[++i];
+    while(i+1<chars.length&&THAI_MARK.test(chars[i+1]))cluster+=chars[++i];
+    clusters.push(cluster);
+  }
+  return clusters;
+}
+
+function wrapCanvasText(ctx,text,maxWidth){
+  const lines=[];let line='';
+  for(const cluster of textClusters(text)){
+    if(cluster==='\n'){lines.push(line);line='';continue;}
+    const next=line+cluster;
+    if(line&&ctx.measureText(next).width>maxWidth){
+      // ข้อความปนสองภาษา: ถ้ามีช่องว่างให้ตัดที่คำ ("Recovery Score" ต้องไม่กลายเป็น
+      // "Recovery Sc"/"ore") แต่ประโยคไทยยาว ๆ ที่เว้นวรรคห่างมากต้องไม่ถอยไปไกล
+      // จนบรรทัดโหว่ — ถอยได้เมื่อยังเหลือความยาวอย่างน้อย 60% ของบรรทัด
+      const cut=line.lastIndexOf(' ');
+      const head=cut>0?line.slice(0,cut):'';
+      if(head&&ctx.measureText(head).width>=maxWidth*0.6){
+        lines.push(head);line=line.slice(cut+1)+cluster;
+      }else{lines.push(line);line=cluster;}
+    }
+    else line=next;
+  }
+  if(line)lines.push(line);
+  return lines;
+}
+
+function drawWrapped(ctx,text,x,y,maxWidth,lineHeight,maxLines=99){
+  const lines=wrapCanvasText(ctx,text,maxWidth).slice(0,maxLines);
+  lines.forEach((line,i)=>ctx.fillText(line,x,y+i*lineHeight));
+  return y+lines.length*lineHeight;
+}
+
+function drawReportHeader(ctx,payload,W,M){
+  let y=M;
+  ctx.fillStyle='#19e3ff';ctx.font=reportFont(800,32);
+  ctx.fillText('ZEEP · SLEEP REPORT',M,y);y+=54;
+  ctx.fillStyle='#eaf7fc';ctx.font=reportFont(800,54);
+  y=drawWrapped(ctx,payload.display_name||payload.username||'ผู้ใช้งาน',M,y,W-2*M,66,2)+10;
+  ctx.fillStyle='#7fa6b8';ctx.font=reportFont(600,26);
+  ctx.fillText(sessionEndDateText(payload.ended_at_utc),M,y);y+=38;
+  ctx.fillText(`ระยะเวลา Session ${fmtDur(payload.duration_s)}`,M,y);
+  return y+62;
+}
+
+function drawReportScore(ctx,quality,y,W,M){
+  const h=250;
+  reportRoundRect(ctx,M,y,W-2*M,h,24);
+  ctx.fillStyle='#0b1e2e';ctx.fill();ctx.strokeStyle='#17394f';ctx.lineWidth=2;ctx.stroke();
+  const score=quality?.available?Number(quality.score)||0:null;
+  const cx=M+150,cy=y+h/2;
+  ctx.lineWidth=18;ctx.strokeStyle='#123043';
+  ctx.beginPath();ctx.arc(cx,cy,88,0,Math.PI*2);ctx.stroke();
+  if(score!=null){
+    ctx.strokeStyle='#19e3ff';ctx.beginPath();
+    ctx.arc(cx,cy,88,-Math.PI/2,-Math.PI/2+Math.PI*2*Math.max(0,Math.min(1,score/100)));ctx.stroke();
+  }
+  ctx.textAlign='center';
+  ctx.fillStyle='#f2fbfd';ctx.font=reportFont(800,62);ctx.fillText(score==null?'—':String(score),cx,cy-46);
+  ctx.fillStyle='#7fa6b8';ctx.font=reportFont(600,24);ctx.fillText('/ 100',cx,cy+28);
+  ctx.textAlign='left';
+  const tx=M+290,tw=W-M-tx-30;
+  ctx.fillStyle='#9fd7e6';ctx.font=reportFont(700,24);
+  ctx.fillText(quality?.score_title||'Sleep Score',tx,y+50);
+  ctx.fillStyle='#eaf7fc';ctx.font=reportFont(800,42);
+  drawWrapped(ctx,quality?.available?(quality.level||''):'ข้อมูลไม่พอ',tx,y+88,tw,50,1);
+  ctx.fillStyle='#7fa6b8';ctx.font=reportFont(500,24);
+  drawWrapped(ctx,quality?.available
+    ?(quality.insight||quality.score_scope||'')
+    :(quality.reason||'ข้อมูล Sensor ไม่เพียงพอสำหรับประเมิน'),tx,y+150,tw,34,3);
+  return y+h+40;
+}
+
+function drawReportMetrics(ctx,sleep,y,W,M){
+  const boxes=[
+    ['Sensor ประเมินว่าหลับ',fmtDur(sleep.estimated_sleep_s)],
+    ['ช่วงที่ Sensor บันทึก',fmtDur(sleep.recording_s)],
+    ['ประสิทธิภาพ',sleep.sleep_efficiency_pct==null?'--':`${sleep.sleep_efficiency_pct}%`],
+    ['W · ตื่น',fmtDur(sleep.wake_s)],
+  ];
+  const bw=(W-2*M-20)/2,bh=140;
+  boxes.forEach(([label,value],i)=>{
+    const bx=M+(i%2)*(bw+20),by=y+Math.floor(i/2)*(bh+20);
+    reportRoundRect(ctx,bx,by,bw,bh,18);
+    ctx.fillStyle='#0b1e2e';ctx.fill();ctx.strokeStyle='#17394f';ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle='#7fa6b8';ctx.font=reportFont(600,24);
+    drawWrapped(ctx,label,bx+26,by+28,bw-52,30,1);
+    ctx.fillStyle='#eaf7fc';ctx.font=reportFont(800,40);
+    drawWrapped(ctx,value,bx+26,by+72,bw-52,46,1);
+  });
+  return y+2*bh+20+44;
+}
+
+function drawReportStages(ctx,report,quality,y,W,M){
+  const stages=(report.stages||[]).filter(stage=>REPORT_STAGE_META[stage.state]);
+  const stageCoverage=Number(report.data_quality?.coverage?.sleep_stage_pct)||0;
+  ctx.fillStyle='#9fd7e6';ctx.font=reportFont(700,28);
+  ctx.fillText('สัดส่วน Sleep Stage',M,y);y+=48;
+  // เกณฑ์เดียวกับหน้าจอ: ต่ำกว่า 80% coverage ไม่เผยแพร่สัดส่วน
+  if(!(quality?.available===true&&stageCoverage>=80&&stages.length)){
+    ctx.fillStyle='#f6b94a';ctx.font=reportFont(600,26);
+    return drawWrapped(ctx,`ข้อมูลยืนยันยังไม่ครบ · ต้องมี Sleep State coverage อย่างน้อย 80% จึงแสดงสัดส่วน · ปัจจุบัน ${stageCoverage.toFixed(0)}%`,
+      M,y,W-2*M,38,3)+34;
+  }
+  const barW=W-2*M,barH=44;
+  ctx.save();reportRoundRect(ctx,M,y,barW,barH,10);ctx.fillStyle='#122b3a';ctx.fill();ctx.clip();
+  let cursor=0;
+  stages.forEach(stage=>{
+    const w=barW*Math.max(0,Number(stage.pct_scored)||0)/100;
+    ctx.fillStyle=REPORT_STAGE_META[stage.state].color;ctx.fillRect(M+cursor,y,w,barH);cursor+=w;
+  });
+  ctx.restore();
+  y+=barH+26;
+  stages.forEach((stage,i)=>{
+    const lx=M+(i%2)*(barW/2),ly=y+Math.floor(i/2)*42;
+    ctx.fillStyle=REPORT_STAGE_META[stage.state].color;ctx.fillRect(lx,ly+6,16,16);
+    ctx.fillStyle='#cfe8f2';ctx.font=reportFont(600,25);
+    drawWrapped(ctx,`${REPORT_STAGE_META[stage.state].label} · ${stage.pct_scored||0}% · ${fmtDur(stage.duration_s)}`,
+      lx+26,ly,barW/2-40,30,1);
+  });
+  return y+Math.ceil(stages.length/2)*42+34;
+}
+
+function drawReportFindings(ctx,report,y,W,M,limit){
+  const findings=(Array.isArray(report.findings)?report.findings:[]).slice(0,5);
+  if(!findings.length)return y;
+  ctx.fillStyle='#9fd7e6';ctx.font=reportFont(700,28);
+  ctx.fillText('สิ่งที่ควรรู้จากคืนนี้',M,y);y+=48;
+  for(const item of findings){
+    if(y>limit)break;
+    ctx.fillStyle=REPORT_PNG_FINDING_COLOR[item.severity]||'#7fa6b8';
+    ctx.fillRect(M,y+8,8,40);
+    ctx.fillStyle='#eaf7fc';ctx.font=reportFont(700,27);
+    y=drawWrapped(ctx,item.title||'ข้อมูลประกอบ',M+28,y,W-2*M-28,36,2);
+    ctx.fillStyle='#7fa6b8';ctx.font=reportFont(500,24);
+    y=drawWrapped(ctx,item.detail||'',M+28,y+6,W-2*M-28,34,2)+24;
+  }
+  return y;
+}
+
+async function drawSessionReportPng(payload){
+  const canvas=document.getElementById('sessionEndCanvas');
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height,M=80;
+  const report=payload.session_report||{},quality=payload.sleep_quality||{};
+  const coverage=report.data_quality?.coverage||{};
+  // รอฟอนต์ไทยของแท็บเล็ตให้พร้อมก่อน ไม่งั้น measureText คำนวณจาก fallback
+  try{await document.fonts.ready;}catch{}
+  const bg=ctx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#061422');bg.addColorStop(1,'#020a13');
+  ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+  ctx.textBaseline='top';ctx.textAlign='left';
+  let y=drawReportHeader(ctx,payload,W,M);
+  y=drawReportScore(ctx,quality,y,W,M);
+  y=drawReportMetrics(ctx,report.sleep||{},y,W,M);
+  y=drawReportStages(ctx,report,quality,y,W,M);
+  drawReportFindings(ctx,report,y,W,M,H-M-190);
+  ctx.fillStyle='#5c8296';ctx.font=reportFont(500,22);
+  drawWrapped(ctx,`${quality.disclaimer||'ประเมินจาก BCG/Sensor ไม่ใช่ผลวินิจฉัยจาก PSG'} · Coverage: Recording ${coverage.recording_pct||0}% · BCG ${coverage.bcg_pct||0}% · Sleep Stage ${coverage.sleep_stage_pct||0}% · Environment ${coverage.environment_pct||0}%`,
+    M,H-M-120,W-2*M,32,3);
+  return canvas.toDataURL('image/png');
+}
+
 async function doLogout(btn){
   if (!await confirmAction({title:'จบและบันทึก Session',message:`การกดจบถือเป็นการยืนยันว่า “ตื่นแล้ว” ระบบจะบันทึก W · ตื่นก่อนจบ Session ของ “${identityLabel(sessionState)}”`,confirmText:'ตื่นแล้ว · จบ Session',tone:'warning',icon:'◷'})) return;
   // User logout is one complete flow: persist the sleep record first, then
   // revoke the browser account. Never leave the former user inside the app
   // after a completed Session on a shared ZEEP tablet.
+  // finalize เคลียร์ ownership ตั้งแต่บรรทัดแรก แล้วค่อยทำงานยาว (flush + ingest)
+  // ระหว่างนั้น WS จะปิด 4403 — ตั้งธงไว้ก่อนยิง เพื่อไม่ให้ handler พาออกจากหน้าจอ
+  sessionEndInProgress = featureReportShare;
   const result = await withBusy(btn, async()=>{
     const ended = await post('/api/session/logout');
     if (!ended) return null;
@@ -5624,12 +5973,16 @@ async function doLogout(btn){
     sessionState={...sessionState,active:false,recording:false};
     document.getElementById('logoutBtn').style.display='none';
     if (!result.signedOut){
+      sessionEndInProgress=false;
       setPageMessage('warning','บันทึก Session แล้ว แต่ออกจากบัญชียังไม่สำเร็จ','กดปุ่มออกจากบัญชีที่มุมขวาบนอีกครั้ง');
       document.getElementById('accountLogoutBtn').style.display='';
       return;
     }
     currentPrincipal=null;
+    if (showSessionEndScreen(result.ended)) return;
     location.replace('/login?logged_out=session_saved');
+  } else {
+    sessionEndInProgress=false;
   }
 }
 
@@ -6257,6 +6610,7 @@ function render(s, source='ws'){
   lastServerUpdateAt = Date.now();
   serverReachable = true;
   current = s;
+  featureReportShare = !!s.features?.session_report_share;
   const e = s.sensor?.esp32 || {}, h2 = s.sensor?.sensorhub2 || {}, a = s.aircon || {}, bedctl = s.bed_control || {}, b = s.sensor?.bcg || {}, m = s.music || {}, sys = s.system || {};
   const environment=renderEnvironmentSensors(s.sensor?.environment,e,h2,b);
   renderSystemHealth(sys);
@@ -6488,7 +6842,7 @@ async function pollStateFallback(){
   finally{clearTimeout(timeout);}
 }
 function startRestFallback(){
-  if(restFallbackTimer)return;
+  if(restFallbackTimer||sessionEndShown)return;
   pollStateFallback();restFallbackTimer=setInterval(pollStateFallback,5000);
 }
 function stopRestFallback(){if(restFallbackTimer){clearInterval(restFallbackTimer);restFallbackTimer=null;}}
@@ -6508,7 +6862,15 @@ function connectWS(){
     if (wsWasDown){ toast('กลับมาเชื่อมต่อแล้ว', 'ok', 2200); loadTracks(); loadUsers(); }
     wsWasDown = false;
   };
-  ws.onmessage = e=>{try{render(JSON.parse(e.data),'ws');setConnectionStatus('ws');}catch{}};
+  ws.onmessage = e=>{try{
+    const message=JSON.parse(e.data);
+    if(message?.type==='session_ended'){
+      // Admin จบ/ไล่ Session: แท็บเล็ตไม่มีข้อมูลของตัวเอง จึงมากับ notice นี้
+      showSessionEndScreen({...(message.report||{}),report_share:message.report_share});
+      return;
+    }
+    render(message,'ws');setConnectionStatus('ws');
+  }catch{}};
   ws.onclose = event=>{
     if(activeWS===ws)activeWS=null;
     if(event.code===4401){
@@ -6517,6 +6879,7 @@ function connectWS(){
       history.replaceState({},'',target);setLoginAudience(target===ADMIN_LOGIN_PATH?'admin':'user');
       applyRoleUI(null);document.getElementById('login').classList.remove('hide');loadPublicStatus();return;
     }
+    if(sessionEndShown||(event.code===4403&&sessionEndInProgress))return;
     if(event.code===4403&&currentPrincipal?.role==='user'){
       // An Admin ended or force-kicked this physical Session. The backend has
       // already persisted the report and revoked the occupant cookie; return
@@ -6541,6 +6904,7 @@ function connectWS(){
 updateDashboardClock();
 setInterval(updateDashboardClock,1000);
 setInterval(()=>{
+  if(sessionEndShown)return;
   if(lastServerUpdateAt&&Date.now()-lastServerUpdateAt>12000){
     serverReachable=false;setConnectionStatus('offline');startRestFallback();
     if(activeWS?.readyState===WebSocket.OPEN)activeWS.close();

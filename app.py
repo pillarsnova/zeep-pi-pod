@@ -131,6 +131,7 @@ from zeep_pod.sessions.history_service import (
     local_history_day,
     resolve_history_window,
 )
+from zeep_pod.sessions.report_share import ReportShareRegistry, create_report_share_router
 from maintenance_registry import maintenance_contract_snapshot
 from migration import migrate_jsonl
 from personal import BaselineStore
@@ -1067,6 +1068,8 @@ auth_sessions = AuthSessionManager(DATA_DIR)
 # In-flight QR logins.  Process memory only: a pollSecret must never reach the
 # browser, the QR image, disk or the log.
 qr_logins = QrLoginRegistry()
+# Post-Session QR share. Off by default: it sends a rendered report off-pod.
+report_shares = ReportShareRegistry(enabled=os.getenv("SESSION_REPORT_SHARE_ENABLED", "0") == "1")
 occupancy_store = OccupancyStore(DATA_DIR, OCCUPANCY_LEASE_SECONDS)
 occupancy_client = build_occupancy_client(occupancy_store)
 OCCUPANCY_COORDINATOR_TOKEN = os.getenv("OCCUPANCY_COORDINATOR_TOKEN", "").strip()
@@ -2370,6 +2373,7 @@ class ZeepApiOffline(Exception):
 def _zeep_request(method: str, path: str, *, json_body: Optional[dict] = None,
                   token: Optional[str] = None,
                   api_key: Optional[str] = None,
+                  files: Optional[dict] = None, data: Optional[dict] = None,
                   timeout: Optional[float] = None) -> Dict[str, Any]:
     """เรียก ZEEP API แล้วคืน envelope `{status, statusCode, message, data}`.
 
@@ -2387,7 +2391,7 @@ def _zeep_request(method: str, path: str, *, json_body: Optional[dict] = None,
         headers["x-api-key"] = api_key
     try:
         response = httpx.request(method, f"{ZEEP_API_BASE_URL}{path}", json=json_body,
-                                 headers=headers,
+                                 files=files, data=data, headers=headers,
                                  timeout=ZEEP_API_TIMEOUT if timeout is None else timeout)
     except httpx.HTTPError as exc:
         raise ZeepApiOffline(f"{type(exc).__name__}: {exc}") from exc
@@ -3670,6 +3674,7 @@ def snapshot() -> Dict[str, Any]:
 def snapshot_for(principal: Principal) -> Dict[str, Any]:
     """Return the minimum telemetry required by the principal's interface."""
     result = snapshot()
+    result["features"] = {"session_report_share": report_shares.enabled}
     if principal.is_admin:
         result["auth"] = {"principal": principal.public_dict(), "session_store": auth_sessions.health()}
         return result
@@ -5534,6 +5539,7 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
     if active is None:
         return None
     record = active["record"]
+    report_shares.reserve(record.get("identity_subject"))
     samples = active["samples"]
     acquisition_interval_s = _sample_interval_seconds(
         record.get("sample_interval_s"), SESSION_SAMPLE_SECONDS)
@@ -5604,6 +5610,7 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
                 },
             })
         _reset_live_sleep_inference(None)
+        report_shares.discard(record.get("identity_subject"))
         return record
     bed_counts: Dict[str, int] = {}
     sleep_counts: Dict[str, int] = {}
@@ -5820,6 +5827,7 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
     # ด้วย externalSessionId). ใช้ x-api-key จึงไม่พึ่ง token ของผู้ใช้ —
     # Session ที่กู้คืนหลัง restart (ไม่มี auth) ก็อัปโหลดได้ตามปกติ
     _enqueue_session_ingest(record, report_samples)
+    report_shares.fulfil(record, access_token=(active.get("auth") or {}).get("access_token"))
     # Adaptive learning: อัปเดต baseline ส่วนบุคคลจากคืนล่าสุด (≤7 คืน rolling)
     try:
         bl = baselines.update_user(record["username_key"])
@@ -6422,6 +6430,9 @@ app.include_router(create_qr_login_router(
     pod_occupied=_pod_is_occupied,
     log_event=log_event,
 ))
+app.include_router(create_report_share_router(
+    report_shares, zeep_request=lambda *a, **kw: _zeep_request(*a, **kw),
+    zeep_offline=ZeepApiOffline, log_event=log_event))
 app.include_router(create_history_router(database, require_admin=require_admin))
 app.include_router(create_occupancy_router(occupancy_store, OCCUPANCY_COORDINATOR_TOKEN))
 app.include_router(create_api_v1_router(
@@ -7805,6 +7816,7 @@ def session_logout(
         "counters": record.get("counters") or {},
         "sleep_quality": record.get("sleep_quality"),
         "session_report": record.get("session_report"),
+        "report_share": report_shares.share_for(record.get("identity_subject")),
         "auth_retained": True,
     }
 
@@ -8764,6 +8776,9 @@ async def websocket_endpoint(ws: WebSocket):
                 with session_lock:
                     active = _active_session
                 if not _principal_owns_active(active, principal):
+                    notice = await report_shares.await_notice(principal.subject)
+                    if notice is not None:
+                        await ws.send_json({"type": "session_ended", **notice})
                     await ws.close(code=4403, reason="pod session ended")
                     return
             await ws.send_json(snapshot_for(principal))

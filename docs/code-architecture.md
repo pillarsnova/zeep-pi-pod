@@ -23,8 +23,19 @@ zeep_pod/
 │   └── zeep_account.py   # bind a ZEEP {tokens, user} payload to local identity
 └── sessions/
     ├── cadence.py        # mixed 5/10-second timeline normalization
-    └── lifecycle.py      # checkpoint, bed occupancy and HR/RR start gate
+    ├── lifecycle.py      # checkpoint, bed occupancy and HR/RR start gate
+    └── report_share.py   # end-of-Session QR share: ticket, upload, QR code
 ```
+
+`sessions/report_share.py` follows the same secret discipline as `qr_login.py`.
+The tablet cannot reach the ZEEP API from the pod hotspot, so it renders the
+finished night as a PNG and the Pi uploads it to the account backend with the
+occupant's own access token; that token stays in process memory and never
+reaches the browser, the database or the log. The browser authorizes the
+upload with a single-use ticket because its cookie is already revoked by then.
+The whole feature is behind `SESSION_REPORT_SHARE_ENABLED`, off by default, and
+no registry method raises — finalizing a Session must never fail because of a
+share.
 
 Existing domain modules at the repository root remain supported while they
 are migrated. Their current responsibilities are:

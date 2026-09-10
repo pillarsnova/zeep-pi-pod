@@ -13,6 +13,24 @@ import time
 from pathlib import Path
 from typing import Any
 
+DEFAULT_AUDIO_MODE = "repeat_one"
+DEFAULT_AUDIO_VOLUME_PERCENT = 60
+
+
+def default_music_state() -> dict[str, Any]:
+    """Return a fresh, stopped player state with safe bedside defaults."""
+    return {
+        "playing": False,
+        "paused": False,
+        "track": None,
+        "volume": DEFAULT_AUDIO_VOLUME_PERCENT,
+        "loop": True,
+        "mode": DEFAULT_AUDIO_MODE,
+        "queue_position": 0,
+        "queue_length": 0,
+        "error": None,
+    }
+
 
 class AudioPlayer:
     """Play local ZEEP audio without reopening the device per track.
@@ -256,7 +274,8 @@ class AudioPlayer:
                     "playing": False,
                     "paused": False,
                     "track": None,
-                    "loop": False,
+                    "loop": True,
+                    "mode": DEFAULT_AUDIO_MODE,
                     "queue_position": 0,
                     "queue_length": 0,
                     "error": error,
@@ -278,12 +297,16 @@ class AudioPlayer:
             self.proc = None
             self._cleanup_socket()
             with self.state_lock:
+                mode = self.state["music"].get("mode", DEFAULT_AUDIO_MODE)
+                if mode not in {"repeat_one", "queue"}:
+                    mode = DEFAULT_AUDIO_MODE
                 self.state["music"].update(
                     {
                         "playing": False,
                         "paused": False,
                         "track": None,
-                        "loop": False,
+                        "loop": mode == "repeat_one",
+                        "mode": mode,
                         "queue_position": 0,
                         "queue_length": 0,
                         "error": error,
@@ -341,6 +364,10 @@ class AudioPlayer:
         return True
 
     def _stop_locked(self) -> None:
+        with self.state_lock:
+            mode = self.state["music"].get("mode", DEFAULT_AUDIO_MODE)
+        if mode not in {"repeat_one", "queue"}:
+            mode = DEFAULT_AUDIO_MODE
         self.loop = False
         self.current_path = None
         self.queue_paths = []
@@ -359,7 +386,8 @@ class AudioPlayer:
                     "playing": False,
                     "paused": False,
                     "track": None,
-                    "loop": False,
+                    "loop": mode == "repeat_one",
+                    "mode": mode,
                     "queue_position": 0,
                     "queue_length": 0,
                 }

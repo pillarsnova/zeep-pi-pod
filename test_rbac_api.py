@@ -18,7 +18,6 @@ from fastapi.testclient import TestClient
 
 from testing_support import configure_app_test_environment
 
-
 _test_root = configure_app_test_environment()
 
 import app as pod_app  # noqa: E402  (environment must be set before import)
@@ -933,6 +932,60 @@ class RbacApiTests(unittest.TestCase):
         finally:
             pod_app.controlhub1_mqtt.publish_and_wait = original_publish
             pod_app.controlhub1_mqtt.publish_sequence_and_wait = original_publish_sequence
+
+    def test_music_play_defaults_to_repeat_and_queue_overrides_loop(self) -> None:
+        track = pod_app.MUSIC_DIR / "default-repeat-test.wav"
+        track.parent.mkdir(parents=True, exist_ok=True)
+        track.write_bytes(b"test")
+        previous_safety = copy.deepcopy(pod_app.state["safety"])
+        original_guard = pod_app.music_stop_guard_until
+        calls: list[tuple[bool, bool]] = []
+
+        def fake_play(
+            path: Path,
+            loop: bool = False,
+            queue: bool = False,
+        ) -> None:
+            self.assertEqual(path, track.resolve())
+            calls.append((loop, queue))
+
+        try:
+            with pod_app.state_lock:
+                pod_app.state["safety"]["latched"] = False
+            pod_app.music_stop_guard_until = 0
+            with patch.object(pod_app.player, "play", side_effect=fake_play):
+                repeated = pod_app.music_play(
+                    pod_app.TrackCommand(track=track.name, user_initiated=True)
+                )
+                queued = pod_app.music_play(
+                    pod_app.TrackCommand(
+                        track=track.name,
+                        queue=True,
+                        user_initiated=True,
+                    )
+                )
+                legacy_both = pod_app.music_play(
+                    pod_app.TrackCommand(
+                        track=track.name,
+                        loop=True,
+                        queue=True,
+                        user_initiated=True,
+                    )
+                )
+
+            self.assertEqual(calls, [(True, False), (False, True), (False, True)])
+            self.assertTrue(repeated["loop"])
+            self.assertFalse(repeated["queue"])
+            self.assertFalse(queued["loop"])
+            self.assertTrue(queued["queue"])
+            self.assertFalse(legacy_both["loop"])
+            self.assertTrue(legacy_both["queue"])
+        finally:
+            pod_app.music_stop_guard_until = original_guard
+            with pod_app.state_lock:
+                pod_app.state["safety"].clear()
+                pod_app.state["safety"].update(previous_safety)
+            track.unlink(missing_ok=True)
 
     def test_audio_track_change_reuses_live_mpv_process(self) -> None:
         """Changing tracks must keep ALSA/MPV open to avoid a silent restart gap."""

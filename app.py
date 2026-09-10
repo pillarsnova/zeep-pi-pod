@@ -97,7 +97,7 @@ from zeep_pod.identity.profile_fields import (
     zeep_health_reference as _zeep_health_reference,
 )
 from zeep_pod.identity.zeep_account import authenticate_password, identity_from_auth_data
-from zeep_pod.hardware.audio import AudioPlayer
+from zeep_pod.hardware.audio import AudioPlayer, default_music_state
 from zeep_pod.hardware.gpio import GPIOManager
 from zeep_pod.hardware.sensorhub1 import (
     SensorHub1Reader,
@@ -926,9 +926,7 @@ state: Dict[str, Any] = {
         "auto_stop_pending": False,
         "error": None,
     },
-    "music": {"playing": False, "paused": False, "track": None, "volume": 75,
-              "loop": False, "mode": "queue", "queue_position": 0,
-              "queue_length": 0, "error": None},
+    "music": default_music_state(),
     "safety": {
         "armed": SAFETY_ARMED_DEFAULT, "ready": False, "level": "initializing",
         "latched": False, "faults": [], "last_check": None,
@@ -8676,14 +8674,15 @@ def music_play(cmd: TrackCommand):
                 "Music was stopped by the user; legacy automatic restart blocked",
             )
         try:
-            player.play(candidate, loop=bool(cmd.loop), queue=bool(cmd.queue))
+            player.play(candidate, loop=cmd.resolved_loop, queue=bool(cmd.queue))
         except Exception as exc:
             raise HTTPException(500, str(exc))
     note_session_activity("music", {"action": "play", "track": candidate.name,
-                                    "loop": bool(cmd.loop), "queue": bool(cmd.queue)})
-    log_event("music", "play", track=candidate.name, loop=bool(cmd.loop),
+                                    "loop": cmd.resolved_loop,
+                                    "queue": bool(cmd.queue)})
+    log_event("music", "play", track=candidate.name, loop=cmd.resolved_loop,
               queue=bool(cmd.queue))
-    return {"ok": True, "track": candidate.name, "loop": bool(cmd.loop),
+    return {"ok": True, "track": candidate.name, "loop": cmd.resolved_loop,
             "queue": bool(cmd.queue), "player": player.backend,
             "state": snapshot()["music"]}
 

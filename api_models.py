@@ -27,9 +27,14 @@ class VolumeCommand(BaseModel):
 
 class TrackCommand(BaseModel):
     track: str
-    loop: bool = False
+    loop: bool = True
     queue: bool = False
     user_initiated: bool = False
+
+    @property
+    def resolved_loop(self) -> bool:
+        """Queue wins if a legacy caller sends both mode flags."""
+        return bool(self.loop) and not bool(self.queue)
 
 
 class BrainwavePreviewCommand(BaseModel):

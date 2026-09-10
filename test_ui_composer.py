@@ -1,6 +1,5 @@
 """Keep the deployed single-file UI synchronized with Control partials."""
 
-from pathlib import Path
 import re
 import unittest
 
@@ -55,8 +54,7 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("SPH0645LM4H-B · ESP32 direct", template)
         self.assertIn("<span>ESP32 DIRECT</span>", template)
         self.assertIn(
-            "const t=e.temperature_c,h=e.humidity_rh,l=e.lux,"
-            "s=e.sound_dba_est",
+            "const t=e.temperature_c,h=e.humidity_rh,l=e.lux,s=e.sound_dba_est",
             template,
         )
         for obsolete in (
@@ -69,6 +67,28 @@ class UiComposerTests(unittest.TestCase):
         ):
             with self.subTest(obsolete=obsolete):
                 self.assertNotIn(obsolete, template)
+
+    def test_audio_controls_default_to_visible_repeat_at_sixty_percent(self):
+        partial = (ui_composer.PARTIAL_DIR / "audio.html").read_text(encoding="utf-8")
+        template = ui_composer.TEMPLATE.read_text(encoding="utf-8")
+        css = (ui_composer.STATIC / "theme-modern.css").read_text(encoding="utf-8")
+
+        self.assertEqual(partial.count('id="unifiedAudioModeToggle"'), 1)
+        self.assertIn('class="stream-control stream-loop', partial)
+        self.assertIn('data-mode="repeat_one"', partial)
+        self.assertIn('aria-pressed="true"', partial)
+        self.assertIn('id="unifiedAudioModeLabel">เล่นซ้ำ', partial)
+        self.assertNotIn('class="stream-mode-row"', partial)
+        self.assertIn('id="unifiedVolume"', partial)
+        self.assertIn('value="60"', partial)
+        self.assertIn('id="unifiedVolumeText">60%</b>', partial)
+        self.assertIn("let unifiedAudioMode = 'repeat_one';", template)
+        self.assertIn("music.volume??60", template)
+        self.assertIn(
+            "grid-template-columns: repeat(4, minmax(0, 1fr));",
+            css,
+        )
+        self.assertIn(".audio-zone .stream-loop.on", css)
 
 
 if __name__ == "__main__":

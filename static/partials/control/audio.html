@@ -27,16 +27,14 @@
                 <span aria-hidden="true">≡</span>
                 <select id="unifiedTrackSelect" aria-label="เลือกเสียงบรรยากาศ" onchange="unifiedSelectTrack(this.value,this)"><option value="">กำลังโหลด…</option></select>
                 <span class="stream-volume-icon" aria-hidden="true">◖</span>
-                <input id="unifiedVolume" type="range" min="0" max="100" value="75" aria-label="ระดับเสียง" oninput="setVolume(this.value)">
-                <b id="unifiedVolumeText">75%</b>
+                <input id="unifiedVolume" type="range" min="0" max="100" value="60" aria-label="ระดับเสียง" aria-valuetext="60%" oninput="setVolume(this.value)">
+                <b id="unifiedVolumeText">60%</b>
               </div>
               <div class="stream-controls" aria-label="ควบคุมการเล่นเพลง">
                 <button id="unifiedAudioPrev" class="stream-control ui-transport-button" onclick="unifiedStepTrack(-1,this)" aria-label="เพลงก่อนหน้า" title="เพลงก่อนหน้า"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-previous"/></svg><small>ก่อนหน้า</small></button>
                 <button id="unifiedAudioBtn" class="stream-control stream-play ui-transport-button" onclick="unifiedAudioToggle(this)" aria-label="เล่นเสียงใน ZEEP" title="เล่นเสียงใน ZEEP"><svg id="unifiedAudioPlayIcon" class="ui-icon" aria-hidden="true"><use href="#ui-icon-play"/></svg><small id="unifiedAudioPlayLabel">เล่น</small></button>
                 <button id="unifiedAudioNext" class="stream-control ui-transport-button" onclick="unifiedStepTrack(1,this)" aria-label="เพลงถัดไป" title="เพลงถัดไป"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-next"/></svg><small>ถัดไป</small></button>
-              </div>
-              <div class="stream-mode-row" role="group" aria-label="รูปแบบการเล่นเพลง">
-                <button id="unifiedAudioModeToggle" class="stream-mode-toggle" data-mode="queue" type="button" onclick="toggleUnifiedAudioMode(this)" aria-pressed="false" aria-label="โหมดคิวเพลง กดเพื่อเปลี่ยนเป็นเล่นซ้ำ" title="สลับระหว่างเล่นซ้ำและคิวเพลง"><span class="stream-mode-option" data-mode-option="repeat_one"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-repeat-one"/></svg><small>เล่นซ้ำ</small></span><i class="stream-mode-switch" aria-hidden="true"><i></i></i><span class="stream-mode-option active" data-mode-option="queue"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-queue"/></svg><small>คิวเพลง</small></span></button>
+                <button id="unifiedAudioModeToggle" class="stream-control stream-loop ui-transport-button on" data-mode="repeat_one" type="button" onclick="toggleUnifiedAudioMode(this)" aria-pressed="true" aria-label="Loop เปิดอยู่ กดเพื่อเปลี่ยนเป็นเล่นตามคิว" title="Loop · เล่นซ้ำ"><svg id="unifiedAudioModeIcon" class="ui-icon" aria-hidden="true"><use href="#ui-icon-repeat-one"/></svg><small id="unifiedAudioModeLabel">เล่นซ้ำ</small></button>
               </div>
             </div>
           </div>

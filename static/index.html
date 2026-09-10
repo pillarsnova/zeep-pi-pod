@@ -6322,7 +6322,9 @@ function renderSessionList(d){
   }
   d.sessions.forEach(sx=>{
     const presentation=reportPresentationMode(sx);
-    const modeLabel=presentation==='recovery'?'Nap & Refresh':'Overnight Recovery';
+    const modeLabel=presentation==='recovery'
+      ?'Nap & Refresh'
+      :presentation==='sleep'?'Overnight Recovery':'รูปแบบยังไม่ยืนยัน';
     const row = document.createElement('button'); row.className = `hist-row mode-${presentation}`;
     const hr = sx.summary?.heart_rate_bpm;
     const identity=currentPrincipal?.role==='admin'
@@ -6382,8 +6384,14 @@ function reportPresentationMode(source){
   const restMode=report.rest_mode||quality.rest_mode||{};
   const group=restMode.group||restMode.requested||restMode.resolved||'';
   const title=String(quality.score_title||restMode.score_title||'').toLowerCase();
-  return quality.quality_type==='rest_goal'||group==='nap_recovery'||title.includes('recovery')
-    ?'recovery':'sleep';
+  const unresolved=quality.rest_mode_unresolved
+    ||quality.validation_status==='legacy_mode_unresolved'
+    ||['auto','unknown_legacy'].includes(group)
+    ||(!group&&!quality.quality_type&&!title);
+  if(unresolved)return 'unknown';
+  if(quality.quality_type==='rest_goal'||group==='nap_recovery'||title.includes('recovery'))return 'recovery';
+  if(quality.quality_type==='sleep'||['sleep','overnight'].includes(group)||title.includes('sleep'))return 'sleep';
+  return 'unknown';
 }
 
 function reportStageDurations(report){
@@ -6509,8 +6517,14 @@ function renderSessionOverview(report){
   const findingIcon={critical:'!',poor:'↓',fair:'–',good:'✓',excellent:'★',unavailable:'?'};
   const allFindings=Array.isArray(report.findings)?report.findings:[];
   const findingRow=item=>`<div class="disturbance-item ${item.severity||'unavailable'}"><i>${findingIcon[item.severity]||'·'}</i><div><b>${item.title||'ข้อมูลประกอบ'}</b><small>${item.detail||''}</small></div><span>${item.action||''}</span></div>`;
-  const requiredFindings=allFindings.filter(item=>['required','sensor_check'].includes(item.decision)||['critical','poor','unavailable'].includes(item.severity));
-  const optimiseFindings=allFindings.filter(item=>['optimise','investigate'].includes(item.decision)||item.severity==='fair');
+  const requiredFindings=allFindings.filter(item=>
+    ['required','sensor_check','safety_review'].includes(item.decision)
+    ||['critical','poor'].includes(item.severity)
+    ||(item.severity==='unavailable'&&item.blocks_overall!==false));
+  const optimiseFindings=allFindings.filter(item=>
+    ['optimise','investigate','advisory'].includes(item.decision)
+    ||item.severity==='fair'
+    ||(item.severity==='unavailable'&&item.blocks_overall===false));
   const maintainFindings=allFindings.filter(item=>item.decision==='maintain'||['good','excellent'].includes(item.severity));
   const findingTier=(title,items)=>items.length?`<div class="disturbance-tier"><h5>${title}</h5>${items.map(findingRow).join('')}</div>`:'';
   const findings=[
@@ -6553,13 +6567,15 @@ function renderSessionOverview(report){
 function renderReport(rec){
   const root = document.getElementById('sessionDetail');
   const presentation=reportPresentationMode(rec.session_report||rec);
-  const reportTitle=presentation==='recovery'?'ผล Nap & Refresh':'ผล Overnight Recovery';
+  const reportTitle=presentation==='recovery'
+    ?'ผล Nap & Refresh'
+    :presentation==='sleep'?'ผล Overnight Recovery':'ผล Session · รอยืนยันรูปแบบ';
   const timelineTitle=presentation==='recovery'
     ?'ลำดับการพัก · Sleep State เป็นข้อมูลประกอบ'
-    :'ลำดับสถานะการนอน';
+    :presentation==='sleep'?'ลำดับสถานะการนอน':'ลำดับข้อมูลที่ Sensor บันทึก';
   const timelineEmpty=presentation==='recovery'
     ?'ยังไม่มีข้อมูลยืนยันรูปแบบการพัก'
-    :'ยังไม่มีข้อมูลสถานะการนอน';
+    :presentation==='sleep'?'ยังไม่มีข้อมูลสถานะการนอน':'ยังไม่พบข้อมูลที่ยืนยันได้';
   const su = rec.summary || {};
   const bed = su.bed_status_counts || {};
   const bedTotal = Object.values(bed).reduce((a,b)=>a+b, 0);

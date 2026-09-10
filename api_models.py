@@ -11,6 +11,9 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel
 
 
+PublicRestMode = Literal["sleep", "nap_recovery"]
+
+
 class SensorBiasCommand(BaseModel):
     metric: str
     bias: float
@@ -53,7 +56,7 @@ class LoginCommand(BaseModel):
     height_cm: Optional[float] = None
     weight_kg: Optional[float] = None
     blood_group: Optional[str] = None
-    rest_mode: str = "nap_recovery"
+    rest_mode: PublicRestMode = "nap_recovery"
     target_duration_minutes: Optional[Literal[30, 90]] = None
     # One-time proof returned only after this Pi failed to reach ZEEP.
     offline_ticket: str
@@ -64,7 +67,7 @@ class AuthLoginCommand(BaseModel):
     identifier: str
     password: str
     age_group: Optional[str] = None
-    rest_mode: str = "nap_recovery"
+    rest_mode: PublicRestMode = "nap_recovery"
     target_duration_minutes: Optional[Literal[30, 90]] = None
 
 
@@ -74,7 +77,7 @@ class QrLoginPollCommand(BaseModel):
 
     login_id: str
     age_group: Optional[str] = None
-    rest_mode: str = "nap_recovery"
+    rest_mode: PublicRestMode = "nap_recovery"
     target_duration_minutes: Optional[Literal[30, 90]] = None
 
 

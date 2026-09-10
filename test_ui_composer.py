@@ -97,6 +97,9 @@ class UiComposerTests(unittest.TestCase):
         )
 
         self.assertIn("function reportPresentationMode(source)", template)
+        self.assertIn("if(unresolved)return 'unknown';", template)
+        self.assertIn("'รูปแบบยังไม่ยืนยัน'", template)
+        self.assertIn("'ผล Session · รอยืนยันรูปแบบ'", template)
         self.assertIn("'NAP & REFRESH SUMMARY'", template)
         self.assertIn("'OVERNIGHT SLEEP SUMMARY'", template)
         self.assertIn("'รูปแบบการพักที่ตรวจพบ'", template)

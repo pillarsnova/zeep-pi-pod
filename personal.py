@@ -29,6 +29,8 @@ from sleep_system_policy import (
     SESSION_REPORT_VERSION,
     SLEEP_QUALITY_VERSION,
     ZEEP_SLEEP_BASELINE_VERSION,
+    is_approved_sleep_result_version,
+    rest_mode_group,
 )
 
 # เกณฑ์กลาง (population default) — ใช้จนกว่าจะเรียนรู้ครบขั้นต่ำ
@@ -129,9 +131,17 @@ class BaselineStore:
         night = final_summary.get("night_summary") or {}
         report = final_summary.get("session_report") or {}
         quality = night.get("sleep_quality") or report.get("quality") or {}
+        mode = report.get("rest_mode") or quality.get("rest_mode") or {}
+        resolved_mode = (
+            mode.get("group") or mode.get("requested") or mode.get("resolved")
+            if isinstance(mode, dict) else mode
+        )
+        approved_versions = is_approved_sleep_result_version(
+            report.get("version"), quality.get("version")
+        )
         if not (
-            report.get("version") == SESSION_REPORT_VERSION
-            and quality.get("version") == SLEEP_QUALITY_VERSION
+            rest_mode_group(resolved_mode) == "sleep"
+            and approved_versions
             and quality.get("available") is True
         ):
             return None
@@ -212,7 +222,6 @@ class BaselineStore:
         metrics["rem_ratio"] = night.get("rem_ratio")
         metrics["wellness_score"] = night.get("wellness_score")
         metrics["detected_sleep_s"] = round(detected_sleep_s, 1)
-        mode = report.get("rest_mode") or quality.get("rest_mode") or {}
         resolved_mode = str(
             mode.get("resolved") or mode.get("requested") or "auto"
         ) if isinstance(mode, dict) else str(mode or "auto")
@@ -254,20 +263,37 @@ class BaselineStore:
         night = final_summary.get("night_summary") or {}
         report = final_summary.get("session_report") or {}
         quality = night.get("sleep_quality") or report.get("quality") or {}
-        if not (
+        mode = (
+            report.get("rest_mode")
+            or quality.get("rest_mode")
+            or final_summary.get("rest_mode")
+            or {}
+        )
+        resolved = (
+            str(mode.get("resolved") or mode.get("requested") or "auto")
+            if isinstance(mode, dict)
+            else str(mode or "auto")
+        )
+        group = rest_mode_group(
+            mode.get("group") if isinstance(mode, dict) and mode.get("group")
+            else resolved
+        )
+        current_versions = (
             report.get("version") == SESSION_REPORT_VERSION
             and quality.get("version") == SLEEP_QUALITY_VERSION
+        )
+        approved_untouched_sleep = (
+            group == "sleep"
+            and is_approved_sleep_result_version(
+                report.get("version"), quality.get("version")
+            )
+        )
+        if not (
+            group is not None
             and quality.get("available") is True
+            and (current_versions or approved_untouched_sleep)
         ):
             return None
-        mode = report.get("rest_mode") or quality.get("rest_mode") or final_summary.get("rest_mode") or {}
-        resolved = str(mode.get("resolved") or mode.get("requested") or "auto") if isinstance(mode, dict) else str(mode or "auto")
-        group = (
-            str(mode.get("group"))
-            if isinstance(mode, dict) and mode.get("group")
-            else "sleep" if resolved in {"sleep", "overnight"}
-            else "nap_recovery"
-        )
         timeline = self.database.read_sessions(
             "SELECT timestamp,temperature,humidity,co2,lux,sound "
             "FROM timeline WHERE session_id=? ORDER BY timestamp", (session_id,))

@@ -6,7 +6,11 @@ import unittest
 from pathlib import Path
 
 from personal import BaselineStore, MIN_DETECTED_SLEEP_SECONDS
-from sleep_system_policy import PERSONAL_BASELINE_LEARNING_START_UTC
+from sleep_system_policy import (
+    PERSONAL_BASELINE_LEARNING_START_UTC,
+    PREVIOUS_SESSION_REPORT_VERSION,
+    PREVIOUS_SLEEP_QUALITY_VERSION,
+)
 
 
 class _DatabaseStub:
@@ -62,6 +66,45 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
             estimated_sleep_s=MIN_DETECTED_SLEEP_SECONDS - 5,
         ))
         self.assertIsNone(store._night_metrics("micro-sleep-session"))
+
+    def test_previous_approved_overnight_still_trains_baseline(self):
+        summary = {
+            "night_summary": {
+                "estimated_sleep_s": MIN_DETECTED_SLEEP_SECONDS,
+                "sleep_quality": {
+                    "available": True,
+                    "quality_type": "sleep",
+                    "sleep_detected": True,
+                    "estimated_sleep_s": MIN_DETECTED_SLEEP_SECONDS,
+                    "version": PREVIOUS_SLEEP_QUALITY_VERSION,
+                },
+            },
+            "session_report": {
+                "version": PREVIOUS_SESSION_REPORT_VERSION,
+                "rest_mode": {"group": "sleep", "resolved": "overnight"},
+            },
+        }
+        timeline = [{
+            "timestamp": f"2026-09-01T00:{index:02d}:00+00:00",
+            "temperature": 24.0,
+            "humidity": 50.0,
+            "co2": 700.0,
+            "lux": 0.0,
+            "sound": 38.0,
+            "heart_rate": 62.0 + (index % 2),
+            "respiration_rate": 14.0,
+            "bed_status": "On bed",
+        } for index in range(30)]
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        store = BaselineStore(
+            _DatabaseStub(summary, timeline), Path(temporary.name)
+        )
+
+        metrics = store._night_metrics("previous-overnight")
+
+        self.assertIsNotNone(metrics)
+        self.assertEqual(metrics["mode_group"], "sleep")
 
     def test_behaviour_context_is_partitioned_by_mode_and_never_selects_stage(self):
         store = self._store(_summary(

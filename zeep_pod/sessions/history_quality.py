@@ -10,6 +10,7 @@ from sleep_system_policy import (
     NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
     SESSION_REPORT_VERSION,
     SLEEP_QUALITY_VERSION,
+    is_approved_sleep_result_version,
     rest_mode_group,
 )
 
@@ -44,17 +45,32 @@ def released_historical_quality(
 ) -> dict[str, Any]:
     """Return current quality or a narrowly preserved legacy Recovery score."""
     report = final_summary.get("session_report") or {}
-    if (
+    current_pair = (
         isinstance(quality, dict)
         and quality.get("version") == SLEEP_QUALITY_VERSION
         and isinstance(report, dict)
         and report.get("version") == SESSION_REPORT_VERSION
-    ):
+    )
+    if current_pair:
         return quality
     requested = _stored_mode(final_summary, report)
+    mode_group = rest_mode_group(requested)
+    approved_untouched_sleep = (
+        mode_group == "sleep"
+        and isinstance(quality, dict)
+        and isinstance(report, dict)
+        and is_approved_sleep_result_version(
+            report.get("version"), quality.get("version")
+        )
+    )
+    if approved_untouched_sleep:
+        return {
+            **quality,
+            "compatible_untouched_sleep_result": True,
+        }
     duration = _recording_seconds(report)
     preserve_legacy_recovery = (
-        rest_mode_group(requested) == "nap_recovery"
+        mode_group == "nap_recovery"
         and final_summary.get("target_duration_s") is None
         and duration is not None
         and NAP_RECOVERY_MINIMUM_SCORE_SECONDS
@@ -80,22 +96,34 @@ def released_historical_quality(
                 "แสดงคะแนนเดิมโดยไม่เขียนทับ"
             ),
         }
-    sleep_mode = requested in {"sleep", "overnight"}
+    sleep_mode = mode_group == "sleep"
+    unresolved_mode = mode_group is None
     return {
         "available": False,
         "score": None,
         "score_releasable": False,
-        "score_title": "Sleep Score" if sleep_mode else "Recovery Score",
+        "score_title": (
+            "Sleep Score" if sleep_mode
+            else "Recovery Score" if not unresolved_mode
+            else "รูปแบบการพักยังไม่ยืนยัน"
+        ),
         "score_scope": (
             "ค่าประเมินการนอนจาก Sensor"
-            if sleep_mode
-            else "คะแนนสนับสนุนการฟื้นตัวจาก Sensor"
+            if sleep_mode else
+            "คะแนนสนับสนุนการฟื้นตัวจาก Sensor"
+            if not unresolved_mode else
+            "ต้องยืนยันว่าเป็น Overnight หรือ Nap & Refresh ก่อน"
         ),
         "level": "รอตรวจคุณภาพข้อมูล",
         "level_key": "unavailable",
-        "reason": "ผลเดิมยังไม่ผ่าน Gate ของรุ่นปัจจุบัน จึงไม่เผยแพร่คะแนน",
+        "reason": (
+            "Session เดิมไม่ได้บันทึกรูปแบบการพัก จึงไม่อนุมานจากเวลา"
+            if unresolved_mode else
+            "ผลเดิมยังไม่ผ่าน Gate ของรุ่นปัจจุบัน จึงไม่เผยแพร่คะแนน"
+        ),
         "version": SLEEP_QUALITY_VERSION,
         "validation_status": "pending_current_pipeline_review",
         "clinical_validated": False,
         "legacy_result_hidden": True,
+        "rest_mode_unresolved": unresolved_mode,
     }

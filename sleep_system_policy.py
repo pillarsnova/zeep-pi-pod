@@ -24,6 +24,16 @@ SLEEP_HISTORY_BACKFILL_VERSION = (
 )
 SESSION_REPORT_VERSION = "zeep-session-report-v10.4-recovery-target-guardrails"
 SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.4-recovery-target-guardrails"
+# The Recovery v2 rollout did not change the Overnight formula.  Keep the
+# immediately preceding, explicitly approved Overnight pair readable and
+# eligible for personal-baseline learning so a targeted Recovery migration
+# cannot invalidate untouched sleep history.
+PREVIOUS_SESSION_REPORT_VERSION = "zeep-session-report-v10.3-nap-goal-duration"
+PREVIOUS_SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.3-nap-goal-duration"
+APPROVED_SLEEP_RESULT_VERSION_PAIRS = frozenset({
+    (SESSION_REPORT_VERSION, SLEEP_QUALITY_VERSION),
+    (PREVIOUS_SESSION_REPORT_VERSION, PREVIOUS_SLEEP_QUALITY_VERSION),
+})
 RECOVERY_SCORE_FORMULA_VERSION = (
     "zeep-recovery-score-v2.0-targeted-25-35-30-10"
 )
@@ -446,6 +456,17 @@ def rest_mode_group(value: Any) -> str | None:
     }:
         return "nap_recovery"
     return None
+
+
+def is_approved_sleep_result_version(
+    report_version: Any,
+    quality_version: Any,
+) -> bool:
+    """Accept only reviewed version pairs for an explicit Overnight result."""
+    return (
+        str(report_version or ""),
+        str(quality_version or ""),
+    ) in APPROVED_SLEEP_RESULT_VERSION_PAIRS
 
 
 def resolve_rest_target(

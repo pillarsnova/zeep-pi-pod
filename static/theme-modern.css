@@ -3852,6 +3852,14 @@ body[data-view="sessions"] .hist-row > .hist-quality {
   color: #68e3b3;
 }
 
+.hist-mode-label.mode-unknown b {
+  color: #a5b5bd;
+}
+
+.hist-row.mode-unknown {
+  border-color: rgba(142, 161, 170, .18);
+}
+
 .session-report-overview.mode-recovery {
   border-color: rgba(86, 220, 168, .25);
   background:

@@ -178,7 +178,7 @@ def _resolve_rest_mode(
         reason = "ไม่พบรูปแบบการพักที่เลือกไว้ จึงไม่อนุมานจากระยะเวลาหรือ Sleep State"
     if requested_mode in REST_SESSION_GROUPS:
         group = requested_mode
-    elif requested_mode == "auto":
+    elif requested_mode in {"auto", "unknown_legacy"}:
         group = None
     else:
         group = _SLEEP_MODE_GROUPS.get(resolved, "nap_recovery")
@@ -443,10 +443,25 @@ def _recovery_environment_summary(
             for value in values
         ]
         aggregate = summarize_environment_session_levels(levels)
+        safety_threshold = _number(criterion.get("critical_at_or_above"))
+        safety_excursion_count = sum(
+            safety_threshold is not None and value >= safety_threshold
+            for value in values
+        )
         metrics.append({
             "key": criterion_key,
             "sample_key": sample_key,
             "average": round(average, 1),
+            "required_for_overall": bool(
+                criterion.get("required_for_overall", True)
+            ),
+            "safety_threshold": safety_threshold,
+            "safety_excursion_observed": bool(safety_excursion_count),
+            "safety_excursion_sample_count": safety_excursion_count,
+            "safety_excursion_sample_pct": _percent(
+                safety_excursion_count,
+                len(values),
+            ),
             **aggregate,
         })
     expected = len(ENVIRONMENT_CONTEXT_CRITERIA)
@@ -456,7 +471,26 @@ def _recovery_environment_summary(
         else None
     )
     minimum = min(metrics, key=lambda metric: metric["rank"], default=None)
-    missing = expected - len(metrics)
+    required_keys = {
+        key
+        for key, criterion in ENVIRONMENT_CONTEXT_CRITERIA.items()
+        if criterion.get("required_for_overall", True)
+    }
+    available_keys = {metric["key"] for metric in metrics}
+    missing_required = required_keys - available_keys
+    missing_optional = (
+        set(ENVIRONMENT_CONTEXT_CRITERIA) - required_keys - available_keys
+    )
+    safety_excursions = [
+        {
+            "key": metric["key"],
+            "threshold": metric["safety_threshold"],
+            "sample_count": metric["safety_excursion_sample_count"],
+            "sample_pct": metric["safety_excursion_sample_pct"],
+        }
+        for metric in metrics
+        if metric["safety_excursion_observed"]
+    ]
     return {
         "available": bool(metrics),
         "averages": averages,
@@ -478,12 +512,22 @@ def _recovery_environment_summary(
         ),
         "meets_expected": bool(
             minimum
-            and not missing
+            and not missing_required
             and minimum["rank"]
             >= ENVIRONMENT_LEVELS[ENVIRONMENT_ACCEPTABLE_MIN_LEVEL]["rank"]
         ),
         "context_only": True,
-        "assessment_quality": "full" if not missing else "partial",
+        "assessment_quality": (
+            "incomplete_required" if missing_required
+            else "degraded_optional" if missing_optional
+            else "complete"
+        ),
+        "blocking_unavailable_count": len(missing_required),
+        "optional_unavailable_count": len(missing_optional),
+        "safety_excursion_observed": bool(safety_excursions),
+        "safety_review_required": bool(safety_excursions),
+        "safety_excursions": safety_excursions,
+        "safety_excursions_change_score": False,
     }
 
 
@@ -1422,7 +1466,9 @@ def _post_session_guidance(
     environment_action = next(
         (
             item.get("action") for item in findings
-            if item.get("decision") in {"required", "optimise", "sensor_check"}
+            if item.get("decision") in {
+                "required", "optimise", "sensor_check", "safety_review",
+            }
             and item.get("action")
         ),
         None,
@@ -1471,6 +1517,15 @@ def _environment_metric(
             "status_key": "unavailable",
             "status": "ไม่มีข้อมูล",
             "decision": "sensor_check",
+            "required_for_overall": bool(
+                criterion.get("required_for_overall", True)
+            ),
+            "safety_threshold": _number(
+                criterion.get("critical_at_or_above")
+            ),
+            "safety_excursion_observed": False,
+            "safety_excursion_sample_count": 0,
+            "safety_excursion_sample_pct": 0,
         }
     levels = [
         environment_level_for_value(criterion_key, value, rest_mode)
@@ -1493,6 +1548,11 @@ def _environment_metric(
     action = criterion.get("action_high") if direction == "high" else criterion.get("action_low")
     policy = environment_policy_snapshot(rest_mode)
     policy_criterion = next(item for item in policy["criteria"] if item["key"] == criterion_key)
+    safety_threshold = _number(criterion.get("critical_at_or_above"))
+    safety_excursion_count = sum(
+        safety_threshold is not None and value >= safety_threshold
+        for value in values
+    )
     return {
         "key": criterion_key,
         "sample_key": key,
@@ -1504,6 +1564,9 @@ def _environment_metric(
         "expected_floor": policy_criterion["acceptable_floor"],
         "bands": policy_criterion["bands_text"],
         "available": True,
+        "required_for_overall": bool(
+            criterion.get("required_for_overall", True)
+        ),
         "coverage_pct": _percent(len(values), total),
         "average": round(average, 1),
         "minimum": round(min(values), 1),
@@ -1527,6 +1590,13 @@ def _environment_metric(
         "transient_critical_observed": aggregate[
             "transient_critical_observed"
         ],
+        "safety_threshold": safety_threshold,
+        "safety_excursion_observed": bool(safety_excursion_count),
+        "safety_excursion_sample_count": safety_excursion_count,
+        "safety_excursion_sample_pct": _percent(
+            safety_excursion_count,
+            len(values),
+        ),
         "action": (
             action if level["decision"] in {"required", "optimise"}
             else "รักษาการตั้งค่าปัจจุบัน"
@@ -1642,13 +1712,17 @@ def build_session_report(
     findings = []
     for metric in environment:
         if not metric.get("available"):
+            blocks_overall = metric["required_for_overall"]
             legacy_unstored = bool(
                 timeline_schema_version < 4
                 and metric["key"] in {"pm25", "voc"}
             )
             findings.append({
                 "key": metric["key"], "severity": "unavailable",
-                "level_key": "unavailable", "decision": "sensor_check",
+                "level_key": "unavailable",
+                "decision": (
+                    "sensor_check" if blocks_overall else "advisory"
+                ),
                 "title": (
                     f"{metric['label']} · Timeline รุ่นเดิมไม่ได้บันทึก"
                     if legacy_unstored else f"{metric['label']} · ไม่มีข้อมูล"
@@ -1666,6 +1740,7 @@ def build_session_report(
                 ),
                 "context_only": True,
                 "legacy_timeline_not_persisted": legacy_unstored,
+                "blocks_overall": blocks_overall,
             })
             continue
         unit = f" {metric['unit']}" if metric.get("unit") else ""
@@ -1706,7 +1781,36 @@ def build_session_report(
             "transient_critical_observed": metric[
                 "transient_critical_observed"
             ],
+            "blocks_overall": False,
         })
+        if metric["safety_excursion_observed"]:
+            threshold = metric["safety_threshold"]
+            findings.append({
+                "key": f"{metric['key']}_safety_excursion",
+                "metric_key": metric["key"],
+                "severity": "critical",
+                "level_key": "critical",
+                "decision": "safety_review",
+                "title": f"{metric['label']} · พบ Safety excursion",
+                "detail": (
+                    f"พบ {metric['safety_excursion_sample_count']} รอบข้อมูล "
+                    f"({metric['safety_excursion_sample_pct']}%) แตะหรือเกิน "
+                    f"{threshold:g}{unit} · สูงสุด "
+                    f"{metric['maximum']:g}{unit} · ระดับรวมทั้ง Session "
+                    f"ยังคำนวณด้วยเกณฑ์ sustained"
+                ),
+                "action": (
+                    "ตรวจ Timeline การเติม/ระบายอากาศและบันทึกการตอบสนอง "
+                    "ของระบบ Safety ก่อนใช้งานครั้งถัดไป"
+                ),
+                "context_only": False,
+                "blocks_overall": False,
+                "changes_sustained_assessment": False,
+                "changes_score": False,
+                "threshold": threshold,
+                "sample_count": metric["safety_excursion_sample_count"],
+                "sample_pct": metric["safety_excursion_sample_pct"],
+            })
     if corroborated_sound_events:
         findings.insert(0, {
             "key": "acoustic_corroborated",
@@ -1722,11 +1826,49 @@ def build_session_report(
         "critical": 0, "poor": 1, "unavailable": 2, "fair": 3,
         "good": 4, "excellent": 5,
     }.get(item["severity"], 6))
-    available_environment = [metric for metric in environment if metric.get("available")]
-    unavailable_environment = [metric for metric in environment if not metric.get("available")]
-    minimum_metric = min(available_environment, key=lambda item: item["rank"], default=None)
-    required_metrics = [metric for metric in available_environment if metric["decision"] == "required"]
-    optimisation_metrics = [metric for metric in available_environment if metric["decision"] == "optimise"]
+    available_environment = [
+        metric for metric in environment if metric.get("available")
+    ]
+    unavailable_environment = [
+        metric for metric in environment if not metric.get("available")
+    ]
+    blocking_unavailable = [
+        metric
+        for metric in unavailable_environment
+        if metric["required_for_overall"]
+    ]
+    optional_unavailable = [
+        metric
+        for metric in unavailable_environment
+        if not metric["required_for_overall"]
+    ]
+    minimum_metric = min(
+        available_environment,
+        key=lambda item: item["rank"],
+        default=None,
+    )
+    required_metrics = [
+        metric
+        for metric in available_environment
+        if metric["decision"] == "required"
+    ]
+    optimisation_metrics = [
+        metric
+        for metric in available_environment
+        if metric["decision"] == "optimise"
+    ]
+    safety_excursions = [
+        {
+            "key": metric["key"],
+            "label": metric["label"],
+            "threshold": metric["safety_threshold"],
+            "maximum": metric["maximum"],
+            "sample_count": metric["safety_excursion_sample_count"],
+            "sample_pct": metric["safety_excursion_sample_pct"],
+        }
+        for metric in available_environment
+        if metric["safety_excursion_observed"]
+    ]
     environment_assessment = {
         "version": ENVIRONMENT_CONTEXT_POLICY_VERSION,
         "aggregation_version": ENVIRONMENT_SESSION_AGGREGATION_VERSION,
@@ -1738,13 +1880,38 @@ def build_session_report(
         "overall_level": minimum_metric["status_key"] if minimum_metric else "unknown",
         "overall_label": minimum_metric["status"] if minimum_metric else "รอข้อมูล",
         "meets_expected": bool(
-            available_environment and not unavailable_environment and not required_metrics
+            available_environment
+            and not blocking_unavailable
+            and not required_metrics
         ),
-        "required_count": len(required_metrics) + len(unavailable_environment),
+        "required_count": len(required_metrics) + len(blocking_unavailable),
+        "advisory_count": len(optional_unavailable),
         "optimisation_count": len(optimisation_metrics),
-        "maintain_count": len(available_environment) - len(required_metrics) - len(optimisation_metrics),
+        "maintain_count": (
+            len(available_environment)
+            - len(required_metrics)
+            - len(optimisation_metrics)
+        ),
         "available_count": len(available_environment),
         "expected_count": len(environment),
+        "required_expected_count": sum(
+            metric["required_for_overall"] for metric in environment
+        ),
+        "blocking_unavailable_count": len(blocking_unavailable),
+        "optional_unavailable_count": len(optional_unavailable),
+        "assessment_quality": (
+            "incomplete_required" if blocking_unavailable
+            else "degraded_optional" if optional_unavailable
+            else "complete"
+        ),
+        "safety_excursion_observed": bool(safety_excursions),
+        "safety_review_required": bool(safety_excursions),
+        "safety_excursion_count": sum(
+            item["sample_count"] for item in safety_excursions
+        ),
+        "safety_excursions": safety_excursions,
+        "safety_excursions_change_sustained_assessment": False,
+        "safety_excursions_change_score": False,
         "context_only": True,
         "direct_stage_influence": False,
         "safety_thresholds_unchanged": True,

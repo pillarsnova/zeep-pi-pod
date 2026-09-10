@@ -5,15 +5,40 @@ import sqlite3
 import tempfile
 import unittest
 
+from pydantic import ValidationError
+
+from api_models import AuthLoginCommand
 from rescore_session_reports import rescore
+from sleep_session_report import build_sleep_quality
 from sleep_system_policy import (
+    PREVIOUS_SESSION_REPORT_VERSION,
+    PREVIOUS_SLEEP_QUALITY_VERSION,
     RECOVERY_SCORE_COMPONENT_MAX_POINTS,
     resolve_rest_target,
     summarize_environment_session_levels,
 )
+from zeep_pod.sessions.history_quality import released_historical_quality
 
 
 class RecoveryPolicyUnitTests(unittest.TestCase):
+    def test_two_mode_docs_match_recovery_v2_contract(self):
+        root = Path(__file__).resolve().parent
+        evidence = (root / "research/evidence-library/TWO_MODE_SCORE_EVIDENCE.md").read_text(
+            encoding="utf-8"
+        )
+        protocol = (root / "docs/zeep-pilot-two-mode-protocol.md").read_text(
+            encoding="utf-8"
+        )
+        for document in (evidence, protocol):
+            self.assertIn("30 หรือ 90 นาที", document)
+            self.assertIn("เวลาพักตามเป้าหมาย 25", document)
+            self.assertIn("การตอบสนอง HR/RR 35", document)
+            self.assertIn("ความต่อเนื่อง", document)
+            self.assertIn("30", document)
+            self.assertIn("สิ่งแวดล้อม", document)
+            self.assertIn("10", document)
+            self.assertIn("Coverage", document)
+
     def test_target_resolver_accepts_only_persisted_30_or_90_minutes(self):
         thirty = resolve_rest_target("nap_recovery", 30 * 60)
         ninety = resolve_rest_target("nap_recovery", 90 * 60)
@@ -32,6 +57,77 @@ class RecoveryPolicyUnitTests(unittest.TestCase):
 
         self.assertFalse(target["available"])
         self.assertEqual(target["source"], "unresolved_mode")
+
+    def test_public_login_accepts_only_the_two_pilot_modes(self):
+        with self.assertRaises(ValidationError):
+            AuthLoginCommand(
+                identifier="tester",
+                password="secret",
+                rest_mode="overnight",
+            )
+
+    def test_explicit_unknown_legacy_never_becomes_recovery(self):
+        quality = build_sleep_quality(
+            30 * 60,
+            {},
+            {"wake": 360},
+            rest_mode="unknown_legacy",
+            sensor_samples=[{
+                "hr": 65.0,
+                "rr": 14.0,
+                "bed": "On bed",
+            }] * 360,
+        )
+
+        self.assertFalse(quality["available"])
+        self.assertIsNone(quality["rest_mode"]["group"])
+        self.assertEqual(
+            quality["validation_status"], "legacy_mode_unresolved"
+        )
+
+    def test_untouched_previous_overnight_score_remains_visible(self):
+        quality = {
+            "available": True,
+            "score": 88,
+            "quality_type": "sleep",
+            "version": PREVIOUS_SLEEP_QUALITY_VERSION,
+        }
+        final_summary = {
+            "rest_mode": "sleep",
+            "session_report": {
+                "version": PREVIOUS_SESSION_REPORT_VERSION,
+                "rest_mode": {"group": "sleep"},
+                "sleep": {"recording_s": 7 * 3600},
+            },
+        }
+
+        released = released_historical_quality(final_summary, quality)
+
+        self.assertTrue(released["available"])
+        self.assertEqual(released["score"], 88)
+        self.assertTrue(released["compatible_untouched_sleep_result"])
+
+    def test_unresolved_auto_history_is_not_labelled_recovery(self):
+        quality = {
+            "available": True,
+            "score": 71,
+            "version": PREVIOUS_SLEEP_QUALITY_VERSION,
+        }
+        final_summary = {
+            "rest_mode": "auto",
+            "session_report": {
+                "version": PREVIOUS_SESSION_REPORT_VERSION,
+                "rest_mode": {"requested": "auto", "group": None},
+                "sleep": {"recording_s": 60 * 60},
+            },
+        }
+
+        released = released_historical_quality(final_summary, quality)
+
+        self.assertFalse(released["available"])
+        self.assertIsNone(released["score"])
+        self.assertTrue(released["rest_mode_unresolved"])
+        self.assertNotEqual(released["score_title"], "Recovery Score")
 
     def test_recovery_v2_weights_total_one_hundred_without_coverage(self):
         self.assertEqual(RECOVERY_SCORE_COMPONENT_MAX_POINTS, {
@@ -52,6 +148,30 @@ class RecoveryPolicyUnitTests(unittest.TestCase):
         self.assertEqual(summary["peak_status_key"], "critical")
         self.assertEqual(summary["critical_sample_pct"], 0.417)
         self.assertTrue(summary["transient_critical_observed"])
+
+    def test_missing_optional_sound_reduces_coverage_not_environment_result(self):
+        samples = [{
+            "bed": "On bed", "hr": 62.0, "rr": 14.0,
+            "temp": 24.0, "hum": 50.0, "co2": 750.0,
+            "lux": 1.0, "pm2_5": 8.0, "voc": 100.0,
+        } for _ in range(240)]
+        quality = build_sleep_quality(
+            20 * 60,
+            {},
+            {"wake": 240},
+            rest_mode="nap_recovery",
+            sensor_samples=samples,
+            target_duration_s=30 * 60,
+        )
+
+        environment = quality["environment_support"]
+        self.assertTrue(environment["meets_expected"])
+        self.assertEqual(environment["assessment_quality"], "degraded_optional")
+        self.assertEqual(environment["blocking_unavailable_count"], 0)
+        self.assertEqual(environment["optional_unavailable_count"], 1)
+        self.assertEqual(environment["available_factors"], 6)
+        self.assertEqual(environment["expected_factors"], 7)
+        self.assertEqual(environment["coverage_pct"], 85.7)
 
 
 class HistoricalRecoveryGuardrailTests(unittest.TestCase):
@@ -313,6 +433,19 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
                 "SELECT COUNT(*) FROM events "
                 "WHERE type='session_report_refreshed'"
             ).fetchone()[0], 1)
+            audit = json.loads(connection.execute(
+                "SELECT value FROM events "
+                "WHERE type='session_report_refreshed'"
+            ).fetchone()[0])
+            self.assertEqual(
+                audit["report_refresh_scope"],
+                "full_derived_session_report",
+            )
+            self.assertIn("previous_report", audit)
+            self.assertNotEqual(
+                audit["previous_report_sha256"],
+                audit["new_report_sha256"],
+            )
             connection.close()
 
     def test_report_only_refuses_all_sessions(self):

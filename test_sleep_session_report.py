@@ -80,9 +80,39 @@ class SleepSessionReportTests(unittest.TestCase):
             5, [{"bed": "On bed", "hr": 60, "rr": 13, "sleep": "n1"}],
             {"estimated_sleep_s": 5}, {"n1": 1}, self._quality())
         self.assertEqual(report["findings"][0]["severity"], "unavailable")
-        self.assertEqual(report["environment_assessment"]["required_count"], 7)
+        self.assertEqual(report["environment_assessment"]["required_count"], 6)
+        self.assertEqual(report["environment_assessment"]["advisory_count"], 1)
         self.assertFalse(report["environment_assessment"]["meets_expected"])
         self.assertEqual(report["data_quality"]["coverage"]["environment_pct"], 0)
+
+    def test_missing_optional_sound_is_advisory_not_environment_failure(self):
+        sample = {
+            "bed": "On bed", "hr": 60, "rr": 13, "sleep": "n2",
+            "temp": 24.0, "hum": 50.0, "co2": 700.0, "lux": 1.0,
+            "pm2_5": 8.0, "voc": 100.0,
+        }
+        report = build_session_report(
+            5,
+            [sample],
+            {"estimated_sleep_s": 5},
+            {"n2": 1},
+            self._quality(),
+            rest_mode="sleep",
+        )
+
+        sound = next(
+            item for item in report["findings"] if item["key"] == "sound"
+        )
+        assessment = report["environment_assessment"]
+        self.assertEqual(sound["severity"], "unavailable")
+        self.assertEqual(sound["decision"], "advisory")
+        self.assertFalse(sound["blocks_overall"])
+        self.assertTrue(assessment["meets_expected"])
+        self.assertEqual(assessment["overall_level"], "excellent")
+        self.assertEqual(assessment["required_count"], 0)
+        self.assertEqual(assessment["advisory_count"], 1)
+        self.assertEqual(assessment["optional_unavailable_count"], 1)
+        self.assertEqual(assessment["assessment_quality"], "degraded_optional")
 
     def test_legacy_timeline_explains_unstored_pm25_and_voc(self):
         report = build_session_report(
@@ -597,6 +627,67 @@ class SleepSessionReportTests(unittest.TestCase):
         self.assertEqual(sound_finding["severity"], "excellent")
         self.assertTrue(sound_finding["transient_critical_observed"])
         self.assertEqual(score_metric["status_key"], "excellent")
+
+    def test_transient_co2_safety_excursion_is_explicit_and_not_rescored(self):
+        base = {
+            "bed": "On bed", "hr": 62.0, "rr": 14.0,
+            "temp": 24.0, "hum": 50.0, "co2": 750.0,
+            "lux": 1.0, "dba": 38.0, "pm2_5": 8.0,
+            "voc": 100.0, "sleep": "wake",
+        }
+        normal_samples = [dict(base) for _ in range(240)]
+        excursion_samples = [dict(base) for _ in range(239)]
+        excursion_samples.append({**base, "co2": 1300.0})
+        normal_quality = build_sleep_quality(
+            20 * 60,
+            {},
+            {"wake": 240},
+            rest_mode="nap_recovery",
+            sensor_samples=normal_samples,
+            target_duration_s=30 * 60,
+        )
+        excursion_quality = build_sleep_quality(
+            20 * 60,
+            {},
+            {"wake": 240},
+            rest_mode="nap_recovery",
+            sensor_samples=excursion_samples,
+            target_duration_s=30 * 60,
+        )
+        report = build_session_report(
+            20 * 60,
+            excursion_samples,
+            {},
+            {"wake": 240},
+            excursion_quality,
+            rest_mode="nap_recovery",
+            target_duration_s=30 * 60,
+        )
+
+        co2_metric = next(
+            item for item in report["environment"] if item["key"] == "co2"
+        )
+        safety_finding = next(
+            item
+            for item in report["findings"]
+            if item["key"] == "co2_safety_excursion"
+        )
+        assessment = report["environment_assessment"]
+        self.assertEqual(normal_quality["score"], excursion_quality["score"])
+        self.assertEqual(co2_metric["status_key"], "excellent")
+        self.assertTrue(co2_metric["safety_excursion_observed"])
+        self.assertEqual(co2_metric["safety_excursion_sample_count"], 1)
+        self.assertEqual(safety_finding["decision"], "safety_review")
+        self.assertEqual(safety_finding["threshold"], 1300.0)
+        self.assertIn("ระบบ Safety", safety_finding["action"])
+        self.assertTrue(assessment["meets_expected"])
+        self.assertEqual(assessment["overall_level"], "excellent")
+        self.assertEqual(assessment["required_count"], 0)
+        self.assertTrue(assessment["safety_excursion_observed"])
+        self.assertTrue(assessment["safety_review_required"])
+        self.assertEqual(assessment["safety_excursion_count"], 1)
+        self.assertFalse(assessment["safety_excursions_change_score"])
+        self.assertIn("Timeline", report["post_session_guidance"]["next_session"])
 
     def test_two_mode_protocol_windows_are_reported(self):
         samples = [{

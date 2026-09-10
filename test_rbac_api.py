@@ -486,7 +486,7 @@ class RbacApiTests(unittest.TestCase):
                 "/api/auth/login",
                 json={
                     "identifier": "restart-recording", "password": "valid",
-                    "rest_mode": "overnight",
+                    "rest_mode": "sleep",
                 },
             )
             self.assertEqual(login.status_code, 200, login.text)
@@ -526,7 +526,7 @@ class RbacApiTests(unittest.TestCase):
             with pod_app.session_lock:
                 restored = pod_app._active_session
             self.assertEqual(restored["phase"], "recording")
-            self.assertEqual(restored["record"]["rest_mode"], "overnight")
+            self.assertEqual(restored["record"]["rest_mode"], "sleep")
             self.assertTrue(pod_app.database.flush(5))
             resume_events = pod_app.database.read_sessions(
                 "SELECT value FROM events WHERE session_id=? "

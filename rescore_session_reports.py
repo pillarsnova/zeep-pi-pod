@@ -341,7 +341,9 @@ def _rebuild(
             stage_sequence=sequence,
             sensor_samples=samples,
             sample_interval_s=stage_sample_seconds,
-            target_duration_s=target.get("seconds"),
+            # Preserve provenance: an Overnight policy default is not a
+            # user-persisted target merely because it resolves to 7 hours.
+            target_duration_s=target_seconds,
         )
         timing = (
             (quality.get("rest_mode") or {}).get("protocol_status") or {}
@@ -365,7 +367,7 @@ def _rebuild(
         sample_interval_s=stage_sample_seconds, estimator_version=estimator_version,
         completed=True,
         timeline_schema_version=int(old_final.get("timeline_schema_version") or 3),
-        target_duration_s=target.get("seconds"),
+        target_duration_s=target_seconds,
     )
     terminal_occupancy = terminal_occupancy_timeline(
         timeline,
@@ -376,6 +378,8 @@ def _rebuild(
     if report_only:
         quality_hash = _canonical_sha256(previous_quality)
         previous_report = old_final.get("session_report") or {}
+        previous_report_hash = _canonical_sha256(previous_report)
+        new_report_hash = _canonical_sha256(report)
         old_final["session_report"] = report
         old_final["session_report_refreshed_at_utc"] = now
         if _canonical_sha256(
@@ -388,6 +392,10 @@ def _rebuild(
             "report_only": True,
             "previous_report_version": previous_report.get("version"),
             "new_report_version": report.get("version"),
+            "previous_report_sha256": previous_report_hash,
+            "new_report_sha256": new_report_hash,
+            "previous_report": previous_report,
+            "report_refresh_scope": "full_derived_session_report",
             "quality_sha256_before": quality_hash,
             "quality_sha256_after": quality_hash,
             "score_preserved": quality.get("score"),
@@ -581,8 +589,8 @@ def main() -> None:
         "--report-only",
         action="store_true",
         help=(
-            "Refresh Session report/environment for targeted IDs while "
-            "preserving the persisted quality and score"
+            "Rebuild the full derived Session report for targeted IDs while "
+            "preserving the persisted quality, score, Sleep State and Raw data"
         ),
     )
     parser.add_argument("--apply", action="store_true")

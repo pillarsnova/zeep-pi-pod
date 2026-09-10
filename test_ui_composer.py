@@ -108,6 +108,8 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("'ไม่บังคับให้หลับ · Sleep State เป็นข้อมูลประกอบ'", template)
         self.assertIn("NREM เป็นผลรวม N1 + N2 + N3", template)
         self.assertIn("function recoveryProtocolBadge(report)", template)
+        self.assertIn("status==='target_unknown'", template)
+        self.assertIn("`เป้าหมาย ${Math.round(targetMinutes)} นาที`", template)
         self.assertIn("'Legacy target ไม่ถูกบันทึก'", template)
         self.assertIn("'ตรวจ Mode/ระยะเวลา'", template)
         self.assertNotIn("stageCoverage>=80", template)

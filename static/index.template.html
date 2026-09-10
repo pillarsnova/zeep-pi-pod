@@ -6201,11 +6201,28 @@ function recoveryProtocolBadge(report){
   const quality=report.quality||{},sleep=report.sleep||{};
   const minutes=(Number(sleep.recording_s)||0)/60;
   const status=quality.rest_mode?.protocol_status?.status;
-  if(minutes>90)return {tone:'review',label:'ตรวจ Mode/ระยะเวลา'};
-  if(minutes>45)return {tone:'legacy',label:'Legacy target ไม่ถูกบันทึก'};
   if(minutes<10)return {tone:'review',label:'สั้นกว่า 10 นาที'};
+  if(status==='implausible_outlier'||status==='out_of_protocol'){
+    return {tone:'review',label:'ตรวจ Mode/ระยะเวลา'};
+  }
+  const target=quality.duration_target||quality.rest_mode?.protocol_status?.target||{};
+  const targetUnknown=quality.legacy_score_preserved===true
+    ||quality.target_status==='TARGET_UNKNOWN'
+    ||status==='target_unknown'
+    ||target.source==='legacy_missing';
+  if(targetUnknown){
+    return {tone:'legacy',label:minutes>45?'Legacy target ไม่ถูกบันทึก':'Target เดิมไม่ถูกบันทึก'};
+  }
+  const targetMinutes=Number(target.target_minutes??target.minutes);
+  if(Number.isFinite(targetMinutes)){
+    return {
+      tone:status==='recommended'?'good':'',
+      label:`เป้าหมาย ${Math.round(targetMinutes)} นาที`,
+    };
+  }
+  if(minutes>120)return {tone:'review',label:'ตรวจ Mode/ระยะเวลา'};
   if(status==='recommended')return {tone:'good',label:'เป้าหมาย 25–35 นาที'};
-  return {tone:'',label:'เทียบเป้าหมาย 30 นาที'};
+  return {tone:'legacy',label:'Target ยังไม่ยืนยัน'};
 }
 
 function renderSessionOverview(report){

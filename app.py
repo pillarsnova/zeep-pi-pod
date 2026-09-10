@@ -131,6 +131,9 @@ from zeep_pod.sessions.history_service import (
     local_history_day,
     resolve_history_window,
 )
+from zeep_pod.sessions.history_quality import (
+    released_historical_quality as _released_historical_quality,
+)
 from zeep_pod.sessions.report_share import ReportShareRegistry, create_report_share_router
 from maintenance_registry import maintenance_contract_snapshot
 from migration import migrate_jsonl
@@ -223,7 +226,6 @@ from sleep_system_policy import (
     GENDER_BASELINE_ADJUSTMENTS,
     PERSONAL_BASELINE_LEARNING_START_UTC,
     SESSION_REPORT_VERSION,
-    SLEEP_QUALITY_VERSION,
     SLEEP_ALLOWED_TRANSITIONS,
     SLEEP_ESTIMATOR_VERSION,
     SLEEP_EVIDENCE_VERSION,
@@ -278,6 +280,7 @@ from sleep_system_policy import (
     age_group as _age_group,
     assess_environment_values,
     gender_adjusted_baseline as _gender_adjusted_baseline,
+    resolve_rest_target,
     sleep_policy_snapshot,
 )
 
@@ -526,6 +529,7 @@ SESSION_SAMPLE_SECONDS = float(os.getenv("SESSION_SAMPLE_SECONDS", "10"))
 SESSION_TIMELINE_SCHEMA_VERSION = 4
 if SESSION_SAMPLE_SECONDS <= 0:
     raise RuntimeError("Session sample cadence must be positive")
+_sleep_quality_summary = partial(build_sleep_quality, sample_interval_s=SESSION_SAMPLE_SECONDS)
 # Keep at least the previous 16 h 40 m capacity. At the new 10-second cadence,
 # 12,000 rows cover 33 h 20 m and still allow a legacy 5-second active Session
 # to resume without truncation during this deployment.
@@ -967,6 +971,7 @@ state: Dict[str, Any] = {
         # are never treated as a diagnosis or a direct Sleep Stage input.
         "health_reference": None,
         "rest_mode": None,
+        "target_duration_s": None,
         "session_id": None,
         "started_at": None,
         "samples": 0,
@@ -2544,66 +2549,6 @@ def _series_stats(values):
         "min": round(min(vals), 2),
         "max": round(max(vals), 2),
         "n": len(vals),
-    }
-
-
-def _sleep_quality_summary(
-    duration_s: Any,
-    night_summary: Optional[Dict[str, Any]],
-    sleep_state_counts: Optional[Dict[str, Any]] = None,
-    *,
-    completed: bool = True,
-    rest_mode: Any = "auto",
-    stage_sequence: Optional[List[Any]] = None,
-    sensor_samples: Optional[List[Dict[str, Any]]] = None,
-    sample_interval_s: Optional[float] = None,
-) -> Dict[str, Any]:
-    """Compatibility wrapper around the hardware-independent report module."""
-    return build_sleep_quality(
-        duration_s, night_summary, sleep_state_counts, completed=completed,
-        rest_mode=rest_mode, stage_sequence=stage_sequence,
-        sensor_samples=sensor_samples,
-        sample_interval_s=_sample_interval_seconds(
-            sample_interval_s, SESSION_SAMPLE_SECONDS),
-    )
-
-
-def _released_historical_quality(
-    final_summary: Dict[str, Any],
-    quality: Any,
-) -> Dict[str, Any]:
-    """Expose only a persisted result from the current reviewed pipeline.
-
-    Pre-cutover data is filtered at the query. Post-cutover Sessions that did
-    not pass the current replay/promotion gate remain auditable in SQLite but
-    must not leak a legacy score beside current Sleep/Recovery Scores.
-    """
-    report = final_summary.get("session_report") or {}
-    if (
-        isinstance(quality, dict)
-        and quality.get("version") == SLEEP_QUALITY_VERSION
-        and isinstance(report, dict)
-        and report.get("version") == SESSION_REPORT_VERSION
-    ):
-        return quality
-    requested = normalise_rest_mode(final_summary.get("rest_mode") or "auto")
-    sleep_mode = requested in {"sleep", "overnight"}
-    return {
-        "available": False,
-        "score": None,
-        "score_releasable": False,
-        "score_title": "Sleep Score" if sleep_mode else "Recovery Score",
-        "score_scope": (
-            "ค่าประเมินการนอนจาก Sensor" if sleep_mode
-            else "คะแนนสนับสนุนการฟื้นตัวจาก Sensor"
-        ),
-        "level": "รอตรวจคุณภาพข้อมูล",
-        "level_key": "unavailable",
-        "reason": "ผลเดิมยังไม่ผ่าน Gate ของรุ่นปัจจุบัน จึงไม่เผยแพร่คะแนน",
-        "version": SLEEP_QUALITY_VERSION,
-        "validation_status": "pending_current_pipeline_review",
-        "clinical_validated": False,
-        "legacy_result_hidden": True,
     }
 
 
@@ -5011,6 +4956,8 @@ def _begin_recording(active: Dict[str, Any]):
         "username_key": record["username_key"], "gender": record["gender"],
         "identity_subject": record.get("identity_subject"), "pod_id": record.get("pod_id"),
         "zeep_public_id": record.get("zeep_public_id"),
+        "rest_mode": record.get("rest_mode"),
+        "target_duration_s": record.get("target_duration_s"),
         "start_time": now_iso, "created_at": record["armed_at_utc"],
     })
     # The open DB row must be durable before the checkpoint announces the
@@ -5322,6 +5269,8 @@ def _build_ingest_payload(record: Dict[str, Any],
         # score in every history statistic, not just in the average.
         "sleep_score": quality.get("score"),
         "sleep_efficiency": quality.get("sleep_efficiency_pct"),
+        "rest_mode": record.get("rest_mode"),
+        "target_duration_s": record.get("target_duration_s"),
         "epoch_seconds": epoch_seconds_sent,
         # Count the scored rounds the report itself used, so
         # total_epochs * epoch_seconds == total_scored_minutes holds.  The raw
@@ -5596,6 +5545,7 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
                 "email": None, "display_name": None, "auth_source": None,
                 "gender": None, "age": None, "age_group": None,
                 "health_reference": None, "rest_mode": None,
+                "target_duration_s": None,
                 "session_id": None, "started_at": None, "samples": 0,
                 "recording": False, "bed_wait_s": 0,
                 "vital_gate": {
@@ -5722,13 +5672,17 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
     }
     # Sleep quality exists only after finalization and is persisted beside the
     # raw factors so history can reproduce and explain the same result later.
-    sleep_quality = _sleep_quality_summary(
+    sleep_quality = build_sleep_quality(
         record["duration_s"], night_summary,
         record["summary"]["sleep_state_counts"], completed=True,
         rest_mode=record.get("rest_mode") or "auto",
         stage_sequence=report_samples,
         sensor_samples=report_samples,
-        sample_interval_s=sample_interval_s,
+        sample_interval_s=_sample_interval_seconds(
+            sample_interval_s,
+            SESSION_SAMPLE_SECONDS,
+        ),
+        target_duration_s=record.get("target_duration_s"),
     )
     night_summary["sleep_quality"] = sleep_quality
     night_summary["wellness_score"] = sleep_quality.get("score")
@@ -5740,6 +5694,7 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
         sample_interval_s=sample_interval_s,
         estimator_version=record.get("sleep_estimator"), completed=True,
         timeline_schema_version=SESSION_TIMELINE_SCHEMA_VERSION,
+        target_duration_s=record.get("target_duration_s"),
     )
     record["session_report"] = session_report
     if terminal_wake:
@@ -5765,6 +5720,7 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
             "sleep_g2_ontology": record.get("sleep_g2_ontology"),
             "terminal_wake_policy": record.get("terminal_wake_policy"),
             "rest_mode": record.get("rest_mode") or "auto",
+            "target_duration_s": record.get("target_duration_s"),
             "sample_interval_s": sample_interval_s,
             "sensor_sample_interval_s": acquisition_interval_s,
             "timeline_schema_version": SESSION_TIMELINE_SCHEMA_VERSION,
@@ -5859,6 +5815,7 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
             "auth_source": None, "gender": None, "age": None, "age_group": None,
             "health_reference": None,
             "rest_mode": None,
+            "target_duration_s": None,
             "session_id": None, "started_at": None, "samples": 0,
             "recording": False, "bed_wait_s": 0,
             "vital_gate": {
@@ -5889,6 +5846,10 @@ def _restore_waiting_session(checkpoint: Dict[str, Any]) -> Optional[str]:
     health_reference = record.get("health_reference")
     if not isinstance(health_reference, dict) or health_reference.get("schema_version") != 1:
         health_reference = _health_reference_from_profile(profile)
+    restored_mode = record.get("rest_mode") or "auto"
+    restored_target = resolve_rest_target(
+        restored_mode, record.get("target_duration_s")
+    )
     identity_subject = record["identity_subject"]
     restored_lease: Optional[OccupancyLease] = None
     occupancy_error: Optional[str] = None
@@ -5908,7 +5869,8 @@ def _restore_waiting_session(checkpoint: Dict[str, Any]) -> Optional[str]:
         "age": age,
         "age_group": age_group,
         "health_reference": health_reference,
-        "rest_mode": record.get("rest_mode") or "auto",
+        "rest_mode": restored_mode,
+        "target_duration_s": restored_target.get("seconds"),
         "sample_interval_s": _sample_interval_seconds(
             record.get("sample_interval_s"), SESSION_SAMPLE_SECONDS),
         "started_at_utc": None,
@@ -5959,7 +5921,8 @@ def _restore_waiting_session(checkpoint: Dict[str, Any]) -> Optional[str]:
             ),
             "age": age, "age_group": age_group,
             "health_reference": health_reference, "session_id": session_id,
-            "rest_mode": record.get("rest_mode") or "auto",
+            "rest_mode": restored_mode,
+            "target_duration_s": restored_target.get("seconds"),
             "started_at": armed_epoch, "samples": 0,
             "recording": False, "bed_wait_s": 0,
             "vital_gate": vital_gate,
@@ -6110,6 +6073,15 @@ def _restore_interrupted_session() -> Optional[str]:
         or row.get("identity_subject")
         or (f"zeep:{row['zeep_public_id']}" if row.get("zeep_public_id") else f"legacy:{row['username_key']}")
     )
+    restored_mode = (
+        checkpoint_record.get("rest_mode")
+        or row.get("rest_mode")
+        or "auto"
+    )
+    persisted_target = checkpoint_record.get("target_duration_s")
+    if persisted_target is None:
+        persisted_target = row.get("target_duration_s")
+    restored_target = resolve_rest_target(restored_mode, persisted_target)
     restored_lease: Optional[OccupancyLease] = None
     occupancy_error: Optional[str] = None
     try:
@@ -6131,9 +6103,10 @@ def _restore_interrupted_session() -> Optional[str]:
             "age": age, "age_group": age_group,
             "health_reference": health_reference,
             "armed_at_utc": checkpoint_record.get("armed_at_utc") or row["created_at"],
-            # Old/open rows predate explicit intent storage; auto is resolved
-            # later from the amount of actual Sleep State data.
-            "rest_mode": checkpoint_record.get("rest_mode") or "auto",
+            # Old/open rows may predate explicit intent storage. Keep ``auto``
+            # unresolved; elapsed time and model output cannot invent intent.
+            "rest_mode": restored_mode,
+            "target_duration_s": restored_target.get("seconds"),
             "auth_source": checkpoint_record.get("auth_source") or (
                 "zeep" if row.get("zeep_public_id") else "local"
             ),
@@ -6189,7 +6162,8 @@ def _restore_interrupted_session() -> Optional[str]:
             ),
             "age": age, "age_group": age_group,
             "health_reference": health_reference, "session_id": session_id,
-            "rest_mode": checkpoint_record.get("rest_mode") or "auto",
+            "rest_mode": restored_mode,
+            "target_duration_s": restored_target.get("seconds"),
             "started_at": started_dt.timestamp(), "samples": len(samples),
             "recording": True, "bed_wait_s": 0,
             "vital_gate": {
@@ -7137,6 +7111,7 @@ def _start_pod_session(
     auth: Optional[Dict[str, Any]] = None,
     health_reference: Optional[Dict[str, Any]] = None,
     rest_mode: str = "nap_recovery",
+    target_duration_minutes: Optional[int] = None,
 ) -> Dict[str, Any]:
     """ตรวจค่า, อัปเดต profile ในตู้ แล้วเปิด session ใหม่ (สถานะ "รอขึ้นเตียง").
 
@@ -7169,6 +7144,17 @@ def _start_pod_session(
         rest_mode = normalise_rest_mode(rest_mode)
     except ValueError as exc:
         raise HTTPException(422, "รูปแบบการพักไม่ถูกต้อง") from exc
+    target = resolve_rest_target(
+        rest_mode,
+        (
+            target_duration_minutes * 60
+            if target_duration_minutes is not None
+            else None
+        ),
+        use_mode_default=True,
+    )
+    if not target.get("available"):
+        raise HTTPException(422, "เป้าหมายระยะเวลาต้องเป็น 30 หรือ 90 นาที")
     if age_group is not None and age_group not in AGE_SLEEP_BASELINES:
         raise HTTPException(422, "ช่วงอายุต้องเป็น 18-29, 30-44, 45-59 หรือ 60+")
     if age is None:
@@ -7323,6 +7309,7 @@ def _start_pod_session(
             "health_reference": session_health_reference,
             "wellness_context": session_wellness_context,
             "rest_mode": rest_mode,
+            "target_duration_s": target["seconds"],
             "auth_source": "zeep" if auth else "local",
             "zeep_public_id": (auth or {}).get("public_id"),
             "identity_subject": owner.subject,
@@ -7371,6 +7358,7 @@ def _start_pod_session(
               bed_start_s=BED_START_SECONDS, monitor_only=monitor_only,
               safety_level=safety.get("level"),
               rest_mode=rest_mode,
+              target_duration_s=target["seconds"],
               auth_source=new_session["record"]["auth_source"], pod_id=POD_ID)
     vital_gate = session_vital_gate_now(new_session)
     with state_lock:
@@ -7384,6 +7372,7 @@ def _start_pod_session(
             "health_reference": session_health_reference,
             "wellness_context_available": bool(session_wellness_context),
             "rest_mode": rest_mode,
+            "target_duration_s": target["seconds"],
             "session_id": session_id, "started_at": time.time(), "samples": 0,
             "recording": False, "bed_wait_s": 0,
             "vital_gate": vital_gate,
@@ -7415,6 +7404,7 @@ def _complete_occupant_login(
     *,
     age_group_choice: Optional[str],
     rest_mode: str,
+    target_duration_minutes: Optional[int],
     response: Response,
 ) -> Dict[str, Any]:
     """Bind a verified ZEEP identity to this pod: profile, cookie, pod session.
@@ -7464,6 +7454,7 @@ def _complete_occupant_login(
             auth["username"], health_reference.get("gender"), age, age_group,
             owner=principal, auth=auth, health_reference=health_reference,
             rest_mode=rest_mode,
+            target_duration_minutes=target_duration_minutes,
         )
     except Exception:
         auth_sessions.revoke(cookie_token)
@@ -7500,6 +7491,7 @@ def auth_login(cmd: AuthLoginCommand, response: Response):
 
     return _complete_occupant_login(
         auth, me, age_group_choice=cmd.age_group, rest_mode=cmd.rest_mode,
+        target_duration_minutes=cmd.target_duration_minutes,
         response=response,
     )
 
@@ -7780,6 +7772,7 @@ def session_login(cmd: LoginCommand, response: Response):
                 "source": "local_profile",
             },
             rest_mode=cmd.rest_mode,
+            target_duration_minutes=cmd.target_duration_minutes,
         )
     except Exception:
         auth_sessions.revoke(cookie_token)
@@ -8459,6 +8452,12 @@ def history_detail(
         sleep_timeline.append(terminal_wake)
     with profile_lock:
         profile = _load_profiles().get(row["username_key"], {})
+    history_rest_mode = (
+        final_summary.get("rest_mode") or row.get("rest_mode") or "auto"
+    )
+    history_target_duration_s = final_summary.get("target_duration_s")
+    if history_target_duration_s is None:
+        history_target_duration_s = row.get("target_duration_s")
     night_summary = final_summary.get("night_summary") or {}
     sleep_quality = night_summary.get("sleep_quality")
     sleep_quality = _released_historical_quality(
@@ -8480,12 +8479,13 @@ def history_detail(
         session_report = build_session_report(
             row["duration"], report_samples, night_summary,
             final_summary.get("sleep_state_counts") or {}, sleep_quality,
-            rest_mode=final_summary.get("rest_mode") or "auto",
+            rest_mode=history_rest_mode,
             sample_interval_s=history_interval_s,
             estimator_version=final_summary.get("sleep_estimator"),
             completed=bool(row["end_time"]),
             timeline_schema_version=int(
                 final_summary.get("timeline_schema_version") or 3),
+            target_duration_s=history_target_duration_s,
         )
         session_report["display_recomputed"] = True
         session_report["display_recomputed_from_version"] = persisted_report_version
@@ -8534,7 +8534,8 @@ def history_detail(
             "g2_ontology": final_summary.get("sleep_g2_ontology"),
             "terminal_wake": final_summary.get("terminal_wake_policy"),
         },
-        "rest_mode": final_summary.get("rest_mode") or "auto",
+        "rest_mode": history_rest_mode,
+        "target_duration_s": history_target_duration_s,
         "sleep_quality": sleep_quality,
         "session_report": session_report,
         "summary": {

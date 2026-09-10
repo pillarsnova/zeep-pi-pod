@@ -208,6 +208,7 @@ def create_qr_login_router(
         log_event("auth", "qr_login", user=auth["username"], login_id=login_id)
         result = complete_login(
             auth, me, age_group_choice=cmd.age_group, rest_mode=cmd.rest_mode,
+            target_duration_minutes=cmd.target_duration_minutes,
             response=response,
         )
         result["state"] = "approved"

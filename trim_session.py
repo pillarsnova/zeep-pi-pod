@@ -174,6 +174,10 @@ def _rebuild_final_summary(
         "rem_ratio": round(counts["rem"] / total_sleep, 3) if total_sleep else None,
     }
     rest_mode = old_final.get("rest_mode") or "auto"
+    session_fields = set(session.keys())
+    target_duration_s = old_final.get("target_duration_s")
+    if target_duration_s is None and "target_duration_s" in session_fields:
+        target_duration_s = session["target_duration_s"]
     stage_sequence = [
         {"state": stage, "metrics": value.get("metrics") or {}}
         for _, stage, value in stage_points
@@ -182,6 +186,7 @@ def _rebuild_final_summary(
         duration_s, night_summary, counts, completed=True,
         rest_mode=rest_mode, stage_sequence=stage_sequence,
         sample_interval_s=sample_seconds,
+        target_duration_s=target_duration_s,
     )
     night_summary["sleep_quality"] = sleep_quality
     night_summary["wellness_score"] = sleep_quality.get("score")
@@ -190,7 +195,9 @@ def _rebuild_final_summary(
         rest_mode=rest_mode,
         sample_interval_s=sample_seconds, estimator_version=estimator_version,
         completed=True,
-        timeline_schema_version=int(old_final.get("timeline_schema_version") or 3))
+        timeline_schema_version=int(old_final.get("timeline_schema_version") or 3),
+        target_duration_s=target_duration_s,
+    )
 
     counter_rows = connection.execute(
         "SELECT type,COUNT(*) AS n FROM events WHERE session_id=? "
@@ -201,6 +208,7 @@ def _rebuild_final_summary(
         "sleep_state_counts": counts,
         "sleep_estimator": estimator_version,
         "rest_mode": rest_mode,
+        "target_duration_s": target_duration_s,
         "sample_interval_s": sample_seconds,
         "counters": counters,
         "armed_at_utc": old_final.get("armed_at_utc"),

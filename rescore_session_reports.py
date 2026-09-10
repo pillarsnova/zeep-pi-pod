@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -25,10 +26,14 @@ from sleep_session_report import (
     normalise_rest_mode,
 )
 from sleep_system_policy import (
+    NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS,
+    NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
     SLEEP_EVIDENCE_VERSION,
     SLEEP_G2_ONTOLOGY_VERSION,
     ZEEP_SLEEP_BASELINE_VERSION,
     ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
+    resolve_rest_target,
+    rest_mode_group,
 )
 from sleep_stage_annotations import apply_annotations, load_annotations
 from sleep_signal_features import (
@@ -46,12 +51,30 @@ SLEEP_STAGES = {"n1", "n2", "n3", "rem"}
 LEGACY_SAMPLE_SECONDS = 5.0
 
 
+class HistoricalModeReviewRequired(ValueError):
+    """The stored Session intent is insufficient for an automatic rewrite."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
 def _json(value: Any) -> Dict[str, Any]:
     try:
         parsed = json.loads(value or "{}")
         return parsed if isinstance(parsed, dict) else {}
     except (TypeError, json.JSONDecodeError):
         return {}
+
+
+def _canonical_sha256(value: Any) -> str:
+    payload = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _timestamp(value: str) -> datetime:
@@ -103,8 +126,14 @@ def _timeline_projection(connection: sqlite3.Connection) -> str:
     return ",".join((*required, *optional))
 
 
-def _rebuild(connection: sqlite3.Connection, session: sqlite3.Row,
-             requested_mode: str | None) -> Dict[str, Any]:
+def _rebuild(
+    connection: sqlite3.Connection,
+    session: sqlite3.Row,
+    requested_mode: str | None,
+    requested_target_minutes: int | None = None,
+    *,
+    report_only: bool = False,
+) -> Dict[str, Any]:
     session_id = session["session_id"]
     final_row = connection.execute(
         "SELECT id,value FROM events WHERE session_id=? AND type='final_summary' "
@@ -119,7 +148,42 @@ def _rebuild(connection: sqlite3.Connection, session: sqlite3.Row,
         or old_final.get("sample_interval_s"),
         LEGACY_SAMPLE_SECONDS,
     )
-    mode = normalise_rest_mode(requested_mode or old_final.get("rest_mode") or "auto")
+    session_fields = set(session.keys())
+    stored_mode = (
+        old_final.get("rest_mode")
+        or (session["rest_mode"] if "rest_mode" in session_fields else None)
+        or "auto"
+    )
+    mode = normalise_rest_mode(requested_mode or stored_mode)
+    if mode == "auto" and not report_only:
+        raise HistoricalModeReviewRequired(
+            "unresolved_rest_mode",
+            "Session เดิมไม่ได้เก็บ Mode; ห้ามอนุมาน Nap/Overnight จากเวลา",
+        )
+    stored_target = old_final.get("target_duration_s")
+    if stored_target is None and "target_duration_s" in session_fields:
+        stored_target = session["target_duration_s"]
+    target_seconds = (
+        requested_target_minutes * 60
+        if requested_target_minutes is not None
+        else stored_target
+    )
+    target = resolve_rest_target(mode, target_seconds)
+    duration_s = max(0.0, float(session["duration"] or 0.0))
+    hard_timing_guard = (
+        duration_s < NAP_RECOVERY_MINIMUM_SCORE_SECONDS
+        or duration_s > NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS
+    )
+    if (
+        rest_mode_group(mode) == "nap_recovery"
+        and not target.get("available")
+        and not hard_timing_guard
+        and not report_only
+    ):
+        raise HistoricalModeReviewRequired(
+            "missing_recovery_target",
+            "Session เดิมไม่ได้เก็บเป้าหมาย Nap 30/90 นาที; รักษาผลเดิมไว้รอตรวจ",
+        )
 
     stage_rows = connection.execute(
         "SELECT timestamp,value FROM events WHERE session_id=? AND type='sleep_stage' "
@@ -234,16 +298,15 @@ def _rebuild(connection: sqlite3.Connection, session: sqlite3.Row,
             ),
             **stage_by_bucket.get(bucket, {}),
         }
-        for target, source in numeric.items():
+        for sample_key, source in numeric.items():
             values = [
                 float(row[source]) for row, _ in selected
                 if isinstance(row[source], (int, float))
                 and math.isfinite(float(row[source]))
             ]
-            sample[target] = statistics.median(values) if values else None
+            sample[sample_key] = statistics.median(values) if values else None
         samples.append(sample)
 
-    duration_s = max(0.0, float(session["duration"] or 0.0))
     total_sleep = sum(counts[stage] for stage in SLEEP_STAGES)
     total_scored = total_sleep + counts["wake"]
     night = dict(old_final.get("night_summary") or {})
@@ -259,11 +322,41 @@ def _rebuild(connection: sqlite3.Connection, session: sqlite3.Row,
         "deep_ratio": round(counts["n3"] / total_sleep, 3) if total_sleep else None,
         "rem_ratio": round(counts["rem"] / total_sleep, 3) if total_sleep else None,
     })
-    quality = build_sleep_quality(
-        duration_s, night, counts, completed=True, rest_mode=mode,
-        stage_sequence=sequence, sensor_samples=samples,
-        sample_interval_s=stage_sample_seconds,
+    previous_quality = (old_final.get("night_summary") or {}).get(
+        "sleep_quality"
     )
+    if report_only:
+        if not isinstance(previous_quality, dict):
+            raise ValueError(
+                f"report-only requires persisted sleep_quality: {session_id}"
+            )
+        quality = previous_quality
+    else:
+        quality = build_sleep_quality(
+            duration_s,
+            night,
+            counts,
+            completed=True,
+            rest_mode=mode,
+            stage_sequence=sequence,
+            sensor_samples=samples,
+            sample_interval_s=stage_sample_seconds,
+            target_duration_s=target.get("seconds"),
+        )
+        timing = (
+            (quality.get("rest_mode") or {}).get("protocol_status") or {}
+        )
+        if (
+            timing.get("review_required")
+            and duration_s <= NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS
+        ):
+            raise HistoricalModeReviewRequired(
+                "recovery_timing_review",
+                str(
+                    timing.get("reason")
+                    or "Recovery Session ต้องตรวจ Mode/เป้าหมาย"
+                ),
+            )
     night["sleep_quality"] = quality
     night["wellness_score"] = quality.get("score")
     report = build_session_report(
@@ -272,6 +365,7 @@ def _rebuild(connection: sqlite3.Connection, session: sqlite3.Row,
         sample_interval_s=stage_sample_seconds, estimator_version=estimator_version,
         completed=True,
         timeline_schema_version=int(old_final.get("timeline_schema_version") or 3),
+        target_duration_s=target.get("seconds"),
     )
     terminal_occupancy = terminal_occupancy_timeline(
         timeline,
@@ -279,7 +373,48 @@ def _rebuild(connection: sqlite3.Connection, session: sqlite3.Row,
         sample_interval_s=sensor_sample_seconds,
     )
     now = datetime.now(timezone.utc).isoformat()
-    previous_quality = (old_final.get("night_summary") or {}).get("sleep_quality")
+    if report_only:
+        quality_hash = _canonical_sha256(previous_quality)
+        previous_report = old_final.get("session_report") or {}
+        old_final["session_report"] = report
+        old_final["session_report_refreshed_at_utc"] = now
+        if _canonical_sha256(
+            (old_final.get("night_summary") or {}).get("sleep_quality")
+        ) != quality_hash:
+            raise RuntimeError("report-only changed persisted sleep_quality")
+        audit = {
+            "version": report.get("version"),
+            "refreshed_at_utc": now,
+            "report_only": True,
+            "previous_report_version": previous_report.get("version"),
+            "new_report_version": report.get("version"),
+            "quality_sha256_before": quality_hash,
+            "quality_sha256_after": quality_hash,
+            "score_preserved": quality.get("score"),
+            "raw_sleep_stage_events_changed": False,
+            "raw_timeline_changed": False,
+        }
+        return {
+            "session_id": session_id,
+            "final_event_id": final_row["id"],
+            "final_summary": old_final,
+            "audit": audit,
+            "audit_event_type": "session_report_refreshed",
+            "audit_timestamp": now,
+            "status": "report_refreshed",
+            "old_score": quality.get("score"),
+            "new_score": quality.get("score"),
+            "score_title": quality.get("score_title"),
+            "estimated_sleep_s": quality.get("estimated_sleep_s"),
+            "actual_scored_s": quality.get("actual_scored_s"),
+            "rest_mode": report.get("rest_mode"),
+            "quality": quality,
+            "report": report,
+            "rounds": total_scored,
+            "counts": counts,
+            "sleep_stage_annotations_used": len(annotations),
+            "annotated_rounds": annotated_rounds,
+        }
     old_final.update({
         "sleep_state_counts": counts,
         "sleep_estimator": estimator_version,
@@ -291,6 +426,7 @@ def _rebuild(connection: sqlite3.Connection, session: sqlite3.Row,
         "sleep_transition_policy": ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
         "sleep_g2_ontology": SLEEP_G2_ONTOLOGY_VERSION,
         "rest_mode": mode,
+        "target_duration_s": target.get("seconds"),
         "sample_interval_s": stage_sample_seconds,
         "sensor_sample_interval_s": sensor_sample_seconds,
         "bed_status_counts": canonical_bed_status_counts,
@@ -306,6 +442,7 @@ def _rebuild(connection: sqlite3.Connection, session: sqlite3.Row,
         "version": SLEEP_QUALITY_VERSION,
         "rescored_at_utc": now,
         "rest_mode": mode,
+        "target_duration_s": target.get("seconds"),
         "rounds": total_scored,
         "raw_sleep_stage_events_changed": False,
         "sleep_stage_annotations_used": len(annotations),
@@ -322,6 +459,9 @@ def _rebuild(connection: sqlite3.Connection, session: sqlite3.Row,
         "final_event_id": final_row["id"],
         "final_summary": old_final,
         "audit": audit,
+        "audit_event_type": "session_report_rescored",
+        "audit_timestamp": now,
+        "status": "rescored",
         "old_score": (previous_quality or {}).get("score"),
         "new_score": quality.get("score"),
         "score_title": quality.get("score_title"),
@@ -337,8 +477,23 @@ def _rebuild(connection: sqlite3.Connection, session: sqlite3.Row,
     }
 
 
-def rescore(data_dir: Path, session_ids: list[str] | None, *,
-            requested_mode: str | None, apply: bool) -> Dict[str, Any]:
+def rescore(
+    data_dir: Path,
+    session_ids: list[str] | None,
+    *,
+    requested_mode: str | None,
+    apply: bool,
+    requested_target_minutes: int | None = None,
+    report_only: bool = False,
+) -> Dict[str, Any]:
+    if report_only and not session_ids:
+        raise ValueError("--report-only requires one or more --session-id values")
+    if report_only and (
+        requested_mode is not None or requested_target_minutes is not None
+    ):
+        raise ValueError(
+            "--report-only preserves Mode/target; do not pass overrides"
+        )
     connection = sqlite3.connect(data_dir / "sessions.db", timeout=30)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA busy_timeout=30000")
@@ -359,9 +514,25 @@ def rescore(data_dir: Path, session_ids: list[str] | None, *,
     results = []
     try:
         for session in sessions:
-            rebuilt = _rebuild(connection, session, requested_mode)
+            try:
+                rebuilt = _rebuild(
+                    connection,
+                    session,
+                    requested_mode,
+                    requested_target_minutes,
+                    report_only=report_only,
+                )
+            except HistoricalModeReviewRequired as exc:
+                results.append({
+                    "session_id": session["session_id"],
+                    "status": "skipped_review_required",
+                    "reason_code": exc.code,
+                    "reason": str(exc),
+                    "persisted_record_unchanged": True,
+                })
+                continue
             results.append({key: rebuilt[key] for key in (
-                "session_id", "old_score", "new_score", "score_title",
+                "session_id", "status", "old_score", "new_score", "score_title",
                 "estimated_sleep_s", "actual_scored_s", "rest_mode", "rounds", "counts",
                 "quality", "report", "sleep_stage_annotations_used", "annotated_rounds")})
             if not apply:
@@ -374,8 +545,8 @@ def rescore(data_dir: Path, session_ids: list[str] | None, *,
             )
             connection.execute(
                 "INSERT INTO events(session_id,timestamp,type,value) VALUES (?,?,?,?)",
-                (rebuilt["session_id"], rebuilt["audit"]["rescored_at_utc"],
-                 "session_report_rescored",
+                (rebuilt["session_id"], rebuilt["audit_timestamp"],
+                 rebuilt["audit_event_type"],
                  json.dumps(rebuilt["audit"], ensure_ascii=False, separators=(",", ":"))),
             )
             connection.commit()
@@ -384,8 +555,17 @@ def rescore(data_dir: Path, session_ids: list[str] | None, *,
         raise
     finally:
         connection.close()
-    return {"applied": apply, "version": SLEEP_QUALITY_VERSION,
-            "sessions": results, "count": len(results)}
+    completed_count = sum("new_score" in item for item in results)
+    return {
+        "applied": apply,
+        "version": SLEEP_QUALITY_VERSION,
+        "operation": "report_only" if report_only else "rescore",
+        "sessions": results,
+        "count": len(results),
+        "rescored_count": 0 if report_only else completed_count,
+        "refreshed_count": completed_count if report_only else 0,
+        "skipped_count": len(results) - completed_count,
+    }
 
 
 def main() -> None:
@@ -396,13 +576,25 @@ def main() -> None:
     parser.add_argument("--rest-mode", choices=(
         "auto", "sleep", "nap_recovery", "short_nap", "cycle_nap",
         "shift_rest", "jet_lag", "overnight"))
+    parser.add_argument("--target-minutes", type=int, choices=(30, 90))
+    parser.add_argument(
+        "--report-only",
+        action="store_true",
+        help=(
+            "Refresh Session report/environment for targeted IDs while "
+            "preserving the persisted quality and score"
+        ),
+    )
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
     if not args.all and not args.session_ids:
         parser.error("provide --session-id (repeatable) or --all")
     result = rescore(
         args.data_dir, None if args.all else args.session_ids,
-        requested_mode=args.rest_mode, apply=args.apply,
+        requested_mode=args.rest_mode,
+        requested_target_minutes=args.target_minutes,
+        apply=args.apply,
+        report_only=args.report_only,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

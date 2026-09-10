@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     pod_id TEXT,
     zeep_public_id TEXT,
     gender TEXT,
+    rest_mode TEXT,
+    target_duration_s REAL,
     start_time TEXT NOT NULL,
     end_time TEXT,
     duration REAL,
@@ -53,4 +55,4 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user_start ON sessions(username_key, sta
 CREATE INDEX IF NOT EXISTS idx_timeline_session_timestamp ON timeline(session_id, timestamp);
 CREATE INDEX IF NOT EXISTS idx_events_session_timestamp ON events(session_id, timestamp);
 
-INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '4');
+INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '5');

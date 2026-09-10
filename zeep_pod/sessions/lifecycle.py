@@ -29,6 +29,7 @@ CHECKPOINT_RECORD_FIELDS = frozenset(
         "health_reference",
         "wellness_context",
         "rest_mode",
+        "target_duration_s",
         "auth_source",
         "zeep_public_id",
         "identity_subject",

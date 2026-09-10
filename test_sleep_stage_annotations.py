@@ -114,7 +114,13 @@ class SleepStageAnnotationTests(unittest.TestCase):
             ).fetchall()
             connection.close()
 
-            result = rescore(data_dir, ["s1"], requested_mode=None, apply=True)
+            result = rescore(
+                data_dir,
+                ["s1"],
+                requested_mode="nap_recovery",
+                requested_target_minutes=30,
+                apply=True,
+            )
             self.assertEqual(result["sessions"][0]["counts"]["wake"], 6)
             self.assertEqual(result["sessions"][0]["annotated_rounds"], 6)
             connection = sqlite3.connect(data_dir / "sessions.db")
@@ -179,7 +185,13 @@ class SleepStageAnnotationTests(unittest.TestCase):
             connection.commit()
             connection.close()
 
-            result = rescore(data_dir, ["s30"], requested_mode=None, apply=True)
+            result = rescore(
+                data_dir,
+                ["s30"],
+                requested_mode="nap_recovery",
+                requested_target_minutes=30,
+                apply=True,
+            )
             self.assertEqual(result["sessions"][0]["rounds"], 4)
             self.assertEqual(result["sessions"][0]["rest_mode"]["group"], "nap_recovery")
             self.assertEqual(result["sessions"][0]["rest_mode"]["score_title"], "Recovery Score")

@@ -26,11 +26,16 @@ from sleep_system_policy import (
     ENVIRONMENT_CONTEXT_CRITERIA,
     ENVIRONMENT_CONTEXT_POLICY_VERSION,
     ENVIRONMENT_LEVELS,
+    ENVIRONMENT_SESSION_AGGREGATION_VERSION,
+    NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS,
+    NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
     OVERNIGHT_ARCHITECTURE_MAX_POINTS,
     OVERNIGHT_N2_FULL_CREDIT_PCT,
     OVERNIGHT_N3_FULL_CREDIT_FROM_PCT,
     OVERNIGHT_N3_ZERO_BELOW_PCT,
     OVERNIGHT_REM_FULL_CREDIT_PCT,
+    RECOVERY_SCORE_COMPONENT_MAX_POINTS,
+    RECOVERY_SCORE_FORMULA_VERSION,
     REST_MODE_LEGACY_ALIASES,
     REST_MODE_PROTOCOLS,
     REST_SESSION_GROUPS,
@@ -41,6 +46,8 @@ from sleep_system_policy import (
     environment_criterion,
     environment_level_for_value,
     environment_policy_snapshot,
+    resolve_rest_target,
+    summarize_environment_session_levels,
 )
 
 STAGE_ORDER = ("wake", "n1", "n2", "n3", "rem")
@@ -55,6 +62,7 @@ REST_MODE_LABELS = {
     "shift_rest": "พักจากการเข้าเวร",
     "jet_lag": "พักเพื่อปรับ Jet lag",
     "overnight": "นอนค้างคืน",
+    "unknown_legacy": "ยังไม่ทราบรูปแบบการพัก",
 }
 REST_MODE_ALIASES = {
     **REST_MODE_LEGACY_ALIASES,
@@ -77,6 +85,8 @@ _SLEEP_MODE_GROUPS = {
 _AWAKE_REST_MODES = {
     "general_rest", "nap_recovery",
 }
+
+_TARGET_UNSET = object()
 
 def _number(value: Any) -> Optional[float]:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -160,24 +170,16 @@ def _resolve_rest_mode(
     elif requested_mode != "auto":
         resolved = requested_mode
         reason = "ผู้ใช้เลือกวัตถุประสงค์ของการพักก่อนเริ่ม Session"
-    elif not sleep_detected:
-        resolved = "general_rest"
-        reason = "ไม่พบ Sleep State จึงประเมินเป็นการพักขณะตื่น"
-    elif sleep_s <= 60 * 60:
-        resolved = "short_nap"
-        reason = "เวลาหลับที่ตรวจพบไม่เกิน 60 นาที จัดเป็นงีบสั้น"
-    elif sleep_s < 5 * 3600:
-        resolved = "cycle_nap"
-        reason = "เวลาหลับที่ตรวจพบมากกว่า 60 นาที แต่ยังไม่ถึงขั้นต่ำการนอนหลัก 5 ชั่วโมง"
     else:
-        resolved = "overnight"
-        reason = "เวลาหลับที่ตรวจพบตั้งแต่ 5 ชั่วโมง จัดเป็นการนอนหลัก"
+        # Historical ``auto`` means the user goal was never persisted. Elapsed
+        # time or an estimator output cannot safely choose a product mode, so it
+        # remains unresolved until an operator links protocol evidence.
+        resolved = "unknown_legacy"
+        reason = "ไม่พบรูปแบบการพักที่เลือกไว้ จึงไม่อนุมานจากระยะเวลาหรือ Sleep State"
     if requested_mode in REST_SESSION_GROUPS:
         group = requested_mode
     elif requested_mode == "auto":
-        # ``auto`` is retained only as a legacy input.  Product reporting has
-        # exactly two public outcomes: long sleep or daytime recovery.
-        group = "sleep" if resolved == "overnight" else "nap_recovery"
+        group = None
     else:
         group = _SLEEP_MODE_GROUPS.get(resolved, "nap_recovery")
     group_policy = REST_SESSION_GROUPS.get(group, {
@@ -197,11 +199,19 @@ def _resolve_rest_mode(
         "sleep_required": bool(group_policy.get("sleep_required", False)),
         "sleep_detected": sleep_detected,
         "reason": reason,
-        "protocol": dict(REST_MODE_PROTOCOLS[group]) if group in REST_MODE_PROTOCOLS else None,
+        "protocol": (
+            dict(REST_MODE_PROTOCOLS[group])
+            if group in REST_MODE_PROTOCOLS
+            else None
+        ),
     }
 
 
-def _protocol_status(mode: Dict[str, Any], observed_s: float) -> Dict[str, Any]:
+def _protocol_status(
+    mode: Dict[str, Any],
+    observed_s: float,
+    target: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """Describe timing compliance without discarding an interrupted Session."""
     group = str(mode.get("group") or "")
     protocol = REST_MODE_PROTOCOLS.get(group)
@@ -212,6 +222,8 @@ def _protocol_status(mode: Dict[str, Any], observed_s: float) -> Dict[str, Any]:
             "observed_seconds": round(max(0.0, observed_s), 1),
         }
     observed = max(0.0, observed_s)
+    if group == "nap_recovery":
+        return _nap_protocol_status(observed, target or {})
     minimum = _number(protocol.get("minimum_seconds"))
     maximum = _number(protocol.get("maximum_seconds"))
     recommended = protocol.get("recommended_range_seconds") or []
@@ -242,6 +254,98 @@ def _protocol_status(mode: Dict[str, Any], observed_s: float) -> Dict[str, Any]:
         "within_operational_window": not below_minimum and not above_maximum,
         "within_recommended_range": in_recommended,
         "status": status,
+        "review_required": False,
+        "score_releasable": True,
+    }
+
+
+def _nap_protocol_status(
+    observed_s: float,
+    target: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Classify Nap timing without guessing a missing 30/90-minute target."""
+    observed = max(0.0, observed_s)
+    common = {
+        "available": True,
+        "canonical_mode": "nap_recovery",
+        "observed_seconds": round(observed, 1),
+        "minimum_score_seconds": NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
+        "legacy_hard_max_seconds": NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS,
+        "target": dict(target),
+    }
+    if observed < NAP_RECOVERY_MINIMUM_SCORE_SECONDS:
+        return {
+            **common,
+            "status": "insufficient",
+            "within_operational_window": False,
+            "within_recommended_range": False,
+            "review_required": False,
+            "score_releasable": False,
+            "reason": "บันทึกไม่ถึง 10 นาที จึงยังไม่ออก Recovery Score",
+        }
+    if observed > NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS:
+        return {
+            **common,
+            "status": "implausible_outlier",
+            "within_operational_window": False,
+            "within_recommended_range": False,
+            "review_required": True,
+            "score_releasable": False,
+            "reason": "เกิน 120 นาที ต้องตรวจ Session lifecycle และ Mode",
+        }
+    if not target.get("available"):
+        extended_unknown = observed > 45 * 60
+        return {
+            **common,
+            "status": "target_unknown",
+            "display_status": (
+                "TARGET_UNKNOWN/extended"
+                if extended_unknown
+                else "TARGET_UNKNOWN"
+            ),
+            "observed_timing_band": (
+                "extended_unknown_target"
+                if extended_unknown
+                else "target_unknown"
+            ),
+            "within_operational_window": None,
+            "within_recommended_range": None,
+            "review_required": True,
+            "score_releasable": False,
+            "reason": "Session เดิมไม่ได้เก็บเป้าหมาย 30/90 นาที ห้ามเดาจากเวลาที่ผ่านไป",
+        }
+
+    recommended = target.get("recommended_range_seconds") or []
+    recommended_low = _number(recommended[0]) if len(recommended) > 0 else None
+    recommended_high = _number(recommended[1]) if len(recommended) > 1 else None
+    extended_max = _number(target.get("extended_max_seconds"))
+    if (
+        recommended_low is not None
+        and recommended_high is not None
+        and recommended_low <= observed <= recommended_high
+    ):
+        status = "recommended"
+    elif recommended_low is not None and observed < recommended_low:
+        status = "partial"
+    elif extended_max is not None and observed <= extended_max:
+        status = "extended"
+    else:
+        status = "out_of_protocol"
+    review_required = status == "out_of_protocol"
+    return {
+        **common,
+        "status": status,
+        "recommended_range_seconds": list(recommended),
+        "extended_max_seconds": extended_max,
+        "within_operational_window": not review_required,
+        "within_recommended_range": status == "recommended",
+        "review_required": review_required,
+        "score_releasable": not review_required,
+        "reason": (
+            "ระยะเวลาอยู่นอกกรอบของเป้าหมายที่เลือก ต้องตรวจโดยผู้ดูแล"
+            if review_required
+            else None
+        ),
     }
 
 
@@ -310,18 +414,77 @@ def _settling(values: list[float], *, scale: float) -> Optional[float]:
     return max(0.0, min(1.0, 0.5 + (first - last) / max(0.1, scale)))
 
 
-def _rest_goal_seconds(group: str) -> float:
-    """Return the full-credit rest goal for a Recovery Score.
+def _rest_goal_seconds(target: Dict[str, Any]) -> Optional[float]:
+    """Return a validated, persisted Recovery target or ``None``."""
+    value = _number(target.get("seconds"))
+    return max(1.0, value) if target.get("available") and value else None
 
-    The product exposes one Nap & Refresh goal: 30 minutes.  Legacy recovery
-    aliases use the same target so historical reports remain comparable.
+
+def _recovery_environment_summary(
+    rows: list[Dict[str, Any]],
+    rest_mode: str,
+) -> Dict[str, Any]:
+    """Score available environment values with the canonical policy bands.
+
+    Quality and Sensor coverage intentionally remain separate. Missing channels
+    reduce confidence/coverage but do not masquerade as a poor measured value.
     """
-    protocol = (
-        REST_MODE_PROTOCOLS.get(group)
-        or REST_MODE_PROTOCOLS["nap_recovery"]
+    averages: Dict[str, float] = {}
+    metrics = []
+    for criterion_key, criterion in ENVIRONMENT_CONTEXT_CRITERIA.items():
+        sample_key = criterion["sample_key"]
+        values = _values(rows, sample_key)
+        if not values:
+            continue
+        average = _average(values) or 0.0
+        averages[sample_key] = round(average, 1)
+        levels = [
+            environment_level_for_value(criterion_key, value, rest_mode)
+            for value in values
+        ]
+        aggregate = summarize_environment_session_levels(levels)
+        metrics.append({
+            "key": criterion_key,
+            "sample_key": sample_key,
+            "average": round(average, 1),
+            **aggregate,
+        })
+    expected = len(ENVIRONMENT_CONTEXT_CRITERIA)
+    quality_factor = (
+        _average([float(metric["rank"]) / 4.0 for metric in metrics])
+        if metrics
+        else None
     )
-    target = _number(protocol.get("full_credit_target_seconds")) or 30 * 60
-    return max(1.0, target)
+    minimum = min(metrics, key=lambda metric: metric["rank"], default=None)
+    missing = expected - len(metrics)
+    return {
+        "available": bool(metrics),
+        "averages": averages,
+        "metrics": metrics,
+        "quality_factor": (
+            round(quality_factor, 3) if quality_factor is not None else None
+        ),
+        "coverage_pct": round(100.0 * len(metrics) / expected, 1),
+        "available_factors": len(metrics),
+        "expected_factors": expected,
+        "policy_version": ENVIRONMENT_CONTEXT_POLICY_VERSION,
+        "aggregation_version": ENVIRONMENT_SESSION_AGGREGATION_VERSION,
+        "overall_level": (
+            minimum.get("status_key") if minimum else "unknown"
+        ),
+        "overall_label": (
+            ENVIRONMENT_LEVELS[minimum["status_key"]]["label"]
+            if minimum else "รอข้อมูล"
+        ),
+        "meets_expected": bool(
+            minimum
+            and not missing
+            and minimum["rank"]
+            >= ENVIRONMENT_LEVELS[ENVIRONMENT_ACCEPTABLE_MIN_LEVEL]["rank"]
+        ),
+        "context_only": True,
+        "assessment_quality": "full" if not missing else "partial",
+    }
 
 
 def _eligible_rest_seconds(
@@ -360,9 +523,10 @@ def _build_awake_rest_quality(
 ) -> Dict[str, Any]:
     """Score an awake wellness Session without inventing sleep architecture.
 
-    The score reflects goal duration, coarse HR/RR settling, bed stillness,
-    environment support, and coverage.  Air Sensor values remain explanatory
-    context and never feed the Sleep State estimator.
+    The score reflects goal duration, coarse HR/RR settling, bed stillness and
+    environment support. Coverage is reported independently as QA/confidence
+    and contributes zero points. Air Sensor values remain explanatory context
+    and never feed the Sleep State estimator.
     """
     group = mode.get("group") or mode.get("resolved") or "general_rest"
     policy = REST_SESSION_GROUPS.get(group, {
@@ -374,10 +538,17 @@ def _build_awake_rest_quality(
     # Sensor rows there is no defensible evidence for an awake-rest score, so
     # keep the historical zero instead of awarding duration-only points.
     no_sensor_evidence = not rows
-    duration_goal_s = _rest_goal_seconds(group)
+    target = dict(mode.get("target") or {})
+    duration_goal_s = _rest_goal_seconds(target)
     eligible_rest_s = _eligible_rest_seconds(rows, interval, duration)
-    duration_factor = min(1.0, eligible_rest_s / duration_goal_s)
-    duration_points = 0.0 if no_sensor_evidence else round(20.0 * duration_factor, 1)
+    duration_factor = (
+        min(1.0, eligible_rest_s / duration_goal_s)
+        if duration_goal_s is not None
+        else 0.0
+    )
+    duration_points = (
+        0.0 if no_sensor_evidence else round(25.0 * duration_factor, 1)
+    )
 
     hr = [value for value in _values(rows, "hr") if 30 <= value <= 220]
     rr = [value for value in _values(rows, "rr") if 4 <= value <= 60]
@@ -401,7 +572,7 @@ def _build_awake_rest_quality(
         # Nap & Refresh accepts quiet wakefulness. Stable HR/RR matters more
         # than forcing heart rate to fall, which meditation does not guarantee.
         physiology_factor = 0.85 * regularity + 0.15 * (settling if settling is not None else 0.5)
-    physiology_points = round(30.0 * physiology_factor, 1)
+    physiology_points = round(35.0 * physiology_factor, 1)
 
     bed_labels = [str(row.get("bed") or "") for row in rows if row.get("bed")]
     moving = sum(label == "Moving" for label in bed_labels)
@@ -413,27 +584,18 @@ def _build_awake_rest_quality(
     else:
         movement_ratio = None
         stillness_factor = 0.0
-    stillness_points = round(20.0 * stillness_factor, 1)
+    continuity_points = round(30.0 * stillness_factor, 1)
 
-    # Broad ZEEP comfort targets. These support the experience and explain a
-    # low score; they do not label or re-label any Sleep Stage.
-    environment_factors: Dict[str, float] = {}
-    environment_bands = {
-        "temp": (18.0, 27.0, 14.0, 32.0),
-        "hum": (40.0, 60.0, 25.0, 80.0),
-        "co2": (350.0, 1000.0, 250.0, 1800.0),
-        "dba": (0.0, 40.0, 0.0, 65.0),
-        "lux": (0.0, 10.0, 0.0, 60.0),
-    }
-    environment_averages: Dict[str, float] = {}
-    for key, band in environment_bands.items():
-        values = _values(rows, key)
-        if values:
-            average = _average(values) or 0.0
-            environment_averages[key] = round(average, 1)
-            environment_factors[key] = _range_fit(average, *band)
-    environment_factor = _average(list(environment_factors.values())) or 0.0
-    environment_points = round(20.0 * environment_factor, 1)
+    # Use the same versioned bands as Dashboard/Session findings. Quality is
+    # calculated only from available channels; missing channels are coverage,
+    # not a fabricated poor measurement.
+    environment = _recovery_environment_summary(rows, "nap_recovery")
+    environment_factor = _number(environment.get("quality_factor"))
+    environment_points = (
+        round(10.0 * environment_factor, 1)
+        if environment_factor is not None
+        else None
+    )
 
     recorded_s = len(rows) * interval
     state_s = sum(counts.values()) * interval
@@ -455,23 +617,20 @@ def _build_awake_rest_quality(
         paired_vital_samples / source_vital_samples
         if source_vital_samples else 0.0
     )
-    coverage_points = 0.0 if no_sensor_evidence else round(10.0 * coverage_ratio, 1)
     component_points = {
         "goal_duration": duration_points,
         "physiological_response": physiology_points,
-        "body_stillness": stillness_points,
+        "rest_continuity": continuity_points,
         "environment_support": environment_points,
-        "data_coverage": coverage_points,
     }
-    component_max = {
-        "goal_duration": 20.0,
-        "physiological_response": 30.0,
-        "body_stillness": 20.0,
-        "environment_support": 20.0,
-        "data_coverage": 10.0,
-    }
-    earned = round(sum(component_points.values()), 1)
-    score = max(0, min(100, int(round(earned))))
+    component_max = dict(RECOVERY_SCORE_COMPONENT_MAX_POINTS)
+    scored_components = [
+        key for key, points in component_points.items() if points is not None
+    ]
+    scored_max = sum(component_max[key] for key in scored_components)
+    earned = round(sum(component_points[key] for key in scored_components), 1)
+    normalized_unrounded = 100.0 * earned / max(1.0, scored_max)
+    score = max(0, min(100, int(round(normalized_unrounded))))
     if score >= 85:
         level, level_key = "ดีมาก", "very_good"
     elif score >= 70:
@@ -481,22 +640,26 @@ def _build_awake_rest_quality(
     else:
         level, level_key = "ควรปรับปรุง", "low"
 
-    lowest = min(component_points, key=lambda key: (
-        component_points[key] / max(1.0, component_max[key])))
+    lowest = min(
+        scored_components,
+        key=lambda key: component_points[key] / max(1.0, component_max[key]),
+    )
     insights = {
         "goal_duration": "ระยะเวลาพักยังไม่เหมาะกับเป้าหมายที่เลือก",
         "physiological_response": "ข้อมูลชีพจรหรือการหายใจยังไม่แสดงความนิ่งเพียงพอ",
-        "body_stillness": "พบการเคลื่อนไหวหรือลุกจากเตียงระหว่างพัก",
+        "rest_continuity": "พบการเคลื่อนไหวหรือลุกจากเตียงระหว่างพัก",
         "environment_support": "สภาพแวดล้อมบางส่วนยังไม่เอื้อต่อเป้าหมายการพัก",
-        "data_coverage": "ข้อมูล Sensor ยังครอบคลุม Session ไม่เพียงพอ",
     }
     sleep_s = sum(counts[stage] for stage in SLEEP_STAGES) * interval
-    score_available = bool(
+    protocol_status = dict(mode.get("protocol_status") or {})
+    evidence_available = bool(
         not no_sensor_evidence
         and paired_vital_samples >= 6
         and hr_regularity is not None
         and rr_regularity is not None
     )
+    timing_releasable = bool(protocol_status.get("score_releasable"))
+    score_available = evidence_available and timing_releasable
     score_confidence = _score_confidence(
         coverage_ratio, paired_vital_ratio
     )
@@ -513,11 +676,17 @@ def _build_awake_rest_quality(
             "paired_hr_rr_coverage_blocks_score": False,
             "minimum_paired_samples": 6,
             "paired_hr_rr_required": True,
+            "minimum_session_seconds": NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
+            "timing_status": protocol_status.get("status"),
+            "timing_releasable": timing_releasable,
+            "review_required": bool(protocol_status.get("review_required")),
             "passed": score_available,
         },
         "reason": (
-            None if score_available else
-            "ข้อมูล HR/RR ที่จับคู่กันยังไม่พอสำหรับคำนวณ Recovery Score"
+            None
+            if score_available
+            else protocol_status.get("reason")
+            or "ข้อมูล HR/RR ที่จับคู่กันยังไม่พอสำหรับคำนวณ Recovery Score"
         ),
         "score_title": policy["score_title"],
         "score_scope": policy.get("score_scope"),
@@ -533,17 +702,23 @@ def _build_awake_rest_quality(
         "actual_scored_s": round(sum(counts.values()) * interval, 1),
         "rest_mode": {
             **mode,
-            "protocol_status": _protocol_status(mode, duration),
+            "protocol_status": protocol_status,
         },
         "duration_target": {
-            "seconds": round(duration_goal_s, 1),
-            "target_minutes": round(duration_goal_s / 60.0, 1),
-            "recommended_range_minutes": [25, 35],
+            **target,
+            "seconds": round(duration_goal_s, 1) if duration_goal_s else None,
+            "target_minutes": (
+                round(duration_goal_s / 60.0, 1) if duration_goal_s else None
+            ),
+            "recommended_range_minutes": [
+                round(value / 60.0, 1)
+                for value in target.get("recommended_range_seconds", [])
+            ],
             "eligible_rest_seconds": round(eligible_rest_s, 1),
             "eligible_rest_minutes": round(eligible_rest_s / 60.0, 1),
             "completion_pct": round(100.0 * duration_factor, 1),
             "basis": (
-                f"เป้าหมาย {policy['label']} 30 นาที; "
+                f"เป้าหมาย {target.get('label') or policy['label']}; "
                 "นับเวลาที่มีหลักฐานว่าอยู่ใน ZEEP และไม่หักเมื่อพักเกินเป้าหมาย"
             ),
         },
@@ -572,16 +747,15 @@ def _build_awake_rest_quality(
                 exit_summary["transient_samples"] if bed_labels else None),
         },
         "environment_support": {
-            "available": bool(environment_factors),
-            "averages": environment_averages,
-            "fit": {key: round(value, 3) for key, value in environment_factors.items()},
-            "context_only": True,
+            **environment,
+            "points": environment_points,
+            "max_points": 10.0,
         },
         "data_coverage": {
             "ratio": round(coverage_ratio, 3),
             "pct": round(coverage_ratio * 100.0, 1),
-            "points": coverage_points,
-            "max_points": 10.0,
+            "score_component": False,
+            "environment_pct": environment["coverage_pct"],
         },
         "component_points": component_points,
         "component_max_points": component_max,
@@ -589,15 +763,17 @@ def _build_awake_rest_quality(
         "component_labels": {
             "goal_duration": "เวลาพักตามเป้าหมาย",
             "physiological_response": "การตอบสนองของร่างกาย",
-            "body_stillness": "ความนิ่งระหว่างพัก",
+            "rest_continuity": "ความต่อเนื่องในการพัก",
             "environment_support": "สภาพแวดล้อมสนับสนุน",
-            "data_coverage": "ความครบของข้อมูล",
         },
-        "score_unrounded": earned,
+        "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
+        "raw_component_points": earned,
+        "score_unrounded": round(normalized_unrounded, 1),
+        "scored_max_points": scored_max,
+        "score_normalized_for_available_components": scored_max < 100.0,
         "score_basis": (
-            "เวลาพักที่มีหลักฐานเทียบเป้าหมาย 30 นาที 20 + "
-            "การตอบสนอง HR/RR 30 + ความต่อเนื่อง 20 + "
-            "สภาพแวดล้อม 20 + ข้อมูล 10"
+            "เวลาพักตามเป้าหมาย 25 + การตอบสนอง HR/RR 35 + "
+            "ความต่อเนื่อง 30 + สภาพแวดล้อม 10; Coverage แสดงแยกและไม่ให้คะแนน"
         ),
         "version": SLEEP_QUALITY_VERSION,
         "outcome_interpretation": "Nap & Refresh ไม่บังคับให้หลับหรือมี N3/REM; ความสดชื่นจริงใช้คำตอบหลัง Session ประกอบ",
@@ -889,6 +1065,7 @@ def build_sleep_quality(
     stage_sequence: Optional[Iterable[Any]] = None,
     sensor_samples: Optional[Iterable[Dict[str, Any]]] = None,
     sample_interval_s: float = 5.0,
+    target_duration_s: Any = _TARGET_UNSET,
 ) -> Dict[str, Any]:
     """Build the mode-aware ZEEP-balanced post-session wellness score.
 
@@ -902,6 +1079,7 @@ def build_sleep_quality(
     unavailable = {
         "available": False,
         "score": None,
+        "score_releasable": False,
         "level": "ข้อมูลไม่พอ",
         "level_key": "unavailable",
         "reason": "Session ยังไม่สิ้นสุด" if not completed else "ไม่มี Sleep State เพียงพอสำหรับประเมิน",
@@ -941,7 +1119,24 @@ def build_sleep_quality(
         paired_vital_rows / source_vital_rows if source_vital_rows else 0.0
     )
     mode = _resolve_rest_mode(rest_mode, actual_scored_s, estimated_sleep_s)
-    mode["protocol_status"] = _protocol_status(mode, duration)
+    target = resolve_rest_target(
+        rest_mode,
+        None if target_duration_s is _TARGET_UNSET else target_duration_s,
+        use_mode_default=target_duration_s is _TARGET_UNSET,
+    )
+    mode["target"] = target
+    mode["protocol_status"] = _protocol_status(mode, duration, target)
+    if mode.get("group") is None:
+        return {
+            **unavailable,
+            "reason": (
+                "ไม่พบรูปแบบการพักที่เลือกไว้ จึงไม่อนุมาน Sleep Score "
+                "หรือ Recovery Score จากระยะเวลา"
+            ),
+            "rest_mode": mode,
+            "review_required": True,
+            "validation_status": "legacy_mode_unresolved",
+        }
     # Nap & Refresh always uses Recovery Score, whether the Session remained
     # awake, contained N1/N2, or became a short nap. Sleep is an optional
     # observation and must not switch the user onto Overnight architecture.
@@ -1277,17 +1472,13 @@ def _environment_metric(
             "status": "ไม่มีข้อมูล",
             "decision": "sensor_check",
         }
-    levels = [environment_level_for_value(criterion_key, value, rest_mode) for value in values]
-    level_counts = {name: levels.count(name) for name in ENVIRONMENT_LEVELS}
-    ranks = sorted(ENVIRONMENT_LEVELS[name]["rank"] for name in levels)
-    # Use a 90%-of-time floor so one transient packet does not downgrade a
-    # whole Session. A Critical sample remains visible regardless of duration.
-    floor_index = max(0, min(len(ranks) - 1, int((len(ranks) * 0.10 + 0.999999)) - 1))
-    floor_rank = 0 if level_counts["critical"] else ranks[floor_index]
-    status_key = next(
-        name for name, definition in ENVIRONMENT_LEVELS.items()
-        if definition["rank"] == floor_rank
-    )
+    levels = [
+        environment_level_for_value(criterion_key, value, rest_mode)
+        for value in values
+    ]
+    aggregate = summarize_environment_session_levels(levels)
+    level_counts = aggregate["level_counts"]
+    status_key = aggregate["status_key"]
     level = ENVIRONMENT_LEVELS[status_key]
     outside_pct = _percent(sum(level_counts[name] for name in ("critical", "poor", "fair", "good")), len(values))
     below_expected_pct = _percent(level_counts["critical"] + level_counts["poor"], len(values))
@@ -1328,6 +1519,14 @@ def _environment_metric(
         "level_distribution_pct": {
             name: _percent(count, len(values)) for name, count in level_counts.items()
         },
+        "aggregation_version": aggregate["version"],
+        "aggregation_method": aggregate["method"],
+        "peak_status_key": aggregate["peak_status_key"],
+        "critical_sample_count": aggregate["critical_sample_count"],
+        "critical_sample_pct": aggregate["critical_sample_pct"],
+        "transient_critical_observed": aggregate[
+            "transient_critical_observed"
+        ],
         "action": (
             action if level["decision"] in {"required", "optimise"}
             else "รักษาการตั้งค่าปัจจุบัน"
@@ -1361,6 +1560,7 @@ def build_session_report(
     estimator_version: Optional[str] = None,
     completed: bool = True,
     timeline_schema_version: int = 4,
+    target_duration_s: Any = _TARGET_UNSET,
 ) -> Dict[str, Any]:
     """Return the compact, explainable report shown after a Session ends."""
     rows = list(samples or [])
@@ -1400,8 +1600,28 @@ def build_session_report(
         estimated_sleep = sum(counts[stage] for stage in SLEEP_STAGES) * sample_interval_s
     estimated_sleep = max(0.0, min(duration, estimated_sleep)) if duration else max(0.0, estimated_sleep)
     wake_s = counts["wake"] * sample_interval_s
-    quality_mode = quality.get("rest_mode") or _resolve_rest_mode(
-        rest_mode, scored_count * sample_interval_s, estimated_sleep)
+    quality_mode = dict(
+        quality.get("rest_mode")
+        or _resolve_rest_mode(
+            rest_mode, scored_count * sample_interval_s, estimated_sleep
+        )
+    )
+    if target_duration_s is not _TARGET_UNSET:
+        quality_mode["target"] = resolve_rest_target(
+            rest_mode,
+            target_duration_s,
+        )
+    elif not quality_mode.get("target"):
+        quality_mode["target"] = resolve_rest_target(
+            rest_mode,
+            None,
+            use_mode_default=True,
+        )
+    quality_mode["protocol_status"] = _protocol_status(
+        quality_mode,
+        duration,
+        quality_mode["target"],
+    )
     environment_mode = quality_mode.get("group") or quality_mode.get("resolved") or rest_mode
 
     waso_samples = 0
@@ -1472,9 +1692,20 @@ def build_session_report(
                 )
                 + "ผ่านขั้นต่ำ "
                 f"{metric['expected_floor']} · เป้าหมายสูงสุด {metric['target']}"
+                + (
+                    " · พบสไปก์ Critical ชั่วคราว; เก็บค่าสูงสุดไว้ตรวจ "
+                    "แต่ไม่ใช้สไปก์เดียวตัดสินทั้ง Session"
+                    if metric["transient_critical_observed"]
+                    else ""
+                )
             ),
             "action": action_text,
             "context_only": True,
+            "aggregation_version": metric["aggregation_version"],
+            "peak_status_key": metric["peak_status_key"],
+            "transient_critical_observed": metric[
+                "transient_critical_observed"
+            ],
         })
     if corroborated_sound_events:
         findings.insert(0, {
@@ -1498,6 +1729,8 @@ def build_session_report(
     optimisation_metrics = [metric for metric in available_environment if metric["decision"] == "optimise"]
     environment_assessment = {
         "version": ENVIRONMENT_CONTEXT_POLICY_VERSION,
+        "aggregation_version": ENVIRONMENT_SESSION_AGGREGATION_VERSION,
+        "aggregation_method": "sustained_lower_decile_of_sample_levels",
         "mode": environment_mode,
         "mode_label": quality_mode.get("label"),
         "acceptable_min_level": ENVIRONMENT_ACCEPTABLE_MIN_LEVEL,

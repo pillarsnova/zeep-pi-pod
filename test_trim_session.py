@@ -127,12 +127,22 @@ class TrimSessionTests(unittest.TestCase):
                 "SELECT COUNT(*) FROM events WHERE type='sleep_stage'").fetchone()[0]
             check.close()
             dry_score = rescore(
-                data_dir, ["session-1"], requested_mode="short_nap", apply=False)
+                data_dir,
+                ["session-1"],
+                requested_mode="short_nap",
+                requested_target_minutes=30,
+                apply=False,
+            )
             self.assertFalse(dry_score["applied"])
             self.assertEqual(dry_score["sessions"][0]["rest_mode"]["resolved"], "short_nap")
 
             applied_score = rescore(
-                data_dir, ["session-1"], requested_mode="short_nap", apply=True)
+                data_dir,
+                ["session-1"],
+                requested_mode="short_nap",
+                requested_target_minutes=30,
+                apply=True,
+            )
             self.assertTrue(applied_score["applied"])
             sessions = sqlite3.connect(data_dir / "sessions.db")
             self.assertEqual(sessions.execute(

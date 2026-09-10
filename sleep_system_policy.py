@@ -22,10 +22,16 @@ SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
 SLEEP_HISTORY_BACKFILL_VERSION = (
     "zeep-sleep-history-reclass-v26-gated-n2-progression"
 )
-SESSION_REPORT_VERSION = "zeep-session-report-v10.3-nap-goal-duration"
-SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.3-nap-goal-duration"
+SESSION_REPORT_VERSION = "zeep-session-report-v10.4-recovery-target-guardrails"
+SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.4-recovery-target-guardrails"
+RECOVERY_SCORE_FORMULA_VERSION = (
+    "zeep-recovery-score-v2.0-targeted-25-35-30-10"
+)
 ENVIRONMENT_CONTEXT_POLICY_VERSION = (
     "zeep-environment-context-v2.1-optional-acoustic-input"
+)
+ENVIRONMENT_SESSION_AGGREGATION_VERSION = (
+    "zeep-environment-session-v1.0-sustained-decile"
 )
 TERMINAL_WAKE_POLICY_VERSION = "zeep-terminal-wake-boundary-v1.0"
 SLEEP_CLASSIFICATION_GAP_VERSION = (
@@ -318,6 +324,35 @@ REST_MODE_DURATION_TARGETS_S = {
     "overnight": 7 * 3600,
 }
 
+# Nap & Refresh has two deliberately selected opportunities.  The target is
+# persisted when the Session starts; elapsed time must never silently turn a
+# 30-minute Session into a 90-minute Session (or the reverse).  Historical
+# records without this field remain reviewable, but are not assigned a target
+# by inference.
+NAP_RECOVERY_TARGET_OPTIONS = {
+    30 * 60: {
+        "key": "nap_30",
+        "label": "Nap & Refresh · 30 นาที",
+        "recommended_range_seconds": [25 * 60, 35 * 60],
+        "extended_max_seconds": 45 * 60,
+    },
+    90 * 60: {
+        "key": "nap_90",
+        "label": "Nap & Refresh · 90 นาที",
+        "recommended_range_seconds": [75 * 60, 105 * 60],
+        "extended_max_seconds": 120 * 60,
+    },
+}
+NAP_RECOVERY_DEFAULT_TARGET_SECONDS = 30 * 60
+NAP_RECOVERY_MINIMUM_SCORE_SECONDS = 10 * 60
+NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS = 120 * 60
+RECOVERY_SCORE_COMPONENT_MAX_POINTS = {
+    "goal_duration": 25.0,
+    "physiological_response": 35.0,
+    "rest_continuity": 30.0,
+    "environment_support": 10.0,
+}
+
 # The Pilot exposes exactly two Session goals. Detailed sub-modes remain
 # internal for historical replay and duration scoring; they must not reappear
 # as extra choices in the user flow.
@@ -333,7 +368,10 @@ REST_SESSION_GROUPS = {
         "label": "Nap & Refresh",
         "score_title": "Recovery Score",
         "score_scope": "คะแนนสนับสนุนการฟื้นตัวจาก Sensor",
-        "description": "พักระหว่างวันประมาณ 30 นาที จะหลับ พักสายตา หรือทำสมาธิก็ได้",
+        "description": (
+            "พักระหว่างวันตามเป้าหมาย 30 หรือ 90 นาที "
+            "จะหลับ พักสายตา หรือทำสมาธิก็ได้"
+        ),
         "sleep_required": False,
     },
 }
@@ -356,10 +394,13 @@ REST_MODE_PROTOCOLS = {
     },
     "nap_recovery": {
         "session_character": "rest_or_nap",
-        "minimum_seconds": None,
-        "maximum_seconds": 45 * 60,
+        "minimum_seconds": NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
+        "maximum_seconds": NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS,
         "recommended_range_seconds": [25 * 60, 35 * 60],
-        "full_credit_target_seconds": 30 * 60,
+        "full_credit_target_seconds": NAP_RECOVERY_DEFAULT_TARGET_SECONDS,
+        "supported_target_seconds": sorted(NAP_RECOVERY_TARGET_OPTIONS),
+        "target_required_for_new_sessions": True,
+        "legacy_missing_target_requires_review": True,
         "phases": ["settle", "rest_or_nap", "gentle_close"],
         "primary_outcomes": [
             "rest_continuity", "hr_rr_settling", "stillness",
@@ -382,6 +423,119 @@ REST_MODE_LEGACY_ALIASES = {
     "meditation": "nap_recovery",
     "relax": "nap_recovery",
 }
+
+
+def rest_mode_group(value: Any) -> str | None:
+    """Return a canonical public Session group without guessing ``auto``.
+
+    This helper is intentionally stricter than the environment profile mapper:
+    an unresolved historical value may use conservative sleep atmosphere bands,
+    but it may not acquire a Sleep/Recovery score identity by implication.
+    """
+    mode = str(value or "auto").strip().lower()
+    mode = REST_MODE_LEGACY_ALIASES.get(mode, mode)
+    if mode in {"sleep", "overnight"}:
+        return "sleep"
+    if mode in {
+        "nap_recovery",
+        "general_rest",
+        "short_nap",
+        "cycle_nap",
+        "shift_rest",
+        "jet_lag",
+    }:
+        return "nap_recovery"
+    return None
+
+
+def resolve_rest_target(
+    rest_mode: Any,
+    persisted_seconds: Any = None,
+    *,
+    use_mode_default: bool = False,
+) -> dict[str, Any]:
+    """Validate one persisted duration target without elapsed-time inference.
+
+    New Sessions call this with ``use_mode_default=True`` before recording and
+    persist the result. Historical reports call it with the stored value only;
+    a missing/invalid target stays explicit and requires review.
+    """
+    group = rest_mode_group(rest_mode)
+    if group is None:
+        return {
+            "available": False,
+            "valid": False,
+            "group": None,
+            "seconds": None,
+            "minutes": None,
+            "source": "unresolved_mode",
+            "review_required": True,
+            "supported_seconds": [],
+        }
+
+    if group == "sleep":
+        target = REST_MODE_PROTOCOLS["sleep"]["full_credit_target_seconds"]
+        return {
+            "available": True,
+            "valid": True,
+            "group": group,
+            "key": "overnight_7h",
+            "label": "Overnight Recovery · 7 ชั่วโมง",
+            "seconds": target,
+            "minutes": target / 60,
+            "source": "persisted" if persisted_seconds is not None else "policy_default",
+            "review_required": False,
+            "supported_seconds": [target],
+        }
+
+    supported = sorted(NAP_RECOVERY_TARGET_OPTIONS)
+    value = None
+    if isinstance(persisted_seconds, (int, float)) and not isinstance(
+        persisted_seconds, bool
+    ):
+        value = float(persisted_seconds)
+    matched = next(
+        (target for target in supported if value is not None and abs(value - target) <= 1),
+        None,
+    )
+    source = "persisted"
+    if matched is None and persisted_seconds is None and use_mode_default:
+        requested = str(rest_mode or "").strip().lower()
+        matched = (
+            90 * 60
+            if requested in {"cycle_nap", "shift_rest"}
+            else NAP_RECOVERY_DEFAULT_TARGET_SECONDS
+        )
+        source = "policy_default_at_session_start"
+    if matched is None:
+        return {
+            "available": False,
+            "valid": persisted_seconds is None,
+            "group": group,
+            "seconds": None,
+            "minutes": None,
+            "source": (
+                "legacy_missing" if persisted_seconds is None else "invalid_persisted"
+            ),
+            "review_required": True,
+            "supported_seconds": supported,
+        }
+
+    option = NAP_RECOVERY_TARGET_OPTIONS[matched]
+    return {
+        "available": True,
+        "valid": True,
+        "group": group,
+        "key": option["key"],
+        "label": option["label"],
+        "seconds": matched,
+        "minutes": matched / 60,
+        "source": source,
+        "review_required": False,
+        "supported_seconds": supported,
+        "recommended_range_seconds": list(option["recommended_range_seconds"]),
+        "extended_max_seconds": option["extended_max_seconds"],
+    }
 
 # Environment is an explanatory context layer, not Sleep-Stage evidence.  A
 # value passes the ZEEP operating expectation at ``fair`` or above.  Only
@@ -412,6 +566,64 @@ ENVIRONMENT_LEVELS = {
         "decision": "maintain", "description": "อยู่ในเป้าหมายสูงสุดของ ZEEP",
     },
 }
+ENVIRONMENT_SESSION_SUSTAINED_FLOOR_QUANTILE = 0.10
+
+
+def summarize_environment_session_levels(level_keys: list[str]) -> dict[str, Any]:
+    """Aggregate a Session without promoting one transient spike to its label.
+
+    The Session level is the sustained lower decile of sample-level ranks. A
+    peak remains explicit context for engineering review. Live life-safety
+    controls continue to operate on current values and do not use this helper.
+    """
+    levels = [key for key in level_keys if key in ENVIRONMENT_LEVELS]
+    if not levels:
+        return {
+            "available": False,
+            "version": ENVIRONMENT_SESSION_AGGREGATION_VERSION,
+            "status_key": "unavailable",
+            "sample_count": 0,
+        }
+    ranks = sorted(ENVIRONMENT_LEVELS[key]["rank"] for key in levels)
+    count = len(ranks)
+    floor_index = max(
+        0,
+        min(
+            count - 1,
+            int(
+                count * ENVIRONMENT_SESSION_SUSTAINED_FLOOR_QUANTILE
+                + 0.999999
+            ) - 1,
+        ),
+    )
+    sustained_rank = ranks[floor_index]
+    status_key = next(
+        key
+        for key, definition in ENVIRONMENT_LEVELS.items()
+        if definition["rank"] == sustained_rank
+    )
+    peak_key = min(
+        levels,
+        key=lambda key: ENVIRONMENT_LEVELS[key]["rank"],
+    )
+    counts = {key: levels.count(key) for key in ENVIRONMENT_LEVELS}
+    critical_count = counts["critical"]
+    return {
+        "available": True,
+        "version": ENVIRONMENT_SESSION_AGGREGATION_VERSION,
+        "method": "sustained_lower_decile_of_sample_levels",
+        "quantile": ENVIRONMENT_SESSION_SUSTAINED_FLOOR_QUANTILE,
+        "status_key": status_key,
+        "rank": sustained_rank,
+        "peak_status_key": peak_key,
+        "sample_count": count,
+        "level_counts": counts,
+        "critical_sample_count": critical_count,
+        "critical_sample_pct": round(100.0 * critical_count / count, 3),
+        "transient_critical_observed": bool(
+            critical_count and status_key != "critical"
+        ),
+    }
 
 # Each list is ordered Excellent -> Good -> Fair -> Poor.  Values outside the
 # last band are Critical.  Temperature, RH and air-quality bands remain common
@@ -581,6 +793,13 @@ def environment_policy_snapshot(rest_mode: Any = "sleep") -> dict[str, Any]:
         "acceptable_min_level": ENVIRONMENT_ACCEPTABLE_MIN_LEVEL,
         "levels": [dict(ENVIRONMENT_LEVELS[key], key=key) for key in
                    ("critical", "poor", "fair", "good", "excellent")],
+        "session_aggregation": {
+            "version": ENVIRONMENT_SESSION_AGGREGATION_VERSION,
+            "method": "sustained_lower_decile_of_sample_levels",
+            "lower_quantile": ENVIRONMENT_SESSION_SUSTAINED_FLOOR_QUANTILE,
+            "peak_retained_as_context": True,
+            "changes_live_safety_logic": False,
+        },
         "criteria": criteria,
         "direct_stage_influence": False,
         "changes_life_safety_thresholds": False,
@@ -992,6 +1211,18 @@ def sleep_policy_snapshot() -> dict[str, Any]:
         },
         "rest_mode_protocols": {
             key: dict(value) for key, value in REST_MODE_PROTOCOLS.items()
+        },
+        "nap_recovery_targets": {
+            str(seconds): dict(value, seconds=seconds)
+            for seconds, value in NAP_RECOVERY_TARGET_OPTIONS.items()
+        },
+        "recovery_score": {
+            "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
+            "component_max_points": dict(
+                RECOVERY_SCORE_COMPONENT_MAX_POINTS
+            ),
+            "coverage_is_score_component": False,
+            "sleep_required": False,
         },
         "rest_mode_legacy_aliases": dict(REST_MODE_LEGACY_ALIASES),
         "environment_context": environment_policy_snapshot("sleep"),

@@ -162,19 +162,19 @@ class SleepSessionReportTests(unittest.TestCase):
             20 * 60,
             {"awakenings": 0, "waso_proxy_s": 0, "sleep_onset_proxy_s": 180},
             {"wake": 12, "n1": 60, "n2": 168, "n3": 0, "rem": 0},
-            rest_mode="auto",
+            rest_mode="nap_recovery",
             sensor_samples=samples,
+            target_duration_s=30 * 60,
         )
         self.assertEqual(quality["rest_mode"]["resolved"], "short_nap")
         self.assertEqual(quality["score_title"], "Recovery Score")
         self.assertTrue(quality["sleep_detected"])
         self.assertGreaterEqual(quality["score"], 70)
         self.assertEqual(quality["component_max_points"], {
-            "goal_duration": 20.0,
-            "physiological_response": 30.0,
-            "body_stillness": 20.0,
-            "environment_support": 20.0,
-            "data_coverage": 10.0,
+            "goal_duration": 25.0,
+            "physiological_response": 35.0,
+            "rest_continuity": 30.0,
+            "environment_support": 10.0,
         })
 
     def test_overnight_uses_recorded_rounds_with_explicit_project_target(self):
@@ -409,10 +409,10 @@ class SleepSessionReportTests(unittest.TestCase):
                 "temp": 24, "hum": 50, "co2": 700, "dba": 35, "lux": 1,
                 "_source_rows": 3, "_paired_hr_rr_rows": 2,
             }
-            for _ in range(10)
+            for _ in range(20)
         ]
         quality = build_sleep_quality(
-            300, {"estimated_sleep_s": 0}, {}, completed=True,
+            600, {"estimated_sleep_s": 0}, {}, completed=True,
             rest_mode="nap_recovery", sensor_samples=samples,
             sample_interval_s=30,
         )
@@ -422,7 +422,7 @@ class SleepSessionReportTests(unittest.TestCase):
         self.assertEqual(
             quality["physiology"]["paired_hr_rr_coverage_pct"], 66.7,
         )
-        self.assertEqual(quality["physiology"]["source_sensor_samples"], 30)
+        self.assertEqual(quality["physiology"]["source_sensor_samples"], 60)
 
     def test_recovery_low_session_coverage_keeps_score_with_confidence(self):
         samples = [{
@@ -452,6 +452,152 @@ class SleepSessionReportTests(unittest.TestCase):
             ]
         )
 
+    def test_recovery_timing_guardrails_follow_persisted_target(self):
+        def quality(minutes, target_minutes):
+            sample_count = max(6, int(minutes * 2))
+            samples = [{
+                "hr": 65.0,
+                "rr": 14.0,
+                "bed": "On bed",
+                "temp": 24.0,
+                "hum": 50.0,
+                "co2": 750.0,
+                "dba": 35.0,
+                "lux": 2.0,
+                "pm2_5": 8.0,
+                "voc": 100.0,
+            } for _ in range(sample_count)]
+            return build_sleep_quality(
+                minutes * 60,
+                {},
+                {"wake": sample_count},
+                rest_mode="nap_recovery",
+                sensor_samples=samples,
+                sample_interval_s=30,
+                target_duration_s=target_minutes * 60,
+            )
+
+        cases = (
+            (9, 30, "insufficient", False),
+            (10, 30, "partial", True),
+            (25, 30, "recommended", True),
+            (35, 30, "recommended", True),
+            (36, 30, "extended", True),
+            (45, 30, "extended", True),
+            (46, 30, "out_of_protocol", False),
+            (90, 90, "recommended", True),
+            (110, 90, "extended", True),
+            (121, 90, "implausible_outlier", False),
+        )
+        for minutes, target, status, available in cases:
+            with self.subTest(minutes=minutes, target=target):
+                result = quality(minutes, target)
+                self.assertEqual(
+                    result["rest_mode"]["protocol_status"]["status"],
+                    status,
+                )
+                self.assertEqual(result["available"], available)
+                self.assertEqual(result["score"] is not None, available)
+
+    def test_legacy_recovery_target_is_not_inferred_from_elapsed_time(self):
+        samples = [{
+            "hr": 65.0,
+            "rr": 14.0,
+            "bed": "On bed",
+        } for _ in range(120)]
+        quality = build_sleep_quality(
+            60 * 60,
+            {},
+            {"wake": 120},
+            rest_mode="nap_recovery",
+            sensor_samples=samples,
+            sample_interval_s=30,
+            target_duration_s=None,
+        )
+
+        timing = quality["rest_mode"]["protocol_status"]
+        self.assertFalse(quality["available"])
+        self.assertEqual(timing["status"], "target_unknown")
+        self.assertEqual(timing["display_status"], "TARGET_UNKNOWN/extended")
+        self.assertTrue(timing["review_required"])
+
+    def test_recovery_v2_keeps_coverage_out_of_health_score(self):
+        samples = [{
+            "hr": 65.0,
+            "rr": 14.0,
+            "bed": "On bed",
+        } for _ in range(60)]
+        quality = build_sleep_quality(
+            30 * 60,
+            {},
+            {"wake": 60},
+            rest_mode="nap_recovery",
+            sensor_samples=samples,
+            sample_interval_s=30,
+            target_duration_s=30 * 60,
+        )
+
+        self.assertTrue(quality["available"])
+        self.assertEqual(sum(quality["component_max_points"].values()), 100)
+        self.assertNotIn("data_coverage", quality["component_points"])
+        self.assertFalse(quality["data_coverage"]["score_component"])
+        self.assertEqual(quality["environment_support"]["coverage_pct"], 0.0)
+        self.assertEqual(quality["scored_max_points"], 90.0)
+
+    def test_transient_sound_spike_does_not_label_whole_session_critical(self):
+        base = {
+            "bed": "On bed",
+            "hr": 62.0,
+            "rr": 14.0,
+            "temp": 24.0,
+            "hum": 50.0,
+            "co2": 750.0,
+            "lux": 1.0,
+            "pm2_5": 8.0,
+            "voc": 100.0,
+            "sleep": "wake",
+        }
+        samples = [{**base, "dba": 38.0} for _ in range(239)]
+        samples.append({**base, "dba": 80.0})
+        quality = build_sleep_quality(
+            20 * 60,
+            {},
+            {"wake": 240},
+            rest_mode="nap_recovery",
+            sensor_samples=samples,
+            target_duration_s=30 * 60,
+        )
+        report = build_session_report(
+            20 * 60,
+            samples,
+            {},
+            {"wake": 240},
+            quality,
+            rest_mode="nap_recovery",
+            target_duration_s=30 * 60,
+        )
+
+        sound_metric = next(
+            item for item in report["environment"] if item["key"] == "sound"
+        )
+        sound_finding = next(
+            item for item in report["findings"] if item["key"] == "sound"
+        )
+        score_metric = next(
+            item
+            for item in quality["environment_support"]["metrics"]
+            if item["key"] == "sound"
+        )
+        self.assertAlmostEqual(sound_metric["average"], 38.2, places=1)
+        self.assertEqual(sound_metric["maximum"], 80.0)
+        self.assertEqual(
+            sound_metric["level_distribution_pct"]["critical"], 0
+        )
+        self.assertEqual(sound_metric["status_key"], "excellent")
+        self.assertEqual(sound_finding["severity"], "excellent")
+        self.assertTrue(sound_finding["transient_critical_observed"])
+        self.assertEqual(score_metric["status_key"], "excellent")
+
     def test_two_mode_protocol_windows_are_reported(self):
         samples = [{
             "hr": 66.0, "rr": 14.0, "bed": "On bed", "temp": 24.0,
@@ -461,12 +607,21 @@ class SleepSessionReportTests(unittest.TestCase):
             46 * 60, {}, {"wake": 360}, rest_mode="nap_recovery",
             sensor_samples=samples,
         )
-        self.assertEqual(over_limit["rest_mode"]["protocol_status"]["status"], "over_limit")
+        self.assertEqual(
+            over_limit["rest_mode"]["protocol_status"]["status"],
+            "out_of_protocol",
+        )
+        self.assertFalse(over_limit["available"])
+        self.assertTrue(
+            over_limit["rest_mode"]["protocol_status"]["review_required"]
+        )
         nap = build_sleep_quality(
             20 * 60, {}, {"wake": 240}, rest_mode="nap_recovery",
             sensor_samples=samples[:300],
         )
-        self.assertEqual(nap["rest_mode"]["protocol_status"]["status"], "allowed")
+        self.assertEqual(
+            nap["rest_mode"]["protocol_status"]["status"], "partial"
+        )
 
     def test_legacy_awake_modes_normalise_to_nap_refresh(self):
         self.assertEqual(normalise_rest_mode("performance_prep"), "nap_recovery")
@@ -511,7 +666,7 @@ class SleepSessionReportTests(unittest.TestCase):
             + [dict(off_bed) for _ in range(180)],
         )
 
-        self.assertEqual(quality["component_points"]["goal_duration"], 10.0)
+        self.assertEqual(quality["component_points"]["goal_duration"], 12.5)
         self.assertEqual(quality["duration_target"]["eligible_rest_minutes"], 15.0)
         self.assertEqual(quality["duration_target"]["completion_pct"], 50.0)
 
@@ -525,23 +680,24 @@ class SleepSessionReportTests(unittest.TestCase):
             sensor_samples=samples,
         )
 
-        self.assertEqual(quality["component_points"]["goal_duration"], 20.0)
+        self.assertEqual(quality["component_points"]["goal_duration"], 25.0)
         self.assertEqual(quality["duration_target"]["eligible_rest_minutes"], 45.0)
         self.assertEqual(quality["duration_target"]["completion_pct"], 100.0)
 
-    def test_smart_mode_classifies_observed_character_without_guessing_awake_goal(self):
+    def test_smart_mode_does_not_infer_goal_from_duration_or_sleep_state(self):
         short = build_sleep_quality(30 * 60, {}, {"n2": 360}, rest_mode="auto")
         cycle = build_sleep_quality(2 * 3600, {}, {"n2": 1440}, rest_mode="auto")
         main = build_sleep_quality(5 * 3600, {}, {"n2": 3600}, rest_mode="auto")
-        self.assertEqual(short["rest_mode"]["resolved"], "short_nap")
-        self.assertEqual(cycle["rest_mode"]["resolved"], "cycle_nap")
-        self.assertEqual(main["rest_mode"]["resolved"], "overnight")
-        self.assertEqual(short["rest_mode"]["group"], "nap_recovery")
-        self.assertEqual(short["score_title"], "Recovery Score")
-        self.assertEqual(cycle["rest_mode"]["group"], "nap_recovery")
-        self.assertEqual(cycle["score_title"], "Recovery Score")
-        self.assertEqual(main["rest_mode"]["group"], "sleep")
-        self.assertEqual(main["score_title"], "Sleep Score")
+        for quality in (short, cycle, main):
+            self.assertEqual(
+                quality["rest_mode"]["resolved"], "unknown_legacy"
+            )
+            self.assertIsNone(quality["rest_mode"]["group"])
+            self.assertFalse(quality["available"])
+            self.assertTrue(quality["review_required"])
+            self.assertEqual(
+                quality["validation_status"], "legacy_mode_unresolved"
+            )
         self.assertEqual(normalise_rest_mode("auto"), "auto")
 
 

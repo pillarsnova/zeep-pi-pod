@@ -66,6 +66,14 @@ class DatabaseManager:
                     for name in ("identity_subject", "pod_id", "zeep_public_id"):
                         if name not in existing:
                             connection.execute(f"ALTER TABLE sessions ADD COLUMN {name} TEXT")
+                    if "rest_mode" not in existing:
+                        connection.execute(
+                            "ALTER TABLE sessions ADD COLUMN rest_mode TEXT"
+                        )
+                    if "target_duration_s" not in existing:
+                        connection.execute(
+                            "ALTER TABLE sessions ADD COLUMN target_duration_s REAL"
+                        )
                     connection.execute(
                         "CREATE INDEX IF NOT EXISTS idx_sessions_subject_start "
                         "ON sessions(identity_subject, start_time DESC)"
@@ -192,11 +200,12 @@ class DatabaseManager:
             connection.execute(
                 """INSERT INTO sessions
                    (session_id,user,username_key,identity_subject,pod_id,zeep_public_id,
-                    gender,start_time,created_at,schema_version)
-                   VALUES (?,?,?,?,?,?,?,?,?,3)""",
+                    gender,rest_mode,target_duration_s,start_time,created_at,schema_version)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,5)""",
                 (p["session_id"], p["user"], p["username_key"],
                  p.get("identity_subject"), p.get("pod_id"), p.get("zeep_public_id"),
-                 p.get("gender"), p["start_time"], p["created_at"]),
+                 p.get("gender"), p.get("rest_mode"), p.get("target_duration_s"),
+                 p["start_time"], p["created_at"]),
             )
         elif job.operation == "session_end":
             connection.execute(

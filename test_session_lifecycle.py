@@ -38,6 +38,7 @@ class SessionCheckpointStoreTests(unittest.TestCase):
                 "identity_subject": "zeep:person-1",
                 "pod_id": "pod-1",
                 "rest_mode": "overnight",
+                "target_duration_s": 25_200,
                 "private_field": "must-not-be-persisted",
             },
             "sleep_context": {
@@ -70,6 +71,7 @@ class SessionCheckpointStoreTests(unittest.TestCase):
         self.assertEqual(
             len(payload["sleep_context"]["awake_vital_pairs"]), 6
         )
+        self.assertEqual(payload["record"]["target_duration_s"], 25_200)
 
     def test_sleep_context_must_belong_to_the_same_session(self) -> None:
         store = SessionCheckpointStore(self.path, bed_start_seconds=20)

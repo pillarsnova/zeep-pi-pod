@@ -103,6 +103,7 @@ from sleep_system_policy import (
     ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
     age_group,
     gender_adjusted_baseline,
+    rest_mode_group,
 )
 
 
@@ -273,7 +274,7 @@ def mode_and_score(value: dict[str, Any]) -> tuple[str, str, Optional[int]]:
     quality = report.get("quality") or (value.get("night_summary") or {}).get("sleep_quality") or {}
     mode = report.get("rest_mode") or quality.get("rest_mode") or {}
     resolved = str(mode.get("resolved") or mode.get("requested") or "auto")
-    group = str(mode.get("group") or ("sleep" if resolved in {"sleep", "overnight"} else "nap_recovery"))
+    group = str(mode.get("group") or rest_mode_group(resolved) or "unresolved")
     score = quality.get("score")
     try:
         score = int(score) if score is not None else None
@@ -1364,6 +1365,8 @@ def main() -> int:
         paired_coverage = paired / len(timeline) if timeline else 0.0
         summary = latest_summary(sessions, row["session_id"])
         resolved_mode, group, old_score = mode_and_score(summary)
+        scoring_mode = group if group in {"sleep", "nap_recovery"} else "auto"
+        target_duration_s = summary.get("target_duration_s")
         mode_counts[group] += 1
         email_counts[row["username_key"]] += 1
         packets = raw_packets(bcg, row["session_id"])
@@ -1532,21 +1535,23 @@ def main() -> int:
             })
             quality = build_sleep_quality(
                 row["duration"], night_summary, counts, completed=True,
-                rest_mode=group, stage_sequence=sequence,
+                rest_mode=scoring_mode, stage_sequence=sequence,
                 sensor_samples=report_sensor_rows,
                 sample_interval_s=SLEEP_EVIDENCE_EPOCH_SECONDS,
+                target_duration_s=target_duration_s,
             )
             new_score = quality.get("score")
             shadow_mode = dict(quality.get("rest_mode") or {})
             report = build_session_report(
                 row["duration"], report_sensor_rows, night_summary, counts, quality,
-                rest_mode=group,
+                rest_mode=scoring_mode,
                 sample_interval_s=SLEEP_EVIDENCE_EPOCH_SECONDS,
                 estimator_version=SLEEP_ESTIMATOR_VERSION,
                 completed=True,
                 timeline_schema_version=int(
                     summary.get("timeline_schema_version") or 3
                 ),
+                target_duration_s=target_duration_s,
             )
             if not quality.get("available"):
                 issue_codes.append("wellness_score_not_releasable")
@@ -1575,6 +1580,8 @@ def main() -> int:
             # overnight product only. Nap & Refresh explicitly allows awake
             # rest, brief N1/N2 or a short nap, so forcing adult overnight
             # proportions onto that mode would be a category error.
+            if group == "unresolved":
+                issue_codes.append("historical_rest_mode_unresolved")
             if group == "sleep" and stage_pct.get("n2", 0) > 85:
                 issue_codes.append("overnight_N2_over_85_percent")
             if group == "sleep" and total_sleep and stage_pct.get("n1", 0) > 30:

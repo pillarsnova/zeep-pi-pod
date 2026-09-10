@@ -6,7 +6,7 @@ prevents device/session orchestration code from becoming the schema registry.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -54,6 +54,7 @@ class LoginCommand(BaseModel):
     weight_kg: Optional[float] = None
     blood_group: Optional[str] = None
     rest_mode: str = "nap_recovery"
+    target_duration_minutes: Optional[Literal[30, 90]] = None
     # One-time proof returned only after this Pi failed to reach ZEEP.
     offline_ticket: str
     offline_identifier: str
@@ -64,6 +65,7 @@ class AuthLoginCommand(BaseModel):
     password: str
     age_group: Optional[str] = None
     rest_mode: str = "nap_recovery"
+    target_duration_minutes: Optional[Literal[30, 90]] = None
 
 
 class QrLoginPollCommand(BaseModel):
@@ -73,6 +75,7 @@ class QrLoginPollCommand(BaseModel):
     login_id: str
     age_group: Optional[str] = None
     rest_mode: str = "nap_recovery"
+    target_duration_minutes: Optional[Literal[30, 90]] = None
 
 
 class AdminLoginCommand(BaseModel):

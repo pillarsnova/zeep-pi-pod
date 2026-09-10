@@ -291,7 +291,7 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertIn("function identityLabel(user,fallback='ผู้ใช้งาน')", ui)
         self.assertIn("if(email)return email", ui)
         self.assertIn("if(accountKey.includes('@'))return accountKey", ui)
-        self.assertIn("รายงาน Session · ${identityLabel(rec,'')}", ui)
+        self.assertIn("ผลการใช้งาน · ${identityLabel(rec,'')}", ui)
         self.assertIn("topUserName.textContent=shownAccount", ui)
 
     def test_admin_history_users_are_ordered_by_latest_session(self):

@@ -18,6 +18,7 @@ from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 from sleep_system_policy import (
+    NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
     PERSONAL_BASELINE_MAX_NIGHTS,
     PERSONAL_BASELINE_MIN_DETECTED_SLEEP_SECONDS,
     PERSONAL_BASELINE_MIN_HR_SAMPLES,
@@ -26,8 +27,12 @@ from sleep_system_policy import (
     PERSONAL_BASELINE_LEARNING_START_LOCAL_DATE,
     PERSONAL_BASELINE_LEARNING_START_TIMEZONE,
     PERSONAL_BASELINE_LEARNING_START_UTC,
+    PRE_RESTORE_SESSION_REPORT_VERSION,
+    RECOVERY_SCORE_FORMULA_VERSION,
+    RESTORE_TREND_MAX_SESSIONS,
     SESSION_REPORT_VERSION,
     SLEEP_QUALITY_VERSION,
+    SLEEP_SCORE_FORMULA_VERSION,
     ZEEP_SLEEP_BASELINE_VERSION,
     is_approved_sleep_result_version,
     rest_mode_group,
@@ -282,6 +287,10 @@ class BaselineStore:
             report.get("version") == SESSION_REPORT_VERSION
             and quality.get("version") == SLEEP_QUALITY_VERSION
         )
+        pre_restore_versions = (
+            report.get("version") == PRE_RESTORE_SESSION_REPORT_VERSION
+            and quality.get("version") == SLEEP_QUALITY_VERSION
+        )
         approved_untouched_sleep = (
             group == "sleep"
             and is_approved_sleep_result_version(
@@ -291,7 +300,11 @@ class BaselineStore:
         if not (
             group is not None
             and quality.get("available") is True
-            and (current_versions or approved_untouched_sleep)
+            and (
+                current_versions
+                or pre_restore_versions
+                or approved_untouched_sleep
+            )
         ):
             return None
         timeline = self.database.read_sessions(
@@ -321,6 +334,11 @@ class BaselineStore:
             "sleep_detected": bool(detected_sleep_s > 0),
             "detected_sleep_s": round(detected_sleep_s, 1),
             "wellness_score": quality.get("score"),
+            "score_formula_version": (
+                SLEEP_SCORE_FORMULA_VERSION
+                if group == "sleep"
+                else RECOVERY_SCORE_FORMULA_VERSION
+            ),
             "temp_median": median_field("temperature"),
             "humidity_median": median_field("humidity"),
             "co2_median": median_field("co2"),
@@ -332,11 +350,17 @@ class BaselineStore:
         """Rebuild physiology and behaviour from the approved cutover onward."""
         sessions = self.database.read_sessions(
             "SELECT session_id,duration,start_time FROM sessions "
-            "WHERE username_key=? AND end_time IS NOT NULL AND duration>? "
-            "AND julianday(start_time)>=julianday(?) ORDER BY julianday(start_time) DESC LIMIT ?",
+            "WHERE username_key=? AND end_time IS NOT NULL AND duration>=? "
+            "AND julianday(start_time)>=julianday(?) "
+            "ORDER BY julianday(start_time) DESC LIMIT ?",
             (
-                username_key, MIN_SESSION_SECONDS,
-                PERSONAL_BASELINE_LEARNING_START_UTC, MAX_NIGHTS * 4,
+                username_key,
+                min(
+                    MIN_SESSION_SECONDS,
+                    NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
+                ),
+                PERSONAL_BASELINE_LEARNING_START_UTC,
+                RESTORE_TREND_MAX_SESSIONS * 4,
             ))
         nights = []
         behaviour_sessions = []
@@ -344,10 +368,15 @@ class BaselineStore:
             behaviour = self._behaviour_metrics(row["session_id"], row["duration"])
             if behaviour:
                 behaviour_sessions.append(behaviour)
-            m = self._night_metrics(row["session_id"])
+            duration = max(0.0, float(row["duration"] or 0.0))
+            m = (
+                self._night_metrics(row["session_id"])
+                if duration >= MIN_SESSION_SECONDS
+                else None
+            )
             if m:
                 m["session_id"] = row["session_id"]
-                m["duration_s"] = round(float(row["duration"] or 0.0), 1)
+                m["duration_s"] = round(duration, 1)
                 nights.append(m)
         physiology_nights = nights[:MAX_NIGHTS]
         record: dict[str, Any] = {
@@ -399,19 +428,57 @@ class BaselineStore:
         # in the same mode are required before the profile is active.
         behaviour_by_mode: dict[str, Any] = {}
         for group in sorted({str(item.get("mode_group") or "unknown") for item in behaviour_sessions}):
-            group_nights = [
+            group_sessions = [
                 item for item in behaviour_sessions
                 if str(item.get("mode_group") or "unknown") == group
-            ][:MAX_NIGHTS]
+            ][:RESTORE_TREND_MAX_SESSIONS]
             values = lambda key: [  # noqa: E731
-                float(item[key]) for item in group_nights
+                float(item[key]) for item in group_sessions
                 if isinstance(item.get(key), (int, float))
             ]
+            scores = [
+                float(item["wellness_score"])
+                for item in reversed(group_sessions)
+                if isinstance(item.get("wellness_score"), (int, float))
+            ]
+            typical_score_range = (
+                [
+                    round(_percentile(scores, 0.25), 1),
+                    round(_percentile(scores, 0.75), 1),
+                ]
+                if scores else None
+            )
             behaviour_by_mode[group] = {
-                "status": "active" if len(group_nights) >= MIN_NIGHTS else "learning",
-                "sessions_used": len(group_nights),
+                "status": (
+                    "active"
+                    if len(group_sessions) >= MIN_NIGHTS
+                    else "learning"
+                ),
+                "sessions_used": len(group_sessions),
                 "minimum_sessions": MIN_NIGHTS,
-                "session_ids": [item["session_id"] for item in group_nights],
+                "session_ids": [
+                    item["session_id"] for item in group_sessions
+                ],
+                "scores": scores,
+                "score_median": (
+                    round(statistics.median(scores), 1) if scores else None
+                ),
+                "score_typical_range": typical_score_range,
+                "score_reference": {
+                    "median": (
+                        round(statistics.median(scores), 1)
+                        if scores else None
+                    ),
+                    "typical_range": typical_score_range,
+                    "method": "median_and_interquartile_range",
+                    "same_mode_only": True,
+                    "prior_completed_sessions_only": True,
+                },
+                "score_formula_versions": sorted({
+                    str(item["score_formula_version"])
+                    for item in group_sessions
+                    if item.get("score_formula_version")
+                }),
                 "expected_onset_minutes": (
                     round(statistics.median(values("onset_proxy_s")) / 60.0, 1)
                     if values("onset_proxy_s") else None
@@ -480,7 +547,9 @@ class BaselineStore:
             }
             else requested
         )
-        context = dict((record.get("behaviour_by_mode") or {}).get(group) or {})
+        grouped = record.get("behaviour_by_mode")
+        stored = grouped.get(group) if isinstance(grouped, dict) else None
+        context = dict(stored) if isinstance(stored, dict) else {}
         if not context:
             context = {
                 "status": "no_data",
@@ -490,6 +559,17 @@ class BaselineStore:
                 "typical_duration_minutes": None,
                 "typical_start_local_hour": None,
                 "typical_environment": {},
+                "scores": [],
+                "score_median": None,
+                "score_typical_range": None,
+                "score_reference": {
+                    "median": None,
+                    "typical_range": None,
+                    "method": "median_and_interquartile_range",
+                    "same_mode_only": True,
+                    "prior_completed_sessions_only": True,
+                },
+                "score_formula_versions": [],
                 "direct_stage_influence": False,
                 "role": "expectation_report_and_confidence_context_only",
             }

@@ -92,9 +92,7 @@ class UiComposerTests(unittest.TestCase):
 
     def test_history_reports_use_mode_appropriate_result_language(self):
         template = ui_composer.TEMPLATE.read_text(encoding="utf-8")
-        css = (ui_composer.STATIC / "theme-modern.css").read_text(
-            encoding="utf-8"
-        )
+        css = (ui_composer.STATIC / "theme-modern.css").read_text(encoding="utf-8")
 
         self.assertIn("function reportPresentationMode(source)", template)
         self.assertIn("if(unresolved)return 'unknown';", template)
@@ -123,9 +121,7 @@ class UiComposerTests(unittest.TestCase):
 
     def test_usage_history_copy_keeps_legacy_routes_and_filter_ids(self):
         template = ui_composer.TEMPLATE.read_text(encoding="utf-8")
-        shell = (ui_composer.STATIC / "app-shell.js").read_text(
-            encoding="utf-8"
-        )
+        shell = (ui_composer.STATIC / "app-shell.js").read_text(encoding="utf-8")
 
         self.assertIn("title: 'ประวัติการใช้งาน'", shell)
         self.assertIn("ดูผล Overnight Recovery และ Nap & Refresh", shell)
@@ -156,9 +152,7 @@ class UiComposerTests(unittest.TestCase):
 
     def test_restore_summary_is_short_claim_safe_and_backward_compatible(self):
         template = ui_composer.TEMPLATE.read_text(encoding="utf-8")
-        css = (ui_composer.STATIC / "theme-modern.css").read_text(
-            encoding="utf-8"
-        )
+        css = (ui_composer.STATIC / "theme-modern.css").read_text(encoding="utf-8")
 
         self.assertIn("function restoreSummarySource(source)", template)
         self.assertIn(
@@ -187,23 +181,21 @@ class UiComposerTests(unittest.TestCase):
 
     def test_user_report_hides_raw_diagnostics_and_mobile_filters_fit(self):
         template = ui_composer.TEMPLATE.read_text(encoding="utf-8")
-        css = (ui_composer.STATIC / "theme-modern.css").read_text(
-            encoding="utf-8"
-        )
+        css = (ui_composer.STATIC / "theme-modern.css").read_text(encoding="utf-8")
 
         self.assertIn("const adminView=currentPrincipal?.role==='admin';", template)
         self.assertIn("const technicalNote=currentPrincipal?.role==='admin'", template)
-        self.assertIn("function normalizeUsageDetail(payload)", template)
-        self.assertIn("/api/v1/usage-sessions/${encodeURIComponent(sid)}", template)
-        self.assertIn("if(userView&&!r.ok&&[404,405].includes(r.status))", template)
-        self.assertIn("class=\"sleep-period user-sleep-period\"", template)
+        self.assertNotIn("function normalizeUsageDetail(payload)", template)
+        self.assertIn("const legacyPath=`/api/history/", template)
+        self.assertIn("renderReport(await r.json())", template)
+        self.assertNotIn("sleep_timeline:[]", template)
+        self.assertIn('class="sleep-period user-sleep-period"', template)
         self.assertIn("สถานะที่ระบบยืนยันจากแนวโน้มภายใน Session", template)
         self.assertIn("@media (max-width: 520px)", css)
         self.assertIn("grid-template-columns: repeat(6, minmax(0, 1fr));", css)
         self.assertIn("min-height: 44px;", css)
         self.assertIn(
-            'body[data-view="sessions"][data-role="admin"] '
-            ".history-admin-filter",
+            'body[data-view="sessions"][data-role="admin"] .history-admin-filter',
             css,
         )
 

@@ -137,8 +137,8 @@ Browser ─▶ POST /api/{door,pulse,output,music,labels,session} ─▶ GPIO / 
 ```
 
 เวอร์ชัน runtime, Rest Mode, สูตรคะแนนและ closure checklist ดูที่
-[ZEEP Sleep System Current](../docs/zeep-sleep-system-current.md) และหลักฐานของ
-ตัวประมาณดูที่ [ZEEP Sleep-State Baseline v1.8](../docs/zeep-sleep-state-baseline-v1.0.md):
+[ZEEP Sleep System Current](docs/zeep-sleep-system-current.md) และหลักฐานของ
+ตัวประมาณดูที่ [ZEEP Sleep-State Baseline v1.8](docs/zeep-sleep-state-baseline-v1.0.md):
 Session/cycle เริ่มที่ Wake, ต้องผ่าน N1 ก่อน N2/N3/REM; N3 ไป REM ได้หลัง
 dwell/hysteresis แต่ REM ไป N3 ต้องผ่าน N2 กติกานี้เป็น ZEEP continuity guard ไม่ใช่ AASM scoring rule;
 G2 primary ontology แก้เป็น `W / N1 / N2 / N3 / REM` แบบ one-to-one กับ PSG;
@@ -146,9 +146,10 @@ G2 primary ontology แก้เป็น `W / N1 / N2 / N3 / REM` แบบ one
 
 ### API ทั้งหมด
 
-สัญญาใหม่ดู [ZEEP Pod API v1](../docs/zeep-api-v1.md): `GET /api/v1/state`
-และ Admin contracts ใช้ envelope ที่มี schema/version/request-id ส่วน endpoint
-เดิมด้านล่างยังคงรองรับ Tablet ที่ติดตั้งอยู่
+สัญญาใหม่ดู [ZEEP Pod API v1](docs/zeep-api-v1.md): `GET /api/v1/state`,
+`GET /api/v1/usage-sessions` และผลสรุปราย Session ที่
+`/api/v1/usage-sessions/{session_id}/summary` ทุก route ใช้ envelope ที่มี
+schema/version/request-id ส่วน endpoint เดิมด้านล่างยังคงรองรับ Tablet ที่ติดตั้งอยู่
 
 | กลุ่ม | Endpoint |
 |---|---|
@@ -157,6 +158,7 @@ G2 primary ontology แก้เป็น `W / N1 / N2 / N3 / REM` แบบ one
 | เสียง | `GET /api/music` · `POST /api/music/{play,stop,pause,volume}` |
 | ป้ายชื่อ | `POST /api/labels/{aroma1..4}` |
 | Session | `POST /api/session/{login,logout}` · `GET /api/users` · `GET /api/history/{user}[/{id}]` · `DELETE /api/users/{user}` |
+| ประวัติการใช้งาน v1 | `GET /api/v1/usage-sessions` · `GET /api/v1/usage-sessions/{id}/summary` · `GET /api/v1/usage-sessions/{id}` |
 
 ทุก API ส่วนบุคคล/ควบคุมตรวจ Auth Session และ RBAC ที่ Backend ส่วน `POST`/`DELETE`
 ตรวจ CSRF เพิ่มอีกชั้น คำสั่ง door/pulse มี lock + cooldown และดึงขากลับ LOW เสมอ

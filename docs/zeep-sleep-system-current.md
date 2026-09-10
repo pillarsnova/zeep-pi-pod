@@ -5,7 +5,7 @@
 > **Status:** Wellness release candidate · guarded derived-result replay/promotion · G2 paired-PSG validation open
 > **Updated:** 2026-09-11
 > **Code manifest:** [`pi5/sleep_system_policy.py`](../pi5/sleep_system_policy.py)  
-> **Related:** [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.0.md) · [Historical Promotion Policy v2](sleep-history-promotion-policy-v2.md) · [v1.23 Wellness Replay Review](sleep-estimator-v123-wellness-longitudinal-report-2026-09-05.md) · [AI Sleep-State](ai-sleep-state-and-assistant.md)
+> **Related:** [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.0.md) · [ZEEP Restore Summary v1](zeep-restore-summary-v1.md) · [Historical Promotion Policy v2](sleep-history-promotion-policy-v2.md) · [v1.23 Wellness Replay Review](sleep-estimator-v123-wellness-longitudinal-report-2026-09-05.md) · [AI Sleep-State](ai-sleep-state-and-assistant.md)
 
 ## TL;DR
 
@@ -18,6 +18,7 @@
 - การพลิกตัว ขยับแขนขา หรือขยับผ้าห่มขณะยังอยู่บนเตียงเป็น `sleep-compatible movement` และไม่เปลี่ยนเป็น Wake โดยลำพัง
 - เส้นทางหลักเริ่ม `Wake → N1 → N2`; ระบบเปิด `N1 → REM` แบบ SOREMP-like ที่ต้องผ่าน REM physiology gate, เปิด `N3 → REM` และเปิด `REM → Wake` เมื่อหลักฐานของ target ชนะ 2 epoch/60 วินาที
 - `Overnight Recovery` ใช้ `Sleep Score`; `Nap & Refresh` ใช้ `Recovery Score` ไม่ว่าจะหลับ พักสายตา หรือทำสมาธิ โดย Recovery Score ใช้ HR/RR ที่จับคู่กันอย่างน้อย 6 จุด ส่วน coverage เป็น QA/confidence แยกและไม่ให้หรือหักคะแนน
+- `ZEEP Restore Summary` อธิบายคะแนนหลักด้วยสถานะ ตัวขับคะแนน Personal Baseline และคำแนะนำหนึ่งข้อ โดยไม่สร้างคะแนนที่สามและไม่อ้าง Whole-day Readiness
 - N3 ต่ำกว่า 3% ไม่ได้คะแนน N3, 3–10% ได้ตามสัดส่วน, ตั้งแต่ 10% ได้เต็มและ **ไม่หักเมื่อเกิน 20%**
 - Raw/Timeline เดิมไม่ถูกแก้โดยการคำนวณรายงานใหม่; Historical Replay และ Rescore มี version/audit แยก
 - ช่วงจบ Session แยก `Wake` ของมนุษย์ออกจาก `ไม่มีผู้ใช้งานบนเตียง → ออกจาก ZEEP → จบ Session`; สองสถานะหลังเป็น Occupancy และไม่ปนเปอร์เซ็นต์ Sleep Stage
@@ -37,8 +38,14 @@
 | G2 ontology | `g2-aasm-5class-v1.0` |
 | Historical replay | `zeep-sleep-history-reclass-v26-gated-n2-progression` |
 | Sleep / Recovery quality | `zeep-rest-quality-v8.4-recovery-target-guardrails` |
+| Sleep Score formula | `zeep-sleep-score-v1.0-20-30-30-15-5` |
 | Recovery Score formula | `zeep-recovery-score-v2.0-targeted-25-35-30-10` |
-| Session report | `zeep-session-report-v10.4-recovery-target-guardrails` |
+| Session report | `zeep-session-report-v10.5-restore-summary` |
+| Restore Summary | `zeep-restore-summary-v1.0` |
+| Restore action bands | `zeep-restore-action-bands-v1.0` |
+| Restore driver policy | `zeep-restore-drivers-v1.0` |
+| Restore Personal Baseline | `zeep-restore-personal-baseline-v1.0` |
+| Restore recommendation | `zeep-restore-recommendation-v1.0` |
 | Environment context | `zeep-environment-context-v2.1-optional-acoustic-input` |
 | Environment Session aggregation | `zeep-environment-session-v1.0-sustained-decile` |
 | Terminal Wake boundary | `zeep-terminal-wake-boundary-v1.0` |

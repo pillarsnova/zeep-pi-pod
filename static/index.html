@@ -6445,65 +6445,18 @@ function renderSessionList(d){
   });
 }
 
-function normalizeUsageDetail(payload){
-  const data=payload?.data||payload||{};
-  if(!data.report&&!data.score)return data;
-  const report={...(data.report||{})};
-  const score=data.score||{};
-  const quality=report.quality||{
-    available:score.available===true,
-    score:score.value,
-    level:score.level,
-    score_title:score.title,
-    formula_version:score.formula_version,
-    quality_type:score.type==='recovery_score'
-      ?'rest_goal':score.type==='sleep_score'?'sleep':undefined,
-    reason:score.reason,
-  };
-  report.quality=quality;
-  report.rest_mode=report.rest_mode||data.mode||{};
-  report.restore_summary=data.restore_summary||report.restore_summary;
-  report.data_quality={
-    ...(report.data_quality||{}),
-    level:report.data_quality?.level||data.data_quality?.level,
-    label:report.data_quality?.label||data.data_quality?.label,
-    coverage:report.data_quality?.coverage||data.data_quality?.coverage||{},
-    confidence:report.data_quality?.confidence
-      ||data.data_quality?.confidence||{},
-  };
-  return {
-    ...data,
-    account_key:data.user?.canonical_identifier||data.user?.email,
-    email:data.user?.email,
-    display_name:data.user?.display_name,
-    sleep_quality:quality,
-    session_report:report,
-    summary:data.summary||{},
-    samples:[],
-    sleep_timeline:[],
-    terminal_occupancy_timeline:[],
-  };
-}
-
 async function loadDetail(user, sid, row){
   document.querySelectorAll('.hist-row').forEach(x=>x.classList.remove('sel'));
   row?.classList.add('sel');
   document.getElementById('sessionDetail').innerHTML='<div class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังสร้างผลการใช้งาน</b><span>กำลังอ่านผลและ Timeline ของ Session</span></div></div>';
-  const userView=currentPrincipal?.role!=='admin';
-  const modernPath=`/api/v1/usage-sessions/${encodeURIComponent(sid)}`;
   const legacyPath=`/api/history/${encodeURIComponent(user)}/${encodeURIComponent(sid)}`;
   let r;
-  try {
-    r=await fetch(userView?modernPath:legacyPath,{cache:'no-store'});
-    // Older Pi images do not expose v1 yet. Keep the existing own-account API
-    // as a transition fallback, while renderReport still hides diagnostics.
-    if(userView&&!r.ok&&[404,405].includes(r.status)){
-      r=await fetch(legacyPath,{cache:'no-store'});
-    }
-  }
+  // The local Pi report retains the confirmed Sleep State sequence. The new
+  // raw-free v1 API remains the contract for ZEEP Backend/Mobile integration.
+  try { r=await fetch(legacyPath,{cache:'no-store'}); }
   catch { toast('เชื่อมต่อ server ไม่ได้', 'error'); return; }
   if (!r.ok){ toast('โหลดรายละเอียดไม่ได้', 'error'); return; }
-  renderReport(normalizeUsageDetail(await r.json()));
+  renderReport(await r.json());
   // On a tablet the history list can fill most of the viewport. Bring the
   // completed report into view so the newly requested quality result is not
   // hidden below the fixed navigation bar.

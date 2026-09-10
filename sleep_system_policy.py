@@ -22,21 +22,38 @@ SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
 SLEEP_HISTORY_BACKFILL_VERSION = (
     "zeep-sleep-history-reclass-v26-gated-n2-progression"
 )
-SESSION_REPORT_VERSION = "zeep-session-report-v10.4-recovery-target-guardrails"
+SESSION_REPORT_VERSION = "zeep-session-report-v10.5-restore-summary"
 SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.4-recovery-target-guardrails"
+SLEEP_SCORE_FORMULA_VERSION = (
+    "zeep-sleep-score-v1.0-20-30-30-15-5"
+)
 # The Recovery v2 rollout did not change the Overnight formula.  Keep the
 # immediately preceding, explicitly approved Overnight pair readable and
 # eligible for personal-baseline learning so a targeted Recovery migration
 # cannot invalidate untouched sleep history.
+PRE_RESTORE_SESSION_REPORT_VERSION = (
+    "zeep-session-report-v10.4-recovery-target-guardrails"
+)
 PREVIOUS_SESSION_REPORT_VERSION = "zeep-session-report-v10.3-nap-goal-duration"
 PREVIOUS_SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.3-nap-goal-duration"
 APPROVED_SLEEP_RESULT_VERSION_PAIRS = frozenset({
     (SESSION_REPORT_VERSION, SLEEP_QUALITY_VERSION),
+    (PRE_RESTORE_SESSION_REPORT_VERSION, SLEEP_QUALITY_VERSION),
     (PREVIOUS_SESSION_REPORT_VERSION, PREVIOUS_SLEEP_QUALITY_VERSION),
 })
 RECOVERY_SCORE_FORMULA_VERSION = (
     "zeep-recovery-score-v2.0-targeted-25-35-30-10"
 )
+RESTORE_SUMMARY_VERSION = "zeep-restore-summary-v1.0"
+RESTORE_ACTION_BANDS_VERSION = "zeep-restore-action-bands-v1.0"
+RESTORE_DRIVER_POLICY_VERSION = "zeep-restore-drivers-v1.0"
+RESTORE_BASELINE_COMPARISON_VERSION = (
+    "zeep-restore-personal-baseline-v1.0"
+)
+RESTORE_RECOMMENDATION_VERSION = "zeep-restore-recommendation-v1.0"
+RESTORE_BASELINE_MIN_COMPARISON_SESSIONS = 7
+RESTORE_BASELINE_STABLE_SESSIONS = 14
+RESTORE_TREND_MAX_SESSIONS = 30
 ENVIRONMENT_CONTEXT_POLICY_VERSION = (
     "zeep-environment-context-v2.1-optional-acoustic-input"
 )
@@ -1038,7 +1055,15 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "g2_ontology": SLEEP_G2_ONTOLOGY_VERSION,
             "historical_replay": SLEEP_HISTORY_BACKFILL_VERSION,
             "sleep_quality": SLEEP_QUALITY_VERSION,
+            "sleep_score_formula": SLEEP_SCORE_FORMULA_VERSION,
             "session_report": SESSION_REPORT_VERSION,
+            "restore_summary": RESTORE_SUMMARY_VERSION,
+            "restore_action_bands": RESTORE_ACTION_BANDS_VERSION,
+            "restore_driver_policy": RESTORE_DRIVER_POLICY_VERSION,
+            "restore_baseline_comparison": (
+                RESTORE_BASELINE_COMPARISON_VERSION
+            ),
+            "restore_recommendation": RESTORE_RECOMMENDATION_VERSION,
             "environment_context": ENVIRONMENT_CONTEXT_POLICY_VERSION,
             "terminal_wake": TERMINAL_WAKE_POLICY_VERSION,
             "classification_gap": SLEEP_CLASSIFICATION_GAP_VERSION,
@@ -1244,6 +1269,36 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             ),
             "coverage_is_score_component": False,
             "sleep_required": False,
+        },
+        "sleep_score": {
+            "formula_version": SLEEP_SCORE_FORMULA_VERSION,
+            "component_max_points": dict(
+                SLEEP_QUALITY_COMPONENT_MAX_POINTS
+            ),
+            "sleep_required": True,
+        },
+        "restore_summary": {
+            "version": RESTORE_SUMMARY_VERSION,
+            "action_bands_version": RESTORE_ACTION_BANDS_VERSION,
+            "driver_policy_version": RESTORE_DRIVER_POLICY_VERSION,
+            "baseline_comparison_version": (
+                RESTORE_BASELINE_COMPARISON_VERSION
+            ),
+            "recommendation_version": RESTORE_RECOMMENDATION_VERSION,
+            "creates_independent_score": False,
+            "source_scores": {
+                "sleep": "Sleep Score",
+                "nap_recovery": "Recovery Score",
+            },
+            "whole_day_readiness": False,
+            "automatic_actuation": False,
+            "personal_comparison_minimum_sessions": (
+                RESTORE_BASELINE_MIN_COMPARISON_SESSIONS
+            ),
+            "personal_baseline_stable_from_sessions": (
+                RESTORE_BASELINE_STABLE_SESSIONS
+            ),
+            "trend_max_sessions": RESTORE_TREND_MAX_SESSIONS,
         },
         "rest_mode_legacy_aliases": dict(REST_MODE_LEGACY_ALIASES),
         "environment_context": environment_policy_snapshot("sleep"),

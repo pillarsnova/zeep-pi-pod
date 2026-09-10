@@ -44,8 +44,6 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-# Team database layer (SQLite V2): queue-based single-writer + BCG epoch
-# storage + daily backup + read-side history router. Merged 2026-08-04.
 from api_history import create_history_router
 from api_models import (
     ActiveSessionProfileCommand,
@@ -135,6 +133,7 @@ from zeep_pod.sessions.history_quality import (
     released_historical_quality as _released_historical_quality,
 )
 from zeep_pod.sessions.report_share import ReportShareRegistry, create_report_share_router
+from zeep_pod.sessions.usage_api import create_usage_sessions_router
 from maintenance_registry import maintenance_contract_snapshot
 from migration import migrate_jsonl
 from personal import BaselineStore
@@ -5114,19 +5113,13 @@ def occupancy_lease_supervisor():
             state["system"]["occupancy"] = health
 
 
-# ---------------------------------------------------------------------------
 # Upload a finished Session to the ZEEP account backend (POST /v1/sleep-sessions/ingest)
-#
 # The account backend stores ``record`` verbatim in the ``scoring_result`` jsonb
 # column and returns the whole row from both the sleep-history list and detail
 # endpoints, so the payload is built as a fresh whitelist literal.  Copying
 # ``record`` and deleting keys would drag ``samples`` (one row per cadence tick,
 # ~1 MB a night) plus the frozen Profile context into every history request.
-#
-# Percentages/minutes come from ``session_report`` rather than being recomputed
-# so the uploaded numbers are exactly what the Pod itself displays.
-
-# pi5 scores AASM W/N1/N2/N3/REM.  The backend only ever tests ``stage != 0`` to
+# Pi scores AASM W/N1/N2/N3/REM. The backend tests ``stage != 0`` to
 # find sleep onset and ``stage == 0`` to count awakenings, so Wake keeps index 0
 # and ``stage_name`` carries the real meaning: the same jsonb column also holds
 # 4-level (0=Awake 1=Light 2=Deep 3=REM) rows from the Python AI service, and
@@ -5626,9 +5619,7 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
         end_reason=reason,
     )
     record["terminal_wake_transition"] = terminal_wake
-    # SQLite เป็น source of truth แล้ว — ไม่เขียน sessions.jsonl อีก
-    # (กัน migration ตอน boot นำเข้าซ้ำ); ข้อมูลส่วนที่ schema ไม่มีคอลัมน์
-    # (bed/sleep counts + estimator version) เก็บเป็น event 'final_summary'
+    # SQLite คือ source of truth; ส่วนที่ schema ไม่มีเก็บใน final_summary.
     bcg_storage.end_session(record["session_id"])
     # night summary (proxy จาก per-sample sleep state) — ป้อน baseline ส่วนบุคคล
     sleep_like = {"n1", "n2", "n3", "rem", "nrem_light", "nrem_deep"}
@@ -5670,8 +5661,7 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
         "rem_ratio": (round(record["summary"]["sleep_state_counts"].get("rem", 0)
                             / total_sleep_samples, 3) if total_sleep_samples else None),
     }
-    # Sleep quality exists only after finalization and is persisted beside the
-    # raw factors so history can reproduce and explain the same result later.
+    # Persist final quality beside its factors for reproducible history.
     sleep_quality = build_sleep_quality(
         record["duration_s"], night_summary,
         record["summary"]["sleep_state_counts"], completed=True,
@@ -5687,6 +5677,8 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
     night_summary["sleep_quality"] = sleep_quality
     night_summary["wellness_score"] = sleep_quality.get("score")
     record["sleep_quality"] = sleep_quality
+    restore_context = baselines.behaviour_context(
+        record["username_key"], record.get("rest_mode") or "auto")
     session_report = build_session_report(
         record["duration_s"], report_samples, night_summary,
         record["summary"]["sleep_state_counts"], sleep_quality,
@@ -5695,6 +5687,7 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
         estimator_version=record.get("sleep_estimator"), completed=True,
         timeline_schema_version=SESSION_TIMELINE_SCHEMA_VERSION,
         target_duration_s=record.get("target_duration_s"),
+        personal_context=restore_context, trend_context=restore_context,
     )
     record["session_report"] = session_report
     if terminal_wake:
@@ -5733,6 +5726,7 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
             # physiology. It may explain/report a Session but cannot create or
             # modify W/N1/N2/N3/REM.
             "wellness_context": record.get("wellness_context"),
+            "restore_context": restore_context,
             "counters": record["counters"],
             "armed_at_utc": record.get("armed_at_utc"),
             "bed_start_s": BED_START_SECONDS,
@@ -5776,10 +5770,7 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
         except (ZeepApiOffline, HTTPException) as exc:
             log_event("auth", "zeep_logout_failed", user=record["username"],
                       error=str(getattr(exc, "detail", exc)))
-    # ส่งผลการนอนขึ้นบัญชีผู้ใช้ — best-effort เหมือน logout ด้านบน: ทำหลัง DB
-    # flush เสมอ และถ้าเน็ตหลุดจะคิวไว้ใน outbox ให้ยิงซ้ำ (backend idempotent
-    # ด้วย externalSessionId). ใช้ x-api-key จึงไม่พึ่ง token ของผู้ใช้ —
-    # Session ที่กู้คืนหลัง restart (ไม่มี auth) ก็อัปโหลดได้ตามปกติ
+    # Upload after DB flush; the idempotent outbox survives network/restart.
     _enqueue_session_ingest(record, report_samples)
     report_shares.fulfil(record, access_token=(active.get("auth") or {}).get("access_token"))
     # Adaptive learning: อัปเดต baseline ส่วนบุคคลจากคืนล่าสุด (≤7 คืน rolling)
@@ -6415,6 +6406,12 @@ app.include_router(create_api_v1_router(
     sensor_contract_snapshot=sensor_contract_snapshot,
     sleep_policy_snapshot=sleep_policy_snapshot,
     maintenance_contract_snapshot=maintenance_contract_snapshot,
+))
+app.include_router(create_usage_sessions_router(
+    require_user=require_user, history_service=lambda: _session_history_service(),
+    profiles_snapshot=lambda: _load_profiles(),
+    profiles_lock=profile_lock,
+    timezone_name=POD_TIMEZONE or "Asia/Bangkok",
 ))
 
 
@@ -8464,6 +8461,9 @@ def history_detail(
         final_summary, sleep_quality,
     )
     persisted_session_report = final_summary.get("session_report")
+    restore_context = final_summary.get("restore_context")
+    if not isinstance(restore_context, dict):
+        restore_context = None
     persisted_report_version = (
         persisted_session_report.get("version")
         if isinstance(persisted_session_report, dict) else None
@@ -8473,9 +8473,7 @@ def history_detail(
         not isinstance(session_report, dict)
         or persisted_report_version != SESSION_REPORT_VERSION
     ):
-        # Backward-compatible display-only read path: old Sessions receive the
-        # current Mode-aware report without rewriting their persisted health
-        # record.  The prior version remains explicit for auditability.
+        # Display-only upgrade; persisted history/version remain unchanged.
         session_report = build_session_report(
             row["duration"], report_samples, night_summary,
             final_summary.get("sleep_state_counts") or {}, sleep_quality,
@@ -8486,6 +8484,7 @@ def history_detail(
             timeline_schema_version=int(
                 final_summary.get("timeline_schema_version") or 3),
             target_duration_s=history_target_duration_s,
+            personal_context=restore_context, trend_context=restore_context,
         )
         session_report["display_recomputed"] = True
         session_report["display_recomputed_from_version"] = persisted_report_version

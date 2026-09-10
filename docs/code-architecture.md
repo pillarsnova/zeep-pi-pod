@@ -2,7 +2,7 @@
 
 Status: active migration guide  
 Owner: Pi 5 application team  
-Last updated: 2026-09-05
+Last updated: 2026-09-11
 
 ## Purpose
 
@@ -24,7 +24,12 @@ zeep_pod/
 └── sessions/
     ├── cadence.py        # mixed 5/10-second timeline normalization
     ├── lifecycle.py      # checkpoint, bed occupancy and HR/RR start gate
-    └── report_share.py   # end-of-Session QR share: ticket, upload, QR code
+    ├── report_share.py   # end-of-Session QR share: ticket, upload, QR code
+    ├── history_service.py # filtered completed-Session read model
+    ├── restore_summary*.py # non-scoring explanation + Personal Baseline
+    ├── result_contract.py # versioned, raw-free result DTO
+    ├── usage_service.py  # app-facing result orchestration
+    └── usage_api.py      # authenticated `/api/v1/usage-sessions` routes
 ```
 
 `sessions/report_share.py` follows the same secret discipline as `qr_login.py`.
@@ -75,7 +80,7 @@ serial ports, GPIO or databases at import time.
   tools have migrated.
 
 These limits are enforced by `test_modular_architecture.py` and the Python
-quality workflow. The legacy root has a no-growth ceiling of 8,900 lines and
+quality workflow. The legacy root has a no-growth ceiling of 8,800 lines and
 must shrink at each extraction phase.
 
 ## Migration sequence
@@ -83,9 +88,10 @@ must shrink at each extraction phase.
 1. **Completed in Phase 1:** Session cadence, profile normalization, GPIO and
    audio runtime extracted with API compatibility.
 2. **Phase 2 — in progress:** checkpoint persistence, Bed Status and the fresh
-   HR/RR recording gate now live in `sessions/lifecycle.py`. Next, move Session
-   start/finalize/restore orchestration and account ingest behind injected
-   database, occupancy and logging ports.
+   HR/RR recording gate live in `sessions/lifecycle.py`; Usage History,
+   Restore Summary และ API result contract แยกออกจาก composition root แล้ว
+   ขั้นถัดไปคือย้าย start/finalize/restore orchestration และ account ingest
+   หลัง database, occupancy และ logging ports ที่ inject ได้
 3. **Phase 3:** move ESP32, MQTT and BCG readers into `sensors/` services.
 4. **Phase 4:** move air-conditioner, bed and accessory commands into
    `controls/` services.

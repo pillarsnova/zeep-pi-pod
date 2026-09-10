@@ -1,10 +1,14 @@
+import json
 import sqlite3
 import tempfile
 import unittest
-import json
 from pathlib import Path
 
 from database import DatabaseManager
+from sleep_system_policy import (
+    PRE_RESTORE_SESSION_REPORT_VERSION,
+    SESSION_REPORT_VERSION,
+)
 from zeep_pod.sessions.history import (
     apply_session_availability,
     session_availability_by_account,
@@ -184,8 +188,7 @@ class SessionAvailabilityTests(unittest.TestCase):
                 "session_report": {"version": "report-v1"},
             }
             connection.execute(
-                "INSERT INTO events(session_id,timestamp,type,value) "
-                "VALUES (?,?,?,?)",
+                "INSERT INTO events(session_id,timestamp,type,value) VALUES (?,?,?,?)",
                 (
                     session_id,
                     "2026-09-05T06:31:00+00:00",
@@ -252,6 +255,111 @@ class SessionAvailabilityTests(unittest.TestCase):
 
         self.assertEqual(found["summary"]["people_count"], 1)
         self.assertEqual(missing["summary"]["people_count"], 0)
+
+    def test_session_lookup_filters_ownership_and_keeps_persisted_mode(self) -> None:
+        account = "owner@example.test"
+        self.insert_session(
+            "owned-session",
+            account,
+            "2026-09-05T05:00:00+00:00",
+            with_timeline=True,
+        )
+        connection = sqlite3.connect(self.data_dir / "sessions.db")
+        connection.execute(
+            "UPDATE sessions SET rest_mode=?,target_duration_s=? WHERE session_id=?",
+            ("nap_recovery", 1800, "owned-session"),
+        )
+        connection.commit()
+        connection.close()
+        service = SessionHistoryService(
+            self.database,
+            history_start_utc="2026-09-01T00:00:00+00:00",
+            report_version="report-v1",
+            release_quality=lambda _summary, quality: quality or {},
+            health_reference=lambda _profile: {},
+        )
+
+        owned = service.session_by_id(
+            "owned-session",
+            {account: {"email": account}},
+            account_key=account,
+        )
+        forbidden = service.session_by_id(
+            "owned-session",
+            {account: {"email": account}},
+            account_key="other@example.test",
+        )
+
+        self.assertEqual(owned["rest_mode"], "nap_recovery")
+        self.assertEqual(owned["target_duration_s"], 1800)
+        self.assertIsNone(forbidden)
+
+    def test_history_keeps_approved_prior_report_and_drops_unknown_version(
+        self,
+    ) -> None:
+        account = "compatible-report@example.test"
+        self.insert_session(
+            "compatible-report",
+            account,
+            "2026-09-05T05:00:00+00:00",
+            with_timeline=True,
+        )
+        self.insert_session(
+            "unknown-report",
+            account,
+            "2026-09-05T06:00:00+00:00",
+            with_timeline=True,
+        )
+        connection = sqlite3.connect(self.data_dir / "sessions.db")
+        for session_id, report_version in (
+            ("compatible-report", PRE_RESTORE_SESSION_REPORT_VERSION),
+            ("unknown-report", "zeep-session-report-v0-unknown"),
+        ):
+            final_summary = {
+                "session_report": {
+                    "version": report_version,
+                    "headline": f"persisted {session_id}",
+                },
+            }
+            connection.execute(
+                "INSERT INTO events(session_id,timestamp,type,value) VALUES (?,?,?,?)",
+                (
+                    session_id,
+                    "2026-09-05T06:31:00+00:00",
+                    "final_summary",
+                    json.dumps(final_summary),
+                ),
+            )
+        connection.commit()
+        connection.close()
+        service = SessionHistoryService(
+            self.database,
+            history_start_utc="2026-09-01T00:00:00+00:00",
+            report_version=SESSION_REPORT_VERSION,
+            release_quality=lambda _summary, quality: quality or {},
+            health_reference=lambda _profile: {},
+        )
+
+        compatible = service.session_by_id(
+            "compatible-report",
+            {account: {"email": account}},
+            account_key=account,
+        )
+        unknown = service.session_by_id(
+            "unknown-report",
+            {account: {"email": account}},
+            account_key=account,
+        )
+
+        self.assertEqual(
+            compatible["session_report"]["version"],
+            PRE_RESTORE_SESSION_REPORT_VERSION,
+        )
+        self.assertEqual(
+            compatible["session_report"]["headline"],
+            "persisted compatible-report",
+        )
+        self.assertIsNone(unknown["session_report"])
 
 
 if __name__ == "__main__":

@@ -4,8 +4,9 @@ The report intentionally keeps three concerns separate:
 
 1. Sleep results come from the versioned BCG sleep-state estimator.
 2. SPH0645 and Bed Status may corroborate a disturbance.
-3. Pod environment values explain possible disturbance and data context only;
-   they never determine Wake/N1/N2/N3/REM.
+3. Pod environment values never determine Wake/N1/N2/N3/REM. They explain
+   possible disturbance in Overnight and contribute a bounded 10 points to
+   the separate Nap & Refresh Recovery Score.
 
 All thresholds below are ZEEP operating targets already shown on the
 dashboard. They are not medical diagnostic limits.
@@ -21,6 +22,7 @@ from sleep_signal_features import (
     bed_exit_event_summary,
     filter_vital_values,
 )
+from zeep_pod.sessions.restore_summary import build_restore_summary
 from sleep_system_policy import (
     ENVIRONMENT_ACCEPTABLE_MIN_LEVEL,
     ENVIRONMENT_CONTEXT_CRITERIA,
@@ -41,6 +43,7 @@ from sleep_system_policy import (
     REST_SESSION_GROUPS,
     REST_MODE_DURATION_TARGETS_S,
     SESSION_REPORT_VERSION,
+    SLEEP_SCORE_FORMULA_VERSION,
     SLEEP_QUALITY_COMPONENT_MAX_POINTS,
     SLEEP_QUALITY_VERSION,
     environment_criterion,
@@ -516,7 +519,11 @@ def _recovery_environment_summary(
             and minimum["rank"]
             >= ENVIRONMENT_LEVELS[ENVIRONMENT_ACCEPTABLE_MIN_LEVEL]["rank"]
         ),
-        "context_only": True,
+        "context_only": False,
+        "sleep_stage_context_only": True,
+        "contributes_to_primary_score": True,
+        "primary_score": "Recovery Score",
+        "max_points": 10.0,
         "assessment_quality": (
             "incomplete_required" if missing_required
             else "degraded_optional" if missing_optional
@@ -569,8 +576,8 @@ def _build_awake_rest_quality(
 
     The score reflects goal duration, coarse HR/RR settling, bed stillness and
     environment support. Coverage is reported independently as QA/confidence
-    and contributes zero points. Air Sensor values remain explanatory context
-    and never feed the Sleep State estimator.
+    and contributes zero points. Air Sensor values contribute only to the
+    bounded Recovery component and never feed the Sleep State estimator.
     """
     group = mode.get("group") or mode.get("resolved") or "general_rest"
     policy = REST_SESSION_GROUPS.get(group, {
@@ -1419,6 +1426,7 @@ def build_sleep_quality(
             if nap_mode else
             "หลับไว/เวลาพัก 20 + หลับต่อเนื่อง 30 + ฟื้นฟู 30 + รอบการนอน 15 + ข้อมูล 5"
         ),
+        "formula_version": SLEEP_SCORE_FORMULA_VERSION,
         "version": SLEEP_QUALITY_VERSION,
         "outcome_interpretation": (
             "Nap & Refresh ไม่บังคับ N3/REM; Recovery Score สะท้อนสัญญาณสนับสนุนการฟื้นตัว และต้องอ่านร่วมกับคำตอบก่อน–หลัง Session"
@@ -1631,6 +1639,9 @@ def build_session_report(
     completed: bool = True,
     timeline_schema_version: int = 4,
     target_duration_s: Any = _TARGET_UNSET,
+    personal_context: Optional[Dict[str, Any]] = None,
+    trend_context: Optional[Dict[str, Any]] = None,
+    subjective_outcome: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Return the compact, explainable report shown after a Session ends."""
     rows = list(samples or [])
@@ -1693,6 +1704,9 @@ def build_session_report(
         quality_mode["target"],
     )
     environment_mode = quality_mode.get("group") or quality_mode.get("resolved") or rest_mode
+    recovery_environment_contributes = (
+        quality_mode.get("group") == "nap_recovery"
+    )
 
     waso_samples = 0
     sleep_started = False
@@ -1738,7 +1752,12 @@ def build_session_report(
                     if legacy_unstored
                     else f"ตรวจ {metric['source']} และ freshness"
                 ),
-                "context_only": True,
+                "context_only": not recovery_environment_contributes,
+                "sleep_stage_context_only": True,
+                # Recovery normalises its environment component across the
+                # channels that are available. Missing Sensor data therefore
+                # lowers QA/confidence; it is not itself a score penalty.
+                "contributes_to_primary_score": False,
                 "legacy_timeline_not_persisted": legacy_unstored,
                 "blocks_overall": blocks_overall,
             })
@@ -1775,7 +1794,11 @@ def build_session_report(
                 )
             ),
             "action": action_text,
-            "context_only": True,
+            "context_only": not recovery_environment_contributes,
+            "sleep_stage_context_only": True,
+            "contributes_to_primary_score": (
+                recovery_environment_contributes
+            ),
             "aggregation_version": metric["aggregation_version"],
             "peak_status_key": metric["peak_status_key"],
             "transient_critical_observed": metric[
@@ -1804,6 +1827,8 @@ def build_session_report(
                     "ของระบบ Safety ก่อนใช้งานครั้งถัดไป"
                 ),
                 "context_only": False,
+                "sleep_stage_context_only": True,
+                "contributes_to_primary_score": False,
                 "blocks_overall": False,
                 "changes_sustained_assessment": False,
                 "changes_score": False,
@@ -1821,6 +1846,8 @@ def build_session_report(
             "detail": f"SPH0645 และ BCG/Bed Status ตรงกัน {corroborated_sound_events} รอบข้อมูล",
             "action": "ตรวจ Timeline เพื่อหาแหล่งเสียงหรือการสั่นในช่วงเดียวกัน",
             "context_only": False,
+            "sleep_stage_context_only": False,
+            "contributes_to_primary_score": False,
         })
     findings.sort(key=lambda item: {
         "critical": 0, "poor": 1, "unavailable": 2, "fair": 3,
@@ -1912,7 +1939,16 @@ def build_session_report(
         "safety_excursions": safety_excursions,
         "safety_excursions_change_sustained_assessment": False,
         "safety_excursions_change_score": False,
-        "context_only": True,
+        "context_only": not recovery_environment_contributes,
+        "sleep_stage_context_only": True,
+        "contributes_to_primary_score": recovery_environment_contributes,
+        "primary_score": (
+            "Recovery Score" if recovery_environment_contributes else None
+        ),
+        "max_score_points": (
+            RECOVERY_SCORE_COMPONENT_MAX_POINTS["environment_support"]
+            if recovery_environment_contributes else 0.0
+        ),
         "direct_stage_influence": False,
         "safety_thresholds_unchanged": True,
     }
@@ -1958,6 +1994,30 @@ def build_session_report(
     bed = _bed_events(rows)
     insight = quality.get("insight") or "สรุปจากข้อมูลที่ระบบบันทึกได้ใน Session นี้"
     post_session_guidance = _post_session_guidance(quality, findings)
+    effective_personal_context = (
+        personal_context
+        or quality.get("personal_context")
+        or night.get("personal_context")
+    )
+    effective_trend_context = (
+        trend_context
+        or quality.get("trend_context")
+        or night.get("trend_context")
+        or effective_personal_context
+    )
+    effective_subjective_outcome = (
+        subjective_outcome
+        or quality.get("subjective_outcome")
+        or night.get("subjective_outcome")
+    )
+    restore_summary = build_restore_summary(
+        quality,
+        mode=quality_mode,
+        findings=findings,
+        personal_context=effective_personal_context,
+        trend_context=effective_trend_context,
+        subjective_outcome=effective_subjective_outcome,
+    )
     return {
         "available": bool(duration > 0 and (rows or scored_count)),
         "version": SESSION_REPORT_VERSION,
@@ -1990,6 +2050,7 @@ def build_session_report(
         "environment_assessment": environment_assessment,
         "findings": findings,
         "post_session_guidance": post_session_guidance,
+        "restore_summary": restore_summary,
         "data_quality": {
             "level": data_level,
             "label": data_label,

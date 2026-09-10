@@ -18,7 +18,8 @@ API_VERSION = "1.0"
 API_SCHEMA = "zeep.api.response"
 
 
-def _response(data: Any, *, kind: str) -> dict[str, Any]:
+def response_envelope(data: Any, *, kind: str) -> dict[str, Any]:
+    """Wrap versioned API data in the shared traceable response envelope."""
     return {
         "schema": API_SCHEMA,
         "api_version": API_VERSION,
@@ -27,6 +28,10 @@ def _response(data: Any, *, kind: str) -> dict[str, Any]:
         "request_id": str(uuid4()),
         "data": data,
     }
+
+
+# Internal compatibility for the first v1 routes and their existing tests.
+_response = response_envelope
 
 
 def create_api_v1_router(
@@ -51,6 +56,7 @@ def create_api_v1_router(
                 "sensor_contracts": "/api/v1/admin/contracts/sensors",
                 "sleep_policy": "/api/v1/admin/contracts/sleep",
                 "maintenance": "/api/v1/admin/maintenance",
+                "usage_sessions": "/api/v1/usage-sessions",
             },
             "mutation_policy": {
                 "idempotent_set_commands_preferred": True,

@@ -8,18 +8,23 @@ remains at the FastAPI route boundary; this module only reads and shapes data.
 
 from __future__ import annotations
 
-from collections import OrderedDict
-from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
 import json
-from typing import Any, Callable, Iterable
+from collections import OrderedDict
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, time, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from database import DatabaseManager
-
+from sleep_system_policy import APPROVED_SLEEP_RESULT_VERSION_PAIRS
 
 QualityRelease = Callable[[dict[str, Any], Any], dict[str, Any]]
 HealthReference = Callable[[dict[str, Any]], dict[str, Any]]
+APPROVED_SESSION_REPORT_VERSIONS = frozenset(
+    report_version
+    for report_version, _quality_version in APPROVED_SLEEP_RESULT_VERSION_PAIRS
+)
 
 
 @dataclass(frozen=True)
@@ -92,8 +97,8 @@ def resolve_history_window(
     if end - start > timedelta(days=maximum_days, minutes=1):
         raise ValueError(f"ช่วงเวลาต้องไม่เกิน {maximum_days} วัน")
     return HistoryWindow(
-        start_utc=start.astimezone(timezone.utc).isoformat(),
-        end_utc=end.astimezone(timezone.utc).isoformat(),
+        start_utc=start.astimezone(UTC).isoformat(),
+        end_utc=end.astimezone(UTC).isoformat(),
         start_local=start.isoformat(),
         end_local=end.isoformat(),
         timezone_name=timezone_name,
@@ -154,10 +159,22 @@ class SessionHistoryService:
         report_version: str,
         release_quality: QualityRelease,
         health_reference: HealthReference,
+        approved_report_versions: Iterable[str] | None = None,
     ) -> None:
         self.database = database
         self.history_start_utc = history_start_utc
         self.report_version = report_version
+        compatible_versions = (
+            APPROVED_SESSION_REPORT_VERSIONS
+            if approved_report_versions is None
+            else approved_report_versions
+        )
+        self.approved_report_versions = frozenset(
+            {
+                report_version,
+                *(str(version) for version in compatible_versions if version),
+            }
+        )
         self.release_quality = release_quality
         self.health_reference = health_reference
 
@@ -165,6 +182,8 @@ class SessionHistoryService:
         self,
         account_keys: Iterable[str] | None,
         window: HistoryWindow | None,
+        *,
+        session_id: str | None = None,
     ) -> list[dict[str, Any]]:
         clauses = [
             "s.start_time>=?",
@@ -183,6 +202,9 @@ class SessionHistoryService:
         if window is not None:
             clauses.extend(("s.end_time>=?", "s.end_time<?"))
             params.extend((window.start_utc, window.end_utc))
+        if session_id:
+            clauses.append("s.session_id=?")
+            params.append(str(session_id))
         sql = f"""
             SELECT s.*,
                 (SELECT COUNT(*) FROM timeline AS aggregate_timeline
@@ -196,7 +218,7 @@ class SessionHistoryService:
                    AND summary_event.type='final_summary'
                  ORDER BY summary_event.timestamp DESC LIMIT 1) AS final_summary_json
             FROM sessions AS s
-            WHERE {' AND '.join(clauses)}
+            WHERE {" AND ".join(clauses)}
             ORDER BY s.end_time DESC, s.start_time DESC
         """
         return self.database.read_sessions(sql, tuple(params))
@@ -220,7 +242,7 @@ class SessionHistoryService:
         report = final_summary.get("session_report")
         if not (
             isinstance(report, dict)
-            and report.get("version") == self.report_version
+            and report.get("version") in self.approved_report_versions
         ):
             report = None
         account_key = str(record.get("username_key") or "").strip().casefold()
@@ -236,14 +258,17 @@ class SessionHistoryService:
             "ended_at_utc": record.get("end_time"),
             "duration_s": record.get("duration"),
             "end_reason": record.get("end_reason"),
+            "rest_mode": final_summary.get("rest_mode") or record.get("rest_mode"),
+            "target_duration_s": (
+                final_summary.get("target_duration_s")
+                if final_summary.get("target_duration_s") is not None
+                else record.get("target_duration_s")
+            ),
             "sample_count": int(record.get("sample_count") or 0),
             "sleep_estimator": final_summary.get("sleep_estimator"),
-            "sleep_estimator_versions": final_summary.get(
-                "sleep_estimator_versions"
-            ) or {},
-            "sleep_provenance_complete": final_summary.get(
-                "sleep_provenance_complete"
-            ),
+            "sleep_estimator_versions": final_summary.get("sleep_estimator_versions")
+            or {},
+            "sleep_provenance_complete": final_summary.get("sleep_provenance_complete"),
             "sleep_policy_versions": {
                 "evidence": final_summary.get("sleep_evidence_version"),
                 "baseline": final_summary.get("sleep_baseline_version"),
@@ -253,22 +278,27 @@ class SessionHistoryService:
             },
             "sleep_quality": quality,
             "session_report": report,
+            "restore_summary": (
+                report.get("restore_summary")
+                if isinstance(report, dict)
+                else final_summary.get("restore_summary")
+            ),
             "health_reference": (
                 final_summary.get("health_reference")
                 if isinstance(final_summary.get("health_reference"), dict)
                 else self.health_reference(profile)
             ),
-            "wellness_context_available": bool(
-                final_summary.get("wellness_context")
-            ),
+            "wellness_context_available": bool(final_summary.get("wellness_context")),
             "summary": {
                 "temperature_c": (
                     {"avg": round(float(temperature), 1)}
-                    if temperature is not None else None
+                    if temperature is not None
+                    else None
                 ),
                 "heart_rate_bpm": (
                     {"avg": round(float(heart_rate), 1)}
-                    if heart_rate is not None else None
+                    if heart_rate is not None
+                    else None
                 ),
             },
         }
@@ -276,7 +306,8 @@ class SessionHistoryService:
     @staticmethod
     def _summary(sessions: list[dict[str, Any]]) -> dict[str, Any]:
         people = {
-            session.get("account_key") for session in sessions
+            session.get("account_key")
+            for session in sessions
             if session.get("account_key")
         }
         sleep_scores: list[float] = []
@@ -300,11 +331,13 @@ class SessionHistoryService:
             "awaiting_score_count": awaiting_score,
             "average_sleep_score": (
                 round(sum(sleep_scores) / len(sleep_scores), 1)
-                if sleep_scores else None
+                if sleep_scores
+                else None
             ),
             "average_recovery_score": (
                 round(sum(recovery_scores) / len(recovery_scores), 1)
-                if recovery_scores else None
+                if recovery_scores
+                else None
             ),
         }
 
@@ -315,28 +348,33 @@ class SessionHistoryService:
         grouped: OrderedDict[str, dict[str, Any]] = OrderedDict()
         for session in sessions:
             key = str(session.get("account_key") or "")
-            participant = grouped.setdefault(key, {
-                "account_key": key,
-                "email": session.get("email"),
-                "display_name": session.get("display_name"),
-                "session_count": 0,
-                "scores": [],
-            })
+            participant = grouped.setdefault(
+                key,
+                {
+                    "account_key": key,
+                    "email": session.get("email"),
+                    "display_name": session.get("display_name"),
+                    "session_count": 0,
+                    "scores": [],
+                },
+            )
             participant["session_count"] += 1
             quality = session.get("sleep_quality") or {}
-            participant["scores"].append({
-                "session_id": session.get("session_id"),
-                "ended_at_utc": session.get("ended_at_utc"),
-                "score": quality.get("score")
-                if quality.get("available") else None,
-                "score_title": quality.get("score_title") or (
-                    "Recovery Score"
-                    if quality.get("quality_type") == "rest_goal"
-                    else "Sleep Score"
-                ),
-                "level": quality.get("level") or "ข้อมูลไม่พอ",
-                "available": bool(quality.get("available")),
-            })
+            participant["scores"].append(
+                {
+                    "session_id": session.get("session_id"),
+                    "ended_at_utc": session.get("ended_at_utc"),
+                    "score": quality.get("score") if quality.get("available") else None,
+                    "score_title": quality.get("score_title")
+                    or (
+                        "Recovery Score"
+                        if quality.get("quality_type") == "rest_goal"
+                        else "Sleep Score"
+                    ),
+                    "level": quality.get("level") or "ข้อมูลไม่พอ",
+                    "available": bool(quality.get("available")),
+                }
+            )
         return list(grouped.values())
 
     def account_history(
@@ -346,13 +384,15 @@ class SessionHistoryService:
         *,
         window: HistoryWindow | None = None,
         limit: int = 200,
+        offset: int = 0,
     ) -> dict[str, Any]:
         key = str(account_key or "").strip().casefold()
         all_sessions = [
-            self._serialize(record, profile)
-            for record in self._records([key], window)
+            self._serialize(record, profile) for record in self._records([key], window)
         ]
-        sessions = all_sessions[: max(1, min(500, int(limit)))]
+        start = max(0, int(offset))
+        size = max(1, min(500, int(limit)))
+        sessions = all_sessions[start : start + size]
         return {
             **_identity(profile, key),
             "health_reference": self.health_reference(profile),
@@ -369,10 +409,11 @@ class SessionHistoryService:
         self,
         profiles: dict[str, dict[str, Any]],
         *,
-        window: HistoryWindow,
+        window: HistoryWindow | None,
         account_key: str | None = None,
         query: str | None = None,
         limit: int = 500,
+        offset: int = 0,
     ) -> dict[str, Any]:
         requested_key = str(account_key or "").strip().casefold()
         keys = [requested_key] if requested_key else None
@@ -386,13 +427,40 @@ class SessionHistoryService:
                 continue
             sessions.append(self._serialize(record, profile))
         total = len(sessions)
-        visible_sessions = sessions[: max(1, min(1000, int(limit)))]
+        start = max(0, int(offset))
+        size = max(1, min(1000, int(limit)))
+        visible_sessions = sessions[start : start + size]
         return {
             "sessions": visible_sessions,
             "participants": self._participants(sessions),
             "summary": self._summary(sessions),
             "total": total,
-            "range": window.public_snapshot(),
+            "range": window.public_snapshot() if window else None,
             "history_start_utc": self.history_start_utc,
             "older_sessions_archived_from_product_results": True,
         }
+
+    def session_by_id(
+        self,
+        session_id: str,
+        profiles: dict[str, dict[str, Any]],
+        *,
+        account_key: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Return one completed data-backed Session within product history.
+
+        Supplying ``account_key`` performs the ownership filter in SQL.  A
+        caller therefore receives the same not-found result for an unknown
+        Session and another person's Session, avoiding an identity oracle at
+        the API boundary.
+        """
+        requested_key = str(account_key or "").strip().casefold()
+        keys = [requested_key] if requested_key else None
+        records = self._records(keys, None, session_id=session_id)
+        if not records:
+            return None
+        record = records[0]
+        key = str(record.get("username_key") or "").strip().casefold()
+        profile = dict(profiles.get(key) or {})
+        profile.setdefault("username", record.get("user"))
+        return self._serialize(record, profile)

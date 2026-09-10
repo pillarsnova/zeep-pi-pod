@@ -8,6 +8,7 @@ from sleep_session_report import normalise_rest_mode
 from sleep_system_policy import (
     NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS,
     NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
+    PRE_RESTORE_SESSION_REPORT_VERSION,
     SESSION_REPORT_VERSION,
     SLEEP_QUALITY_VERSION,
     is_approved_sleep_result_version,
@@ -39,20 +40,72 @@ def _recording_seconds(report: Any) -> float | None:
     return float(value)
 
 
+def _compatible_versioned_quality(
+    report: Any,
+    quality: Any,
+) -> dict[str, Any] | None:
+    """Return an explicitly compatible current or pre-Restore result."""
+    if not isinstance(report, dict) or not isinstance(quality, dict):
+        return None
+    if (
+        quality.get("version") == SLEEP_QUALITY_VERSION
+        and report.get("version") == SESSION_REPORT_VERSION
+    ):
+        return quality
+    if (
+        quality.get("version") == SLEEP_QUALITY_VERSION
+        and report.get("version") == PRE_RESTORE_SESSION_REPORT_VERSION
+    ):
+        return {
+            **quality,
+            "compatible_pre_restore_result": True,
+        }
+    return None
+
+
+def _preserved_legacy_recovery(
+    final_summary: dict[str, Any],
+    report: Any,
+    quality: Any,
+    mode_group: str | None,
+) -> dict[str, Any] | None:
+    """Preserve a scored legacy Nap only inside the documented guardrail."""
+    duration = _recording_seconds(report)
+    if not (
+        mode_group == "nap_recovery"
+        and final_summary.get("target_duration_s") is None
+        and duration is not None
+        and NAP_RECOVERY_MINIMUM_SCORE_SECONDS
+        <= duration
+        <= NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS
+        and isinstance(quality, dict)
+        and quality.get("score") is not None
+    ):
+        return None
+    target_status = (
+        "TARGET_UNKNOWN/extended" if duration > 45 * 60 else "TARGET_UNKNOWN"
+    )
+    return {
+        **quality,
+        "legacy_score_preserved": True,
+        "review_required": True,
+        "target_status": target_status,
+        "validation_status": "legacy_recovery_target_unknown_preserved",
+        "preservation_reason": (
+            "Session เดิมไม่มีเป้าหมาย 30/90 นาที; แสดงคะแนนเดิมโดยไม่เขียนทับ"
+        ),
+    }
+
+
 def released_historical_quality(
     final_summary: dict[str, Any],
     quality: Any,
 ) -> dict[str, Any]:
     """Return current quality or a narrowly preserved legacy Recovery score."""
     report = final_summary.get("session_report") or {}
-    current_pair = (
-        isinstance(quality, dict)
-        and quality.get("version") == SLEEP_QUALITY_VERSION
-        and isinstance(report, dict)
-        and report.get("version") == SESSION_REPORT_VERSION
-    )
-    if current_pair:
-        return quality
+    compatible_quality = _compatible_versioned_quality(report, quality)
+    if compatible_quality is not None:
+        return compatible_quality
     requested = _stored_mode(final_summary, report)
     mode_group = rest_mode_group(requested)
     approved_untouched_sleep = (
@@ -68,34 +121,14 @@ def released_historical_quality(
             **quality,
             "compatible_untouched_sleep_result": True,
         }
-    duration = _recording_seconds(report)
-    preserve_legacy_recovery = (
-        mode_group == "nap_recovery"
-        and final_summary.get("target_duration_s") is None
-        and duration is not None
-        and NAP_RECOVERY_MINIMUM_SCORE_SECONDS
-        <= duration
-        <= NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS
-        and isinstance(quality, dict)
-        and quality.get("score") is not None
+    legacy_recovery = _preserved_legacy_recovery(
+        final_summary,
+        report,
+        quality,
+        mode_group,
     )
-    if preserve_legacy_recovery:
-        target_status = (
-            "TARGET_UNKNOWN/extended"
-            if duration > 45 * 60
-            else "TARGET_UNKNOWN"
-        )
-        return {
-            **quality,
-            "legacy_score_preserved": True,
-            "review_required": True,
-            "target_status": target_status,
-            "validation_status": "legacy_recovery_target_unknown_preserved",
-            "preservation_reason": (
-                "Session เดิมไม่มีเป้าหมาย 30/90 นาที; "
-                "แสดงคะแนนเดิมโดยไม่เขียนทับ"
-            ),
-        }
+    if legacy_recovery is not None:
+        return legacy_recovery
     sleep_mode = mode_group == "sleep"
     unresolved_mode = mode_group is None
     return {
@@ -103,23 +136,25 @@ def released_historical_quality(
         "score": None,
         "score_releasable": False,
         "score_title": (
-            "Sleep Score" if sleep_mode
-            else "Recovery Score" if not unresolved_mode
+            "Sleep Score"
+            if sleep_mode
+            else "Recovery Score"
+            if not unresolved_mode
             else "รูปแบบการพักยังไม่ยืนยัน"
         ),
         "score_scope": (
             "ค่าประเมินการนอนจาก Sensor"
-            if sleep_mode else
-            "คะแนนสนับสนุนการฟื้นตัวจาก Sensor"
-            if not unresolved_mode else
-            "ต้องยืนยันว่าเป็น Overnight หรือ Nap & Refresh ก่อน"
+            if sleep_mode
+            else "คะแนนสนับสนุนการฟื้นตัวจาก Sensor"
+            if not unresolved_mode
+            else "ต้องยืนยันว่าเป็น Overnight หรือ Nap & Refresh ก่อน"
         ),
         "level": "รอตรวจคุณภาพข้อมูล",
         "level_key": "unavailable",
         "reason": (
             "Session เดิมไม่ได้บันทึกรูปแบบการพัก จึงไม่อนุมานจากเวลา"
-            if unresolved_mode else
-            "ผลเดิมยังไม่ผ่าน Gate ของรุ่นปัจจุบัน จึงไม่เผยแพร่คะแนน"
+            if unresolved_mode
+            else "ผลเดิมยังไม่ผ่าน Gate ของรุ่นปัจจุบัน จึงไม่เผยแพร่คะแนน"
         ),
         "version": SLEEP_QUALITY_VERSION,
         "validation_status": "pending_current_pipeline_review",

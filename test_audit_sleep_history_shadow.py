@@ -34,6 +34,48 @@ class ShadowPathParityTests(unittest.TestCase):
         self.assertEqual(second, "wake")
         self.assertEqual(metadata["decision"], "confirmed")
 
+    def test_signal_gap_preserves_confirmed_stage_and_first_onset(self):
+        path = ShadowPath()
+        path.last = "n2"
+        path.stage_since = 150.0
+        path.cycle_has_n1 = True
+        path.sleep_onset_at = 30.0
+        path.candidate = "rem"
+        path.candidate_ticks = 1
+        path.ema = {"rem": 0.8}
+
+        path.observe_signal_gap()
+
+        self.assertEqual(path.segment, 1)
+        self.assertEqual(path.last, "n2")
+        self.assertEqual(path.stage_since, 150.0)
+        self.assertTrue(path.cycle_has_n1)
+        self.assertEqual(path.sleep_onset_at, 30.0)
+        self.assertIsNone(path.candidate)
+        self.assertEqual(path.candidate_ticks, 0)
+        self.assertIsNone(path.ema)
+
+    def test_confirmed_off_bed_starts_new_cycle_but_preserves_onset(self):
+        path = ShadowPath()
+        path.last = "n3"
+        path.stage_since = 180.0
+        path.cycle_has_n1 = True
+        path.sleep_onset_at = 30.0
+        path.candidate = "n2"
+        path.candidate_ticks = 1
+
+        path.observe_confirmed_off_bed(240.0)
+
+        self.assertEqual(path.segment, 1)
+        self.assertEqual(path.last, "wake")
+        self.assertEqual(path.stage_since, 240.0)
+        self.assertFalse(path.cycle_has_n1)
+        self.assertEqual(path.sleep_onset_at, 30.0)
+        self.assertFalse(path.allowed("n2", strong_wake=False))
+        self.assertTrue(path.allowed("n1", strong_wake=False))
+        self.assertIsNone(path.candidate)
+        self.assertEqual(path.candidate_ticks, 0)
+
     def test_health_artifact_is_owner_only_even_when_overwritten(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "replay.json"

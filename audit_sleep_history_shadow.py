@@ -440,10 +440,35 @@ class ShadowPath:
         self.ema: Optional[dict[str, float]] = None
         self.segment = 0
 
-    def reset_after_gap(self) -> None:
-        next_segment = self.segment + 1
-        self.__init__()
-        self.segment = next_segment
+    def _start_new_segment(self) -> None:
+        """Discard only unfinished evidence when continuity is interrupted."""
+        self.segment += 1
+        self.candidate = None
+        self.candidate_ticks = 0
+        self.ema = None
+
+    def observe_signal_gap(self) -> None:
+        """Mirror Live handling of a telemetry gap within the same Session.
+
+        A missing observation is not evidence that the occupant woke.  The
+        confirmed stage, first sleep onset and frozen pre-onset references
+        therefore survive while an incomplete challenger and its EMA do not.
+        """
+        self._start_new_segment()
+
+    def observe_confirmed_off_bed(self, now: float) -> None:
+        """Mirror Live Bed Exit handling without forgetting first onset.
+
+        The operational OFF BED interval closes the current sleep cycle and a
+        returning occupant must pass through N1 again.  Preserving the first
+        onset prevents sleeping HR/RR after return from contaminating the
+        within-Session awake reference.
+        """
+        self._start_new_segment()
+        self.cycle_has_n1 = False
+        if self.last != "wake":
+            self.last = "wake"
+            self.stage_since = now
 
     def allowed(self, candidate: str, strong_wake: bool) -> bool:
         if self.last is None:
@@ -489,8 +514,9 @@ class ShadowPath:
         self.candidate_ticks = 0
         if candidate == "wake":
             self.cycle_has_n1 = False
-            # Preserve first onset across a brief Wake; reset_after_gap still
-            # clears it after an off-bed or missing-signal discontinuity.
+            # Preserve first onset across Wake, Bed Exit and telemetry gaps.
+            # A returning occupant still needs N1 before a deeper stage, while
+            # the frozen pre-onset reference remains owned by this Session.
         elif candidate == "n1":
             self.cycle_has_n1 = True
             if self.sleep_onset_at is None:
@@ -650,7 +676,7 @@ def replay_session(
                     segment=path.segment,
                 ))
             if offbed_run == 3:
-                path.reset_after_gap()
+                path.observe_confirmed_off_bed(bucket["t"])
                 context.clear()
                 last_valid_t = None
             continue
@@ -674,7 +700,7 @@ def replay_session(
                     segment=path.segment,
                 ))
             if last_valid_t is not None and bucket["t"] - last_valid_t >= SLEEP_CONTEXT_RESET_GAP_SECONDS:
-                path.reset_after_gap()
+                path.observe_signal_gap()
                 context.clear()
                 last_valid_t = None
             continue

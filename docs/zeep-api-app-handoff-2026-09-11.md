@@ -6,7 +6,8 @@
 > **Product position:** ZEEP Wellness & Longevity · ผลทั้งหมดเป็นการประเมิน
 > เชิงสุขภาพจาก Sensor ไม่ใช่การวินิจฉัยหรือผล AASM/PSG
 >
-> **Production commit:** `f8f70c39e32eb5a2c1053cbd22e10adf4c191082`
+> **Runtime release commit:** `f8f70c39e32eb5a2c1053cbd22e10adf4c191082`
+> (commit หลังจากนี้ในวันเดียวกันเป็นเอกสาร Handoff เท่านั้น)
 >
 > **Machine-readable contract:** `GET /openapi.json`
 
@@ -268,7 +269,8 @@ Sleep Stage แบบ PSG
 ## 6. Production verification
 
 - Pi branch: `develop`
-- Pi HEAD ตรง `origin/develop`: `f8f70c3`
+- Pi `develop` มี Runtime release `f8f70c3` และตาม `origin/develop`;
+  docs-only commits หลัง release ไม่เปลี่ยน Runtime behavior
 - Targeted regression บน Pi: `109/109` ผ่าน
 - Full suite ของ release: `546` ผ่าน, `1` skipped
 - GitHub Actions: ผ่าน

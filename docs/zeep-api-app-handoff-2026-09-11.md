@@ -159,6 +159,9 @@ Success response ใช้ envelope:
 - Error ใช้ FastAPI `detail` ซึ่งเป็นได้ทั้ง string และ object
 - API นี้เป็น Pull API ภายใน Pod; ไม่ได้เปลี่ยน legacy push contract
   `POST /v1/sleep-sessions/ingest`
+- Detail endpoint เผยแพร่ `report.sleep.classification_accounting` และ
+  `report.stages[].score_eligible_*` ผ่าน positive allowlist แล้ว; Summary/List
+  ยังคงเป็นผลย่อและไม่มี Raw Timeline
 
 ### 2.5 Typed response และ Privacy
 
@@ -409,6 +412,11 @@ Deployment กลางอีกครั้ง:
 14. Success response เป็น `private, no-store`
 15. App ไม่มี demo fallback ใน Production
 16. OpenAPI มี Typed response ของทั้งสาม endpoints
+17. Detail response คง Continuity Accounting ครบและ
+    `arithmetic_invariant.holds=true`
+18. ผลรวม `stages[].score_eligible_duration_s` ตรงกับ
+    `sleep.classification_accounting.score_eligible_s`
+19. Unknown/private nested field ใน accounting และ stages ไม่หลุดผ่าน API
 
 ## 10. สิ่งที่ไม่เปลี่ยนในรอบนี้
 

@@ -8149,6 +8149,7 @@ def _history_window(
 
 @app.get("/api/admin/history", dependencies=[Depends(require_admin)])
 def admin_history_list(
+    response: Response,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     time_from: str = "00:00",
@@ -8158,6 +8159,8 @@ def admin_history_list(
     limit: int = 500,
 ):
     """Return a local-day roster and released score for each participant."""
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Pragma"] = "no-cache"
     window = _history_window(
         date_from,
         date_to,
@@ -8179,6 +8182,7 @@ def admin_history_list(
 @app.get("/api/history/{username}")
 def history_list(
     username: str,
+    response: Response,
     limit: int = 200,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
@@ -8186,6 +8190,8 @@ def history_list(
     time_to: str = "23:59",
     principal: Principal = Depends(require_user),
 ):
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Pragma"] = "no-cache"
     key = _require_username_access(username, principal)
     window = _history_window(
         date_from,
@@ -8208,8 +8214,11 @@ def history_list(
 def history_detail(
     username: str,
     session_id: str,
+    response: Response,
     principal: Principal = Depends(require_user),
 ):
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Pragma"] = "no-cache"
     key = _require_username_access(username, principal)
     rows = database.read_sessions(
         "SELECT s.* FROM sessions AS s WHERE s.session_id=? AND "

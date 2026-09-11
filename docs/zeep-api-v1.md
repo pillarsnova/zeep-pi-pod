@@ -175,6 +175,16 @@ Query parameters:
 - ค่า Engineering ภายใน เช่น `engineering_shadow_score`, `score_unrounded`
   และ release gate ที่ไม่อยู่ใน Public Quality DTO
 
+ผลรุ่น Continuity ส่งบัญชีเวลาที่ `report.sleep.classification_accounting`
+เพื่อแยกเวลายืนยันตรง, เวลาคง State ก่อนหน้า, provisional, WAIT, NO DATA,
+OFF BED, restart hold, sensor gap และ `score_eligible_s` พร้อม
+`arithmetic_invariant` ส่วน `report.stages[]` มี
+`score_eligible_samples`, `score_eligible_duration_s`,
+`pct_score_eligible` และ `pct_score_eligible_sleep` แยกจากค่าที่ใช้แสดง
+Timeline โดยชัดเจน App ต้องใช้ค่าชุดนี้จาก Server และห้ามคำนวณฐานคะแนนใหม่เอง
+รายละเอียด field และสมการดูหัวข้อ 9.1 ใน
+[Usage Session Schema Reference](zeep-api-schema-reference-v1.md)
+
 `report.quality` เป็น Positive allowlist: ระบบคืนเฉพาะ field ที่อนุมัติสำหรับ
 Application contract เท่านั้น ไม่ได้คัดออกเพียงตามชื่อ field ต้องห้าม ดังนั้น field
 ใหม่จาก Model จะไม่ออก API จนกว่าจะผ่านการทบทวนและเพิ่มใน Public Quality DTO

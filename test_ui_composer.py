@@ -202,6 +202,22 @@ class UiComposerTests(unittest.TestCase):
     def test_sleep_state_ui_discloses_continuity_hold_without_unclassified(self):
         template = ui_composer.TEMPLATE.read_text(encoding="utf-8")
 
+        self.assertIn(
+            "function classificationAccountingMarkup(report,adminView,presentation)",
+            template,
+        )
+        self.assertIn("TIME ACCOUNTING", template)
+        self.assertIn("เวลาของ Session ถูกจัดหมวดครบ", template)
+        self.assertIn("ใช้คิดคะแนน", template)
+        self.assertIn("ไม่นับคะแนน", template)
+        self.assertIn("accounting.provisional_hold_s", template)
+        self.assertIn("accounting.initial_wait_s", template)
+        self.assertIn("accounting.no_data_s", template)
+        self.assertIn("accounting.off_bed_s", template)
+        self.assertIn("stage.score_eligible_duration_s", template)
+        self.assertIn("ใช้เฉพาะเวลาที่เข้าคะแนน", template)
+        self.assertIn("Recovery Score ไม่บังคับให้หลับ", template)
+        self.assertIn("State (ข้อมูลประกอบ)", template)
         self.assertIn("provisional · คง State ก่อนหน้า", template)
         self.assertIn("ยังไม่นับเป็น State ใหม่", template)
         self.assertIn("คงสถานะก่อนหน้า", template)

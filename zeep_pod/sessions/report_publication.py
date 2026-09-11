@@ -30,11 +30,23 @@ def _public_sleep_summary(value: Any) -> dict[str, Any]:
             "recording_s",
             "estimated_sleep_s",
             "wake_s",
+            "score_wake_s",
             "sleep_onset_proxy_s",
             "waso_proxy_s",
+            "score_waso_proxy_s",
             "sleep_efficiency_pct",
             "actual_scored_s",
+            "direct_confirmed_s",
+            "continuity_carried_forward_s",
+            "initial_wait_s",
+            "no_data_s",
+            "off_bed_s",
+            "restart_display_hold_s",
+            "sensor_gap_s",
+            "provisional_hold_s",
+            "excluded_from_score_s",
             "wake_pct_recorded",
+            "score_wake_pct",
             "wake_entries",
             "awakenings",
             "movement_pct",
@@ -49,13 +61,70 @@ def _public_sleep_summary(value: Any) -> dict[str, Any]:
         public["cycles"] = None
     elif "cycles" in source:
         public["cycles"] = public_cycle(source["cycles"])
+    if "classification_accounting" in source:
+        public["classification_accounting"] = (
+            _public_classification_accounting(
+                source["classification_accounting"]
+            )
+        )
+    return public
+
+
+def _public_classification_accounting(value: Any) -> dict[str, Any]:
+    source = mapping(value)
+    public = copy_scalars(
+        source,
+        {
+            "version",
+            "method",
+            "direct_confirmed_s",
+            "continuity_carried_forward_s",
+            "initial_wait_s",
+            "no_data_s",
+            "off_bed_s",
+            "restart_display_hold_s",
+            "sensor_gap_s",
+            "provisional_hold_s",
+            "classified_s",
+            "display_attributed_s",
+            "score_eligible_s",
+            "excluded_from_score_s",
+            "operational_unscored_s",
+            "accounted_s",
+            "recording_s",
+            "display_stage_total_s",
+            "display_stage_total_delta_s",
+            "display_stage_total_reconciles",
+            "score_stage_total_s",
+            "score_stage_total_delta_s",
+            "score_stage_total_reconciles",
+            "restart_display_hold_derived",
+            "challenger_time_before_confirmation_s",
+            "legacy_carry_provenance_available",
+        },
+    )
+    if "arithmetic_invariant" in source:
+        public["arithmetic_invariant"] = copy_scalars(
+            source["arithmetic_invariant"],
+            {"expression", "left_s", "right_s", "delta_s", "holds"},
+        )
     return public
 
 
 def _public_stage(value: Any) -> dict[str, Any]:
     return copy_scalars(
         value,
-        {"state", "samples", "duration_s", "pct_scored", "pct_sleep"},
+        {
+            "state",
+            "samples",
+            "duration_s",
+            "pct_scored",
+            "pct_sleep",
+            "score_eligible_samples",
+            "score_eligible_duration_s",
+            "pct_score_eligible",
+            "pct_score_eligible_sleep",
+        },
     )
 
 

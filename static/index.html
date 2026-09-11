@@ -576,13 +576,18 @@
     .stage-donut>span{position:relative;z-index:1;text-align:center}.stage-donut b,.stage-donut small{display:block}.stage-donut b{color:#effbff;font-size:15px}.stage-donut small{margin-top:2px;color:var(--faint);font-size:8px}
     .stage-legend{display:grid;gap:5px}.stage-legend-row{display:grid;grid-template-columns:9px minmax(70px,1fr) 36px 70px;align-items:center;gap:6px;font-size:9.5px;color:var(--muted)}
     .stage-legend-row i{width:8px;height:8px;border-radius:3px;background:var(--stage-color)}.stage-legend-row strong{color:#eef9fc;text-align:right}.stage-legend-row span:last-child{text-align:right;color:var(--faint);font-family:"SF Mono",ui-monospace,monospace}
+    .classification-accounting-card{display:grid;gap:10px;margin-top:12px;padding:12px;border:1px solid #56d7eb33;border-radius:12px;background:linear-gradient(145deg,#0a1c28f2,#081722f2)}
+    .classification-accounting-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.classification-accounting-head span{color:#56d7eb;font:800 8px "SF Mono",ui-monospace,monospace;letter-spacing:.12em}.classification-accounting-head h3{margin:3px 0 0;color:#eefbff;font-size:14px}
+    .accounting-status{flex:0 0 auto;padding:5px 9px;border:1px solid #667f8b42;border-radius:999px;color:#91a8b2;background:#172b365e;font-size:9px}.accounting-status.good{border-color:#4bd49b55;color:#70dfb0;background:#29906b1f}.accounting-status.attention{border-color:#f167735c;color:#f58c96;background:#8f2e391f}
+    .classification-accounting-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.classification-accounting-metrics>div{display:grid;gap:3px;padding:8px 9px;border:1px solid #56788a2e;border-radius:9px;background:#0d222fb8}.classification-accounting-metrics span,.classification-accounting-detail small{color:#7895a2;font-size:8px}.classification-accounting-metrics b,.classification-accounting-detail b{color:#e8f7fa;font-size:11px}
+    .classification-accounting-detail{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}.classification-accounting-detail>span{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:7px;background:#13283580}.classification-accounting-card p{margin:0;color:#6f8b97;font-size:8px;line-height:1.45}
     .disturbance-list{display:grid;gap:6px}.disturbance-item{display:grid;grid-template-columns:30px 1fr auto;align-items:center;gap:8px;padding:8px;border:1px solid var(--line-dim);border-radius:9px;background:#08141f}
     .disturbance-item>i{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:#142735;color:var(--muted);font-style:normal}.disturbance-item b,.disturbance-item small{display:block}.disturbance-item b{font-size:10.5px}.disturbance-item small{margin-top:2px;color:var(--faint);font-size:8.5px;line-height:1.35}.disturbance-item>span{max-width:145px;color:var(--muted);font-size:8.5px;text-align:right;line-height:1.35}
     .disturbance-tier{display:grid;gap:6px}.disturbance-tier+.disturbance-tier{margin-top:8px}.disturbance-tier>h5{margin:0;padding:0 2px;color:var(--muted);font-size:9px;font-weight:800;letter-spacing:.04em}.disturbance-item.critical,.disturbance-item.poor,.disturbance-item.unavailable{border-color:#6c303b}.disturbance-item.critical>i,.disturbance-item.poor>i,.disturbance-item.unavailable>i{background:#321821;color:var(--bad)}.disturbance-item.fair{border-color:#6b5429}.disturbance-item.fair>i{background:#2d2515;color:var(--amber)}.disturbance-item.good,.disturbance-item.excellent{border-color:#285b49}.disturbance-item.good>i,.disturbance-item.excellent>i{background:#142b24;color:var(--good)}
     .report-context-note{padding:8px 10px;border-left:2px solid var(--cyan-dim);color:var(--faint);font-size:9px;line-height:1.5;background:#091924}
     .report-details{margin-top:12px;border:1px solid var(--line-dim);border-radius:11px;background:#081520;overflow:hidden}.report-details>summary{padding:11px 13px;color:#dceef5;font-size:11px;font-weight:800;cursor:pointer;list-style:none}.report-details>summary::after{content:"＋";float:right;color:var(--cyan)}.report-details[open]>summary::after{content:"−"}.report-details .sleep-timeline{margin:0;padding:0 10px 10px}
-    @media(max-width:900px){.session-key-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.session-report-body{grid-template-columns:1fr}.stage-summary-content{grid-template-columns:100px 1fr}.stage-donut{width:96px;height:96px}.stage-donut::after{width:62px;height:62px}}
-    @media(max-width:520px){.session-key-metrics{grid-template-columns:1fr 1fr}.stage-summary-content{grid-template-columns:1fr}.stage-donut{margin:auto}.stage-legend-row{grid-template-columns:9px 1fr 32px 64px}.session-report-head{align-items:flex-start}.disturbance-item{grid-template-columns:30px 1fr}.disturbance-item>span{grid-column:2;text-align:left;max-width:none}}
+    @media(max-width:900px){.session-key-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.session-report-body{grid-template-columns:1fr}.stage-summary-content{grid-template-columns:100px 1fr}.stage-donut{width:96px;height:96px}.stage-donut::after{width:62px;height:62px}.classification-accounting-detail{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:520px){.session-key-metrics{grid-template-columns:1fr 1fr}.stage-summary-content{grid-template-columns:1fr}.stage-donut{margin:auto}.stage-legend-row{grid-template-columns:9px 1fr 32px 64px}.session-report-head{align-items:flex-start}.disturbance-item{grid-template-columns:30px 1fr}.disturbance-item>span{grid-column:2;text-align:left;max-width:none}.classification-accounting-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.classification-accounting-head{align-items:flex-start}.classification-accounting-detail{grid-template-columns:1fr}}
     @media(max-width:700px){.sleep-period{grid-template-columns:1fr 1fr}.sleep-period .reason{grid-column:1/-1}.sleep-period-env{grid-template-columns:repeat(2,minmax(0,1fr))}.sleep-quality-card{grid-template-columns:86px minmax(0,1fr);gap:11px;padding:12px}.sleep-quality-ring{width:80px;height:80px}.sleep-quality-ring strong{font-size:22px}.sleep-quality-ring small{margin-top:-24px}.sleep-quality-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
     #histCanvas{height:170px;margin-top:12px}
 
@@ -6497,6 +6502,9 @@ const RECOVERY_PROFILE_META={
   short_sleep:{label:'พบช่วงหลับ · N2/N3/REM',color:'#8f82ef'},
   unconfirmed:{label:'ยังยืนยันไม่ได้ · NO DATA/OFF BED',color:'#526b78'},
 };
+const SCORE_EXCLUDED_META={
+  key:'score_excluded',label:'ไม่นับคะแนน',color:'#526b78',
+};
 const TERMINAL_OCCUPANCY_META={
   no_user_on_bed:{label:'ไม่มีผู้ใช้งานบนเตียง',code:'OFF',color:'#7cc7d8'},
   exited_zeep:{label:'ออกจาก ZEEP',code:'EXIT',color:'#f6b94a'},
@@ -6518,20 +6526,34 @@ function reportPresentationMode(source){
   return 'unknown';
 }
 
-function reportStageDurations(report){
+function reportStageDurations(report,{scoreEligible=false}={}){
   const values={wake:0,n1:0,n2:0,n3:0,rem:0};
   (report?.stages||[]).forEach(stage=>{
-    if(Object.prototype.hasOwnProperty.call(values,stage.state)){
-      values[stage.state]=Math.max(0,Number(stage.duration_s)||0);
+    const key=String(stage?.state||'').toLowerCase();
+    if(Object.prototype.hasOwnProperty.call(values,key)){
+      const duration=scoreEligible&&stage.score_eligible_duration_s!=null
+        ?stage.score_eligible_duration_s:stage.duration_s;
+      values[key]=Math.max(0,Number(duration)||0);
     }
   });
   return values;
 }
 
 function reportProfileItems(report,presentation){
-  const sleep=report.sleep||{},durations=reportStageDurations(report);
+  const sleep=report.sleep||{};
+  const knownStages=(report?.stages||[]).filter(stage=>
+    Object.prototype.hasOwnProperty.call(
+      REPORT_STAGE_META,String(stage?.state||'').toLowerCase()
+    )
+  );
+  const hasScoreEligible=presentation==='sleep'
+    &&knownStages.length===Object.keys(REPORT_STAGE_META).length
+    &&knownStages.every(stage=>stage.score_eligible_duration_s!=null);
+  const durations=reportStageDurations(report,{scoreEligible:hasScoreEligible});
   const known=Object.values(durations).reduce((sum,value)=>sum+value,0);
-  const recording=Math.max(0,Number(sleep.recording_s)||0);
+  const recording=Math.max(0,Number(
+    sleep.classification_accounting?.recording_s??sleep.recording_s
+  )||0);
   const denominator=Math.max(recording,known,1);
   const unconfirmed=Math.max(0,recording-known);
   let items;
@@ -6544,15 +6566,26 @@ function reportProfileItems(report,presentation){
     ].map(item=>({...RECOVERY_PROFILE_META[item.key],...item}));
   }else{
     items=Object.keys(durations).map(key=>({...REPORT_STAGE_META[key],key,duration_s:durations[key]}));
-    if(unconfirmed>0)items.push({key:'unconfirmed',label:'ยังยืนยันไม่ได้',color:'#526b78',duration_s:unconfirmed});
+    if(unconfirmed>0){
+      items.push({
+        ...(hasScoreEligible
+          ?SCORE_EXCLUDED_META
+          :{key:'unconfirmed',label:'ยังยืนยันไม่ได้',color:'#526b78'}),
+        duration_s:unconfirmed,
+      });
+    }
   }
-  return items.map(item=>({...item,pct:100*item.duration_s/denominator}));
+  return {
+    hasScoreEligible,
+    items:items.map(item=>({...item,pct:100*item.duration_s/denominator})),
+  };
 }
 
 function reportProfileMarkup(report,presentation){
   const sleep=report.sleep||{},quality=report.quality||{};
   const coverage=report.data_quality?.coverage||{};
-  const items=reportProfileItems(report,presentation);
+  const profile=reportProfileItems(report,presentation);
+  const items=profile.items;
   let cursor=0;
   const segments=items.filter(item=>item.duration_s>0).map(item=>{
     const start=cursor,end=Math.min(100,cursor+item.pct);cursor=end;
@@ -6570,12 +6603,71 @@ function reportProfileMarkup(report,presentation){
   const title=presentation==='recovery'?'รูปแบบการพักที่ตรวจพบ':'สัดส่วน Sleep Stage';
   const note=presentation==='recovery'
     ?'ไม่บังคับให้หลับ · Sleep State เป็นข้อมูลประกอบ'
-    :`เทียบเวลาที่บันทึก · Coverage ${Number(coverage.sleep_stage_pct)||0}%`;
+    :profile.hasScoreEligible
+      ?`ใช้เฉพาะเวลาที่เข้าคะแนน · ${fmtDur(sleep.actual_scored_s)}`
+      :`ข้อมูลรุ่นเดิม · Coverage ${Number(coverage.sleep_stage_pct)||0}%`;
   const centreLabel=presentation==='recovery'?'เวลาพักที่นับได้':'Sensor ประเมินว่าหลับ';
   const meaning=presentation==='recovery'
     ?'<div class="profile-meaning-note">พักขณะตื่นไม่ใช่ผลล้มเหลว · คะแนนอ่านจากเวลาพัก ความนิ่ง HR/RR ความนิ่งร่างกาย และสิ่งแวดล้อมร่วมกัน</div>'
-    :'<div class="profile-meaning-note">NREM เป็นผลรวม N1 + N2 + N3 ไม่ใช่ Sleep State เพิ่มเติม</div>';
+    :profile.hasScoreEligible
+      ?'<div class="profile-meaning-note">วงแหวนนี้ใช้เวลาที่มีสิทธิ์เข้าคะแนน · provisional, WAIT, NO DATA และ OFF BED อยู่ในส่วน “ไม่นับคะแนน” · NREM เป็นผลรวม N1 + N2 + N3</div>'
+      :'<div class="profile-meaning-note">รายงานรุ่นเดิมยังแยกเวลาแสดง State ออกจากเวลาคิดคะแนนไม่ได้ · NREM เป็นผลรวม N1 + N2 + N3</div>';
   return `<div class="stage-summary ${presentation==='recovery'?'recovery-profile-summary':''}"><div class="report-subhead"><span>${title}</span><small>${note}</small></div><div class="stage-summary-content"><div class="stage-donut" style="--stage-ring:conic-gradient(${segments.join(',')})"><span><b>${centreValue}</b><small>${centreLabel}</small></span></div><div class="stage-legend">${rows}${meaning}</div></div></div>`;
+}
+
+function classificationAccountingMarkup(report,adminView,presentation){
+  const sleep=report?.sleep||{};
+  const quality=report?.quality||{};
+  const accounting=sleep.classification_accounting;
+  if(!accounting||typeof accounting!=='object')return '';
+  const recovery=presentation==='recovery';
+  const recording=Number(accounting.recording_s??sleep.recording_s)||0;
+  const displayed=Number(accounting.display_attributed_s??accounting.classified_s)||0;
+  const restEligible=Number(quality.duration_target?.eligible_rest_seconds);
+  const eligible=recovery
+    ?Number.isFinite(restEligible)
+      ?Math.max(0,Math.min(recording,restEligible))
+      :null
+    :Number(accounting.score_eligible_s??sleep.actual_scored_s)||0;
+  const excluded=recovery
+    ?eligible==null?null:Math.max(0,recording-eligible)
+    :Number(accounting.excluded_from_score_s)||Math.max(0,recording-eligible);
+  const invariant=accounting.arithmetic_invariant||{};
+  const status=invariant.holds===true?'ครบถ้วน':invariant.holds===false?'ต้องตรวจสอบ':'รอข้อมูล';
+  const statusClass=invariant.holds===true?'good':invariant.holds===false?'attention':'neutral';
+  const title=recovery
+    ?'บัญชีเวลาการพักและ State ประกอบ'
+    :invariant.holds===true
+    ?'เวลาของ Session ถูกจัดหมวดครบ'
+    :invariant.holds===false
+      ?'พบบัญชีเวลาที่ต้องตรวจสอบ'
+      :'กำลังตรวจบัญชีเวลา';
+  const details=[
+    ['ยืนยันโดยตรง',accounting.direct_confirmed_s],
+    ['คง State ก่อนหน้า',accounting.continuity_carried_forward_s],
+    ['provisional',accounting.provisional_hold_s],
+    ['WAIT เริ่มต้น',accounting.initial_wait_s],
+    ['NO DATA',accounting.no_data_s],
+    ['OFF BED',accounting.off_bed_s],
+    ['Restart hold',accounting.restart_display_hold_s],
+    ['Sensor gap',accounting.sensor_gap_s],
+  ].filter(([,value])=>value!=null&&Number(value)>0);
+  const detailMarkup=adminView
+    ?`<div class="classification-accounting-detail">${details.map(([label,value])=>`<span><small>${label}</small><b>${fmtDur(Number(value))}</b></span>`).join('')}</div>`
+    :'';
+  return `<section class="classification-accounting-card">
+    <div class="classification-accounting-head"><div><span>TIME ACCOUNTING</span><h3>${title}</h3></div><b class="accounting-status ${statusClass}">${status}</b></div>
+    <div class="classification-accounting-metrics">
+      <div><span>Sensor บันทึก</span><b>${fmtDur(recording)}</b></div>
+      <div><span>${recovery?'State (ข้อมูลประกอบ)':'แสดง State'}</span><b>${fmtDur(displayed)}</b></div>
+      <div><span>${recovery?'เวลาพักที่นับได้':'ใช้คิดคะแนน'}</span><b>${fmtDur(eligible)}</b></div>
+      <div><span>${recovery?'ไม่นับเป็นเวลาพัก':'ไม่นับคะแนน'}</span><b>${fmtDur(excluded)}</b></div>
+    </div>
+    ${detailMarkup}
+    <p>${recovery
+      ?'Recovery Score ไม่บังคับให้หลับ · Sleep State ใช้ประกอบการอธิบายเท่านั้น ส่วนคะแนนใช้เวลาพัก ความนิ่ง HR/RR ความนิ่งร่างกาย และสภาพแวดล้อมร่วมกัน'
+      :'provisional เป็นส่วนหนึ่งของเวลาที่คง State ก่อนหน้า แต่ยังไม่เข้าคะแนน · WAIT, NO DATA และ OFF BED แยกจาก W/N1/N2/N3/REM'}</p>
+  </section>`;
 }
 
 function reportOverviewMetrics(report,presentation){
@@ -6824,6 +6916,7 @@ function renderReport(rec){
     ${renderSleepQuality(rec.sleep_quality, rec.ended_at_utc, presentation)}
     ${restoreSummaryHtml}
     ${renderSessionOverview(rec.session_report,Boolean(restoreSummaryHtml))}
+    ${classificationAccountingMarkup(rec.session_report,adminView,presentation)}
     <div class="report-grid">
       ${statBlock('อุณหภูมิเฉลี่ย', su.temperature_c, ' °C')}
       ${statBlock('ความชื้นเฉลี่ย', su.humidity_rh, ' %RH')}

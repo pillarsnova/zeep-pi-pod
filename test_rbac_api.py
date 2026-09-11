@@ -123,10 +123,20 @@ class RbacApiTests(unittest.TestCase):
             },
         )
         self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.headers.get("cache-control"), "private, no-store")
+        self.assertEqual(response.headers.get("pragma"), "no-cache")
         payload = response.json()
         self.assertEqual(payload["range"]["timezone"], "Asia/Bangkok")
         self.assertIn("people_count", payload["summary"])
         self.assertIn("participants", payload)
+
+        account_history = admin.get("/api/history/nobody@example.test")
+        self.assertEqual(account_history.status_code, 200, account_history.text)
+        self.assertEqual(
+            account_history.headers.get("cache-control"),
+            "private, no-store",
+        )
+        self.assertEqual(account_history.headers.get("pragma"), "no-cache")
 
     def test_brainwave_sound_lab_is_admin_only_and_plays_on_pi(self) -> None:
         anonymous = TestClient(pod_app.app)

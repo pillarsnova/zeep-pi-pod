@@ -593,6 +593,52 @@ Environment ไม่ได้กำหนด Sleep State และ event เป
 `score_derived_claims_suppressed=true` ห้าม client แสดงข้อความเชิงบวกจาก
 report เก่าหรือ field ภายใน
 
+### 9.1 Continuity accounting และเวลาที่เข้าคะแนน
+
+Detail endpoint เผยแพร่บัญชีเวลาที่ผ่าน positive allowlist ที่
+`report.sleep.classification_accounting` เพื่อให้ App อธิบายได้ว่าทุกวินาที
+ของ Session อยู่ที่ใด โดยไม่ต้องอ่าน Raw Timeline หรือคำนวณคะแนนซ้ำ
+
+| Field | Type | ความหมาย |
+|---|---|---|
+| `direct_confirmed_s` | `number >= 0` | เวลาที่ estimator ยืนยัน State จากหลักฐานของ epoch นั้นโดยตรง |
+| `continuity_carried_forward_s` | `number >= 0` | เวลาที่คง State ก่อนหน้าขณะ State ผู้ท้าชิงยังไม่ชัด |
+| `provisional_hold_s` | `number >= 0` | ส่วนย่อยของ carry 1–2 epoch แรก; แสดงได้แต่ไม่เข้าคะแนน |
+| `display_attributed_s` | `number >= 0` | เวลาที่ผูกกับ W/N1/N2/N3/REM สำหรับแสดง Timeline |
+| `score_eligible_s` | `number >= 0` | เวลาที่ Server อนุญาตให้ใช้คำนวณคะแนน |
+| `initial_wait_s` | `number >= 0` | WAIT ช่วงยืนยัน State แรก 60/120 วินาที |
+| `no_data_s` | `number >= 0` | หลักฐานชีพจร/การหายใจ/BCG ไม่พอ |
+| `off_bed_s` | `number >= 0` | ยืนยันว่าไม่มีผู้ใช้งานบนเตียง |
+| `restart_display_hold_s` | `number >= 0` | State เดิมที่แสดงชั่วคราวหลัง service restart; ไม่เข้าคะแนน |
+| `sensor_gap_s` | `number >= 0` | ช่องว่าง acquisition หรือเศษท้ายที่ไม่ครบ epoch |
+| `excluded_from_score_s` | `number >= 0` | เวลาบันทึกทั้งหมดที่ไม่มีสิทธิ์เข้าคะแนน |
+| `arithmetic_invariant` | `object` | `left_s`, `right_s`, `delta_s`, `holds` สำหรับตรวจว่ายอดเวลาครบ |
+
+`provisional_hold_s` เป็นส่วนย่อยของ `continuity_carried_forward_s` จึงห้าม
+นำมาบวกซ้ำในยอดเวลารวม สมการบัญชีหลักคือ:
+
+```text
+direct_confirmed_s + continuity_carried_forward_s + initial_wait_s +
+no_data_s + off_bed_s + restart_display_hold_s + sensor_gap_s = recording_s
+```
+
+`report.sleep.actual_scored_s` เท่ากับ `classification_accounting.score_eligible_s`
+ใน report รุ่นปัจจุบัน ส่วน `report.stages[]` ส่งทั้งค่าที่ใช้แสดงและค่าที่ใช้
+คิดคะแนนแยกกัน:
+
+| Field | Type | ใช้สำหรับ |
+|---|---|---|
+| `duration_s`, `pct_scored`, `pct_sleep` | `number` | การแสดงสัดส่วน State ที่ผูกกับ Timeline |
+| `score_eligible_samples` | `integer >= 0` | จำนวน epoch ของ State นี้ที่มีสิทธิ์เข้าคะแนน |
+| `score_eligible_duration_s` | `number >= 0` | เวลาของ State นี้ที่มีสิทธิ์เข้าคะแนน |
+| `pct_score_eligible` | `number 0..100` | สัดส่วน State จากเวลาที่มีสิทธิ์เข้าคะแนนทั้งหมด |
+| `pct_score_eligible_sleep` | `number 0..100` หรือ `null` | สัดส่วน N1/N2/N3/REM จากเวลาหลับที่มีสิทธิ์เข้าคะแนน |
+
+Client ต้องใช้ค่าชุด `score_eligible_*` เมื่อต้องอธิบายฐานของคะแนน และใช้
+`duration_s`/`pct_scored` เมื่อต้องแสดง Timeline เท่านั้น ห้ามอนุมานว่า
+provisional, WAIT, NO DATA หรือ OFF BED เข้าคะแนน และห้ามสร้าง bucket
+`Unclassified`
+
 `report.quality` เป็น allowlist ของ application fields เช่น
 `available`, `score`, `score_title`, `score_scope`, `validation_status`,
 `clinical_validated`, `quality_type`, `session_character`, `sleep_detected`,

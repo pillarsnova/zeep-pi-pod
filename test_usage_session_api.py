@@ -84,7 +84,55 @@ def _session(session_id: str, email: str, mode: str) -> dict:
             "sleep": {
                 "recording_s": 25200,
                 "estimated_sleep_s": 23400,
+                "actual_scored_s": 22800,
+                "direct_confirmed_s": 18000,
+                "continuity_carried_forward_s": 5400,
+                "initial_wait_s": 60,
+                "no_data_s": 300,
+                "off_bed_s": 300,
+                "restart_display_hold_s": 60,
+                "sensor_gap_s": 1080,
+                "provisional_hold_s": 600,
+                "excluded_from_score_s": 2400,
                 "sleep_efficiency_pct": 92.9,
+                "classification_accounting": {
+                    "version": "classification-accounting-v-test",
+                    "method": "row_level_classification_metadata",
+                    "direct_confirmed_s": 18000,
+                    "continuity_carried_forward_s": 5400,
+                    "initial_wait_s": 60,
+                    "no_data_s": 300,
+                    "off_bed_s": 300,
+                    "restart_display_hold_s": 60,
+                    "sensor_gap_s": 1080,
+                    "provisional_hold_s": 600,
+                    "classified_s": 23400,
+                    "display_attributed_s": 23400,
+                    "score_eligible_s": 22800,
+                    "excluded_from_score_s": 2400,
+                    "operational_unscored_s": 1800,
+                    "accounted_s": 25200,
+                    "recording_s": 25200,
+                    "display_stage_total_s": 23400,
+                    "display_stage_total_delta_s": 0,
+                    "display_stage_total_reconciles": True,
+                    "score_stage_total_s": 22800,
+                    "score_stage_total_delta_s": 0,
+                    "score_stage_total_reconciles": True,
+                    "restart_display_hold_derived": True,
+                    "challenger_time_before_confirmation_s": 0,
+                    "legacy_carry_provenance_available": True,
+                    "arithmetic_invariant": {
+                        "expression": "classification buckets = recording_s",
+                        "left_s": 25200,
+                        "right_s": 25200,
+                        "delta_s": 0,
+                        "holds": True,
+                        "raw_rows": ["must-not-leak"],
+                    },
+                    "participant_email": "must-not-leak",
+                    "raw_epoch_ids": ["must-not-leak"],
+                },
                 "hr_series": [58.0, 59.0],
                 "participant_phone": "must-not-leak",
             },
@@ -95,8 +143,57 @@ def _session(session_id: str, email: str, mode: str) -> dict:
                     "duration_s": 12000,
                     "pct_scored": 51.3,
                     "pct_sleep": 55.1,
+                    "score_eligible_samples": 380,
+                    "score_eligible_duration_s": 11400,
+                    "pct_score_eligible": 50.0,
+                    "pct_score_eligible_sleep": 53.5,
                     "series": ["N2", "N2"],
-                }
+                    "score_private_basis": "must-not-leak",
+                },
+                {
+                    "state": "W",
+                    "samples": 100,
+                    "duration_s": 3000,
+                    "pct_scored": 12.8,
+                    "pct_sleep": None,
+                    "score_eligible_samples": 100,
+                    "score_eligible_duration_s": 3000,
+                    "pct_score_eligible": 13.2,
+                    "pct_score_eligible_sleep": None,
+                },
+                {
+                    "state": "N1",
+                    "samples": 60,
+                    "duration_s": 1800,
+                    "pct_scored": 7.7,
+                    "pct_sleep": 8.8,
+                    "score_eligible_samples": 60,
+                    "score_eligible_duration_s": 1800,
+                    "pct_score_eligible": 7.9,
+                    "pct_score_eligible_sleep": 9.1,
+                },
+                {
+                    "state": "N3",
+                    "samples": 100,
+                    "duration_s": 3000,
+                    "pct_scored": 12.8,
+                    "pct_sleep": 14.7,
+                    "score_eligible_samples": 100,
+                    "score_eligible_duration_s": 3000,
+                    "pct_score_eligible": 13.2,
+                    "pct_score_eligible_sleep": 15.2,
+                },
+                {
+                    "state": "REM",
+                    "samples": 120,
+                    "duration_s": 3600,
+                    "pct_scored": 15.4,
+                    "pct_sleep": 17.6,
+                    "score_eligible_samples": 120,
+                    "score_eligible_duration_s": 3600,
+                    "pct_score_eligible": 15.8,
+                    "pct_score_eligible_sleep": 18.2,
+                },
             ],
             "environment": [
                 {
@@ -340,7 +437,35 @@ class UsageSessionApiTests(unittest.TestCase):
             58.4,
         )
         self.assertEqual(payload["report"]["sleep"]["estimated_sleep_s"], 23400)
+        accounting = payload["report"]["sleep"]["classification_accounting"]
+        self.assertEqual(accounting["direct_confirmed_s"], 18000)
+        self.assertEqual(accounting["continuity_carried_forward_s"], 5400)
+        self.assertEqual(accounting["provisional_hold_s"], 600)
+        self.assertEqual(accounting["score_eligible_s"], 22800)
+        self.assertEqual(accounting["initial_wait_s"], 60)
+        self.assertEqual(accounting["no_data_s"], 300)
+        self.assertEqual(accounting["off_bed_s"], 300)
+        self.assertEqual(accounting["restart_display_hold_s"], 60)
+        self.assertEqual(accounting["sensor_gap_s"], 1080)
+        self.assertTrue(accounting["arithmetic_invariant"]["holds"])
+        self.assertEqual(payload["report"]["sleep"]["actual_scored_s"], 22800)
+        self.assertEqual(payload["report"]["sleep"]["provisional_hold_s"], 600)
         self.assertEqual(payload["report"]["stages"][0]["state"], "N2")
+        self.assertEqual(
+            payload["report"]["stages"][0]["score_eligible_duration_s"],
+            11400,
+        )
+        self.assertEqual(
+            payload["report"]["stages"][0]["pct_score_eligible"],
+            50.0,
+        )
+        self.assertEqual(
+            sum(
+                stage["score_eligible_duration_s"]
+                for stage in payload["report"]["stages"]
+            ),
+            accounting["score_eligible_s"],
+        )
         self.assertEqual(payload["report"]["environment"][0]["average"], 22.4)
         self.assertEqual(
             payload["report"]["environment_assessment"]["overall_level"],
@@ -376,6 +501,9 @@ class UsageSessionApiTests(unittest.TestCase):
         self.assertNotIn("values", rendered)
         self.assertNotIn("patient_name", rendered)
         self.assertNotIn("date_of_birth", rendered)
+        self.assertNotIn("raw_epoch_ids", rendered)
+        self.assertNotIn("raw_rows", rendered)
+        self.assertNotIn("score_private_basis", rendered)
 
     def test_unavailable_score_never_releases_engineering_fallback(self) -> None:
         session = self.history.sessions["a-session"]

@@ -417,8 +417,15 @@ class UsageResponseModelTests(unittest.TestCase):
             account_key=None,
         )
         parsed = _validate(UsageSessionDetail, detail)
+        accounting = parsed.report.sleep.classification_accounting
 
         self.assertEqual(parsed.report.stages[2].state, "n2")
+        self.assertEqual(
+            parsed.report.stages[2].score_eligible_duration_s,
+            5,
+        )
+        self.assertEqual(accounting.score_eligible_s, 5)
+        self.assertTrue(accounting.arithmetic_invariant.holds)
         self.assertEqual(parsed.report.environment[0].key, "temperature")
 
     def test_current_sleep_and_recovery_quality_shapes_validate(self):

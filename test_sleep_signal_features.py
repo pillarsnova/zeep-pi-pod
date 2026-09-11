@@ -324,6 +324,10 @@ class SignalFeatureTests(unittest.TestCase):
         )
         self.assertEqual(missing_vitals[0]["state"], "no_data")
         self.assertEqual(
+            missing_vitals[0]["label"],
+            "NO DATA · ไม่มี HR/RR ที่ใช้ได้",
+        )
+        self.assertEqual(
             missing_vitals[0]["data_status"], "missing_current_vitals")
 
         sensor_gap = sleep_classification_gap_timeline(
@@ -334,7 +338,65 @@ class SignalFeatureTests(unittest.TestCase):
             sensor_sample_interval_s=10,
         )
         self.assertEqual(sensor_gap[0]["state"], "sensor_gap")
+        self.assertEqual(
+            sensor_gap[0]["label"], "NO DATA · ไม่มีข้อมูล Sensor")
         self.assertEqual(sensor_gap[0]["coverage"]["sensor_rows"], 0)
+
+    def test_wait_label_is_reserved_for_initial_confirmation(self):
+        periods = [{"state": "wake", "start_time": 120, "end_time": 130}]
+        initial = sleep_classification_gap_timeline(
+            periods,
+            [
+                {"t": 100, "hr": 70, "rr": 16, "bed": "On bed"},
+                {"t": 110, "hr": 69, "rr": 15, "bed": "On bed"},
+            ],
+            session_start=100,
+            classification_end=130,
+            sensor_sample_interval_s=10,
+        )
+        self.assertEqual(
+            initial[0]["label"], "WAIT · กำลังยืนยันสถานะ")
+        self.assertEqual(
+            initial[0]["data_status"], "confirming_initial_state")
+
+        later = sleep_classification_gap_timeline(
+            [
+                {"state": "wake", "start_time": 100, "end_time": 120},
+                {"state": "n1", "start_time": 150, "end_time": 170},
+            ],
+            [
+                {"t": 120, "hr": 65, "rr": 15, "bed": "On bed"},
+                {"t": 130, "hr": 64, "rr": 14, "bed": "On bed"},
+                {"t": 140, "hr": 64, "rr": 14, "bed": "On bed"},
+            ],
+            session_start=100,
+            classification_end=170,
+            sensor_sample_interval_s=10,
+        )
+        self.assertEqual(
+            later[0]["label"], "NO DATA · หลักฐานยังไม่ครบ")
+        self.assertEqual(
+            later[0]["data_status"], "no_data_unconfirmed_evidence")
+
+    def test_initial_wait_is_capped_at_two_minutes(self):
+        samples = [
+            {"t": float(second), "hr": 70, "rr": 16, "bed": "On bed"}
+            for second in range(10, 3610, 10)
+        ]
+        gaps = sleep_classification_gap_timeline(
+            [],
+            samples,
+            session_start=0,
+            classification_end=3600,
+            sensor_sample_interval_s=10,
+        )
+
+        self.assertEqual(len(gaps), 2)
+        self.assertEqual(gaps[0]["duration_s"], 120.0)
+        self.assertEqual(gaps[0]["data_status"], "confirming_initial_state")
+        self.assertEqual(gaps[1]["duration_s"], 3480.0)
+        self.assertEqual(gaps[1]["data_status"], "initial_confirmation_timeout")
+        self.assertNotIn("WAIT", gaps[1]["label"])
 
     def test_report_does_not_add_noise_for_short_decision_gap(self):
         gaps = sleep_classification_gap_timeline(

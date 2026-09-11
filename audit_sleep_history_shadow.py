@@ -74,6 +74,7 @@ from sleep_system_policy import (
     SLEEP_DEFAULT_N2_RR_CONFLICT_SUPPORT,
     SLEEP_DEFAULT_N3_RR_CONFLICT_PENALTY,
     SLEEP_BUCKET_MIN_BCG_PACKETS,
+    SLEEP_CONFIRMATION_SECONDS,
     SLEEP_EVIDENCE_EPOCH_SECONDS,
     SLEEP_EVIDENCE_MIN_MARGIN,
     SLEEP_EVIDENCE_MIN_WINNER,
@@ -97,11 +98,13 @@ from sleep_system_policy import (
     SLEEP_PROBABILITY_SWITCH_MARGIN,
     SLEEP_SCORE_SOFTMAX_TEMPERATURE,
     SLEEP_STAGE_CONFIRM_TICKS,
+    SLEEP_STAGE_CONFIRMATION_SECONDS,
     SLEEP_STAGE_MIN_DWELL_SECONDS,
     ZEEP_SLEEP_BASELINE_VERSION,
     ZEEP_SLEEP_STATES,
     ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
     age_group,
+    continuity_hold_contract,
     gender_adjusted_baseline,
     rest_mode_group,
 )
@@ -407,6 +410,66 @@ def timeline_sensor_rows(
     return output
 
 
+def apply_replay_statuses_to_report_rows(
+    report_rows: list[dict[str, Any]],
+    status_rows: Iterable[dict[str, Any]],
+    *,
+    session_start: float,
+    interval_s: float = SLEEP_EVIDENCE_EPOCH_SECONDS,
+) -> None:
+    """Overlay replay WAIT/NO DATA/OFF BED on report-time buckets.
+
+    Timeline HR/RR can remain numerically valid when Raw BCG coverage fails.
+    The replay abstention is authoritative in that case: without this overlay,
+    report accounting can reinterpret the bucket as score-eligible continuity
+    and diverge from the reviewed ``score_counts``. Operational status is
+    applied after Stage projection so it also wins over any stale Stage row.
+    """
+    status_by_bucket: dict[int, dict[str, Any]] = {}
+    for status_row in status_rows:
+        timestamp = float(status_row["t"])
+        attribution_start = float(status_row.get(
+            "attribution_start",
+            timestamp - interval_s,
+        ))
+        bucket = max(0, int(math.floor(
+            (attribution_start - session_start) / interval_s + 1e-9
+        )))
+        state = str(status_row.get("state") or "no_data").strip().lower()
+        data_status = str(
+            status_row.get("data_status") or state or "no_data"
+        ).strip().lower()
+        status_by_bucket[bucket] = {
+            "sleep": None,
+            "sleep_confidence": (
+                status_row.get("confidence") or "unavailable"
+            ),
+            "acoustic_corroborated": False,
+            "sleep_operational_state": state,
+            "sleep_operational_label": status_row.get("label"),
+            "sleep_decision_kind": (
+                status_row.get("decision_kind")
+                or "historical_operational_status"
+            ),
+            "sleep_held_previous_state": False,
+            "sleep_provisional": bool(
+                status_row.get("provisional", False)
+            ),
+            "sleep_pending_state": None,
+            "sleep_data_status": data_status,
+            "sleep_score_attribution_state": None,
+            "sleep_challenger_counted_as_new_state": False,
+            "sleep_score_eligible": False,
+            "sleep_excluded_from_score": True,
+            "sleep_excluded_from_personal_baseline": True,
+            "sleep_status_reason": status_row.get("reason"),
+        }
+
+    for report_row in report_rows:
+        bucket = int(report_row.get("_bucket_index", -1))
+        report_row.update(status_by_bucket.get(bucket, {}))
+
+
 def raw_packet_quality(packets: list[sqlite3.Row], start: float, end: float) -> dict[str, Any]:
     """Measure acquisition and paired-vital completeness without using labels."""
     paired = 0
@@ -436,6 +499,7 @@ class ShadowPath:
         self.stage_since: Optional[float] = None
         self.candidate: Optional[str] = None
         self.candidate_ticks = 0
+        self.continuity_hold_ticks = 0
         self.cycle_has_n1 = False
         self.sleep_onset_at: Optional[float] = None
         self.ema: Optional[dict[str, float]] = None
@@ -446,6 +510,7 @@ class ShadowPath:
         self.segment += 1
         self.candidate = None
         self.candidate_ticks = 0
+        self.continuity_hold_ticks = 0
         self.ema = None
 
     def observe_signal_gap(self) -> None:
@@ -456,6 +521,20 @@ class ShadowPath:
         therefore survive while an incomplete challenger and its EMA do not.
         """
         self._start_new_segment()
+
+    def interrupt_confirmation(self) -> None:
+        """Discard non-consecutive challenger evidence for one invalid epoch.
+
+        Live classification clears the pending candidate and probability EMA
+        whenever a canonical 30-second epoch lacks valid Bed + HR + RR + BCG.
+        A short invalid epoch is not necessarily a 60-second signal gap, so it
+        must break confirmation without starting a new replay segment or
+        forgetting the last confirmed State.
+        """
+        self.candidate = None
+        self.candidate_ticks = 0
+        self.continuity_hold_ticks = 0
+        self.ema = None
 
     def observe_confirmed_off_bed(self, now: float) -> None:
         """Mirror Live Bed Exit handling without forgetting first onset.
@@ -482,15 +561,67 @@ class ShadowPath:
             return False
         return candidate in SLEEP_ALLOWED_TRANSITIONS.get(self.last, frozenset())
 
-    def step(self, candidate: Optional[str], now: float, strong_wake: bool) -> tuple[Optional[str], dict[str, Any]]:
+    def step(
+        self,
+        candidate: Optional[str],
+        now: float,
+        strong_wake: bool,
+    ) -> tuple[Optional[str], dict[str, Any]]:
         if candidate is None or not self.allowed(candidate, strong_wake):
             self.candidate = None
             self.candidate_ticks = 0
-            return None, {"decision": "abstain" if candidate is None else "blocked_transition"}
+            self.continuity_hold_ticks += 1
+            contract = continuity_hold_contract(
+                self.last,
+                candidate=candidate,
+                decision=(
+                    "ambiguous_evidence_hold"
+                    if candidate is None else "blocked_transition_hold"
+                ),
+                hold_epochs=self.continuity_hold_ticks,
+            )
+            required = int(
+                SLEEP_STAGE_CONFIRM_TICKS.get(
+                    candidate, SLEEP_CONFIRM_EPOCHS
+                )
+            ) if candidate in STAGES else 0
+            contract.update({
+                "candidate_epochs": 0,
+                "required_epochs": required,
+                "confirmation_seconds": (
+                    SLEEP_STAGE_CONFIRMATION_SECONDS.get(
+                        candidate, SLEEP_CONFIRMATION_SECONDS
+                    )
+                    if candidate in STAGES else SLEEP_CONFIRMATION_SECONDS
+                ),
+                "confirmation_complete": False,
+            })
+            return contract["confirmed_state"], contract
         if candidate == self.last:
             self.candidate = None
             self.candidate_ticks = 0
-            return self.last, {"decision": "hold_confirmed"}
+            self.continuity_hold_ticks = 0
+            return self.last, {
+                "decision": "hold_confirmed",
+                "decision_kind": "confirmed_state",
+                "confirmed_state": self.last,
+                "held_previous_state": False,
+                "provisional": False,
+                "challenger_counted_as_new_state": False,
+                "score_eligible": True,
+                "excluded_from_score": False,
+                "excluded_from_personal_baseline": False,
+                "candidate_epochs": SLEEP_STAGE_CONFIRM_TICKS.get(
+                    self.last, SLEEP_CONFIRM_EPOCHS
+                ),
+                "required_epochs": SLEEP_STAGE_CONFIRM_TICKS.get(
+                    self.last, SLEEP_CONFIRM_EPOCHS
+                ),
+                "confirmation_seconds": SLEEP_STAGE_CONFIRMATION_SECONDS.get(
+                    self.last, SLEEP_CONFIRMATION_SECONDS
+                ),
+                "confirmation_complete": True,
+            }
         if self.candidate == candidate:
             self.candidate_ticks += 1
         else:
@@ -503,16 +634,31 @@ class ShadowPath:
             # Live persistence holds the preceding confirmed stage while an
             # allowed challenger is accumulating confirmation.  Returning the
             # old state here keeps duration, coverage and score parity.
+            self.continuity_hold_ticks += 1
+            contract = continuity_hold_contract(
+                self.last,
+                candidate=candidate,
+                decision="confirming",
+                hold_epochs=self.continuity_hold_ticks,
+            )
             return self.last, {
+                **contract,
                 "decision": "confirming",
                 "ticks": self.candidate_ticks,
                 "required": required,
+                "candidate_epochs": self.candidate_ticks,
+                "required_epochs": required,
+                "confirmation_seconds": SLEEP_STAGE_CONFIRMATION_SECONDS.get(
+                    candidate, SLEEP_CONFIRMATION_SECONDS
+                ),
+                "confirmation_complete": False,
                 "confirmed_state": self.last,
             }
         self.last = candidate
         self.stage_since = now
         self.candidate = None
         self.candidate_ticks = 0
+        self.continuity_hold_ticks = 0
         if candidate == "wake":
             self.cycle_has_n1 = False
             # Preserve first onset across Wake, Bed Exit and telemetry gaps.
@@ -522,7 +668,24 @@ class ShadowPath:
             self.cycle_has_n1 = True
             if self.sleep_onset_at is None:
                 self.sleep_onset_at = now
-        return candidate, {"decision": "confirmed", "required": required}
+        return candidate, {
+            "decision": "confirmed",
+            "decision_kind": "confirmed_state",
+            "required": required,
+            "candidate_epochs": required,
+            "required_epochs": required,
+            "confirmation_seconds": SLEEP_STAGE_CONFIRMATION_SECONDS.get(
+                candidate, SLEEP_CONFIRMATION_SECONDS
+            ),
+            "confirmation_complete": True,
+            "confirmed_state": candidate,
+            "held_previous_state": False,
+            "provisional": False,
+            "challenger_counted_as_new_state": True,
+            "score_eligible": True,
+            "excluded_from_score": False,
+            "excluded_from_personal_baseline": False,
+        }
 
 
 def raw_packets(connection: sqlite3.Connection, session_id: str) -> list[sqlite3.Row]:
@@ -538,7 +701,12 @@ def make_buckets(
     packets: list[sqlite3.Row], start: float, end: float,
     *, timeline_sound: Optional[dict[int, float]] = None,
 ) -> list[dict[str, Any]]:
-    count = max(0, int(math.ceil((end - start) / 10.0)))
+    # Only complete 10-second acquisition buckets may enter a canonical
+    # 30-second Evidence Epoch.  ``ceil`` used to create a synthetic endpoint
+    # beyond ``end`` (for example 85 s -> a bucket ending at 90 s), which could
+    # in turn persist a decision outside the Session.  The incomplete tail is
+    # accounted explicitly after replay and is never padded into evidence.
+    count = max(0, int(math.floor((end - start) / 10.0 + 1e-9)))
     buckets = [{"t": start + (index + 1) * 10.0, "packets": []} for index in range(count)]
     for packet in packets:
         packet_t = epoch(packet["timestamp"])
@@ -596,8 +764,9 @@ def operational_status_row(
     data_status: str,
     reason: str,
     segment: int,
+    sample_interval_s: float = SLEEP_EVIDENCE_EPOCH_SECONDS,
 ) -> dict[str, Any]:
-    """Describe an unclassified 30-second epoch without inventing a Stage."""
+    """Describe operational time without inventing a Sleep Stage."""
     labels = {
         "wait": "WAIT · กำลังยืนยันสถานะ",
         "no_data": "NO DATA · หลักฐานไม่ครบ",
@@ -606,8 +775,13 @@ def operational_status_row(
             "บนเตียง"
         ),
     }
+    timestamp = float(bucket["t"])
+    interval_s = max(0.0, float(sample_interval_s))
     return {
         "t": bucket["t"],
+        "attribution_start": timestamp - interval_s,
+        "attribution_end": timestamp,
+        "sample_interval_s": interval_s,
         "state": state,
         "label": labels[state],
         "data_status": data_status,
@@ -649,6 +823,102 @@ def replay_session(
     operational = Counter()
     last_valid_t: Optional[float] = None
     offbed_run = 0
+
+    def upsert_off_bed_epoch(bucket: dict[str, Any]) -> None:
+        """Persist confirmed OFF BED on the canonical 30-second grid.
+
+        Three consecutive 10-second exit buckets can complete between grid
+        boundaries.  Backfill the immediately preceding epoch so a Session
+        ending before the next boundary cannot lose the confirmed exit.
+        """
+        elapsed = max(0.0, float(bucket["t"]) - start)
+        epoch_number = max(
+            1,
+            int(math.floor(elapsed / SLEEP_EVIDENCE_EPOCH_SECONDS)),
+        )
+        epoch_end = start + epoch_number * SLEEP_EVIDENCE_EPOCH_SECONDS
+        if epoch_end > float(bucket["t"]):
+            epoch_end -= SLEEP_EVIDENCE_EPOCH_SECONDS
+        epoch_end = max(
+            start + SLEEP_EVIDENCE_EPOCH_SECONDS,
+            epoch_end,
+        )
+        epoch_bucket = {**bucket, "t": epoch_end}
+        state_rows[:] = [
+            row for row in state_rows
+            if not math.isclose(float(row["t"]), epoch_end, abs_tol=0.01)
+        ]
+        status_rows[:] = [
+            row for row in status_rows
+            if not math.isclose(float(row["t"]), epoch_end, abs_tol=0.01)
+        ]
+        status_rows.append(operational_status_row(
+            epoch_bucket,
+            state="off_bed",
+            data_status="confirmed_off_bed",
+            reason=(
+                "Bed Status ยืนยันว่าไม่มีผู้ใช้งานบนเตียง "
+                "จึงไม่สร้าง Sleep State"
+            ),
+            segment=path.segment,
+        ))
+
+    def append_continuity_hold(
+        bucket: dict[str, Any],
+        *,
+        decision: str,
+        candidate: Optional[str] = None,
+        metrics: Optional[dict[str, Any]] = None,
+    ) -> bool:
+        """Attribute one valid on-bed epoch to the preceding State.
+
+        The challenger earns no Stage time until confirmation.  This helper is
+        deliberately unavailable before the first confirmed State and is not
+        used for missing-data or confirmed OFF BED epochs.
+        """
+        if path.last not in STAGES:
+            return False
+        path.candidate = None
+        path.candidate_ticks = 0
+        path.continuity_hold_ticks += 1
+        transition = continuity_hold_contract(
+            path.last,
+            candidate=candidate,
+            decision=decision,
+            hold_epochs=path.continuity_hold_ticks,
+        )
+        state_rows.append({
+            "t": bucket["t"],
+            "attribution_start": (
+                float(bucket["t"]) - SLEEP_EVIDENCE_EPOCH_SECONDS
+            ),
+            "attribution_end": float(bucket["t"]),
+            "sample_interval_s": SLEEP_EVIDENCE_EPOCH_SECONDS,
+            "state": path.last,
+            "segment": path.segment,
+            "metrics": metrics or {
+                "mean_hr": bucket.get("hr"),
+                "mean_rr": bucket.get("rr"),
+                "bed_status": (
+                    "Moving" if bucket.get("status") == 2 else "On bed"
+                ),
+            },
+            "decision_kind": transition["decision_kind"],
+            "decision": transition["decision"],
+            "held_previous_state": True,
+            "provisional": transition["provisional"],
+            "pending_state": transition.get("pending_state"),
+            "score_attribution_state": path.last,
+            "challenger_counted_as_new_state": False,
+            "score_eligible": bool(transition.get("score_eligible")),
+            "excluded_from_score": bool(
+                transition.get("excluded_from_score")
+            ),
+            "excluded_from_personal_baseline": True,
+            "confirmation": transition,
+        })
+        return True
+
     for index, bucket in enumerate(buckets):
         epoch_boundary = (index + 1) % 3 == 0
         context.append(bucket)
@@ -664,26 +934,23 @@ def replay_session(
             offbed_run = 0
         if offbed_run >= 3:
             operational["off_bed_10s"] += 1
-            if epoch_boundary:
-                status_rows.append(operational_status_row(
-                    bucket,
-                    state="off_bed",
-                    data_status="confirmed_off_bed",
-                    reason=(
-                        "Bed Status ยืนยันว่า"
-                        "ไม่มีผู้ใช้งานบนเตียง "
-                        "จึงไม่สร้าง Sleep State"
-                    ),
-                    segment=path.segment,
-                ))
             if offbed_run == 3:
                 path.observe_confirmed_off_bed(bucket["t"])
                 context.clear()
                 last_valid_t = None
+            if offbed_run == 3 or epoch_boundary:
+                upsert_off_bed_epoch(bucket)
             continue
         if not bucket["valid"]:
             operational["invalid_10s"] += 1
+            if path.last is None:
+                # Initial confirmation requires consecutive valid evidence;
+                # never let a missing bucket contribute one of its 60/120 s
+                # confirmation epochs.
+                path.candidate = None
+                path.candidate_ticks = 0
             if epoch_boundary:
+                path.interrupt_confirmation()
                 no_packets = int(bucket.get("packet_count") or 0) <= 0
                 status_rows.append(operational_status_row(
                     bucket,
@@ -713,31 +980,33 @@ def replay_session(
             operational["incomplete_current_epoch_30s"] += 1
             status_rows.append(operational_status_row(
                 bucket,
-                state="wait",
+                state="no_data",
                 data_status="incomplete_current_epoch",
                 reason=(
-                    "กำลังสะสมข้อมูลครบ 30 วินาที"
-                    "สำหรับ Epoch ปัจจุบัน"
+                    "ข้อมูลสดหลังช่วงขาดหายยังไม่ครบ Epoch 30 วินาที"
                 ),
                 segment=path.segment,
             ))
             continue
         if any(item["status"] == 1 for item in current_epoch):
             operational["possible_off_bed_epoch_30s"] += 1
-            status_rows.append(operational_status_row(
+            if not append_continuity_hold(
                 bucket,
-                state="wait",
-                data_status="confirming_off_bed",
-                reason=(
-                    "พบสัญญาณออกจากเตียง"
-                    "ใน Epoch ปัจจุบัน แต่ยังไม่ครบ"
-                    "เงื่อนไข OFF BED"
-                ),
-                segment=path.segment,
-            ))
+                decision="confirming_off_bed_hold",
+            ):
+                status_rows.append(operational_status_row(
+                    bucket,
+                    state="wait",
+                    data_status="confirming_initial_state",
+                    reason=(
+                        "กำลังยืนยันสถานะแรกพร้อมตรวจ Bed Status"
+                    ),
+                    segment=path.segment,
+                ))
             continue
         if any(not item["valid"] for item in current_epoch):
             operational["invalid_current_epoch_30s"] += 1
+            path.interrupt_confirmation()
             status_rows.append(operational_status_row(
                 bucket,
                 state="no_data",
@@ -753,16 +1022,24 @@ def replay_session(
         valid_short = [item for item in short if item["valid"]]
         if len(short) < 6 or len(valid_short) / len(short) < 0.80:
             operational["insufficient_epoch_30s"] += 1
-            status_rows.append(operational_status_row(
+            if not append_continuity_hold(
                 bucket,
-                state="wait",
-                data_status="insufficient_confirmation_window",
-                reason=(
-                    "กำลังสะสมหน้าต่าง 60 วินาที "
-                    "หรือข้อมูลที่ใช้ได้ยังไม่ถึง 80%"
-                ),
-                segment=path.segment,
-            ))
+                decision="rebuilding_confirmation_window_hold",
+            ):
+                _initial_state, initial_confirmation = path.step(
+                    "wake", bucket["t"], False
+                )
+                initial_row = operational_status_row(
+                    bucket,
+                    state="wait",
+                    data_status="confirming_initial_state",
+                    reason=(
+                        "กำลังสะสมหน้าต่างยืนยันสถานะแรก 60/120 วินาที"
+                    ),
+                    segment=path.segment,
+                )
+                initial_row["confirmation"] = initial_confirmation
+                status_rows.append(initial_row)
             continue
         hrs = [item["hr"] for item in valid_short]
         rrs = [item["rr"] for item in valid_short]
@@ -931,6 +1208,13 @@ def replay_session(
         )
         if strong_wake:
             candidate = "wake"
+        if path.last is None and candidate != "wake":
+            candidate_meta.update({
+                "candidate_source": "initial_awake_anchor",
+                "initial_awake_anchor": True,
+                "initial_evidence_candidate": candidate,
+            })
+            candidate = "wake"
         confirmed, transition = path.step(candidate, bucket["t"], strong_wake)
         evidence_rows.append({
             "t": bucket["t"],
@@ -975,8 +1259,41 @@ def replay_session(
         })
         if confirmed is not None:
             state_rows.append({
-                "t": bucket["t"], "state": confirmed,
+                "t": bucket["t"],
+                "attribution_start": (
+                    float(bucket["t"]) - SLEEP_EVIDENCE_EPOCH_SECONDS
+                ),
+                "attribution_end": float(bucket["t"]),
+                "sample_interval_s": SLEEP_EVIDENCE_EPOCH_SECONDS,
+                "state": confirmed,
                 "segment": path.segment, "metrics": metrics,
+                "decision_kind": transition.get(
+                    "decision_kind", "confirmed_state"
+                ),
+                "decision": transition.get("decision"),
+                "held_previous_state": bool(
+                    transition.get("held_previous_state")
+                ),
+                "provisional": bool(transition.get("provisional")),
+                "pending_state": transition.get("pending_state"),
+                "score_attribution_state": (
+                    transition.get("score_attribution_state") or confirmed
+                ),
+                "challenger_counted_as_new_state": bool(
+                    transition.get("challenger_counted_as_new_state")
+                ),
+                "score_eligible": bool(
+                    transition.get("score_eligible", True)
+                ),
+                "excluded_from_score": bool(
+                    transition.get("excluded_from_score", False)
+                ),
+                "excluded_from_personal_baseline": bool(
+                    transition.get(
+                        "excluded_from_personal_baseline", False
+                    )
+                ),
+                "confirmation": transition,
             })
         else:
             status_rows.append(operational_status_row(
@@ -992,6 +1309,47 @@ def replay_session(
                 ),
                 segment=path.segment,
             ))
+
+    # A Session may end between canonical 30-second boundaries.  That partial
+    # tail is real recording time, but it cannot satisfy a complete Evidence
+    # Epoch.  Preserve it as explicit, visible and unscored NO DATA rather than
+    # letting report compatibility logic infer a scoreable continuity carry.
+    complete_epoch_s = (
+        math.floor((end - start) / SLEEP_EVIDENCE_EPOCH_SECONDS + 1e-9)
+        * SLEEP_EVIDENCE_EPOCH_SECONDS
+    )
+    partial_tail_s = max(0.0, (end - start) - complete_epoch_s)
+    if partial_tail_s > 1e-6:
+        tail_packets = [
+            packet for packet in packets
+            if start + complete_epoch_s < epoch(packet["timestamp"]) <= end
+        ]
+        tail_paired = sum(bool(
+            filter_vital_values([packet["heart_rate"]], HR_SANITY_RANGE_BPM)
+            and filter_vital_values(
+                [packet["respiration_rate"]], RR_SANITY_RANGE_PER_MIN
+            )
+        ) for packet in tail_packets)
+        status_rows.append(operational_status_row(
+            {
+                "t": end,
+                "packet_count": len(tail_packets),
+                "paired_packets": tail_paired,
+                "paired_vital_coverage": (
+                    tail_paired / len(tail_packets) if tail_packets else 0.0
+                ),
+                "waveform_sample_coverage": 0.0,
+            },
+            state="no_data",
+            data_status="incomplete_final_epoch",
+            reason=(
+                "Session สิ้นสุดก่อนสะสม Evidence Epoch 30 วินาทีครบ "
+                "ช่วงท้ายจึงแสดงเป็น NO DATA และไม่เข้าคะแนนหรือ Baseline"
+            ),
+            segment=path.segment,
+            sample_interval_s=partial_tail_s,
+        ))
+        operational["incomplete_final_epoch"] += 1
 
     counts = Counter(row["state"] for row in state_rows)
     gate_pass_counts = Counter(
@@ -1073,9 +1431,21 @@ def replay_session(
         (row["t"] for row in state_rows if row["state"] in SLEEP_STAGES), None,
     )
     evaluation_epoch_count = len(state_rows) + len(status_rows)
+    state_duration_s = sum(
+        float(row.get("sample_interval_s") or SLEEP_EVIDENCE_EPOCH_SECONDS)
+        for row in state_rows
+    )
+    status_duration_s = sum(
+        float(row.get("sample_interval_s") or SLEEP_EVIDENCE_EPOCH_SECONDS)
+        for row in status_rows
+    )
+    evaluation_duration_s = state_duration_s + status_duration_s
+    evaluation_epoch_equivalents = (
+        evaluation_duration_s / SLEEP_EVIDENCE_EPOCH_SECONDS
+    )
     confirmed_coverage = (
-        len(state_rows) * 100.0 / evaluation_epoch_count
-        if evaluation_epoch_count else 0.0
+        state_duration_s * 100.0 / evaluation_duration_s
+        if evaluation_duration_s else 0.0
     )
     evidence_by_time = {
         round(float(row["t"]), 3): row for row in evidence_rows
@@ -1092,11 +1462,81 @@ def replay_session(
         )
         for level in ("high", "medium", "low")
     }
+    direct_confirmed_count = sum(
+        not bool(row.get("held_previous_state")) for row in state_rows
+    )
+    continuity_carried_count = sum(
+        bool(row.get("held_previous_state")) for row in state_rows
+    )
+    provisional_hold_count = sum(
+        bool(row.get("held_previous_state"))
+        and not bool(row.get("score_eligible"))
+        for row in state_rows
+    )
+    score_eligible_count = sum(
+        bool(row.get("score_eligible", True)) for row in state_rows
+    )
     return {
         "bucket_count": len(buckets),
         "evaluation_epoch_count": evaluation_epoch_count,
+        "evaluation_epoch_equivalents": round(
+            evaluation_epoch_equivalents, 6
+        ),
+        "evaluation_duration_s": round(evaluation_duration_s, 3),
         "evidence_count": len(evidence_rows),
         "confirmed_count": len(state_rows),
+        "direct_confirmed_count": direct_confirmed_count,
+        "continuity_carried_count": continuity_carried_count,
+        "classification_accounting": {
+            "direct_confirmed_s": round(
+                direct_confirmed_count * SLEEP_EVIDENCE_EPOCH_SECONDS, 1
+            ),
+            "continuity_carried_forward_s": round(
+                continuity_carried_count * SLEEP_EVIDENCE_EPOCH_SECONDS, 1
+            ),
+            "provisional_hold_s": round(
+                provisional_hold_count * SLEEP_EVIDENCE_EPOCH_SECONDS, 1
+            ),
+            "display_attributed_s": round(
+                len(state_rows) * SLEEP_EVIDENCE_EPOCH_SECONDS, 1
+            ),
+            "actual_scored_s": round(
+                score_eligible_count * SLEEP_EVIDENCE_EPOCH_SECONDS, 1
+            ),
+            "initial_wait_s": round(
+                sum(
+                    float(row.get("sample_interval_s") or SLEEP_EVIDENCE_EPOCH_SECONDS)
+                    for row in status_rows if row["state"] == "wait"
+                ),
+                1,
+            ),
+            "no_data_s": round(
+                sum(
+                    float(row.get("sample_interval_s") or SLEEP_EVIDENCE_EPOCH_SECONDS)
+                    for row in status_rows if row["state"] == "no_data"
+                ),
+                1,
+            ),
+            "off_bed_s": round(
+                sum(
+                    float(row.get("sample_interval_s") or SLEEP_EVIDENCE_EPOCH_SECONDS)
+                    for row in status_rows if row["state"] == "off_bed"
+                ),
+                1,
+            ),
+            "recording_s": round(max(0.0, end - start), 1),
+            "accounted_s": round(evaluation_duration_s, 1),
+            "arithmetic_invariant": {
+                "left_s": round(evaluation_duration_s, 3),
+                "right_s": round(max(0.0, end - start), 3),
+                "delta_s": round(
+                    evaluation_duration_s - max(0.0, end - start), 3
+                ),
+                "holds": abs(
+                    evaluation_duration_s - max(0.0, end - start)
+                ) <= 0.001,
+            },
+        },
         "operational_status_count": len(status_rows),
         "operational_status_counts": dict(Counter(
             row["state"] for row in status_rows
@@ -1448,35 +1888,54 @@ def main() -> int:
                 )
             )
             counts = Counter(item["state"] for item in report_state_rows)
+            score_rows = [
+                item for item in report_state_rows
+                if item.get("score_eligible", True)
+            ]
+            score_counts = Counter(item["state"] for item in score_rows)
             total_sleep = sum(counts[stage] for stage in SLEEP_STAGES)
             stage_pct = {
                 stage: round(counts[stage] * 100.0 / total_sleep, 1) if total_sleep else 0.0
                 for stage in ("n1", "n2", "n3", "rem")
             }
-            evidence_denominator = max(1, replay["evidence_count"])
+            evidence_denominator = max(1, replay["evaluation_epoch_count"])
             stage_pct_of_occupied_evidence = {
                 stage: round(counts[stage] * 100.0 / evidence_denominator, 1)
                 for stage in ("wake", "n1", "n2", "n3", "rem")
             }
             sequence = [
-                {"state": item["state"], "timestamp": datetime.fromtimestamp(item["t"]).isoformat(),
-                 "metrics": item["metrics"]}
+                {
+                    "state": item["state"],
+                    "timestamp": datetime.fromtimestamp(
+                        item["t"]
+                    ).isoformat(),
+                    "metrics": item["metrics"],
+                    "decision_kind": item.get("decision_kind"),
+                    "held_previous_state": bool(
+                        item.get("held_previous_state")
+                    ),
+                    "provisional": bool(item.get("provisional")),
+                    "score_eligible": bool(
+                        item.get("score_eligible", True)
+                    ),
+                }
                 for item in report_state_rows
             ]
             first_sleep_t = next(
-                (item["t"] for item in report_state_rows
+                (float(item.get("attribution_start", item["t"]))
+                 for item in score_rows
                  if item["state"] in SLEEP_STAGES),
                 None,
             )
             awakenings = sum(
                 left["state"] in SLEEP_STAGES and right["state"] == "wake"
                 for left, right in zip(
-                    report_state_rows, report_state_rows[1:]
+                    score_rows, score_rows[1:]
                 )
             )
             sleep_started = False
             waso_rounds = 0
-            for state_item in report_state_rows:
+            for state_item in score_rows:
                 if state_item["state"] in SLEEP_STAGES:
                     sleep_started = True
                 elif sleep_started and state_item["state"] == "wake":
@@ -1496,22 +1955,73 @@ def main() -> int:
                 auxiliary = ((state_item.get("metrics") or {}).get(
                     "auxiliary_evidence") or {})
                 acoustic = auxiliary.get("acoustic") or {}
-                stage_by_bucket[int(
-                    (float(state_item["t"]) - start)
-                    // SLEEP_EVIDENCE_EPOCH_SECONDS
-                )] = {
+                attribution_start = float(state_item.get(
+                    "attribution_start",
+                    float(state_item["t"]) - SLEEP_EVIDENCE_EPOCH_SECONDS,
+                ))
+                bucket_index = max(0, int(
+                    math.floor(
+                        (attribution_start - start)
+                        / SLEEP_EVIDENCE_EPOCH_SECONDS
+                        + 1e-9
+                    )
+                ))
+                stage_by_bucket[bucket_index] = {
                     "sleep": state_item["state"],
                     "sleep_confidence": (
                         state_item.get("confidence")
                         or confidence(evidence_item)
                     ),
                     "acoustic_corroborated": bool(acoustic.get("corroborated")),
+                    "sleep_decision_kind": state_item.get(
+                        "decision_kind", "confirmed_state"
+                    ),
+                    "sleep_held_previous_state": bool(
+                        state_item.get("held_previous_state")
+                    ),
+                    "sleep_provisional": bool(
+                        state_item.get("provisional")
+                    ),
+                    "sleep_pending_state": state_item.get("pending_state"),
+                    "sleep_data_status": (
+                        "provisional_hold"
+                        if state_item.get("held_previous_state")
+                        and state_item.get("provisional")
+                        else "continuity_hold"
+                        if state_item.get("held_previous_state")
+                        else "live"
+                    ),
+                    "sleep_score_attribution_state": state_item.get(
+                        "score_attribution_state"
+                    ) or state_item["state"],
+                    "sleep_challenger_counted_as_new_state": bool(
+                        state_item.get("challenger_counted_as_new_state")
+                    ),
+                    "sleep_score_eligible": bool(
+                        state_item.get("score_eligible", True)
+                    ),
+                    "sleep_excluded_from_score": bool(
+                        state_item.get("excluded_from_score", False)
+                    ),
+                    "sleep_excluded_from_personal_baseline": bool(
+                        state_item.get(
+                            "excluded_from_personal_baseline", False
+                        )
+                    ),
                 }
             for report_row in report_sensor_rows:
                 report_row.update(stage_by_bucket.get(
                     int(report_row.get("_bucket_index", -1)), {}
                 ))
-            total_scored = sum(counts[stage] for stage in STAGES)
+            apply_replay_statuses_to_report_rows(
+                report_sensor_rows,
+                replay["status_rows"],
+                session_start=start,
+            )
+            total_score_sleep = sum(
+                score_counts[stage] for stage in SLEEP_STAGES
+            )
+            total_scored = sum(score_counts[stage] for stage in STAGES)
             night_summary = dict(summary.get("night_summary") or {})
             night_summary.update({
                 "sleep_onset_proxy_s": (
@@ -1522,15 +2032,20 @@ def main() -> int:
                 "waso_proxy_s": round(
                     waso_rounds * SLEEP_EVIDENCE_EPOCH_SECONDS, 1
                 ),
-                "estimated_sleep_s": total_sleep * SLEEP_EVIDENCE_EPOCH_SECONDS,
+                "estimated_sleep_s": (
+                    total_score_sleep * SLEEP_EVIDENCE_EPOCH_SECONDS
+                ),
                 "sleep_efficiency": (
-                    round(total_sleep / total_scored, 3) if total_scored else None
+                    round(total_score_sleep / total_scored, 3)
+                    if total_scored else None
                 ),
                 "deep_ratio": (
-                    round(counts["n3"] / total_sleep, 3) if total_sleep else None
+                    round(score_counts["n3"] / total_score_sleep, 3)
+                    if total_score_sleep else None
                 ),
                 "rem_ratio": (
-                    round(counts["rem"] / total_sleep, 3) if total_sleep else None
+                    round(score_counts["rem"] / total_score_sleep, 3)
+                    if total_score_sleep else None
                 ),
             })
             quality = build_sleep_quality(
@@ -1539,6 +2054,7 @@ def main() -> int:
                 sensor_samples=report_sensor_rows,
                 sample_interval_s=SLEEP_EVIDENCE_EPOCH_SECONDS,
                 target_duration_s=target_duration_s,
+                score_state_counts=score_counts,
             )
             new_score = quality.get("score")
             shadow_mode = dict(quality.get("rest_mode") or {})
@@ -1552,6 +2068,7 @@ def main() -> int:
                     summary.get("timeline_schema_version") or 3
                 ),
                 target_duration_s=target_duration_s,
+                sleep_score_state_counts=score_counts,
             )
             if not quality.get("available"):
                 issue_codes.append("wellness_score_not_releasable")

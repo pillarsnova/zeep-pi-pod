@@ -8,6 +8,8 @@ from sleep_session_report import normalise_rest_mode
 from sleep_system_policy import (
     NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS,
     NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
+    PRE_CONTINUITY_SESSION_REPORT_VERSION,
+    PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
     PRE_RESTORE_SESSION_REPORT_VERSION,
     SESSION_REPORT_VERSION,
     SLEEP_QUALITY_VERSION,
@@ -53,7 +55,15 @@ def _compatible_versioned_quality(
     ):
         return quality
     if (
-        quality.get("version") == SLEEP_QUALITY_VERSION
+        quality.get("version") == PRE_CONTINUITY_SLEEP_QUALITY_VERSION
+        and report.get("version") == PRE_CONTINUITY_SESSION_REPORT_VERSION
+    ):
+        return {
+            **quality,
+            "compatible_pre_continuity_result": True,
+        }
+    if (
+        quality.get("version") == PRE_CONTINUITY_SLEEP_QUALITY_VERSION
         and report.get("version") == PRE_RESTORE_SESSION_REPORT_VERSION
     ):
         return {

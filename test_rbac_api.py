@@ -1509,6 +1509,198 @@ class RbacApiTests(unittest.TestCase):
         self.assertEqual(periods[0]["metrics"]["mean_hr"], 59.0)
         self.assertAlmostEqual(periods[0]["probabilities"]["n2"], 0.85)
 
+    def test_session_timeline_splits_continuity_and_score_metadata(self) -> None:
+        def point(second: int, **metadata):
+            return {
+                "timestamp": f"2026-01-01T00:{second // 60:02d}:{second % 60:02d}+00:00",
+                "window_end": f"2026-01-01T00:{second // 60:02d}:{second % 60:02d}+00:00",
+                "state": "n2",
+                "sample_interval_s": 30,
+                "confidence": "medium",
+                "probabilities": {"n2": 0.7},
+                "metrics": {"mean_hr": 60, "mean_rr": 14},
+                **metadata,
+            }
+
+        points = [
+            point(
+                30,
+                held_previous_state=False,
+                provisional=False,
+                score_eligible=True,
+                data_status="live",
+                decision_kind="confirmed_state",
+            ),
+            point(
+                60,
+                held_previous_state=True,
+                provisional=True,
+                score_eligible=False,
+                data_status="provisional_hold",
+                pending_state="n3",
+                decision_kind="continuity_hold",
+            ),
+            point(
+                90,
+                held_previous_state=True,
+                provisional=True,
+                score_eligible=False,
+                data_status="provisional_hold",
+                pending_state="n3",
+                decision_kind="continuity_hold",
+            ),
+            point(
+                120,
+                held_previous_state=True,
+                provisional=False,
+                score_eligible=True,
+                data_status="continuity_hold",
+                pending_state="n3",
+                decision_kind="continuity_hold",
+            ),
+            point(
+                150,
+                held_previous_state=True,
+                provisional=False,
+                score_eligible=True,
+                data_status="continuity_hold",
+                pending_state="rem",
+                decision_kind="continuity_hold",
+            ),
+        ]
+
+        periods = pod_app._compress_sleep_stage_points(
+            points,
+            report_end="2026-01-01T00:02:30+00:00",
+            sample_interval_s=30,
+        )
+
+        self.assertEqual([period["round_count"] for period in periods], [1, 2, 1, 1])
+        self.assertEqual(
+            [period["score_eligible"] for period in periods],
+            [True, False, True, True],
+        )
+        self.assertEqual(
+            [period["provisional"] for period in periods],
+            [False, True, False, False],
+        )
+        self.assertEqual(
+            [period["held_previous_state"] for period in periods],
+            [False, True, True, True],
+        )
+        self.assertEqual(
+            [period["data_status"] for period in periods],
+            ["live", "provisional_hold", "continuity_hold", "continuity_hold"],
+        )
+        self.assertEqual(
+            [period["pending_state"] for period in periods],
+            [None, "n3", "n3", "rem"],
+        )
+        self.assertEqual(
+            [period["decision_kind"] for period in periods],
+            ["confirmed_state", "continuity_hold", "continuity_hold", "continuity_hold"],
+        )
+
+    def test_history_timeline_uses_persisted_status_and_disables_gap_fallback(
+        self,
+    ) -> None:
+        def point(second: int, state: str, **metadata):
+            timestamp = (
+                f"2026-01-01T00:{second // 60:02d}:{second % 60:02d}+00:00"
+            )
+            return {
+                "timestamp": timestamp,
+                "window_end": timestamp,
+                "state": state,
+                "sample_interval_s": 30,
+                **metadata,
+            }
+
+        stage_points = [
+            point(30, "wake", score_eligible=True),
+            # A conflicting derived Stage at the same epoch end must not erase
+            # the persisted missing-vitals decision.
+            point(60, "wake", score_eligible=True),
+            point(120, "n1", score_eligible=True),
+        ]
+        status_points = [
+            point(
+                60,
+                "no_data",
+                label="NO DATA · หลักฐานไม่ครบ",
+                data_status="missing_current_vitals",
+                score_eligible=False,
+                excluded_from_score=True,
+                excluded_from_personal_baseline=True,
+            ),
+            point(
+                90,
+                "off_bed",
+                label="OFF BED · ไม่มีผู้ใช้งานบนเตียง",
+                data_status="confirmed_off_bed",
+                score_eligible=False,
+                excluded_from_score=True,
+                excluded_from_personal_baseline=True,
+            ),
+        ]
+
+        periods, use_legacy_gap_fallback = pod_app._history_sleep_timeline(
+            stage_points,
+            status_points,
+            report_end="2026-01-01T00:02:00+00:00",
+            sample_interval_s=30,
+            fallback_estimator="test-estimator",
+        )
+
+        self.assertFalse(use_legacy_gap_fallback)
+        self.assertEqual(
+            [period["state"] for period in periods],
+            ["wake", "no_data", "off_bed", "n1"],
+        )
+        self.assertEqual(periods[1]["data_status"], "missing_current_vitals")
+        self.assertFalse(periods[1]["sleep_stage"])
+        self.assertTrue(periods[1]["excluded_from_score"])
+        self.assertTrue(periods[2]["excluded_from_personal_baseline"])
+
+        _, legacy_fallback = pod_app._history_sleep_timeline(
+            stage_points,
+            [],
+            report_end="2026-01-01T00:02:00+00:00",
+            sample_interval_s=30,
+            fallback_estimator="test-estimator",
+        )
+        self.assertTrue(legacy_fallback)
+
+    def test_terminal_occupancy_removes_persisted_off_bed_from_sleep_timeline(
+        self,
+    ) -> None:
+        periods = [
+            {
+                "state": "n2",
+                "start_time": "2026-01-01T00:00:00+00:00",
+                "end_time": "2026-01-01T00:01:15+00:00",
+                "duration_s": 75.0,
+            },
+            {
+                "state": "off_bed",
+                "start_time": "2026-01-01T00:01:00+00:00",
+                "end_time": "2026-01-01T00:01:30+00:00",
+                "duration_s": 30.0,
+                "decision_kind": "operational_status",
+            },
+        ]
+
+        clipped = pod_app._clip_history_sleep_timeline(
+            periods,
+            classification_end="2026-01-01T00:01:00+00:00",
+        )
+
+        self.assertEqual([period["state"] for period in clipped], ["n2"])
+        self.assertEqual(
+            clipped[0]["end_time"], "2026-01-01T00:01:00+00:00"
+        )
+        self.assertEqual(clipped[0]["duration_s"], 60.0)
+
     def test_user_can_occupy_in_any_safety_state_admin_can_monitor(self) -> None:
         original = pod_app._authenticate_zeep_account
 

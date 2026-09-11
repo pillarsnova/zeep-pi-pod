@@ -14,6 +14,8 @@ from sleep_system_policy import (
     PREVIOUS_SESSION_REPORT_VERSION,
     PREVIOUS_SLEEP_QUALITY_VERSION,
     RECOVERY_SCORE_COMPONENT_MAX_POINTS,
+    SESSION_REPORT_VERSION,
+    SLEEP_QUALITY_VERSION,
     resolve_rest_target,
     summarize_environment_session_levels,
 )
@@ -182,6 +184,7 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
         duration_s: float,
         target_duration_s=None,
         sound_spike: bool = False,
+        quality_version: str = "legacy-recovery-score",
     ) -> tuple[dict, int, int]:
         connection = sqlite3.connect(root / "sessions.db")
         connection.executescript("""
@@ -241,7 +244,7 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
             "score_title": "Recovery Score",
             "estimated_sleep_s": 0,
             "actual_scored_s": duration_s,
-            "version": "legacy-recovery-score",
+            "version": quality_version,
             "rest_mode": {
                 "requested": "nap_recovery",
                 "resolved": "nap_recovery",
@@ -396,6 +399,7 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
                 data_dir,
                 duration_s=20 * 60,
                 sound_spike=True,
+                quality_version=SLEEP_QUALITY_VERSION,
             )
 
             result = rescore(
@@ -417,6 +421,10 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
                 item for item in report["findings"] if item["key"] == "sound"
             )
             self.assertEqual(final["night_summary"]["sleep_quality"], original)
+            self.assertEqual(report["version"], SESSION_REPORT_VERSION)
+            self.assertEqual(
+                report["quality"]["version"], SLEEP_QUALITY_VERSION
+            )
             self.assertEqual(sound["severity"], "excellent")
             self.assertTrue(sound["transient_critical_observed"])
             self.assertEqual(
@@ -446,6 +454,42 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
                 audit["previous_report_sha256"],
                 audit["new_report_sha256"],
             )
+            connection.close()
+
+    def test_report_only_rejects_stale_quality_without_writing(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            data_dir = Path(temporary)
+            original, stage_count, _ = self._database(
+                data_dir,
+                duration_s=20 * 60,
+                sound_spike=True,
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "current report contract with a stale sleep_quality",
+            ):
+                rescore(
+                    data_dir,
+                    ["nap-1"],
+                    requested_mode=None,
+                    apply=True,
+                    report_only=True,
+                )
+
+            connection = sqlite3.connect(data_dir / "sessions.db")
+            final = json.loads(connection.execute(
+                "SELECT value FROM events WHERE type='final_summary'"
+            ).fetchone()[0])
+            self.assertEqual(final["night_summary"]["sleep_quality"], original)
+            self.assertEqual(final["session_report"]["version"], "legacy-report")
+            self.assertEqual(connection.execute(
+                "SELECT COUNT(*) FROM events WHERE type='sleep_stage'"
+            ).fetchone()[0], stage_count)
+            self.assertEqual(connection.execute(
+                "SELECT COUNT(*) FROM events "
+                "WHERE type='session_report_refreshed'"
+            ).fetchone()[0], 0)
             connection.close()
 
     def test_report_only_refuses_all_sessions(self):

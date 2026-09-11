@@ -2186,7 +2186,8 @@ const SLEEP_TH = {
   // emits a generic NREM because ZEEP's current ontology is W/N1/N2/N3/REM.
   nrem:       {code:'NREM', label:'หลับ · ข้อมูลเดิม',cls:'nrem'},
   off_bed:    {code:'OFF',  label:'ไม่มีผู้ใช้งานบนเตียง',cls:'off'},
-  no_data:    {code:'WAIT', label:'รอ HR / RR', cls:'na'},
+  wait_initial:{code:'WAIT', title:'WAIT · กำลังยืนยันสถานะ',label:'กำลังยืนยันสถานะ',cls:'na'},
+  no_data:    {code:'NO DATA', label:'หลักฐานไม่ครบ', cls:'na'},
 };
 function renderSleepState(sl={},session={},bcg={}){
   const box = document.getElementById('sleepState');
@@ -2197,7 +2198,11 @@ function renderSleepState(sl={},session={},bcg={}){
     ||(!sessionActive)||(Number(bcg.status_code)===1&&bcg.bed_exit_evidence?.confirmed);
   // UI defence-in-depth: even if an old/cached server frame contains N1–REM,
   // never present it as current without an active classification contract.
-  const stateKey=offBed?'off_bed':(!recording||!classificationActive?'no_data':sl.state);
+  const initialWait=['confirming_initial_state','collecting_evidence_epoch']
+    .includes(sl.data_status);
+  const stateKey=offBed?'off_bed':classificationActive
+    ? sl.state
+    : recording&&initialWait?'wait_initial':'no_data';
   const meta = SLEEP_TH[stateKey] || SLEEP_TH.no_data;
   box.className = `sleep-state ${meta.cls}`;
   document.getElementById('sleepStateText').textContent = `${meta.code} · ${meta.label}`;
@@ -2207,13 +2212,15 @@ function renderSleepState(sl={},session={},bcg={}){
   const progress = `Sensor ${clock.frame_in_epoch||0}/${clock.sensor_frames_per_epoch||3} · Evidence ${sl.evidence_epoch_s||30} วิ`;
   const next = ` · สรุปรอบถัดไปใน ${sl.next_evidence_s ?? sl.evidence_epoch_s ?? 30} วิ`;
   const source = sl.classification_source === 'personal' ? 'Personal Baseline' : 'Age + Gender Baseline';
-  const provisional = classificationActive&&sl.provisional ? ' · กำลังเรียนรู้' : '';
+  const provisional = classificationActive&&sl.provisional
+    ? ` · provisional · คง State ก่อนหน้า · ${sl.score_eligible?'นับตาม State เดิม':'ยังไม่นับคะแนน'}`
+    : '';
   const confirmProgress=`${confirmation.candidate_epochs||0}/${confirmation.required_epochs||2} epoch`;
   const confirmationSeconds=(confirmation.required_epochs||2)*30;
   const classificationNote=classificationActive
     ? restartHold
       ? `สถานะยืนยันก่อน Restart · รอหลักฐานสดรอบใหม่ · ไม่บันทึกซ้ำ`
-      : `${source}${provisional} · ยืนยัน ${meta.code} แล้ว · หลักฐานล่าสุด ${(evidenceCandidate||'--').toUpperCase()} · มั่นใจ ${confidenceTh[sl.confidence] || 'ต่ำ'}`
+      : `${source}${provisional} · แสดง ${meta.code} · หลักฐานล่าสุด ${(evidenceCandidate||'--').toUpperCase()} · มั่นใจ ${confidenceTh[sl.confidence] || 'ต่ำ'}`
     : sl.evidence_active
       ? `หลักฐาน ${(evidenceCandidate||'--').toUpperCase()} · กำลังยืนยัน ${confirmProgress}`
       : 'ยังไม่จัดประเภทการนอน';
@@ -2797,9 +2804,15 @@ function renderSimpleDashboard(state={},environment={},bcg={},session={}){
   const sleepOccupancyValid=personOnBed||restartSleepHold;
   const classificationActive=active&&recording&&sleepOccupancyValid
     &&(vitalPairValid||restartSleepHold)&&sleep.classification_active===true;
-  const sleepStateKey=!active||!sleepOccupancyValid?'off_bed':classificationActive?sleep.state:'no_data';
+  const initialWait=['confirming_initial_state','collecting_evidence_epoch']
+    .includes(sleep.data_status);
+  const sleepStateKey=!active||!sleepOccupancyValid?'off_bed'
+    : classificationActive?sleep.state
+    : recording&&initialWait?'wait_initial':'no_data';
   const sleepMeta=SLEEP_TH[sleepStateKey]||SLEEP_TH.no_data;
-  document.getElementById('dashSleep').textContent=sleepMeta.label;
+  document.getElementById('dashSleep').textContent=sleepStateKey==='wait_initial'
+    ? sleepMeta.title
+    : sleepMeta.label;
   document.getElementById('dashSleep').title=sleepMeta.meaning||sleepMeta.title||'';
   const confidence=({high:'สูง',medium:'ปานกลาง',low:'ต่ำ'})[sleep.confidence]||'ไม่ระบุ';
   const sleepSource=sleep.classification_source==='personal'?'Baseline ส่วนบุคคล':'Baseline อายุและเพศ';
@@ -2808,7 +2821,9 @@ function renderSimpleDashboard(state={},environment={},bcg={},session={}){
   document.getElementById('dashSleepNote').textContent=classificationActive
     ? restartSleepHold
       ? `${sleepMeta.code} ก่อน Restart · กำลังรับหลักฐานสด · ไม่บันทึกซ้ำ`
-      : `${sleepMeta.code} ยืนยันแล้ว · หลักฐาน ${(evidenceCandidate||'--').toUpperCase()} · ${sleepSource} · มั่นใจ ${confidence}`
+      : sleep.held_previous_state
+        ? `${sleepMeta.code} · ${sleep.provisional?'provisional · ':''}คง State ก่อนหน้า · ผู้ท้าชิง ${(confirmation.pending_state||evidenceCandidate||'--').toUpperCase()} ยังไม่นับเป็น State ใหม่ · ${sleep.score_eligible?'นับเวลาตาม State เดิม':'ยังไม่นับคะแนน'}`
+        : `${sleepMeta.code} ยืนยันแล้ว · หลักฐาน ${(evidenceCandidate||'--').toUpperCase()} · ${sleepSource} · มั่นใจ ${confidence}`
     : sleep.evidence_active
       ? `หลักฐาน ${(evidenceCandidate||'--').toUpperCase()} · กำลังยืนยัน ${confirmation.candidate_epochs||0}/${confirmation.required_epochs||2} epoch`
       : `${sleepMeta.code} · ${sleep.reason||vitalFallbackNote} · ยังไม่จัดประเภทการนอน`;
@@ -6472,11 +6487,13 @@ function renderReport(rec){
       sleepSensorTile('movement','MOV','เคลื่อนไหว',m.movement_ratio==null?'--':`${Math.round(Number(m.movement_ratio)*100)}%`),
       sleepSensorTile('bed','BED','สถานะเตียง',period.state==='off_bed'?'ไม่มีผู้ใช้งานบนเตียง':sleepBedStatusLabel(m.bed_status)),
     ].join('');
-    if(period.decision_kind==='classification_gap'){
+    if(period.decision_kind==='classification_gap'||period.decision_kind==='operational_status'){
       const coverage=period.coverage||{};
       const coverageText=coverage.sensor_rows
         ? `HR/RR ใช้ได้ ${coverage.valid_hr_rr_pairs||0}/${coverage.sensor_rows} รอบ`
-        : 'ไม่มี Timeline Sensor';
+        : period.decision_kind==='operational_status'
+          ? 'ใช้ผล Operational ที่บันทึกไว้กับ Session'
+          : 'ไม่มี Timeline Sensor';
       const restartHeld=period.data_status==='service_restart_hold'
         && period.held_previous_state===true;
       const operationLabel=restartHeld?'Operational hold':'ไม่ประเมิน Stage';
@@ -6486,12 +6503,18 @@ function renderReport(rec){
       if(!adminView){
         return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)}</div></div><div class="stage">${historyEscape(period.label||'ยังยืนยันไม่ได้')}</div><div class="user-period-summary">ข้อมูลช่วงนี้ไม่พอสำหรับยืนยัน Sleep State</div></div>`;
       }
-      return `<div class="sleep-period terminal-occupancy-period classification-gap-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)} · ${operationLabel}</div></div><div class="stage">${period.label||'WAIT · ไม่มีข้อมูลสถานะ'}</div><div>${coverageText}<div class="mini">${scoreLabel}</div></div><div class="reason"><div class="sleep-period-env">${sensorTiles}</div><div class="sleep-period-note">${period.reason||'หลักฐานไม่พอสำหรับยืนยัน Sleep State'}</div></div></div>`;
+      return `<div class="sleep-period terminal-occupancy-period classification-gap-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)} · ${operationLabel}</div></div><div class="stage">${period.label||'NO DATA · ไม่มีข้อมูลสถานะ'}</div><div>${coverageText}<div class="mini">${scoreLabel}</div></div><div class="reason"><div class="sleep-period-env">${sensorTiles}</div><div class="sleep-period-note">${period.reason||'หลักฐานไม่พอสำหรับยืนยัน Sleep State'}</div></div></div>`;
     }
     if(!adminView){
-      return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)}</div></div><div class="stage">${SLEEP_TH[period.state]?.label||String(period.state||'').toUpperCase()}</div><div class="user-period-summary">สถานะที่ระบบยืนยันจากแนวโน้มภายใน Session</div></div>`;
+      const heldCopy=period.held_previous_state
+        ? `คงสถานะก่อนหน้า${period.provisional?' · provisional':''}`
+        : 'สถานะที่ระบบยืนยันจากแนวโน้มภายใน Session';
+      return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)}</div></div><div class="stage">${SLEEP_TH[period.state]?.label||String(period.state||'').toUpperCase()}</div><div class="user-period-summary">${heldCopy}</div></div>`;
     }
-    return `<div class="sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)} · ${epoch}</div></div><div class="stage">${SLEEP_TH[period.state]?.label||period.state.toUpperCase()}</div><div>มั่นใจ ${confidenceTh[period.confidence]||'ไม่ระบุ'}<div class="mini">P ${Math.round((prob[period.state]||0)*100)}%</div></div><div class="reason"><div class="sleep-period-env">${sensorTiles}</div><div class="sleep-period-note">${sleepReasonExplanation(period.reason)}</div></div></div>`;
+    const holdMeta=period.held_previous_state
+      ? `<div class="mini">คง State ก่อนหน้า ${period.continuity_hold_rounds||0} รอบ${period.provisional_rounds?` · provisional ${period.provisional_rounds} รอบ`:''} · ผู้ท้าชิงยังไม่ถูกนับเป็น State ใหม่</div>`
+      : '';
+    return `<div class="sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)} · ${epoch}</div></div><div class="stage">${SLEEP_TH[period.state]?.label||period.state.toUpperCase()}${period.provisional?' · provisional':''}</div><div>มั่นใจ ${confidenceTh[period.confidence]||'ไม่ระบุ'}<div class="mini">P ${Math.round((prob[period.state]||0)*100)}%</div>${holdMeta}</div><div class="reason"><div class="sleep-period-env">${sensorTiles}</div><div class="sleep-period-note">${sleepReasonExplanation(period.reason)}</div></div></div>`;
   }).join('');
   const terminalOccupancy=(rec.terminal_occupancy_timeline||[]).map(period=>{
     const meta=TERMINAL_OCCUPANCY_META[period.state]||{label:period.label||period.state,code:'—'};
@@ -6508,8 +6531,9 @@ function renderReport(rec){
       :`<div class="sleep-period user-sleep-period"><div>${new Date(rec.ended_at_utc).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}<div class="mini">สิ้นสุดการใช้งาน</div></div><div class="stage">END · จบ Session</div><div class="user-period-summary">บันทึกผลเรียบร้อย</div></div>`):'';
   const restoreSummaryHtml=renderRestoreSummary(rec,presentation);
   const timelineCount=`${rec.sleep_timeline?.length||0} ช่วง`;
+  const decisionRounds=Number(rec.sleep_timeline_rounds||0)+Number(rec.sleep_status_timeline_rounds||0);
   const timelineMeta=adminView
-    ?`${timelineCount} · จาก ${rec.sleep_timeline_rounds||rec.sleep_timeline?.length||0} รอบข้อมูล${rec.sleep_classification_gap_count?` · WAIT/OFF ${rec.sleep_classification_gap_count} ช่วง`:''}`
+    ?`${timelineCount} · จาก ${decisionRounds||rec.sleep_timeline?.length||0} รอบข้อมูล${rec.sleep_status_timeline_rounds?` · Operational ${rec.sleep_status_timeline_rounds} รอบ`:rec.sleep_classification_gap_count?` · WAIT/OFF ${rec.sleep_classification_gap_count} ช่วง`:''}`
     :timelineCount;
   const timelineDetails=adminView||sleepTimeline
     ?`<details class="report-details"><summary>${timelineTitle} · ${timelineMeta}</summary>${sleepTimeline?`<div class="sleep-timeline">${sleepTimeline}</div>`:`<div class="mini" style="padding:0 12px 12px">${timelineEmpty}</div>`}</details>`

@@ -53,6 +53,198 @@ class SleepSessionReportTests(unittest.TestCase):
         sound = next(item for item in report["environment"] if item["key"] == "sound")
         self.assertEqual(sound["outside_target_pct"], 67)
 
+    def test_report_reconciles_continuity_and_operational_time(self):
+        rows = [
+            {
+                "bed": "On bed", "hr": 65, "rr": 14,
+                "sleep": None,
+                "sleep_data_status": "confirming_initial_state",
+            },
+            {
+                "bed": "On bed", "hr": 64, "rr": 14,
+                "sleep": "wake", "sleep_score_eligible": True,
+            },
+            {
+                "bed": "On bed", "hr": 63, "rr": 14,
+                "sleep": "wake", "sleep_held_previous_state": True,
+                "sleep_provisional": True,
+                "sleep_score_eligible": False,
+                "sleep_data_status": "provisional_hold",
+            },
+            {
+                "bed": "On bed", "hr": 63, "rr": 14,
+                "sleep": "wake", "sleep_held_previous_state": True,
+                "sleep_provisional": True,
+                "sleep_score_eligible": False,
+                "sleep_data_status": "provisional_hold",
+            },
+            {
+                "bed": "On bed", "hr": 62, "rr": 13,
+                "sleep": "wake", "sleep_held_previous_state": True,
+                "sleep_provisional": False,
+                "sleep_score_eligible": True,
+                "sleep_data_status": "continuity_hold",
+            },
+            {
+                "bed": "On bed", "hr": None, "rr": None,
+                "sleep": None,
+                "sleep_data_status": "missing_vitals",
+            },
+            {
+                "bed": "Get out of bed", "hr": None, "rr": None,
+                "sleep": None,
+                "sleep_data_status": "confirmed_off_bed",
+            },
+            {
+                "bed": "On bed", "hr": None, "rr": None,
+                "sleep": None,
+                "sleep_data_status": "service_restart_hold",
+            },
+        ]
+        report = build_session_report(
+            240,
+            rows,
+            {"estimated_sleep_s": 0},
+            {"wake": 4},
+            self._quality(),
+            sample_interval_s=30,
+            sleep_score_state_counts={"wake": 2},
+        )
+
+        sleep = report["sleep"]
+        accounting = sleep["classification_accounting"]
+        self.assertEqual(sleep["direct_confirmed_s"], 30)
+        self.assertEqual(sleep["continuity_carried_forward_s"], 90)
+        self.assertEqual(sleep["provisional_hold_s"], 60)
+        self.assertEqual(sleep["actual_scored_s"], 60)
+        self.assertEqual(sleep["excluded_from_score_s"], 180)
+        self.assertEqual(sleep["initial_wait_s"], 30)
+        self.assertEqual(sleep["no_data_s"], 30)
+        self.assertEqual(sleep["off_bed_s"], 30)
+        self.assertEqual(sleep["restart_display_hold_s"], 30)
+        self.assertEqual(sleep["sensor_gap_s"], 0)
+        self.assertTrue(accounting["arithmetic_invariant"]["holds"])
+        self.assertTrue(accounting["display_stage_total_reconciles"])
+        self.assertTrue(accounting["score_stage_total_reconciles"])
+        self.assertEqual(
+            accounting["challenger_time_before_confirmation_s"],
+            0,
+        )
+
+    def test_report_accounts_for_partial_tail_as_sensor_gap(self):
+        rows = [
+            {"bed": "On bed", "hr": 62, "rr": 13, "sleep": "n2"},
+            {"bed": "On bed", "hr": 61, "rr": 13, "sleep": "n2"},
+        ]
+        report = build_session_report(
+            65,
+            rows,
+            {"estimated_sleep_s": 60},
+            {"n2": 2},
+            self._quality(),
+            sample_interval_s=30,
+        )
+
+        accounting = report["sleep"]["classification_accounting"]
+        self.assertEqual(accounting["direct_confirmed_s"], 60)
+        self.assertEqual(accounting["sensor_gap_s"], 5)
+        self.assertEqual(accounting["accounted_s"], 65)
+        self.assertTrue(accounting["arithmetic_invariant"]["holds"])
+
+    def test_explicit_unscored_row_is_not_inferred_as_scoreable_carry(self):
+        exclusion_variants = (
+            {"sleep_score_eligible": False},
+            {"sleep_excluded_from_score": True},
+        )
+        for exclusion in exclusion_variants:
+            with self.subTest(exclusion=exclusion):
+                rows = [
+                    {
+                        "bed": "On bed", "hr": 62, "rr": 13,
+                        "sleep": "n2", "sleep_score_eligible": True,
+                    },
+                    {
+                        "bed": "On bed", "hr": 61, "rr": 13,
+                        "sleep": None,
+                        "sleep_data_status": (
+                            "insufficient_paired_vital_coverage"
+                        ),
+                        **exclusion,
+                    },
+                ]
+                report = build_session_report(
+                    60,
+                    rows,
+                    {"estimated_sleep_s": 30},
+                    {"n2": 1},
+                    self._quality(),
+                    sample_interval_s=30,
+                    sleep_score_state_counts={"n2": 1},
+                )
+
+                accounting = report["sleep"]["classification_accounting"]
+                self.assertEqual(accounting["direct_confirmed_s"], 30)
+                self.assertEqual(
+                    accounting["continuity_carried_forward_s"], 0
+                )
+                self.assertEqual(accounting["no_data_s"], 30)
+                self.assertEqual(accounting["score_eligible_s"], 30)
+                self.assertEqual(accounting["excluded_from_score_s"], 30)
+                self.assertTrue(accounting["arithmetic_invariant"]["holds"])
+                self.assertTrue(accounting["display_stage_total_reconciles"])
+                self.assertTrue(accounting["score_stage_total_reconciles"])
+
+    def test_excluded_alias_keeps_held_stage_display_only(self):
+        rows = [
+            {
+                "bed": "On bed", "hr": 62, "rr": 13,
+                "sleep": "n2", "sleep_score_eligible": True,
+            },
+            {
+                "bed": "On bed", "hr": 61, "rr": 13,
+                "sleep": "n2", "sleep_held_previous_state": True,
+                "sleep_data_status": "continuity_hold",
+                "sleep_excluded_from_score": True,
+            },
+        ]
+        report = build_session_report(
+            60,
+            rows,
+            {"estimated_sleep_s": 30},
+            {"n2": 2},
+            self._quality(),
+            sample_interval_s=30,
+            sleep_score_state_counts={"n2": 1},
+        )
+
+        accounting = report["sleep"]["classification_accounting"]
+        self.assertEqual(accounting["direct_confirmed_s"], 30)
+        self.assertEqual(accounting["continuity_carried_forward_s"], 30)
+        self.assertEqual(accounting["score_eligible_s"], 30)
+        self.assertEqual(accounting["excluded_from_score_s"], 30)
+        self.assertTrue(accounting["display_stage_total_reconciles"])
+        self.assertTrue(accounting["score_stage_total_reconciles"])
+
+    def test_sleep_quality_uses_score_eligible_counts(self):
+        sequence = [
+            {"state": "wake", "score_eligible": True},
+            {"state": "wake", "provisional": True},
+            {"state": "n2", "score_eligible": True},
+            {"state": "n2", "provisional": True},
+        ]
+        quality = build_sleep_quality(
+            120,
+            {"sleep_onset_proxy_s": 60},
+            {"wake": 2, "n2": 2},
+            rest_mode="overnight",
+            stage_sequence=sequence,
+            sample_interval_s=30,
+            score_state_counts={"wake": 1, "n2": 1},
+        )
+
+        self.assertEqual(quality["actual_scored_s"], 60)
+        self.assertEqual(quality["estimated_sleep_s"], 30)
+
     def test_environment_changes_findings_not_sleep_stages_or_quality(self):
         base = {"bed": "On bed", "hr": 60, "rr": 13, "sleep": "n2"}
         good = [{**base, "dba": 35, "temp": 24, "hum": 50, "co2": 700,

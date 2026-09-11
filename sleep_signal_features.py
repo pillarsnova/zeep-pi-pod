@@ -519,6 +519,7 @@ def sleep_classification_gap_timeline(
     service_pause_times: Iterable[Any] = (),
     service_resume_times: Iterable[Any] = (),
     hold_unclassified_after_first_state: bool = False,
+    initial_wait_max_s: float = 120.0,
 ) -> list[dict[str, Any]]:
     """Expose unclassified wall-clock gaps without inventing Sleep Stages.
 
@@ -599,6 +600,25 @@ def sleep_classification_gap_timeline(
     if end_epoch - cursor >= minimum:
         gaps.append((cursor, end_epoch))
 
+    # WAIT is an acquisition/confirmation state, never an unlimited fallback.
+    # Split a long leading gap so at most the configured 60/120-second window
+    # can be labelled WAIT; any remainder is explicit NO DATA until a durable
+    # five-state decision exists.
+    wait_max = max(interval, float(initial_wait_max_s or 120.0))
+    bounded_gaps: list[tuple[float, float]] = []
+    for gap_start, gap_end in gaps:
+        has_previous = any(
+            period_end <= gap_start + interval
+            for _, period_end, _ in periods
+        )
+        wait_boundary = min(gap_end, start_epoch + wait_max)
+        if not has_previous and gap_start < wait_boundary < gap_end:
+            bounded_gaps.append((gap_start, wait_boundary))
+            bounded_gaps.append((wait_boundary, gap_end))
+        else:
+            bounded_gaps.append((gap_start, gap_end))
+    gaps = bounded_gaps
+
     sample_rows: list[tuple[float, Mapping[str, Any]]] = []
     for sample in sensor_samples:
         sample_epoch = epoch(field(sample, "t", "timestamp"))
@@ -677,7 +697,7 @@ def sleep_classification_gap_timeline(
             status = "service_restart_hold"
         elif not rows:
             state = "sensor_gap"
-            label = "WAIT · ไม่มีข้อมูล Sensor"
+            label = "NO DATA · ไม่มีข้อมูล Sensor"
             reason = "ไม่มี Timeline Sensor ในช่วงนี้"
             status = "sensor_unavailable"
         elif off_bed > on_bed:
@@ -690,24 +710,40 @@ def sleep_classification_gap_timeline(
             status = "confirmed_or_dominant_off_bed"
         elif valid_pairs == 0:
             state = "no_data"
-            label = "WAIT · ไม่มี HR/RR ที่ใช้ได้"
+            label = "NO DATA · ไม่มี HR/RR ที่ใช้ได้"
             reason = "มี Timeline แต่ไม่มีคู่ HR และ RR ที่ผ่าน sanity gate"
             status = "missing_current_vitals"
         elif valid_pairs < max(2, math.ceil(len(rows) * 0.5)):
             state = "no_data"
-            label = "WAIT · HR/RR ไม่ต่อเนื่อง"
+            label = "NO DATA · HR/RR ไม่ต่อเนื่อง"
             reason = (
                 "HR/RR ที่ใช้ได้ไม่ต่อเนื่องพอสำหรับยืนยัน Sleep State"
             )
             status = "insufficient_vital_coverage"
-        else:
+        elif not previous_periods and gap_end <= start_epoch + wait_max + 0.001:
             state = "no_data"
             label = "WAIT · กำลังยืนยันสถานะ"
             reason = (
-                "Sensor มีข้อมูล แต่ยังไม่มี confirmed Sleep State "
-                "ในช่วงเริ่มต้น/หลัง restart หรือรอยืนยัน 60 วินาที"
+                "Sensor มีข้อมูลและกำลังยืนยัน Sleep State แรก "
+                "60 วินาที หรือ 120 วินาทีสำหรับ N2"
             )
-            status = "unconfirmed_evidence"
+            status = "confirming_initial_state"
+        elif not previous_periods:
+            state = "no_data"
+            label = "NO DATA · ยังไม่มีสถานะยืนยัน"
+            reason = (
+                "ครบช่วงสะสมและยืนยันสูงสุด 120 วินาทีแล้ว "
+                "แต่ไม่มี derived Sleep State ที่ยืนยันได้"
+            )
+            status = "initial_confirmation_timeout"
+        else:
+            state = "no_data"
+            label = "NO DATA · หลักฐานยังไม่ครบ"
+            reason = (
+                "Sensor มีข้อมูลหลังมี confirmed Sleep State แล้ว "
+                "แต่ช่วงนี้ไม่มี continuity attribution ที่ยืนยันได้"
+            )
+            status = "no_data_unconfirmed_evidence"
         results.append({
             "version": SLEEP_CLASSIFICATION_GAP_VERSION,
             "state": state,

@@ -355,7 +355,7 @@ def candidate_from_stage_evidence(
     n3_gate: bool,
     sleep_onset_gate_passed: bool = True,
     eligible_states: Mapping[str, Any] | None = None,
-) -> tuple[str, dict[str, Any]]:
+) -> tuple[str | None, dict[str, Any]]:
     """Select a stable candidate without starving gated N2/N3 progression.
 
     EMA remains the default candidate source. A current N2 winner may bypass a
@@ -419,6 +419,20 @@ def candidate_from_stage_evidence(
     )
     if closed_gate_transition_prevented:
         candidate = current_stage if current_stage in STAGES else None
+    # A stale EMA may still name the already displayed State after that
+    # State's *current* physiology gate has closed.  Returning it as a direct
+    # confirmation would falsely reset continuity metadata and score the epoch
+    # as fresh evidence.  Abstain instead: the shared state machine will carry
+    # the previous State provisionally, and only a gate-eligible challenger can
+    # earn a new label.
+    current_state_gate_closed = bool(
+        current_stage in STAGES
+        and eligible_states is not None
+        and not eligible_states.get(current_stage, False)
+        and candidate == current_stage
+    )
+    if current_state_gate_closed:
+        candidate = None
     metadata = dict(current_metadata if current_override else ema_metadata)
     metadata.update({
         "candidate_source": (
@@ -441,6 +455,7 @@ def candidate_from_stage_evidence(
         "gated_n1_onset_current_evidence_override": gated_n1_onset_override,
         "current_candidate_gate_open": candidate_gate_open,
         "closed_gate_transition_prevented": closed_gate_transition_prevented,
+        "current_state_gate_closed": current_state_gate_closed,
         "n3_gate": bool(n3_gate),
         "sleep_onset_gate_passed": bool(sleep_onset_gate_passed),
         "sleep_onset_guard_held": onset_guard_held,

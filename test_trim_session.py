@@ -156,6 +156,116 @@ class TrimSessionTests(unittest.TestCase):
             self.assertEqual(final["rest_mode"], "short_nap")
             sessions.close()
 
+    def test_trim_preserves_display_holds_but_excludes_provisional_score(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            data_dir = self._data_dir(Path(temporary))
+            sessions = sqlite3.connect(data_dir / "sessions.db")
+            sessions.execute(
+                "DELETE FROM events WHERE type='sleep_stage'"
+            )
+            sessions.execute("DELETE FROM timeline")
+            stage_rows = (
+                ("2026-08-26T00:05:00+00:00", True, False),
+                ("2026-08-26T00:05:30+00:00", True, False),
+                ("2026-08-26T00:06:00+00:00", False, True),
+            )
+            for index, (timestamp, provisional, eligible) in enumerate(
+                stage_rows,
+                10,
+            ):
+                value = {
+                    "state": "n2",
+                    "sample_interval_s": 30,
+                    "estimator_version": "continuity-test",
+                    "decision_kind": "continuity_hold",
+                    "held_previous_state": True,
+                    "provisional": provisional,
+                    "pending_state": "n3",
+                    "score_attribution_state": "n2",
+                    "challenger_counted_as_new_state": False,
+                    "score_eligible": eligible,
+                    "excluded_from_score": not eligible,
+                    "excluded_from_personal_baseline": True,
+                }
+                sessions.execute(
+                    "INSERT INTO events VALUES (?,?,?,?,?)",
+                    (
+                        index,
+                        "session-1",
+                        timestamp,
+                        "sleep_stage",
+                        json.dumps(value),
+                    ),
+                )
+                sessions.execute(
+                    "INSERT INTO timeline VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        index,
+                        "session-1",
+                        timestamp,
+                        25,
+                        50,
+                        750,
+                        1,
+                        35,
+                        60,
+                        13,
+                        "On bed",
+                    ),
+                )
+            final = {
+                "sleep_estimator": "continuity-test",
+                "rest_mode": "overnight",
+                "sample_interval_s": 30,
+                "timeline_schema_version": 4,
+            }
+            sessions.execute(
+                "UPDATE events SET value=? WHERE type='final_summary'",
+                (json.dumps(final),),
+            )
+            sessions.commit()
+            sessions.close()
+
+            result = trim_session(
+                data_dir,
+                "session-1",
+                datetime(2026, 8, 26, 0, 10, tzinfo=timezone.utc),
+                "continuity-regression",
+                apply=True,
+            )
+
+            self.assertEqual(result["sleep_state_counts"]["n2"], 3)
+            self.assertEqual(result["sleep_score_state_counts"]["n2"], 1)
+            sessions = sqlite3.connect(data_dir / "sessions.db")
+            persisted = json.loads(sessions.execute(
+                "SELECT value FROM events WHERE type='final_summary'"
+            ).fetchone()[0])
+            sessions.close()
+            self.assertEqual(persisted["sleep_state_counts"]["n2"], 3)
+            self.assertEqual(
+                persisted["sleep_score_state_counts"]["n2"],
+                1,
+            )
+            self.assertEqual(
+                persisted["night_summary"]["estimated_sleep_s"],
+                30,
+            )
+            self.assertEqual(
+                persisted["night_summary"]["sleep_quality"][
+                    "actual_scored_s"
+                ],
+                30,
+            )
+            sleep = persisted["session_report"]["sleep"]
+            self.assertEqual(sleep["continuity_carried_forward_s"], 90)
+            self.assertEqual(sleep["provisional_hold_s"], 60)
+            self.assertEqual(sleep["actual_scored_s"], 30)
+            self.assertTrue(
+                sleep["classification_accounting"][
+                    "score_stage_total_reconciles"
+                ]
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

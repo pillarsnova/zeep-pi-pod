@@ -199,6 +199,19 @@ class UiComposerTests(unittest.TestCase):
             css,
         )
 
+    def test_sleep_state_ui_discloses_continuity_hold_without_unclassified(self):
+        template = ui_composer.TEMPLATE.read_text(encoding="utf-8")
+
+        self.assertIn("provisional · คง State ก่อนหน้า", template)
+        self.assertIn("ยังไม่นับเป็น State ใหม่", template)
+        self.assertIn("คงสถานะก่อนหน้า", template)
+        self.assertRegex(template, r"no_data:\s+\{code:'NO DATA'")
+        self.assertIn("confirming_initial_state", template)
+        self.assertIn("WAIT · กำลังยืนยันสถานะ", template)
+        self.assertIn("NO DATA · ไม่มีข้อมูลสถานะ", template)
+        self.assertNotIn("WAIT · ไม่มีข้อมูลสถานะ", template)
+        self.assertNotIn("Unclassified", template)
+
 
 if __name__ == "__main__":
     unittest.main()

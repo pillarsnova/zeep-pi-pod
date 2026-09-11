@@ -2,13 +2,36 @@
 
 from __future__ import annotations
 
-import json
 import math
 from collections.abc import Callable, Mapping, Sequence
-from datetime import datetime
 from typing import Any
 
-SLEEP_STATES = frozenset({"wake", "n1", "n2", "n3", "rem"})
+from .sleep_decision_projection import (
+    DEFAULT_HEART_RATE_RANGE,
+    DEFAULT_RESPIRATION_RATE_RANGE,
+    EVIDENCE_EPOCH_SECONDS,
+    INITIAL_CONFIRMATION_MAX_SECONDS,
+    SLEEP_STATES,
+    apply_sleep_decisions_to_samples,
+)
+from .sleep_event_data import (
+    event_epoch as _event_epoch,
+    event_value as _event_value,
+    finite_number as _finite_number,
+    parse_timestamp as _timestamp,
+)
+
+__all__ = [
+    "DEFAULT_HEART_RATE_RANGE",
+    "DEFAULT_RESPIRATION_RATE_RANGE",
+    "EVIDENCE_EPOCH_SECONDS",
+    "INITIAL_CONFIRMATION_MAX_SECONDS",
+    "SLEEP_STATES",
+    "apply_sleep_decisions_to_samples",
+    "checkpoint_sleep_context",
+    "restore_session_sleep_context",
+    "restore_sleep_context",
+]
 
 SessionReader = Callable[..., list[dict[str, Any]]]
 
@@ -126,9 +149,16 @@ def restore_session_sleep_context(
            ORDER BY timestamp DESC""",
         (session_id,),
     )
-    _apply_confirmed_stages_to_samples(
+    status_events = read_sessions(
+        """SELECT timestamp,value FROM events
+           WHERE session_id=? AND type='sleep_stage_status'
+           ORDER BY timestamp""",
+        (session_id,),
+    )
+    apply_sleep_decisions_to_samples(
         samples,
-        stage_events,
+        stage_events=stage_events,
+        status_events=status_events,
         fallback_interval_s=fallback_interval_s,
     )
     return restore_sleep_context(
@@ -140,46 +170,6 @@ def restore_session_sleep_context(
         heart_rate_range=heart_rate_range,
         respiration_rate_range=respiration_rate_range,
     )
-
-
-def _apply_confirmed_stages_to_samples(
-    samples: list[dict[str, Any]],
-    events: Sequence[Mapping[str, Any]],
-    *,
-    fallback_interval_s: float,
-) -> None:
-    """Restore historical labels without creating any new Sleep decisions."""
-    for event in events:
-        value = _event_value(event)
-        stage = value.get("state")
-        if stage not in SLEEP_STATES:
-            continue
-        end_epoch = _event_epoch(event, value)
-        if end_epoch is None:
-            continue
-        start_epoch = _timestamp(value.get("window_start"))
-        if start_epoch is None:
-            interval = value.get("sample_interval_s")
-            if not _finite_number(interval) or float(interval) <= 0:
-                interval = fallback_interval_s
-            start_epoch = end_epoch - float(interval)
-        for sample in samples:
-            timestamp = sample.get("t")
-            if _finite_number(timestamp) and (
-                start_epoch < float(timestamp) <= end_epoch + 0.001
-            ):
-                sample.update(
-                    {
-                        "sleep": stage,
-                        "sleep_confirmed_state": stage,
-                        "sleep_estimator_version": value.get("estimator_version"),
-                        "sleep_evidence_version": value.get("evidence_version"),
-                        "sleep_confidence": value.get("confidence"),
-                        "sleep_probability": (value.get("probabilities") or {}).get(
-                            stage
-                        ),
-                    }
-                )
 
 
 def _replay_confirmed_path(
@@ -203,7 +193,9 @@ def _replay_confirmed_path(
         stage = value.get("state")
         if stage not in SLEEP_STATES:
             continue
-        event_epoch = _event_epoch(event, value)
+        event_epoch = _timestamp(value.get("attribution_start"))
+        if event_epoch is None:
+            event_epoch = _event_epoch(event, value)
         if stage == "wake":
             path["seen"].clear()
             path["cycle_has_n1"] = False
@@ -273,50 +265,9 @@ def _evidence_awake_references(
     return None, None
 
 
-def _event_value(event: Mapping[str, Any]) -> dict[str, Any]:
-    value = event.get("value")
-    if isinstance(value, dict):
-        return value
-    if not isinstance(value, str):
-        return {}
-    try:
-        decoded = json.loads(value)
-    except json.JSONDecodeError:
-        return {}
-    return decoded if isinstance(decoded, dict) else {}
-
-
-def _event_epoch(
-    event: Mapping[str, Any],
-    value: Mapping[str, Any],
-) -> float | None:
-    for candidate in (value.get("window_end"), event.get("timestamp")):
-        parsed = _timestamp(candidate)
-        if parsed is not None:
-            return parsed
-    return None
-
-
-def _timestamp(value: Any) -> float | None:
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(str(value)).timestamp()
-    except (TypeError, ValueError):
-        return None
-
-
 def _upper_quartile(values: Sequence[float]) -> float | None:
     ordered = sorted(float(value) for value in values if _finite_number(value))
     if not ordered:
         return None
     index = min(len(ordered) - 1, int(round((len(ordered) - 1) * 0.75)))
     return ordered[index]
-
-
-def _finite_number(value: Any) -> bool:
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(float(value))
-    )

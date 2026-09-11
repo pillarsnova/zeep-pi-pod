@@ -16,6 +16,7 @@ from collections import Counter
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -127,6 +128,79 @@ def object_sha256(value: Any) -> str:
     return hashlib.sha256(json.dumps(
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
     ).encode("utf-8")).hexdigest()
+
+
+def validate_promotion_reconciliation(
+    report: dict[str, Any],
+    quality: dict[str, Any],
+) -> dict[str, float]:
+    """Fail closed unless one promoted report has coherent time accounting."""
+    sleep = report.get("sleep") if isinstance(report, dict) else None
+    accounting = (
+        sleep.get("classification_accounting")
+        if isinstance(sleep, dict) else None
+    )
+    if not isinstance(accounting, dict):
+        raise RuntimeError("promotion report has no classification accounting")
+
+    for key in (
+        "display_stage_total_reconciles",
+        "score_stage_total_reconciles",
+    ):
+        if accounting.get(key) is not True:
+            raise RuntimeError(f"promotion report failed {key}")
+
+    invariant = accounting.get("arithmetic_invariant")
+    if not isinstance(invariant, dict) or invariant.get("holds") is not True:
+        raise RuntimeError("promotion report failed arithmetic invariant")
+
+    def finite_seconds(value: Any, label: str) -> float:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise RuntimeError(f"promotion result has invalid {label}")
+        seconds = float(value)
+        if not math.isfinite(seconds) or seconds < 0:
+            raise RuntimeError(f"promotion result has invalid {label}")
+        return seconds
+
+    report_seconds = finite_seconds(
+        sleep.get("actual_scored_s"), "report actual_scored_s"
+    )
+    quality_seconds = finite_seconds(
+        quality.get("actual_scored_s"), "quality actual_scored_s"
+    )
+    delta_seconds = report_seconds - quality_seconds
+    if abs(delta_seconds) > 0.11:
+        raise RuntimeError(
+            "promotion report/quality actual_scored_s mismatch: "
+            f"report={report_seconds}, quality={quality_seconds}"
+        )
+    return {
+        "report_actual_scored_s": report_seconds,
+        "quality_actual_scored_s": quality_seconds,
+        "actual_scored_delta_s": round(delta_seconds, 3),
+    }
+
+
+def reviewed_mode_group(item: dict[str, Any]) -> str:
+    """Return explicit historical intent, never an ``auto`` score fallback.
+
+    The shadow scorer may create an engineering-only mode suggestion from an
+    unresolved legacy row.  That suggestion is useful for Admin review but it
+    cannot decide whether a persisted result is Sleep Score or Recovery Score.
+    Promotion therefore uses ``previous_mode`` as the authoritative intent and
+    preserves the old report when that intent is still unresolved.
+    """
+    previous = item.get("previous_mode")
+    if isinstance(previous, dict):
+        group = str(previous.get("group") or "")
+        if group in {"sleep", "nap_recovery"}:
+            return group
+        return "unresolved"
+    # Backward compatibility for a reviewed artifact created before
+    # ``previous_mode`` was recorded.
+    mode = item.get("mode")
+    group = str((mode or {}).get("group") or "") if isinstance(mode, dict) else ""
+    return group if group in {"sleep", "nap_recovery"} else "unresolved"
 
 
 def cohort_minimum_duration_seconds(artifact: dict[str, Any]) -> float:
@@ -255,6 +329,10 @@ def _event_values(session: dict[str, Any]) -> list[tuple[str, str, str]]:
             "g2_ontology_version": SLEEP_G2_ONTOLOGY_VERSION,
             "window_start": iso_utc(when - 60.0),
             "window_end": iso_utc(when),
+            "attribution_start": iso_utc(
+                when - SLEEP_EVIDENCE_EPOCH_SECONDS
+            ),
+            "attribution_end": iso_utc(when),
             "sample_count": 6,
             "sensor_sample_interval_s": SLEEP_SENSOR_SAMPLE_SECONDS,
             "evidence_epoch_s": SLEEP_EVIDENCE_EPOCH_SECONDS,
@@ -286,8 +364,14 @@ def _event_values(session: dict[str, Any]) -> list[tuple[str, str, str]]:
         when = float(state_row["t"])
         stage = str(state_row["state"])
         evidence = evidence_by_time.get(round(when, 3), {})
-        probabilities = align_probabilities_to_emitted_stage(
-            evidence.get("probabilities") or {}, stage, winner_margin=0.01,
+        held_previous_state = bool(state_row.get("held_previous_state"))
+        evidence_probabilities = evidence.get("probabilities") or {}
+        probabilities = (
+            dict(evidence_probabilities)
+            if held_previous_state
+            else align_probabilities_to_emitted_stage(
+                evidence_probabilities, stage, winner_margin=0.01,
+            )
         )
         changed = stage != previous
         if changed:
@@ -300,7 +384,11 @@ def _event_values(session: dict[str, Any]) -> list[tuple[str, str, str]]:
             "state": stage,
             "probabilities": {key: round(value, 4) for key, value in probabilities.items()},
             "confidence": confidence(evidence),
-            "reason": "confirmed_from_preserved_raw_bcg_replay",
+            "reason": (
+                "continuity_hold_from_preserved_raw_bcg_replay"
+                if held_previous_state
+                else "confirmed_from_preserved_raw_bcg_replay"
+            ),
             "progression": progression,
             "metrics": state_row.get("metrics") or {},
             "estimator_version": SLEEP_ESTIMATOR_VERSION,
@@ -310,13 +398,54 @@ def _event_values(session: dict[str, Any]) -> list[tuple[str, str, str]]:
             "g2_ontology_version": SLEEP_G2_ONTOLOGY_VERSION,
             "window_start": iso_utc(when - 60.0),
             "window_end": iso_utc(when),
+            # The rolling Evidence window is 60 seconds, but one State row
+            # owns only its canonical 30-second attribution interval.  Persist
+            # both explicitly so report rebuilds cannot shift the label into
+            # the following Timeline bucket.
+            "attribution_start": iso_utc(float(
+                state_row.get(
+                    "attribution_start",
+                    when - SLEEP_EVIDENCE_EPOCH_SECONDS,
+                )
+            )),
+            "attribution_end": iso_utc(float(
+                state_row.get("attribution_end", when)
+            )),
             "sample_count": 6,
             "sensor_sample_interval_s": SLEEP_SENSOR_SAMPLE_SECONDS,
             "sample_interval_s": SLEEP_EVIDENCE_EPOCH_SECONDS,
             "confirmation_seconds": SLEEP_STAGE_CONFIRMATION_SECONDS.get(
                 stage, SLEEP_CONFIRMATION_SECONDS),
-            "confirmation": evidence.get("transition") or {},
-            "decision_kind": "historical_confirmed_state",
+            "confirmation": (
+                state_row.get("confirmation")
+                or evidence.get("transition")
+                or {}
+            ),
+            "decision_kind": (
+                "historical_continuity_hold"
+                if held_previous_state
+                else "historical_confirmed_state"
+            ),
+            "held_previous_state": held_previous_state,
+            "provisional": bool(state_row.get("provisional")),
+            "pending_state": state_row.get("pending_state"),
+            "score_attribution_state": (
+                state_row.get("score_attribution_state") or stage
+            ),
+            "challenger_counted_as_new_state": bool(
+                state_row.get("challenger_counted_as_new_state")
+            ),
+            "score_eligible": bool(
+                state_row.get("score_eligible", True)
+            ),
+            "excluded_from_score": bool(
+                state_row.get("excluded_from_score", False)
+            ),
+            "excluded_from_personal_baseline": bool(
+                state_row.get(
+                    "excluded_from_personal_baseline", False
+                )
+            ),
             "state_changed": changed,
             "historical_replay_version": SLEEP_HISTORY_BACKFILL_VERSION,
             "raw_source_modified": False,
@@ -452,6 +581,16 @@ def main() -> int:
                 f"reviewed Session has derived promotion blockers: {session_id} "
                 f"{item.get('promotion_blockers') or []}"
             )
+        if reviewed_mode_group(item) in {"sleep", "nap_recovery"}:
+            try:
+                validate_promotion_reconciliation(
+                    item.get("report") or {}, item.get("quality") or {}
+                )
+            except RuntimeError as exc:
+                raise SystemExit(
+                    f"reviewed Session reconciliation failed for {session_id}: "
+                    f"{exc}"
+                ) from exc
         db_row = session_guard.execute(
             "SELECT username_key,start_time,end_time,duration FROM sessions "
             "WHERE session_id=?",
@@ -500,6 +639,10 @@ def main() -> int:
         "cutover_utc": PERSONAL_BASELINE_LEARNING_START_UTC,
         "selected_sessions": len(selected),
         "selected_ids": selected_ids,
+        "score_report_mode_unresolved_ids": [
+            session_id for session_id, item, _events in selected
+            if reviewed_mode_group(item) == "unresolved"
+        ],
         "derived_events": sum(len(item[2]) for item in selected),
         "raw_timeline_modified": False,
         "raw_bcg_modified": False,
@@ -629,10 +772,17 @@ def main() -> int:
 
     try:
         report_sessions = []
+        mode_unresolved_sessions = []
         for session_id, item, _ in selected:
-            reviewed_mode = str((item.get("mode") or {}).get("group") or "")
+            reviewed_mode = reviewed_mode_group(item)
             if reviewed_mode not in {"sleep", "nap_recovery"}:
-                raise RuntimeError(f"invalid reviewed Mode for {session_id}")
+                # Mode identity determines Sleep Score vs Recovery Score, but
+                # it does not invalidate per-Epoch W/N1/N2/N3/REM and
+                # NO DATA/OFF BED derivation.  Promote those reviewed rows and
+                # preserve the prior score/report until an operator assigns a
+                # mode; never abort unrelated Sessions in the same batch.
+                mode_unresolved_sessions.append(session_id)
+                continue
             one_result = rescore(
                 staging_dir, [session_id], requested_mode=reviewed_mode, apply=True,
             )
@@ -641,6 +791,7 @@ def main() -> int:
             "applied": True,
             "sessions": report_sessions,
             "count": len(report_sessions),
+            "mode_unresolved_score_preserved_ids": mode_unresolved_sessions,
         }
         # The promoted DB must reproduce the reviewed shadow artifact exactly
         # for score identity and stage-time accounting.  This guard catches
@@ -653,6 +804,9 @@ def main() -> int:
             expected_item = reviewed[session_id]
             expected_quality = expected_item.get("quality") or {}
             expected_report = expected_item.get("report") or {}
+            reconciliation = validate_promotion_reconciliation(
+                rebuilt.get("report") or {}, rebuilt.get("quality") or {}
+            )
             expected_counts = Counter(
                 str(row.get("state"))
                 for row in (
@@ -685,7 +839,13 @@ def main() -> int:
             parity.append({
                 "session_id": session_id,
                 "status": "exact_full_quality_mode_counts_report",
+                "reconciliation": reconciliation,
             })
+        parity.extend({
+            "session_id": session_id,
+            "status": "derived_epochs_only_mode_unresolved_score_preserved",
+            "reconciliation": None,
+        } for session_id in mode_unresolved_sessions)
 
         # Rebuild learned context only from current-version reports at/after
         # the cutover. Historical Raw Sensor/BCG files are not involved.

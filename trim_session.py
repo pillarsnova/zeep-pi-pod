@@ -107,6 +107,7 @@ def _rebuild_final_summary(
 
     stage_points = []
     counts = {stage: 0 for stage in STAGES}
+    score_counts = {stage: 0 for stage in STAGES}
     estimator_version = old_final.get("sleep_estimator")
     for row in stage_rows:
         value = _load_json(row["value"])
@@ -114,18 +115,51 @@ def _rebuild_final_summary(
         if stage not in counts:
             continue
         counts[stage] += 1
+        score_eligible = bool(
+            value.get("score_eligible", True)
+            and not value.get("provisional", False)
+        )
+        if score_eligible:
+            score_counts[stage] += 1
         estimator_version = value.get("estimator_version") or estimator_version
-        stage_points.append((row["timestamp"], stage, value))
+        stage_points.append(
+            (row["timestamp"], stage, value, score_eligible)
+        )
 
     stage_by_bucket = {}
-    for timestamp, stage, value in stage_points:
+    for timestamp, stage, value, score_eligible in stage_points:
         bucket = int(_iso(timestamp).timestamp() // sample_seconds)
         auxiliary = ((value.get("metrics") or {}).get("auxiliary_evidence") or {})
         acoustic = auxiliary.get("acoustic") or {}
+        held = bool(value.get("held_previous_state"))
+        provisional = bool(value.get("provisional"))
         stage_by_bucket[bucket] = {
             "sleep": stage,
             "sleep_confidence": value.get("confidence"),
             "acoustic_corroborated": bool(acoustic.get("corroborated")),
+            "sleep_confirmation": value.get("confirmation") or {},
+            "sleep_decision_kind": value.get("decision_kind"),
+            "sleep_held_previous_state": held,
+            "sleep_provisional": provisional,
+            "sleep_pending_state": value.get("pending_state"),
+            "sleep_data_status": (
+                "provisional_hold"
+                if held and provisional
+                else "continuity_hold"
+                if held
+                else "live"
+            ),
+            "sleep_score_attribution_state": (
+                value.get("score_attribution_state") or stage
+            ),
+            "sleep_challenger_counted_as_new_state": bool(
+                value.get("challenger_counted_as_new_state")
+            ),
+            "sleep_score_eligible": score_eligible,
+            "sleep_excluded_from_score": not score_eligible,
+            "sleep_excluded_from_personal_baseline": bool(
+                value.get("excluded_from_personal_baseline", False)
+            ),
         }
 
     samples = []
@@ -146,13 +180,21 @@ def _rebuild_final_summary(
     started = _iso(session["start_time"])
     duration_s = max(0.0, (cutoff - started.astimezone(timezone.utc)).total_seconds())
     first_sleep = next(
-        (_iso(timestamp) for timestamp, stage, _ in stage_points if stage in SLEEP_STAGES), None)
+        (
+            _iso(timestamp)
+            for timestamp, stage, _, score_eligible in stage_points
+            if score_eligible and stage in SLEEP_STAGES
+        ),
+        None,
+    )
     onset_s = round(max(0.0, (first_sleep - started).total_seconds()), 1) if first_sleep else None
     awakenings = 0
     asleep = False
     sleep_started = False
     waso_rounds = 0
-    for _, stage, _ in stage_points:
+    for _, stage, _, score_eligible in stage_points:
+        if not score_eligible:
+            continue
         if stage in SLEEP_STAGES:
             asleep = True
             sleep_started = True
@@ -162,16 +204,22 @@ def _rebuild_final_summary(
             if asleep:
                 awakenings += 1
                 asleep = False
-    total_sleep = sum(counts[stage] for stage in SLEEP_STAGES)
-    total_scored = total_sleep + counts["wake"]
+    total_sleep = sum(score_counts[stage] for stage in SLEEP_STAGES)
+    total_scored = total_sleep + score_counts["wake"]
     night_summary = {
         "sleep_onset_proxy_s": onset_s,
         "awakenings": awakenings,
         "waso_proxy_s": round(waso_rounds * sample_seconds, 1),
         "estimated_sleep_s": round(min(duration_s, total_sleep * sample_seconds), 1),
         "sleep_efficiency": round(total_sleep / total_scored, 3) if total_scored else None,
-        "deep_ratio": round(counts["n3"] / total_sleep, 3) if total_sleep else None,
-        "rem_ratio": round(counts["rem"] / total_sleep, 3) if total_sleep else None,
+        "deep_ratio": (
+            round(score_counts["n3"] / total_sleep, 3)
+            if total_sleep else None
+        ),
+        "rem_ratio": (
+            round(score_counts["rem"] / total_sleep, 3)
+            if total_sleep else None
+        ),
     }
     rest_mode = old_final.get("rest_mode") or "auto"
     session_fields = set(session.keys())
@@ -179,14 +227,23 @@ def _rebuild_final_summary(
     if target_duration_s is None and "target_duration_s" in session_fields:
         target_duration_s = session["target_duration_s"]
     stage_sequence = [
-        {"state": stage, "metrics": value.get("metrics") or {}}
-        for _, stage, value in stage_points
+        {
+            "state": stage,
+            "metrics": value.get("metrics") or {},
+            "score_eligible": score_eligible,
+            "provisional": bool(value.get("provisional")),
+            "held_previous_state": bool(
+                value.get("held_previous_state")
+            ),
+        }
+        for _, stage, value, score_eligible in stage_points
     ]
     sleep_quality = build_sleep_quality(
         duration_s, night_summary, counts, completed=True,
         rest_mode=rest_mode, stage_sequence=stage_sequence,
         sample_interval_s=sample_seconds,
         target_duration_s=target_duration_s,
+        score_state_counts=score_counts,
     )
     night_summary["sleep_quality"] = sleep_quality
     night_summary["wellness_score"] = sleep_quality.get("score")
@@ -197,6 +254,7 @@ def _rebuild_final_summary(
         completed=True,
         timeline_schema_version=int(old_final.get("timeline_schema_version") or 3),
         target_duration_s=target_duration_s,
+        sleep_score_state_counts=score_counts,
     )
 
     counter_rows = connection.execute(
@@ -206,6 +264,7 @@ def _rebuild_final_summary(
     summary = {
         "bed_status_counts": bed_counts,
         "sleep_state_counts": counts,
+        "sleep_score_state_counts": score_counts,
         "sleep_estimator": estimator_version,
         "rest_mode": rest_mode,
         "target_duration_s": target_duration_s,
@@ -221,9 +280,15 @@ def _rebuild_final_summary(
             "regenerated_at_utc": datetime.now(timezone.utc).isoformat(),
         },
     }
-    return {"value": summary, "duration_s": round(duration_s, 1), "counts": counts,
-            "bed_counts": bed_counts, "timeline_rows": len(timeline),
-            "stage_rows": len(stage_points)}
+    return {
+        "value": summary,
+        "duration_s": round(duration_s, 1),
+        "counts": counts,
+        "score_counts": score_counts,
+        "bed_counts": bed_counts,
+        "timeline_rows": len(timeline),
+        "stage_rows": len(stage_points),
+    }
 
 
 def trim_session(
@@ -314,6 +379,7 @@ def trim_session(
         return {
             "applied": True, "session_id": session_id, "cutoff_utc": cutoff_iso,
             "duration_s": rebuilt["duration_s"], "sleep_state_counts": rebuilt["counts"],
+            "sleep_score_state_counts": rebuilt["score_counts"],
             "timeline_rows": rebuilt["timeline_rows"], "stage_rows": rebuilt["stage_rows"],
             "before": before, "after": after,
         }

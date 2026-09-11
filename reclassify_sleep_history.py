@@ -70,6 +70,7 @@ from sleep_system_policy import (
     SLEEP_STAGE_MIN_DWELL_SECONDS,
     ZEEP_SLEEP_STATES,
     ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
+    continuity_hold_contract,
 )
 
 
@@ -235,10 +236,11 @@ class HistoricalStagePath:
         self.stage_since: Optional[float] = None
         self.candidate: Optional[str] = None
         self.candidate_ticks = 0
+        self.continuity_hold_ticks = 0
         self.cycle_has_n1 = False
         self.probability_ema: Optional[dict[str, float]] = None
 
-    def _allowed(self, candidate: str, strong_wake: bool) -> bool:
+    def _allowed(self, candidate: Optional[str], strong_wake: bool) -> bool:
         previous = self.last
         if previous is None:
             return candidate == "wake"
@@ -251,13 +253,18 @@ class HistoricalStagePath:
         return candidate in SLEEP_ALLOWED_TRANSITIONS.get(
             previous, frozenset({"wake"}))
 
-    def _fallback(self, blocked: str) -> str:
+    def _fallback(self, blocked: Optional[str]) -> str:
         previous = self.last
         if previous in STAGES:
             return previous
         return "wake"
 
-    def stabilize(self, candidate: str, now: float, strong_wake: bool) -> tuple[str, dict[str, Any]]:
+    def stabilize(
+        self,
+        candidate: Optional[str],
+        now: float,
+        strong_wake: bool,
+    ) -> tuple[str, dict[str, Any]]:
         allowed = self._allowed(candidate, strong_wake)
         target = candidate if allowed else self._fallback(candidate)
         meta: dict[str, Any] = {
@@ -272,6 +279,7 @@ class HistoricalStagePath:
         if not allowed:
             self.candidate = None
             self.candidate_ticks = 0
+            self.continuity_hold_ticks += 1
             meta.update({
                 "required_ticks": 0,
                 "candidate_ticks": 0,
@@ -279,11 +287,18 @@ class HistoricalStagePath:
                 "required_epochs": 0,
                 "confirmation_seconds": SLEEP_STAGE_CONFIRMATION_SECONDS.get(
                     target, SLEEP_CONFIRMATION_SECONDS),
-                "held": True,
                 "confirmation_complete": False,
-                "confirmed_state": None,
-                "decision": "blocked_transition_abstain",
             })
+            meta.update(continuity_hold_contract(
+                self.last,
+                candidate=candidate,
+                decision=(
+                    "ambiguous_evidence_hold"
+                    if candidate is None
+                    else "blocked_transition_hold"
+                ),
+                hold_epochs=self.continuity_hold_ticks,
+            ))
             return (self.last or "wake"), meta
         if self.last is None:
             if self.candidate == target:
@@ -293,6 +308,7 @@ class HistoricalStagePath:
                 self.candidate_ticks = 1
             required = int(self.confirm_ticks.get(target, SLEEP_CONFIRM_EPOCHS))
             held = self.candidate_ticks < required
+            self.continuity_hold_ticks = 0
             meta.update({
                 "required_ticks": required,
                 "candidate_ticks": self.candidate_ticks,
@@ -303,11 +319,24 @@ class HistoricalStagePath:
                 "held": held,
                 "confirmation_complete": not held,
                 "confirmed_state": None if held else target,
+                "held_previous_state": False,
+                "provisional": False,
+                "decision": (
+                    "initial_confirmation_wait" if held else "confirmed"
+                ),
+                "decision_kind": (
+                    "initial_confirmation_wait" if held
+                    else "confirmed_state"
+                ),
+                "score_eligible": not held,
+                "excluded_from_score": held,
+                "excluded_from_personal_baseline": held,
             })
             return target, meta
         if target == self.last:
             self.candidate = None
             self.candidate_ticks = 0
+            self.continuity_hold_ticks = 0
             meta.update({
                 "required_ticks": SLEEP_CONFIRM_EPOCHS,
                 "candidate_ticks": SLEEP_CONFIRM_EPOCHS,
@@ -318,6 +347,13 @@ class HistoricalStagePath:
                 "held": False,
                 "confirmation_complete": True,
                 "confirmed_state": self.last,
+                "held_previous_state": False,
+                "provisional": False,
+                "decision": "hold_confirmed",
+                "decision_kind": "confirmed_state",
+                "score_eligible": True,
+                "excluded_from_score": False,
+                "excluded_from_personal_baseline": False,
             })
             return self.last, meta
 
@@ -329,6 +365,10 @@ class HistoricalStagePath:
             self.candidate_ticks = 1
         required = self.confirm_ticks.get(target, 2)
         held = dwell < self.minimum_dwell.get(self.last, 0.0) or self.candidate_ticks < required
+        if held:
+            self.continuity_hold_ticks += 1
+        else:
+            self.continuity_hold_ticks = 0
         meta.update({
             "required_ticks": required,
             "candidate_ticks": self.candidate_ticks,
@@ -342,6 +382,25 @@ class HistoricalStagePath:
             "confirmation_complete": not held,
             "confirmed_state": self.last if held else target,
         })
+        if held:
+            meta.update(continuity_hold_contract(
+                self.last,
+                candidate=target,
+                decision="confirming",
+                hold_epochs=self.continuity_hold_ticks,
+            ))
+        else:
+            meta.update({
+                "held_previous_state": False,
+                "provisional": False,
+                "decision": "confirmed",
+                "decision_kind": "confirmed_state",
+                "score_attribution_state": target,
+                "challenger_counted_as_new_state": True,
+                "score_eligible": True,
+                "excluded_from_score": False,
+                "excluded_from_personal_baseline": False,
+            })
         return (self.last if held else target), meta
 
     def commit(self, stage: str, now: float) -> tuple[bool, list[str]]:
@@ -356,6 +415,7 @@ class HistoricalStagePath:
             self.stage_since = now
             self.candidate = None
             self.candidate_ticks = 0
+            self.continuity_hold_ticks = 0
         self.last = stage
         return changed, list(self.seen)
 
@@ -476,13 +536,23 @@ def rescore_event(
     probabilities = {
         key: round(value, 4) for key, value in path.probability_ema.items()
     }
-    probabilities[candidate] = round(
-        probabilities[candidate] + round(1.0 - sum(probabilities.values()), 4), 4)
-    confirmed_probabilities = adjusted_probabilities(
-        path.probability_ema, confirmed_state)
+    probability_winner = (
+        candidate if candidate in STAGES else instant_candidate
+    )
+    probabilities[probability_winner] = round(
+        probabilities[probability_winner]
+        + round(1.0 - sum(probabilities.values()), 4),
+        4,
+    )
+    held_previous_state = bool(transition.get("held_previous_state"))
+    confirmed_probabilities = (
+        dict(probabilities)
+        if held_previous_state
+        else adjusted_probabilities(path.probability_ema, confirmed_state)
+    )
     selected = confirmed_state
     changed, progression = path.commit(selected, now)
-    winner = probabilities[candidate]
+    winner = probabilities[probability_winner]
     confidence = "high" if winner >= 0.72 else "medium" if winner >= 0.48 else "low"
     if transition.get("bridge_state") or transition.get("held") or int(value.get("sample_count") or 0) < 6:
         confidence = "low"
@@ -520,7 +590,7 @@ def rescore_event(
         },
         "instant_candidate": instant_candidate,
         "raw_candidate": candidate,
-        "probability_winner": candidate,
+        "probability_winner": probability_winner,
         "probability_filter": {
             "method": "ema_after_60s_rolling_features",
             "alpha": SLEEP_PROBABILITY_EMA_ALPHA,
@@ -538,12 +608,46 @@ def rescore_event(
         },
         "confirmation": {
             "confirmed_state": selected,
-            "pending_state": candidate if transition.get("held") else None,
+            "pending_state": (
+                transition.get("pending_state")
+                if transition.get("held") else None
+            ),
             "candidate_epochs": transition.get("candidate_epochs", 0),
             "required_epochs": transition.get("required_epochs", SLEEP_CONFIRM_EPOCHS),
-            "required_seconds": SLEEP_CONFIRMATION_SECONDS,
+            "required_seconds": float(
+                transition.get("confirmation_seconds")
+                or SLEEP_CONFIRMATION_SECONDS
+            ),
             "complete": bool(transition.get("confirmation_complete")),
+            "decision": transition.get("decision"),
+            "decision_kind": transition.get("decision_kind"),
+            "held_previous_state": held_previous_state,
+            "provisional": bool(transition.get("provisional")),
+            "challenger_counted_as_new_state": bool(
+                transition.get("challenger_counted_as_new_state")
+            ),
         },
+        "decision_kind": transition.get(
+            "decision_kind", "confirmed_state"
+        ),
+        "held_previous_state": held_previous_state,
+        "provisional": bool(transition.get("provisional")),
+        "pending_state": transition.get("pending_state"),
+        "score_attribution_state": (
+            transition.get("score_attribution_state") or selected
+        ),
+        "challenger_counted_as_new_state": bool(
+            transition.get("challenger_counted_as_new_state")
+        ),
+        "score_eligible": bool(
+            transition.get("score_eligible", True)
+        ),
+        "excluded_from_score": bool(
+            transition.get("excluded_from_score", False)
+        ),
+        "excluded_from_personal_baseline": bool(
+            transition.get("excluded_from_personal_baseline", False)
+        ),
         "reason": reason,
         "progression": progression,
         "metrics": {
@@ -908,34 +1012,14 @@ def main() -> None:
                 skipped_without_raw += 1
                 preserved_current_without_raw += 1
                 continue
-            # A reset can precede the first retained packet. Anchor that round
-            # at Wake (or hold the already replayed stage later in a gap) and
-            # mark it unproved instead of retaining a legacy REM/N3 label.
-            selected = path.last if path.last in STAGES else "wake"
-            changed, progression = path.commit(selected, parse_timestamp(row["timestamp"]))
-            updated = {
-                **value,
-                "state": selected,
-                "probabilities": {stage: 1.0 if stage == selected else 0.0 for stage in STAGES},
-                "confidence": "low",
-                "reason": "Historical replay · ไม่มี Raw BCG ในหน้าต่างนี้ · คงลำดับอย่างระมัดระวัง",
-                "progression": progression,
-                **zeep._sleep_decision_provenance(),
-                "state_changed": changed,
-                "historical_reclassification": {
-                    "version": BACKFILL_VERSION,
-                    "reclassified_at": reclassified_at,
-                    "source": "missing_raw_bcg_guard",
-                    "original_state": value.get("state"),
-                    "original_estimator_version": value.get("estimator_version"),
-                    "aasm_psg_equivalent": False,
-                },
-            }
-            updates.append((json.dumps(updated, ensure_ascii=False, separators=(",", ":")), row["id"]))
-            new_values.append(updated)
-            new_events.append((row["timestamp"], updated))
-            changes[(str(value.get("state")), selected)] += 1
+            # This legacy comparison cannot reconstruct the epoch. Do not
+            # manufacture W or carry a Stage without Raw BCG; the canonical
+            # raw replay emits NO DATA and this apply path is disabled.
             skipped_without_raw += 1
+            continue
+        if reconstructed.get("bed_status") == "Get out of bed":
+            # Bed exit is occupancy, never Stage W. Canonical replay emits
+            # OFF BED; this legacy comparison deliberately omits the row.
             continue
         score_value = dict(value)
         score_metrics = dict(value.get("metrics") or {})

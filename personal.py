@@ -27,6 +27,8 @@ from sleep_system_policy import (
     PERSONAL_BASELINE_LEARNING_START_LOCAL_DATE,
     PERSONAL_BASELINE_LEARNING_START_TIMEZONE,
     PERSONAL_BASELINE_LEARNING_START_UTC,
+    PRE_CONTINUITY_SESSION_REPORT_VERSION,
+    PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
     PRE_RESTORE_SESSION_REPORT_VERSION,
     RECOVERY_SCORE_FORMULA_VERSION,
     RESTORE_TREND_MAX_SESSIONS,
@@ -166,9 +168,107 @@ class BaselineStore:
             "SELECT timestamp,temperature,humidity,co2,lux,sound,pm2_5,voc_index,"
             "heart_rate,respiration_rate,bed_status "
             "FROM timeline WHERE session_id=? ORDER BY timestamp", (session_id,))
-        quiet_rows = [r for r in timeline if r["bed_status"] in
-                      ("On bed", "Snoring", "Weak breathing")]
-        moving_rows = [r for r in timeline if r["bed_status"] == "Moving"]
+        stage_events = self.database.read_sessions(
+            "SELECT timestamp,value FROM events WHERE session_id=? "
+            "AND type='sleep_stage' ORDER BY timestamp,id",
+            (session_id,),
+        )
+
+        def event_epoch(value: Any) -> Optional[float]:
+            if isinstance(value, (int, float)):
+                return float(value)
+            try:
+                return datetime.fromisoformat(
+                    str(value).replace("Z", "+00:00")
+                ).timestamp()
+            except (TypeError, ValueError, OverflowError):
+                return None
+
+        eligible_intervals: list[tuple[float, float, str]] = []
+        for event in stage_events:
+            try:
+                value = json.loads(event["value"] or "{}")
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if not isinstance(value, dict):
+                continue
+            stage = str(value.get("state") or "").lower()
+            if stage not in {"wake", "n1", "n2", "n3", "rem"}:
+                continue
+            if (
+                value.get("provisional") is True
+                or value.get("score_eligible") is False
+                or value.get("excluded_from_personal_baseline") is True
+            ):
+                continue
+            end = event_epoch(value.get("attribution_end"))
+            if end is None:
+                end = event_epoch(value.get("window_end"))
+            if end is None:
+                try:
+                    event_timestamp = event["timestamp"]
+                except (KeyError, TypeError):
+                    event_timestamp = None
+                end = event_epoch(event_timestamp)
+            interval = value.get("sample_interval_s", 30.0)
+            try:
+                interval = max(1.0, float(interval))
+            except (TypeError, ValueError, OverflowError):
+                interval = 30.0
+            start = event_epoch(value.get("attribution_start"))
+            if start is None and end is not None:
+                start = end - interval
+            if start is not None and end is not None and end > start:
+                eligible_intervals.append((start, end, stage))
+
+        def eligible_stage(row: Any) -> Optional[str]:
+            position = event_epoch(row["timestamp"])
+            if position is None:
+                return None
+            return next((
+                stage for start, end, stage in eligible_intervals
+                if start < position <= end + 0.001
+            ), None)
+
+        if stage_events:
+            # Current-version Sessions explicitly carry baseline eligibility.
+            # Honour it: provisional and continuity-carried rows never teach
+            # the personal physiology model even when their display State is
+            # retained for timeline completeness.
+            staged_timeline = [
+                (row, eligible_stage(row)) for row in timeline
+            ]
+            quiet_rows = [
+                row for row, stage in staged_timeline
+                if stage in {"n1", "n2", "n3", "rem"}
+                and row["bed_status"] in (
+                    "On bed", "Snoring", "Weak breathing"
+                )
+            ]
+            wake_rows = [
+                row for row, stage in staged_timeline if stage == "wake"
+            ]
+            eligible_rows = [
+                row for row, stage in staged_timeline if stage is not None
+            ]
+            moving_rows = [
+                row for row in eligible_rows if row["bed_status"] == "Moving"
+            ]
+            baseline_stage_filter = "direct_score_eligible_stage_intervals"
+        else:
+            # Compatibility for an older approved Session whose event schema
+            # predates explicit eligibility metadata.
+            quiet_rows = [
+                row for row in timeline if row["bed_status"] in (
+                    "On bed", "Snoring", "Weak breathing"
+                )
+            ]
+            wake_rows = list(timeline[:20])
+            eligible_rows = list(timeline)
+            moving_rows = [
+                row for row in timeline if row["bed_status"] == "Moving"
+            ]
+            baseline_stage_filter = "legacy_approved_timeline_fallback"
         quiet_hr = [r["heart_rate"] for r in quiet_rows if r["heart_rate"]]
         if len(quiet_hr) < MIN_HR_SAMPLES:
             return None
@@ -189,7 +289,7 @@ class BaselineStore:
         # position changes and blanket adjustment can all load the bed sensor.
         # Until a time-aligned Wake decision is queried here, use only the
         # initial settling samples as the conservative awake-baseline proxy.
-        awake_hr = [r["heart_rate"] for r in timeline[:20] if r["heart_rate"]]
+        awake_hr = [r["heart_rate"] for r in wake_rows if r["heart_rate"]]
         # lowest stable: ค่าต่ำจริงแบบไม่เอา outlier (p10 ของช่วงนิ่ง)
         low_stable = _percentile(quiet_hr, 0.10)
         metrics = {
@@ -202,8 +302,10 @@ class BaselineStore:
             "cv_p75": round(_percentile(cvs, 0.75), 4) if cvs else None,
             "rr_median": round(statistics.median(rrs), 1) if rrs else None,
             "rr_low_stable": round(_percentile(rrs, 0.10), 1) if rrs else None,
-            "move_ratio": (round(len(moving_rows) / len(timeline), 3)
-                           if timeline else None),
+            "move_ratio": (
+                round(len(moving_rows) / len(eligible_rows), 3)
+                if eligible_rows else None
+            ),
             "temp_median": round(statistics.median(temps), 1) if temps else None,
             "humidity_median": round(statistics.median(humidity), 1) if humidity else None,
             "co2_median": round(statistics.median(co2), 1) if co2 else None,
@@ -227,6 +329,7 @@ class BaselineStore:
         metrics["rem_ratio"] = night.get("rem_ratio")
         metrics["wellness_score"] = night.get("wellness_score")
         metrics["detected_sleep_s"] = round(detected_sleep_s, 1)
+        metrics["baseline_stage_filter"] = baseline_stage_filter
         resolved_mode = str(
             mode.get("resolved") or mode.get("requested") or "auto"
         ) if isinstance(mode, dict) else str(mode or "auto")
@@ -287,9 +390,13 @@ class BaselineStore:
             report.get("version") == SESSION_REPORT_VERSION
             and quality.get("version") == SLEEP_QUALITY_VERSION
         )
-        pre_restore_versions = (
-            report.get("version") == PRE_RESTORE_SESSION_REPORT_VERSION
-            and quality.get("version") == SLEEP_QUALITY_VERSION
+        compatible_previous_versions = (
+            report.get("version") in {
+                PRE_CONTINUITY_SESSION_REPORT_VERSION,
+                PRE_RESTORE_SESSION_REPORT_VERSION,
+            }
+            and quality.get("version")
+            == PRE_CONTINUITY_SLEEP_QUALITY_VERSION
         )
         approved_untouched_sleep = (
             group == "sleep"
@@ -302,7 +409,7 @@ class BaselineStore:
             and quality.get("available") is True
             and (
                 current_versions
-                or pre_restore_versions
+                or compatible_previous_versions
                 or approved_untouched_sleep
             )
         ):

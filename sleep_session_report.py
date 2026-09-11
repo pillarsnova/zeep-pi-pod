@@ -90,6 +90,50 @@ _AWAKE_REST_MODES = {
 }
 
 _TARGET_UNSET = object()
+CLASSIFICATION_ACCOUNTING_VERSION = (
+    "zeep-classification-accounting-v1.0-continuity-carry-forward"
+)
+
+_RESTART_DISPLAY_STATUSES = {
+    "service_restart_hold",
+    "restored_confirmed_state",
+    "restored_waiting_live_frame",
+    "restart_hold",
+}
+_OFF_BED_STATUSES = {
+    "confirmed_off_bed",
+    "confirmed_or_dominant_off_bed",
+    "empty_bed",
+    "off_bed",
+}
+_NO_DATA_STATUSES = {
+    "incomplete_current_epoch",
+    "incomplete_current_epoch_evidence",
+    "invalid_or_missing_current_vitals",
+    "invalid_or_missing_current_vitals_or_bcg",
+    "invalid_or_missing_vitals",
+    "insufficient_paired_vital_coverage",
+    "insufficient_vital_coverage",
+    "missing_bed_status",
+    "missing_current_vitals",
+    "missing_vitals",
+    "no_data",
+    "no_data_unconfirmed_evidence",
+    "no_frame",
+    "no_session",
+    "sensor_gap",
+    "sensor_unavailable",
+    "stale",
+    "unconfirmed_evidence",
+    "waiting_for_sensor_frame",
+    "waiting_for_vitals",
+}
+_INITIAL_WAIT_STATUSES = {
+    "collecting_evidence_epoch",
+    "confirming_initial_state",
+    "initial_confirmation_wait",
+}
+
 
 def _number(value: Any) -> Optional[float]:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -121,6 +165,352 @@ def _normalise_stage_counts(raw: Optional[Dict[str, Any]]) -> Dict[str, float]:
         if stage in counts and amount is not None and amount > 0:
             counts[stage] += amount
     return counts
+
+
+def _score_eligible_stage_sequence(
+    stage_sequence: Optional[Iterable[Any]],
+) -> list[Any]:
+    """Exclude provisional display holds from score-facing sequence metrics."""
+    eligible = []
+    for item in stage_sequence or []:
+        if not isinstance(item, dict):
+            eligible.append(item)
+            continue
+        confirmation = item.get("sleep_confirmation")
+        confirmation = confirmation if isinstance(confirmation, dict) else {}
+        explicit = item.get("sleep_score_eligible")
+        if explicit is None:
+            explicit = item.get("score_eligible")
+        if explicit is None:
+            explicit = confirmation.get("score_eligible")
+        excluded = bool(
+            item.get("sleep_excluded_from_score")
+            or item.get("excluded_from_score")
+            or confirmation.get("excluded_from_score")
+        )
+        provisional = bool(
+            item.get("sleep_provisional")
+            or item.get("provisional")
+            or confirmation.get("provisional")
+        )
+        if explicit is False or excluded or provisional:
+            continue
+        eligible.append(item)
+    return eligible
+
+
+def _row_data_status(sample: Dict[str, Any]) -> str:
+    """Return the most specific persisted Sleep classification status."""
+    confirmation = sample.get("sleep_confirmation")
+    confirmation = confirmation if isinstance(confirmation, dict) else {}
+    value = (
+        sample.get("sleep_data_status")
+        or sample.get("data_status")
+        or confirmation.get("data_status")
+        or confirmation.get("decision_kind")
+        or ""
+    )
+    return str(value).strip().lower()
+
+
+def _row_sleep_stage(sample: Dict[str, Any]) -> Optional[str]:
+    stage = str(sample.get("sleep") or "").strip().lower()
+    if stage not in {*STAGE_ORDER, "nrem_light", "nrem_deep"}:
+        return None
+    return {"nrem_light": "n2", "nrem_deep": "n3"}.get(stage, stage)
+
+
+def _paired_vitals_available(sample: Dict[str, Any]) -> bool:
+    return bool(
+        filter_vital_values([sample.get("hr")], HR_SANITY_RANGE_BPM)
+        and filter_vital_values(
+            [sample.get("rr")], RR_SANITY_RANGE_PER_MIN
+        )
+    )
+
+
+def _explicitly_excluded_from_score(sample: Dict[str, Any]) -> bool:
+    """Return whether persisted decision metadata explicitly excludes a row.
+
+    Operational rows can still contain a valid current HR/RR pair, especially
+    when a rolling window loses coverage or a historical status event is
+    joined to Timeline.  Those vitals must not make the legacy continuity
+    fallback silently score a row that the estimator explicitly withheld.
+    """
+    confirmation = sample.get("sleep_confirmation")
+    confirmation = confirmation if isinstance(confirmation, dict) else {}
+    eligible_values = (
+        sample.get("sleep_score_eligible"),
+        sample.get("score_eligible"),
+        confirmation.get("score_eligible"),
+    )
+    excluded_values = (
+        sample.get("sleep_excluded_from_score"),
+        sample.get("excluded_from_score"),
+        confirmation.get("excluded_from_score"),
+    )
+    return bool(
+        any(value is False for value in eligible_values)
+        or any(value is True for value in excluded_values)
+    )
+
+
+def _is_no_data_status(status: str) -> bool:
+    """Recognise canonical acquisition/gating failures as operational time."""
+    return bool(
+        status in _NO_DATA_STATUSES
+        or status.startswith("invalid_or_missing_")
+        or status.startswith("insufficient_")
+        or status.startswith("incomplete_")
+        or status.startswith("missing_")
+        or status.startswith("no_data_")
+    )
+
+
+def _classification_accounting(
+    rows: list[Dict[str, Any]],
+    *,
+    duration_s: float,
+    sample_interval_s: float,
+    display_count: float,
+    scored_count: float,
+) -> Dict[str, Any]:
+    """Reconcile every report second to one classification-time category.
+
+    A carried-forward State remains display-attributed to the last confirmed
+    State. Its first two provisional epochs are excluded from score; later
+    held epochs can score as that preceding State. An unconfirmed challenger
+    receives no new-State time. WAIT is limited to the first 60/120-second
+    confirmation window. Missing vitals,
+    confirmed bed exit, restart display-only holds and acquisition gaps remain
+    operational time and never become Sleep Stage evidence.
+
+    Older reports may contain Stage totals without row-level labels.  Those
+    reports use a clearly identified count fallback rather than inventing
+    direct-versus-carry provenance.
+    """
+    interval = max(0.1, float(sample_interval_s or 0.1))
+    recording_s = max(0.0, float(duration_s or 0.0))
+    if recording_s <= 0 and rows:
+        recording_s = len(rows) * interval
+
+    categories = {
+        "direct_confirmed_s": 0.0,
+        "continuity_carried_forward_s": 0.0,
+        "initial_wait_s": 0.0,
+        "no_data_s": 0.0,
+        "off_bed_s": 0.0,
+        "restart_display_hold_s": 0.0,
+        "sensor_gap_s": 0.0,
+    }
+    provisional_hold_s = 0.0
+    score_eligible_s = 0.0
+    has_row_stage = any(_row_sleep_stage(sample) for sample in rows)
+    method = "row_level_classification_metadata"
+    restart_status_seen = False
+
+    if not has_row_stage and display_count > 0:
+        # Legacy Session reports expose aggregate Stage totals but not the
+        # per-row decision metadata required to separate direct and carried
+        # time. Allocate any explicit operational rows first so a stale
+        # aggregate count cannot overwrite NO DATA/OFF BED. Preserve only the
+        # non-overlapping remainder as direct-compatible history; never claim
+        # that historical carry provenance was observed.
+        method = "legacy_stage_count_fallback"
+        remaining = recording_s
+        explicit = {
+            "restart_display_hold_s": 0.0,
+            "off_bed_s": 0.0,
+            "no_data_s": 0.0,
+            "initial_wait_s": 0.0,
+        }
+        for sample in rows:
+            status = _row_data_status(sample)
+            bed = str(sample.get("bed") or "").strip().lower()
+            if (
+                sample.get("display_only_after_restart")
+                or sample.get("sleep_display_only_after_restart")
+                or status in _RESTART_DISPLAY_STATUSES
+            ):
+                explicit["restart_display_hold_s"] += interval
+            elif status in _OFF_BED_STATUSES or bed == "get out of bed":
+                explicit["off_bed_s"] += interval
+            elif status in _INITIAL_WAIT_STATUSES:
+                explicit["initial_wait_s"] += interval
+            elif (
+                _is_no_data_status(status)
+                or _explicitly_excluded_from_score(sample)
+            ):
+                explicit["no_data_s"] += interval
+        for key in (
+            "restart_display_hold_s",
+            "off_bed_s",
+            "no_data_s",
+            "initial_wait_s",
+        ):
+            allocated = min(remaining, explicit[key])
+            categories[key] = allocated
+            remaining -= allocated
+        restart_status_seen = categories["restart_display_hold_s"] > 0
+        categories["direct_confirmed_s"] = min(
+            remaining,
+            max(0.0, float(display_count)) * interval,
+        )
+        score_eligible_s = min(
+            categories["direct_confirmed_s"],
+            max(0.0, float(scored_count)) * interval,
+        )
+        remaining -= categories["direct_confirmed_s"]
+        categories["sensor_gap_s"] = remaining
+    else:
+        remaining = recording_s
+        previous_stage: Optional[str] = None
+        for sample in rows:
+            if remaining <= 0:
+                break
+            seconds = min(interval, remaining)
+            remaining -= seconds
+            status = _row_data_status(sample)
+            stage = _row_sleep_stage(sample)
+            confirmation = sample.get("sleep_confirmation")
+            confirmation = (
+                confirmation if isinstance(confirmation, dict) else {}
+            )
+            restart_display = bool(
+                sample.get("display_only_after_restart")
+                or sample.get("sleep_display_only_after_restart")
+                or status in _RESTART_DISPLAY_STATUSES
+            )
+            if restart_display:
+                categories["restart_display_hold_s"] += seconds
+                restart_status_seen = True
+                continue
+
+            # An operational status takes precedence over a stale/cached Stage
+            # label.  Likewise, an explicit score exclusion must be honoured
+            # before the compatibility fallback considers valid HR/RR as a
+            # carried-forward State.
+            bed = str(sample.get("bed") or "").strip().lower()
+            if status in _OFF_BED_STATUSES or bed == "get out of bed":
+                categories["off_bed_s"] += seconds
+                continue
+            if _is_no_data_status(status):
+                categories["no_data_s"] += seconds
+                continue
+
+            if stage is not None:
+                held = bool(
+                    sample.get("sleep_held_previous_state")
+                    or confirmation.get("held_previous_state")
+                    or confirmation.get("decision_kind")
+                    == "continuity_hold"
+                    or status in {"continuity_hold", "provisional_hold"}
+                )
+                key = (
+                    "continuity_carried_forward_s"
+                    if held else "direct_confirmed_s"
+                )
+                categories[key] += seconds
+                provisional = bool(
+                    held
+                    and (
+                        sample.get("sleep_provisional")
+                        or confirmation.get("provisional")
+                        or status == "provisional_hold"
+                    )
+                )
+                if provisional:
+                    provisional_hold_s += seconds
+                if (
+                    not provisional
+                    and not _explicitly_excluded_from_score(sample)
+                ):
+                    score_eligible_s += seconds
+                previous_stage = stage
+                continue
+
+            if _explicitly_excluded_from_score(sample):
+                if status in _INITIAL_WAIT_STATUSES or previous_stage is None:
+                    categories["initial_wait_s"] += seconds
+                else:
+                    categories["no_data_s"] += seconds
+                continue
+            if not _paired_vitals_available(sample):
+                categories["no_data_s"] += seconds
+                continue
+            if previous_stage is not None:
+                # This is the continuity rule itself: valid on-bed evidence
+                # after the first confirmed State cannot create a timeline
+                # hole merely because the next challenger is not yet clear.
+                categories["continuity_carried_forward_s"] += seconds
+                provisional = status == "provisional_hold"
+                if provisional:
+                    provisional_hold_s += seconds
+                else:
+                    score_eligible_s += seconds
+                continue
+            if status in _INITIAL_WAIT_STATUSES or previous_stage is None:
+                categories["initial_wait_s"] += seconds
+
+        categories["sensor_gap_s"] = max(0.0, remaining)
+
+    classified_s = (
+        categories["direct_confirmed_s"]
+        + categories["continuity_carried_forward_s"]
+    )
+    accounted_s = sum(categories.values())
+    display_stage_total_s = max(0.0, float(display_count)) * interval
+    score_stage_total_s = max(0.0, float(scored_count)) * interval
+    delta_s = accounted_s - recording_s
+    rounded = {key: round(value, 1) for key, value in categories.items()}
+    return {
+        "version": CLASSIFICATION_ACCOUNTING_VERSION,
+        "method": method,
+        **rounded,
+        "provisional_hold_s": round(provisional_hold_s, 1),
+        "classified_s": round(classified_s, 1),
+        "display_attributed_s": round(classified_s, 1),
+        "score_eligible_s": round(score_eligible_s, 1),
+        "excluded_from_score_s": round(
+            recording_s - score_eligible_s,
+            1,
+        ),
+        "operational_unscored_s": round(accounted_s - classified_s, 1),
+        "accounted_s": round(accounted_s, 1),
+        "recording_s": round(recording_s, 1),
+        "display_stage_total_s": round(display_stage_total_s, 1),
+        "display_stage_total_delta_s": round(
+            classified_s - display_stage_total_s,
+            1,
+        ),
+        "display_stage_total_reconciles": abs(
+            classified_s - display_stage_total_s
+        ) <= 0.11,
+        "score_stage_total_s": round(score_stage_total_s, 1),
+        "score_stage_total_delta_s": round(
+            score_eligible_s - score_stage_total_s,
+            1,
+        ),
+        "score_stage_total_reconciles": abs(
+            score_eligible_s - score_stage_total_s
+        ) <= 0.11,
+        "restart_display_hold_derived": restart_status_seen,
+        "arithmetic_invariant": {
+            "expression": (
+                "direct_confirmed_s + continuity_carried_forward_s + "
+                "initial_wait_s + no_data_s + off_bed_s + "
+                "restart_display_hold_s + sensor_gap_s = recording_s"
+            ),
+            "left_s": round(accounted_s, 1),
+            "right_s": round(recording_s, 1),
+            "delta_s": round(delta_s, 3),
+            "holds": abs(delta_s) <= 0.001,
+        },
+        "challenger_time_before_confirmation_s": 0.0,
+        "legacy_carry_provenance_available": method != (
+            "legacy_stage_count_fallback"
+        ),
+    }
 
 
 def _stage_percentages(counts: Dict[str, float]) -> Dict[str, int]:
@@ -1117,6 +1507,7 @@ def build_sleep_quality(
     sensor_samples: Optional[Iterable[Dict[str, Any]]] = None,
     sample_interval_s: float = 5.0,
     target_duration_s: Any = _TARGET_UNSET,
+    score_state_counts: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build the mode-aware ZEEP-balanced post-session wellness score.
 
@@ -1145,13 +1536,18 @@ def build_sleep_quality(
         return unavailable
 
     night = dict(night_summary or {})
-    counts = _normalise_stage_counts(sleep_state_counts)
+    counts = _normalise_stage_counts(
+        score_state_counts
+        if score_state_counts is not None
+        else sleep_state_counts
+    )
     total_sleep_samples = sum(counts[stage] for stage in SLEEP_STAGES)
     total_scored_samples = total_sleep_samples + counts["wake"]
     interval = max(0.1, _number(sample_interval_s) or 5.0)
     actual_scored_s = total_scored_samples * interval
     estimated_sleep_s = total_sleep_samples * interval
     rows = list(sensor_samples or [])
+    score_stage_sequence = _score_eligible_stage_sequence(stage_sequence)
     source_vital_rows = 0
     paired_vital_rows = 0
     for row in rows:
@@ -1223,7 +1619,10 @@ def build_sleep_quality(
     efficiency_points = round(20.0 * efficiency, 1)
     wake_pct = counts["wake"] * 100.0 / total_scored_samples
     wake_points = 10.0 if wake_pct <= 10.0 else max(0.0, 10.0 - (wake_pct - 10.0))
-    arousal = analyse_arousal_proxy(stage_sequence, sample_interval_s=interval)
+    arousal = analyse_arousal_proxy(
+        score_stage_sequence,
+        sample_interval_s=interval,
+    )
     balanced_arousal_penalty = (
         round(min(5.0, 0.25 * arousal["index_per_hour"]), 1)
         if arousal.get("index_per_hour") is not None else 0.0
@@ -1248,7 +1647,10 @@ def build_sleep_quality(
     # recorded opportunity expressed plausible NREM→REM progression. It is not a
     # direct measurement that the user woke refreshed; subjective alertness must
     # be collected separately if that claim is required.
-    cycles = analyse_sleep_cycles(stage_sequence, sample_interval_s=interval)
+    cycles = analyse_sleep_cycles(
+        score_stage_sequence,
+        sample_interval_s=interval,
+    )
     expected_cycles = (
         max(1, int((estimated_sleep_s + 45 * 60) // (90 * 60)))
         if mode["resolved"] == "overnight" and estimated_sleep_s > 0 else 1
@@ -1642,16 +2044,27 @@ def build_session_report(
     personal_context: Optional[Dict[str, Any]] = None,
     trend_context: Optional[Dict[str, Any]] = None,
     subjective_outcome: Optional[Dict[str, Any]] = None,
+    sleep_score_state_counts: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Return the compact, explainable report shown after a Session ends."""
     rows = list(samples or [])
     duration = _number(duration_s) or 0.0
     counts = _normalise_stage_counts(sleep_state_counts)
-    scored_count = sum(counts.values())
+    score_counts = _normalise_stage_counts(
+        sleep_score_state_counts
+        if sleep_score_state_counts is not None
+        else sleep_state_counts
+    )
+    display_count = sum(counts.values())
+    scored_count = sum(score_counts.values())
     quality = dict(sleep_quality or {})
     night = dict(night_summary or {})
     stage_percentages = _stage_percentages(counts)
+    score_stage_percentages = _stage_percentages(score_counts)
     total_sleep_count = sum(counts[stage] for stage in SLEEP_STAGES)
+    total_score_sleep_count = sum(
+        score_counts[stage] for stage in SLEEP_STAGES
+    )
 
     if not completed:
         return {
@@ -1660,9 +2073,18 @@ def build_session_report(
             "version": SESSION_REPORT_VERSION,
         }
 
+    classification_accounting = _classification_accounting(
+        rows,
+        duration_s=duration,
+        sample_interval_s=sample_interval_s,
+        display_count=display_count,
+        scored_count=scored_count,
+    )
+
     stages = []
     for stage in STAGE_ORDER:
         count = counts[stage]
+        score_count = score_counts[stage]
         stages.append({
             "state": stage,
             "samples": int(count),
@@ -1674,13 +2096,33 @@ def build_session_report(
                 round(count * 100.0 / total_sleep_count, 1)
                 if stage in SLEEP_STAGES and total_sleep_count else None
             ),
+            # Display attribution remains complete while score attribution
+            # excludes the first 1–2 provisional continuity epochs.
+            "score_eligible_samples": int(score_count),
+            "score_eligible_duration_s": round(
+                score_count * sample_interval_s, 1
+            ),
+            "pct_score_eligible": score_stage_percentages[stage],
+            "pct_score_eligible_sleep": (
+                round(
+                    score_count * 100.0 / total_score_sleep_count,
+                    1,
+                )
+                if stage in SLEEP_STAGES and total_score_sleep_count
+                else None
+            ),
         })
 
-    estimated_sleep = _number(night.get("estimated_sleep_s"))
+    estimated_sleep = _number(quality.get("estimated_sleep_s"))
     if estimated_sleep is None:
-        estimated_sleep = sum(counts[stage] for stage in SLEEP_STAGES) * sample_interval_s
+        estimated_sleep = _number(night.get("estimated_sleep_s"))
+    if estimated_sleep is None:
+        estimated_sleep = sum(
+            score_counts[stage] for stage in SLEEP_STAGES
+        ) * sample_interval_s
     estimated_sleep = max(0.0, min(duration, estimated_sleep)) if duration else max(0.0, estimated_sleep)
     wake_s = counts["wake"] * sample_interval_s
+    score_wake_s = score_counts["wake"] * sample_interval_s
     quality_mode = dict(
         quality.get("rest_mode")
         or _resolve_rest_mode(
@@ -1961,7 +2403,7 @@ def build_session_report(
     )
     stage_rows = sum(sample.get("sleep") in STAGE_ORDER for sample in rows)
     if stage_rows == 0 and total_rows:
-        stage_rows = min(total_rows, int(scored_count))
+        stage_rows = min(total_rows, int(display_count))
     environment_coverages = [item["coverage_pct"] for item in environment if item.get("available")]
     recording_coverage = _percent(total_rows * sample_interval_s, duration) if duration else 0
     coverage = {
@@ -2033,11 +2475,36 @@ def build_session_report(
             "recording_s": round(duration, 1),
             "estimated_sleep_s": round(estimated_sleep, 1),
             "wake_s": round(wake_s, 1),
+            "score_wake_s": round(score_wake_s, 1),
             "sleep_onset_proxy_s": _number(night.get("sleep_onset_proxy_s")),
             "waso_proxy_s": round(waso_samples * sample_interval_s, 1),
+            "score_waso_proxy_s": _number(night.get("waso_proxy_s")),
             "sleep_efficiency_pct": quality.get("sleep_efficiency_pct"),
-            "actual_scored_s": round(scored_count * sample_interval_s, 1),
+            "actual_scored_s": classification_accounting[
+                "score_eligible_s"
+            ],
+            "direct_confirmed_s": classification_accounting[
+                "direct_confirmed_s"
+            ],
+            "continuity_carried_forward_s": classification_accounting[
+                "continuity_carried_forward_s"
+            ],
+            "initial_wait_s": classification_accounting["initial_wait_s"],
+            "no_data_s": classification_accounting["no_data_s"],
+            "off_bed_s": classification_accounting["off_bed_s"],
+            "restart_display_hold_s": classification_accounting[
+                "restart_display_hold_s"
+            ],
+            "sensor_gap_s": classification_accounting["sensor_gap_s"],
+            "provisional_hold_s": classification_accounting[
+                "provisional_hold_s"
+            ],
+            "excluded_from_score_s": classification_accounting[
+                "excluded_from_score_s"
+            ],
+            "classification_accounting": classification_accounting,
             "wake_pct_recorded": stage_percentages["wake"],
+            "score_wake_pct": score_stage_percentages["wake"],
             "cycles": quality.get("cycles"),
             # wake_s is total Stage-W duration; wake_entries is the number of
             # sleep -> W transitions. Keep awakenings as a compatibility key.

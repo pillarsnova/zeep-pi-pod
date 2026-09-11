@@ -1,6 +1,6 @@
 """Strict nested response contracts for public Session reports.
 
-Historical reports evolved between v10.3 and v10.5, so every field is
+Historical reports evolved between v10.3 and v10.6, so every field is
 optional.  When a section is present, however, undocumented nested keys are
 rejected.  This keeps legacy summaries readable without turning their JSON
 objects into an unbounded public API surface.
@@ -27,15 +27,75 @@ class PublicCycle(ContractModel):
     max_points: float | None = Field(default=None, ge=0)
 
 
+class PublicClassificationAccountingInvariant(ContractModel):
+    expression: str | None = None
+    left_s: float | None = Field(default=None, ge=0)
+    right_s: float | None = Field(default=None, ge=0)
+    delta_s: float | None = None
+    holds: bool | None = None
+
+
+class PublicClassificationAccounting(ContractModel):
+    version: str | None = None
+    method: str | None = None
+    direct_confirmed_s: float | None = Field(default=None, ge=0)
+    continuity_carried_forward_s: float | None = Field(
+        default=None,
+        ge=0,
+    )
+    initial_wait_s: float | None = Field(default=None, ge=0)
+    no_data_s: float | None = Field(default=None, ge=0)
+    off_bed_s: float | None = Field(default=None, ge=0)
+    restart_display_hold_s: float | None = Field(default=None, ge=0)
+    sensor_gap_s: float | None = Field(default=None, ge=0)
+    provisional_hold_s: float | None = Field(default=None, ge=0)
+    classified_s: float | None = Field(default=None, ge=0)
+    display_attributed_s: float | None = Field(default=None, ge=0)
+    score_eligible_s: float | None = Field(default=None, ge=0)
+    excluded_from_score_s: float | None = Field(default=None, ge=0)
+    operational_unscored_s: float | None = Field(default=None, ge=0)
+    accounted_s: float | None = Field(default=None, ge=0)
+    recording_s: float | None = Field(default=None, ge=0)
+    display_stage_total_s: float | None = Field(default=None, ge=0)
+    display_stage_total_delta_s: float | None = None
+    display_stage_total_reconciles: bool | None = None
+    score_stage_total_s: float | None = Field(default=None, ge=0)
+    score_stage_total_delta_s: float | None = None
+    score_stage_total_reconciles: bool | None = None
+    restart_display_hold_derived: bool | None = None
+    arithmetic_invariant: PublicClassificationAccountingInvariant | None = None
+    challenger_time_before_confirmation_s: float | None = Field(
+        default=None,
+        ge=0,
+    )
+    legacy_carry_provenance_available: bool | None = None
+
+
 class PublicSleepSummary(ContractModel):
     recording_s: float | None = Field(default=None, ge=0)
     estimated_sleep_s: float | None = Field(default=None, ge=0)
     wake_s: float | None = Field(default=None, ge=0)
+    score_wake_s: float | None = Field(default=None, ge=0)
     sleep_onset_proxy_s: float | None = Field(default=None, ge=0)
     waso_proxy_s: float | None = Field(default=None, ge=0)
+    score_waso_proxy_s: float | None = Field(default=None, ge=0)
     sleep_efficiency_pct: float | None = Field(default=None, ge=0, le=100)
     actual_scored_s: float | None = Field(default=None, ge=0)
+    direct_confirmed_s: float | None = Field(default=None, ge=0)
+    continuity_carried_forward_s: float | None = Field(
+        default=None,
+        ge=0,
+    )
+    initial_wait_s: float | None = Field(default=None, ge=0)
+    no_data_s: float | None = Field(default=None, ge=0)
+    off_bed_s: float | None = Field(default=None, ge=0)
+    restart_display_hold_s: float | None = Field(default=None, ge=0)
+    sensor_gap_s: float | None = Field(default=None, ge=0)
+    provisional_hold_s: float | None = Field(default=None, ge=0)
+    excluded_from_score_s: float | None = Field(default=None, ge=0)
+    classification_accounting: PublicClassificationAccounting | None = None
     wake_pct_recorded: float | None = Field(default=None, ge=0, le=100)
+    score_wake_pct: float | None = Field(default=None, ge=0, le=100)
     cycles: PublicCycle | None = None
     wake_entries: int | None = Field(default=None, ge=0)
     awakenings: int | None = Field(default=None, ge=0)
@@ -55,6 +115,14 @@ class PublicStageSummary(ContractModel):
     duration_s: float | None = Field(default=None, ge=0)
     pct_scored: float | None = Field(default=None, ge=0, le=100)
     pct_sleep: float | None = Field(default=None, ge=0, le=100)
+    score_eligible_samples: int | None = Field(default=None, ge=0)
+    score_eligible_duration_s: float | None = Field(default=None, ge=0)
+    pct_score_eligible: float | None = Field(default=None, ge=0, le=100)
+    pct_score_eligible_sleep: float | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+    )
 
 
 class PublicEnvironmentLevelDistribution(ContractModel):

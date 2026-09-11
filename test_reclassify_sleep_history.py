@@ -112,11 +112,45 @@ class HistoricalStagePathTests(unittest.TestCase):
         selected, metadata = path.stabilize("n3", now=15.0, strong_wake=False)
         self.assertEqual(selected, "wake")
         self.assertIsNone(metadata["bridge_state"])
-        self.assertEqual(metadata["decision"], "blocked_transition_abstain")
+        self.assertEqual(metadata["decision"], "blocked_transition_hold")
+        self.assertEqual(metadata["confirmed_state"], "wake")
+        self.assertEqual(metadata["score_attribution_state"], "wake")
+        self.assertFalse(metadata["challenger_counted_as_new_state"])
+        self.assertNotIn("unclassified", metadata)
         path.commit(selected, 15.0)
         selected, metadata = path.stabilize("n3", now=45.0, strong_wake=False)
         self.assertEqual(selected, "wake")
         self.assertEqual(metadata["required_ticks"], 0)
+
+    def test_n2_confirmation_reports_target_specific_120_seconds(self):
+        path = HistoricalStagePath()
+        path.commit("wake", 0.0)
+        path.commit("n1", 60.0)
+
+        for index, now in enumerate((90.0, 120.0, 150.0, 180.0), start=1):
+            selected, metadata = path.stabilize(
+                "n2", now=now, strong_wake=False
+            )
+            self.assertEqual(metadata["required_epochs"], 4)
+            self.assertEqual(metadata["confirmation_seconds"], 120.0)
+            self.assertEqual(selected, "n2" if index == 4 else "n1")
+
+    def test_ambiguous_epoch_carries_previous_without_none_probability_key(self):
+        path = HistoricalStagePath()
+        path.commit("wake", 0.0)
+        selected, metadata = path.stabilize(
+            None,
+            now=30.0,
+            strong_wake=False,
+        )
+
+        self.assertEqual(selected, "wake")
+        self.assertEqual(metadata["decision"], "ambiguous_evidence_hold")
+        self.assertTrue(metadata["held_previous_state"])
+        self.assertTrue(metadata["provisional"])
+        self.assertFalse(metadata["score_eligible"])
+        self.assertIsNone(metadata["pending_state"])
+        self.assertNotIn("unclassified", metadata)
 
     def test_emitted_stage_remains_probability_winner(self):
         result = adjusted_probabilities(

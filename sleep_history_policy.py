@@ -24,6 +24,7 @@ REVIEW_WARNING_CODES = frozenset({
     "wellness_score_not_releasable",
     "no_valid_epoch_evidence",
     "no_confirmed_sleep_state",
+    "historical_rest_mode_unresolved",
     "overnight_N2_over_85_percent",
     "overnight_N1_over_30_percent",
     "overnight_N3_over_35_percent",

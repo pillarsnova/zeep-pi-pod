@@ -56,10 +56,27 @@ def build_record(
     """Return (record, report_samples) shaped exactly as finalization builds them."""
     rows: List[Dict[str, Any]] = []
     for index, stage in enumerate(stages):
+        operational_off_bed = stage == "off_bed"
+        operational_no_data = stage is None
         rows.append({
-            "t": START_EPOCH + index * interval_s, "sleep": stage, "bed": "On bed",
+            "t": START_EPOCH + index * interval_s,
+            "sleep": None if operational_off_bed else stage,
+            "bed": "Get out of bed" if operational_off_bed else "On bed",
             "temp": 24.0, "hum": 50.0, "lux": 1.0, "dba": 33.0, "co2": 800.0,
             "pm2_5": None, "voc": None, "hr": 60.0, "rr": 14.0,
+            "sleep_data_status": (
+                "confirmed_off_bed"
+                if operational_off_bed
+                else "sensor_unavailable"
+                if operational_no_data
+                else "live"
+            ),
+            "sleep_score_eligible": not (
+                operational_off_bed or operational_no_data
+            ),
+            "sleep_excluded_from_score": bool(
+                operational_off_bed or operational_no_data
+            ),
         })
     duration_s = len(stages) * interval_s
     counts: Dict[str, int] = {}
@@ -74,14 +91,19 @@ def build_record(
         "sleep_efficiency": round(sleep_samples / scored, 3) if scored else None,
         "deep_ratio": None, "rem_ratio": None,
     }
+    score_counts = {
+        key: value for key, value in counts.items() if key != "off_bed"
+    }
     quality = build_sleep_quality(
         duration_s, night, counts, completed=True, rest_mode="sleep",
-        stage_sequence=rows, sensor_samples=rows, sample_interval_s=interval_s)
+        stage_sequence=rows, sensor_samples=rows, sample_interval_s=interval_s,
+        score_state_counts=score_counts)
     night["sleep_quality"] = quality
     report = build_session_report(
         duration_s, rows, night, counts, quality, rest_mode="sleep",
         sample_interval_s=interval_s, estimator_version="test", completed=True,
-        timeline_schema_version=app.SESSION_TIMELINE_SCHEMA_VERSION)
+        timeline_schema_version=app.SESSION_TIMELINE_SCHEMA_VERSION,
+        sleep_score_state_counts=score_counts)
     record = {
         "session_id": "s-20260831T150000Z-a1b2c3",
         "username": "tester", "username_key": "tester@example.com",
@@ -101,6 +123,7 @@ def build_record(
             "heart_rate_bpm": {"avg": 60.0, "min": 47.0, "max": 88.0, "n": len(rows)},
             "respiration_rate": {"avg": 14.2, "min": 9.0, "max": 21.0, "n": len(rows)},
             "sleep_state_counts": counts,
+            "sleep_score_state_counts": score_counts,
         },
         "sleep_quality": quality, "session_report": report,
     }
@@ -298,11 +321,90 @@ class IngestStageEncodingTests(unittest.TestCase):
         self.assertEqual(derive_architecture(result["segments"]), (None, 0))
         self.assertEqual(result["total_sleep_minutes"], 0.0)
 
-    def test_a_session_with_nothing_scored_still_produces_a_valid_body(self) -> None:
+    def test_a_session_with_nothing_scored_is_not_published(self) -> None:
         record, rows = build_record([None] * 50)
+        self.assertIsNone(app._build_ingest_payload(record, rows))
+
+    def test_provisional_hold_is_unscored_but_off_bed_stays_visible(self) -> None:
+        record, rows = build_record(
+            ["wake"] * 12
+            + ["n2"] * 12
+            + ["n2"] * 6
+            + ["off_bed"] * 6
+            + ["n2"] * 12,
+            10.0,
+        )
+        for row in rows[24:30]:
+            row.update({
+                "sleep_provisional": True,
+                "sleep_score_eligible": False,
+            })
+        for row in rows[30:36]:
+            row.update({
+                "sleep": None,
+                "bed": "Get out of bed",
+                "sleep_score_eligible": False,
+                "sleep_data_status": "confirmed_off_bed",
+            })
+
+        # Rebuild the report after adding the explicit status metadata, exactly
+        # as finalisation does before creating the external payload.
+        counts = {"wake": 12, "n2": 30, "off_bed": 6}
+        score_counts = {"wake": 12, "n2": 24}
+        night = {
+            "sleep_onset_proxy_s": 120.0,
+            "awakenings": 1,
+            "waso_proxy_s": 60.0,
+            "estimated_sleep_s": 240.0,
+            "sleep_efficiency": 240.0 / 360.0,
+            "deep_ratio": 0.0,
+            "rem_ratio": 0.0,
+        }
+        quality = build_sleep_quality(
+            480.0,
+            night,
+            counts,
+            completed=True,
+            rest_mode="sleep",
+            stage_sequence=rows,
+            sensor_samples=rows,
+            sample_interval_s=10.0,
+            score_state_counts=score_counts,
+        )
+        night["sleep_quality"] = quality
+        record["sleep_quality"] = quality
+        record["session_report"] = build_session_report(
+            480.0,
+            rows,
+            night,
+            counts,
+            quality,
+            rest_mode="sleep",
+            sample_interval_s=10.0,
+            estimator_version="test",
+            completed=True,
+            timeline_schema_version=app.SESSION_TIMELINE_SCHEMA_VERSION,
+            sleep_score_state_counts=score_counts,
+        )
         result = app._build_ingest_payload(record, rows)["record"]
-        self.assertEqual(result["segments"], [])
-        self.assertEqual(result["total_epochs"], 0)
+
+        self.assertEqual(
+            [segment["stage_name"] for segment in result["segments"]],
+            ["wake", "n2", "off_bed", "n2"],
+        )
+        self.assertEqual(
+            result["total_epochs"],
+            sum(
+                segment["epochs"]
+                for segment in result["segments"]
+                if segment["stage_name"] != "off_bed"
+            ),
+        )
+        self.assertAlmostEqual(
+            result["total_epochs"] * 10.0 / 60.0,
+            result["total_scored_minutes"],
+            delta=0.1,
+        )
 
 
 class IngestCadenceTests(unittest.TestCase):

@@ -389,13 +389,17 @@ HR/RR เป็นค่า directional จาก sensor (pre-G2) ไม่ใ�
 ## Sleep State (est.) — internal telemetry
 
 แถบในการ์ด BCG รับ Sensor frame ทุก 10 วินาที สร้าง evidence ทุก 30 วินาที
-จาก rolling 6 ชุด (60 วินาที; candidate `bcg-audio-bed-5state-v1.24-gap-safe-continuity`)
+จาก rolling 6 ชุด (60 วินาที; candidate
+`bcg-audio-bed-5state-v1.28-continuity-carry-forward`)
 และยืนยัน State เมื่อ candidate เดิมต่อเนื่องตาม target: W/N1/N3/REM ใช้
 2 epoch/60 วินาที ส่วน N2 ใช้ 4 epoch/120 วินาที; EMA เป็น continuity หลัก
 ของ W/N1/N2/REM ส่วน N3 ที่ชนะและผ่าน physiology gate ใช้หลักฐานปัจจุบันก่อน EMA
 เพื่อไม่ให้การกรองซ้ำกด N3 ที่มีหลักฐานครบจนหายไป ช่วง 5 นาทีแรกคง W เพื่อเก็บ
 Awake/settling evidence และจะเข้า N1 ได้เมื่อเตียงนิ่งพร้อม HR/RR ลดลงต่อเนื่อง
-ครบเงื่อนไข 2 evidence epochs; เวลาเริ่ม Session หรือความนิ่งเพียงอย่างเดียวสร้าง N1 ไม่ได้:
+ครบเงื่อนไข 2 evidence epochs; เวลาเริ่ม Session หรือความนิ่งเพียงอย่างเดียวสร้าง N1 ไม่ได้
+`WAIT` ใช้เฉพาะการยืนยัน State แรกสูงสุด 60/120 วินาที หลังมี State แล้ว
+ผู้ท้าชิงที่ยังไม่ชัดจะคง State ก่อนหน้า โดย 1–2 epoch แรกเป็น `provisional`
+และไม่เข้าคะแนน หลังจากนั้นจึงนับให้ State เดิมจน State ใหม่ผ่าน Gate และการยืนยัน:
 
 | หลักฐานเด่น | ผลแบบ exploratory |
 |---|---|

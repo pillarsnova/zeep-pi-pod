@@ -96,6 +96,14 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
                 self.assertEqual(live_stage, replay_stage)
                 self.assertEqual(live_meta["bridge_state"], replay_meta["bridge_state"])
                 self.assertEqual(live_meta["held"], replay_meta["held"])
+                self.assertEqual(
+                    live_meta.get("held_previous_state"),
+                    replay_meta.get("held_previous_state"),
+                )
+                self.assertEqual(
+                    live_meta.get("challenger_counted_as_new_state"),
+                    replay_meta.get("challenger_counted_as_new_state"),
+                )
                 with zeep.sleep_path_lock:
                     zeep._apply_stage_to_path(live_stage, now=now)
                 historical.commit(replay_stage, now)
@@ -144,6 +152,7 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertEqual(snapshot["runtime"]["confirmation_seconds"], 60.0)
         self.assertEqual(snapshot["runtime"]["confirmation_seconds_by_target"]["n2"], 120.0)
         self.assertEqual(snapshot["runtime"]["confirmation_epochs"], 2)
+        self.assertEqual(snapshot["provisional_hold_epochs"], 2)
         self.assertTrue(snapshot["runtime"]["evidence_and_confirmed_state_separate"])
         self.assertEqual(snapshot["runtime"]["rolling_window_frames"], 6)
         self.assertEqual(
@@ -177,13 +186,32 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertEqual(cadence["confirmation_seconds_range"], [60.0, 120.0])
         self.assertEqual(cadence["detect_signal_gap_seconds"], 60.0)
         self.assertTrue(cadence["preserve_confirmed_context_after_signal_gap"])
-        self.assertEqual(cadence["signal_gap_display"], "WAIT/no_data")
+        self.assertEqual(
+            cadence["signal_gap_display"], "no_data_or_restart_hold"
+        )
         self.assertEqual(
             cadence["restart_same_session_display"],
             "last_confirmed_display_only",
         )
-        self.assertEqual(cadence["restart_display_hold_max_seconds"], 180.0)
+        self.assertEqual(cadence["restart_display_hold_max_seconds"], 60.0)
         self.assertFalse(cadence["restart_display_persisted_as_stage"])
+        self.assertEqual(
+            probability["ambiguous_evidence_action"],
+            "hold_previous_confirmed_state",
+        )
+        self.assertEqual(probability["gate_role"], "new_state_entry_only")
+        self.assertFalse(
+            probability["challenger_receives_stage_time_before_confirmation"]
+        )
+        self.assertTrue(gate["gate_controls_new_state_entry_only"])
+        self.assertEqual(
+            gate["valid_on_bed_gate_failure_action"],
+            "hold_previous_confirmed_state",
+        )
+        self.assertEqual(
+            gate["no_previous_state_action"], "initial_confirmation_wait"
+        )
+        self.assertTrue(gate["no_unclassified_after_first_confirmed_state"])
 
     def test_sleep_stage_meanings_are_consistent_across_policy_and_ui(self):
         expected = {

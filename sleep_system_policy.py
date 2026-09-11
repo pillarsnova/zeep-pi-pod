@@ -13,32 +13,55 @@ from typing import Any
 
 
 # Every persisted decision/report carries these versions for provenance.
-SLEEP_PIPELINE_CONTRACT_VERSION = "zeep-sleep-health-pipeline-v1.10-n2-progression"
-SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.27-gated-n2-progression"
-SLEEP_EVIDENCE_VERSION = "zeep-sleep-state-evidence-v3.5-gated-n2-progression"
+SLEEP_PIPELINE_CONTRACT_VERSION = (
+    "zeep-sleep-health-pipeline-v1.11-continuity-carry-forward"
+)
+SLEEP_ESTIMATOR_VERSION = (
+    "bcg-audio-bed-5state-v1.28-continuity-carry-forward"
+)
+SLEEP_EVIDENCE_VERSION = (
+    "zeep-sleep-state-evidence-v3.6-continuity-carry-forward"
+)
 ZEEP_SLEEP_BASELINE_VERSION = "zeep-sleep-state-baseline-v1.8-sep1-cutover"
-ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.16-n2-progression"
+ZEEP_SLEEP_TRANSITION_POLICY_VERSION = (
+    "zeep-semimarkov-30s-v1.17-continuity-carry-forward"
+)
 SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
 SLEEP_HISTORY_BACKFILL_VERSION = (
-    "zeep-sleep-history-reclass-v26-gated-n2-progression"
+    "zeep-sleep-history-reclass-v27-continuity-carry-forward"
 )
-SESSION_REPORT_VERSION = "zeep-session-report-v10.5-restore-summary"
-SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.4-recovery-target-guardrails"
+SESSION_REPORT_VERSION = "zeep-session-report-v10.6-continuity-accounting"
+SLEEP_QUALITY_VERSION = (
+    "zeep-rest-quality-v8.5-continuity-score-eligibility"
+)
 SLEEP_SCORE_FORMULA_VERSION = (
     "zeep-sleep-score-v1.0-20-30-30-15-5"
 )
-# The Recovery v2 rollout did not change the Overnight formula.  Keep the
-# immediately preceding, explicitly approved Overnight pair readable and
-# eligible for personal-baseline learning so a targeted Recovery migration
-# cannot invalidate untouched sleep history.
+# v10.6 adds continuity/score-eligibility accounting and therefore pairs only
+# with v8.5 quality. Keep the reviewed v10.5 Restore report, the v10.4 Recovery
+# guardrail report and the matching v10.3 legacy pair readable, but never
+# generate a current report beside stale quality during a report-only rebuild.
 PRE_RESTORE_SESSION_REPORT_VERSION = (
     "zeep-session-report-v10.4-recovery-target-guardrails"
+)
+PRE_CONTINUITY_SESSION_REPORT_VERSION = (
+    "zeep-session-report-v10.5-restore-summary"
+)
+PRE_CONTINUITY_SLEEP_QUALITY_VERSION = (
+    "zeep-rest-quality-v8.4-recovery-target-guardrails"
 )
 PREVIOUS_SESSION_REPORT_VERSION = "zeep-session-report-v10.3-nap-goal-duration"
 PREVIOUS_SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.3-nap-goal-duration"
 APPROVED_SLEEP_RESULT_VERSION_PAIRS = frozenset({
     (SESSION_REPORT_VERSION, SLEEP_QUALITY_VERSION),
-    (PRE_RESTORE_SESSION_REPORT_VERSION, SLEEP_QUALITY_VERSION),
+    (
+        PRE_CONTINUITY_SESSION_REPORT_VERSION,
+        PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
+    ),
+    (
+        PRE_RESTORE_SESSION_REPORT_VERSION,
+        PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
+    ),
     (PREVIOUS_SESSION_REPORT_VERSION, PREVIOUS_SLEEP_QUALITY_VERSION),
 })
 RECOVERY_SCORE_FORMULA_VERSION = (
@@ -62,7 +85,7 @@ ENVIRONMENT_SESSION_AGGREGATION_VERSION = (
 )
 TERMINAL_WAKE_POLICY_VERSION = "zeep-terminal-wake-boundary-v1.0"
 SLEEP_CLASSIFICATION_GAP_VERSION = (
-    "zeep-sleep-classification-gap-v1.5-complete-operational-hold"
+    "zeep-sleep-classification-gap-v1.6-continuity-carry-forward"
 )
 
 
@@ -235,6 +258,12 @@ SLEEP_STAGE_CONFIRMATION_SECONDS = {
     stage: float(ticks) * SLEEP_EVIDENCE_EPOCH_SECONDS
     for stage, ticks in SLEEP_STAGE_CONFIRM_TICKS.items()
 }
+# A pending challenger is visibly marked ``provisional`` for at most two
+# evidence epochs. The preceding confirmed State remains visible but those
+# first two epochs do not enter the score. From the third held epoch onward the
+# preceding State resumes score attribution; the challenger earns no Stage
+# time until it completes its own 60/120-second confirmation.
+SLEEP_PROVISIONAL_HOLD_EPOCHS = 2
 SLEEP_STAGE_MIN_DWELL_SECONDS = {
     "wake": 10.0, "n1": 30.0, "n2": 60.0, "n3": 60.0, "rem": 60.0,
 }
@@ -293,13 +322,85 @@ SLEEP_SCORE_SOFTMAX_TEMPERATURE = 4.0
 # margin, dwell and confirmation rules.
 SLEEP_HR_RR_FIT_FUSION_WEIGHT = 0.20
 SLEEP_HR_RR_FIT_FUSION_AGREEMENT_WEIGHT = 0.35
+
+
+def continuity_hold_contract(
+    previous_state: Any,
+    *,
+    candidate: Any = None,
+    decision: str,
+    hold_epochs: int = 1,
+) -> dict[str, Any]:
+    """Return the canonical contract for an uncertain State transition.
+
+    A physiology/evidence gate controls entry into a *new* State.  Once a
+    Session has a confirmed W/N1/N2/N3/REM label, an ambiguous or blocked
+    challenger cannot erase that label or create an unclassified hole.  The
+    previous State remains on the timeline until a new candidate completes its
+    gate, dwell and confirmation requirements. Its first two held epochs are
+    display-only; later held epochs may re-enter score attribution.
+
+    This function never fills missing HR/RR, confirmed OFF BED, or a missing
+    Sensor interval.  Those remain operational ``no_data``/``off_bed`` periods.
+    """
+    previous = (
+        str(previous_state).lower()
+        if str(previous_state).lower() in ZEEP_SLEEP_STATES
+        else None
+    )
+    pending = (
+        str(candidate).lower()
+        if str(candidate).lower() in ZEEP_SLEEP_STATES
+        and str(candidate).lower() != previous
+        else None
+    )
+    epochs = max(1, int(hold_epochs or 1))
+    has_previous = previous is not None
+    provisional = bool(
+        has_previous and epochs <= SLEEP_PROVISIONAL_HOLD_EPOCHS
+    )
+    return {
+        "held": has_previous,
+        "held_previous_state": has_previous,
+        "confirmed_state": previous,
+        "pending_state": pending,
+        "continuity_hold_epochs": epochs if has_previous else 0,
+        "provisional": provisional,
+        "data_status": (
+            "provisional_hold"
+            if provisional
+            else "continuity_hold"
+            if has_previous
+            else "confirming_initial_state"
+        ),
+        "decision": decision if has_previous else "initial_confirmation_wait",
+        "decision_kind": (
+            "continuity_hold" if has_previous else "initial_confirmation_wait"
+        ),
+        "score_attribution_state": previous,
+        "challenger_counted_as_new_state": False,
+        # The first one or two carried epochs are display continuity only.
+        # If uncertainty persists beyond that short provisional window, the
+        # already-confirmed State resumes score attribution; the challenger
+        # itself never receives time before confirmation.
+        "score_eligible": bool(has_previous and not provisional),
+        "excluded_from_score": bool(not has_previous or provisional),
+        "excluded_from_stage_statistics": not has_previous,
+        "excluded_from_personal_baseline": True,
+        "state_source": (
+            "carry_previous_confirmed" if has_previous else "initial_wait"
+        ),
+    }
+
+
 # Backward-compatible constant name: this threshold detects a discontinuity
 # between valid classification windows. It no longer resets the confirmed
 # Sleep State/onset for the same active Session; only pending evidence is reset.
 SLEEP_CONTEXT_RESET_GAP_SECONDS = 60.0
-# Display-only grace period after the same active Session is restored.  No held
-# label is persisted or counted, and confirmed Bed Exit overrides it at once.
-SLEEP_RESTART_STATE_HOLD_SECONDS_DEFAULT = 180.0
+# Display-only grace period after the same active Session is restored. Keep the
+# preceding State visible for at most two 30-second epochs; it is never counted,
+# and confirmed Bed Exit overrides it at once.
+SLEEP_RESTART_STATE_HOLD_SECONDS_DEFAULT = 60.0
 SLEEP_MIN_PAIRED_VITAL_COVERAGE = 0.80
 SLEEP_BUCKET_MIN_BCG_PACKETS = 8
 SLEEP_MIN_WAVEFORM_COVERAGE = 0.80
@@ -1082,6 +1183,7 @@ def sleep_policy_snapshot() -> dict[str, Any]:
         ],
         "confirm_ticks": dict(SLEEP_STAGE_CONFIRM_TICKS),
         "confirmation_seconds_by_target": dict(SLEEP_STAGE_CONFIRMATION_SECONDS),
+        "provisional_hold_epochs": SLEEP_PROVISIONAL_HOLD_EPOCHS,
         "cadence": {
             "sensor_sample_seconds": SLEEP_SENSOR_SAMPLE_SECONDS,
             "sensor_frames_per_evidence_epoch": SLEEP_SENSOR_FRAMES_PER_EPOCH,
@@ -1095,7 +1197,7 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "long_transition_context_seconds": SLEEP_LONG_CONTEXT_SECONDS,
             "detect_signal_gap_seconds": SLEEP_CONTEXT_RESET_GAP_SECONDS,
             "preserve_confirmed_context_after_signal_gap": True,
-            "signal_gap_display": "WAIT/no_data",
+            "signal_gap_display": "no_data_or_restart_hold",
             "restart_same_session_display": "last_confirmed_display_only",
             "restart_display_hold_max_seconds": (
                 SLEEP_RESTART_STATE_HOLD_SECONDS_DEFAULT
@@ -1147,7 +1249,13 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "minimum_margin": SLEEP_EVIDENCE_MIN_MARGIN,
             "n3_gated_minimum_winner": SLEEP_N3_GATED_MIN_WINNER,
             "n3_gated_minimum_margin": SLEEP_N3_GATED_MIN_MARGIN,
-            "ambiguous_evidence_action": "abstain_without_stage_persistence",
+            "ambiguous_evidence_action": "hold_previous_confirmed_state",
+            "initial_state_action": "WAIT_then_anchor_W_within_60_120s",
+            "gate_role": "new_state_entry_only",
+            "challenger_receives_stage_time_before_confirmation": False,
+            "provisional_hold_score_eligible": False,
+            "continuity_hold_after_provisional_score_eligible": True,
+            "continuity_hold_personal_baseline_eligible": False,
             "hr_rr_fit_fusion": {
                 "method": "gated_linear_pool_before_ema_and_semimarkov",
                 "weight": SLEEP_HR_RR_FIT_FUSION_WEIGHT,
@@ -1196,16 +1304,25 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "inactive_probabilities_zero": True,
             "inactive_stage_persistence": False,
             "hold_last_stage_when_inactive": False,
+            "gate_controls_new_state_entry_only": True,
+            "valid_on_bed_gate_failure_action": (
+                "hold_previous_confirmed_state"
+            ),
+            "no_previous_state_action": "initial_confirmation_wait",
+            "no_unclassified_after_first_confirmed_state": True,
             "evidence_event_type": "sleep_stage_evidence",
             "confirmed_state_event_type": "sleep_stage",
         },
         "report_gap_policy": {
-            "unclassified_periods_visible": True,
+            "operational_gaps_visible": True,
             "minimum_gap_seconds": 15.0,
-            "labels": ["off_bed", "missing_vitals", "sensor_gap", "confirming"],
+            "labels": [
+                "off_bed", "missing_vitals", "sensor_gap", "initial_wait",
+            ],
             "counted_as_sleep_stage": False,
             "counted_in_score": False,
             "fills_with_adjacent_stage": False,
+            "ambiguous_valid_epoch_is_gap": False,
         },
         "signal_roles": {
             "primary_stage_evidence": [

@@ -3,6 +3,7 @@
 import json
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from personal import BaselineStore, MIN_DETECTED_SLEEP_SECONDS
@@ -14,15 +15,18 @@ from sleep_system_policy import (
 
 
 class _DatabaseStub:
-    def __init__(self, final_summary, timeline=None):
+    def __init__(self, final_summary, timeline=None, stage_events=None):
         self.final_summary = final_summary
         self.timeline = timeline or []
+        self.stage_events = stage_events or []
 
     def read_sessions(self, sql, params=()):
         if "type='final_summary'" in sql:
             if self.final_summary is None:
                 return []
             return [{"value": json.dumps(self.final_summary)}]
+        if "type='sleep_stage'" in sql:
+            return list(self.stage_events)
         if "FROM timeline" in sql:
             return list(self.timeline)
         return []
@@ -105,6 +109,71 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
 
         self.assertIsNotNone(metrics)
         self.assertEqual(metrics["mode_group"], "sleep")
+
+    def test_current_baseline_excludes_provisional_and_continuity_rows(self):
+        summary = {
+            "night_summary": {
+                "estimated_sleep_s": MIN_DETECTED_SLEEP_SECONDS,
+                "sleep_quality": {
+                    "available": True,
+                    "quality_type": "sleep",
+                    "sleep_detected": True,
+                    "estimated_sleep_s": MIN_DETECTED_SLEEP_SECONDS,
+                    "version": PREVIOUS_SLEEP_QUALITY_VERSION,
+                },
+            },
+            "session_report": {
+                "version": PREVIOUS_SESSION_REPORT_VERSION,
+                "rest_mode": {"group": "sleep", "resolved": "overnight"},
+            },
+        }
+        origin = datetime(2026, 9, 1, tzinfo=timezone.utc)
+        timeline = []
+        for index in range(36):
+            timestamp = origin + timedelta(seconds=(index + 1) * 10)
+            timeline.append({
+                "timestamp": timestamp.isoformat(),
+                "temperature": 24.0,
+                "humidity": 50.0,
+                "co2": 700.0,
+                "lux": 0.0,
+                "sound": 38.0,
+                "heart_rate": 100.0 if index < 6 else 60.0,
+                "respiration_rate": 20.0 if index < 6 else 14.0,
+                "bed_status": "On bed",
+            })
+        stage_events = []
+        for index in range(12):
+            start = origin + timedelta(seconds=index * 30)
+            end = start + timedelta(seconds=30)
+            excluded = index < 2
+            stage_events.append({
+                "timestamp": end.isoformat(),
+                "value": json.dumps({
+                    "state": "n2",
+                    "attribution_start": start.isoformat(),
+                    "attribution_end": end.isoformat(),
+                    "sample_interval_s": 30,
+                    "provisional": excluded,
+                    "score_eligible": not excluded,
+                    "excluded_from_personal_baseline": excluded,
+                }),
+            })
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        store = BaselineStore(
+            _DatabaseStub(summary, timeline, stage_events),
+            Path(temporary.name),
+        )
+
+        metrics = store._night_metrics("current-overnight")
+
+        self.assertIsNotNone(metrics)
+        self.assertEqual(metrics["hr_quiet_median"], 60.0)
+        self.assertEqual(
+            metrics["baseline_stage_filter"],
+            "direct_score_eligible_stage_intervals",
+        )
 
     def test_behaviour_context_is_partitioned_by_mode_and_never_selects_stage(self):
         store = self._store(_summary(

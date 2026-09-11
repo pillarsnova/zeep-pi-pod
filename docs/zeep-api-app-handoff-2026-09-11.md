@@ -6,14 +6,15 @@
 > **Product position:** ZEEP Wellness & Longevity · ผลทั้งหมดเป็นการประเมิน
 > เชิงสุขภาพจาก Sensor ไม่ใช่การวินิจฉัยหรือผล AASM/PSG
 >
-> **Runtime release commit:** `f8f70c39e32eb5a2c1053cbd22e10adf4c191082`
-> (commit หลังจากนี้ในวันเดียวกันเป็นเอกสาร Handoff เท่านั้น)
+> **Runtime release:** `origin/develop` ที่มี Continuity contract ตาม Version ในหัวข้อ 3
+> (Exact Git SHA ต้องอ่านจาก Deployment audit ของรอบ Release เดียวกัน)
 >
 > **Machine-readable contract:** `GET /openapi.json`
 
 ## TL;DR
 
-- Production Pi ใช้ `origin/develop` ที่ commit `f8f70c3` และ Service ทำงานปกติ
+- Sleep State ใช้ continuity carry-forward: `WAIT` เฉพาะก่อน State แรก,
+  ส่วน valid on-bed epoch ที่ State ใหม่ยังไม่ชัดจะคง State ก่อนหน้า
 - Overnight Recovery ใช้ **Sleep Score** ส่วน Nap & Refresh ใช้
   **Recovery Score**; ห้ามรวมคะแนนหรือเปลี่ยนชื่อข้ามโหมด
 - เพิ่ม ZEEP Restore Summary เพื่ออธิบายคะแนนเดิม ไม่สร้างคะแนนที่สาม
@@ -47,17 +48,44 @@
 
 ## 2. การเปลี่ยนแปลงวันนี้
 
-ช่วง commit `685b41e..f8f70c3` มี 10 commits, 66 files,
-เพิ่ม 12,871 บรรทัดและลด 709 บรรทัด
+ช่วง commit `685b41e..f8f70c3` เป็นฐานก่อน Continuity release; จำนวนไฟล์และ
+บรรทัดของ release ปัจจุบันให้ยึด Deployment audit/Exact Git SHA ของรอบ Deploy
 
 ### 2.1 Sleep replay และความต่อเนื่อง
 
 - รักษา estimator context เมื่อ Sensor ขาดช่วงชั่วคราว ไม่ reset การหลับโดยไม่มี
   หลักฐานเพียงพอ
+- Gate ควบคุมการเข้า State ใหม่เท่านั้น; เมื่อมี State เดิมแล้ว Evidence ที่ก้ำกึ่ง,
+  transition ที่ถูกปิด หรือ candidate ที่กำลังยืนยันจะไม่สร้างช่องว่าง
+- 1–2 epoch แรกของการคง State ติด `provisional` และไม่เข้าคะแนน; หลังจากนั้นยังคง
+  State เดิมต่อได้จน challenger ผ่าน โดย challenger ไม่รับเวลา State ใหม่หรือคะแนนก่อนยืนยัน
+- `WAIT · กำลังยืนยัน` ใช้เฉพาะ initial confirmation 60 วินาที หรือ 120 วินาที
+  สำหรับ N2; acquisition/occupancy failure ใช้ `NO DATA`/`OFF BED` และมีสิทธิ์เหนือ carry
+- ทุก epoch ต้องเป็นหนึ่งใน W/N1/N2/N3/REM, initial WAIT, NO DATA หรือ OFF BED;
+  Runtime/API/UI ห้ามส่ง `Unclassified`
 - เพิ่ม explicit Session allowlist สำหรับ Targeted replay
-- แยก WAIT, NO DATA และ OFF BED ออกจาก W/N1/N2/N3/REM
+- แยก initial WAIT, NO DATA และ OFF BED ออกจาก W/N1/N2/N3/REM
 - Historical promotion ทำงานเฉพาะ Derived evidence/state/report และตรวจ Hash
   ของ Raw input ก่อน Apply
+
+Metadata ที่ Client/Admin ใช้อธิบายช่วง carry:
+
+| Field | Type | ความหมาย |
+|---|---|---|
+| `held_previous_state` | boolean | Epoch นี้คง State ที่ยืนยันก่อนหน้า |
+| `continuity_hold_epochs` | integer | จำนวน epoch ที่คง State ต่อเนื่อง |
+| `provisional` | boolean | เป็น 1–2 epoch แรกของช่วง hold |
+| `pending_state` | enum/null | State ผู้ท้าชิงที่ยังไม่ผ่านครบ |
+| `score_attribution_state` | enum/null | State ที่รับเวลา/คะแนนใน epoch นี้ |
+| `challenger_counted_as_new_state` | boolean | ต้องเป็น `false` จนยืนยัน transition สำเร็จ |
+| `data_status` | enum | `confirming_initial_state`, `provisional_hold`, `continuity_hold`, `no_data` หรือ `off_bed` ตามบริบท |
+
+Report v10.6 เพิ่ม `sleep.classification_accounting` เพื่อแยก
+`direct_confirmed_s`, `continuity_carried_forward_s`, `provisional_hold_s`,
+`score_eligible_s`, `initial_wait_s`, `no_data_s`, `off_bed_s`,
+`restart_display_hold_s` และ `sensor_gap_s` พร้อม arithmetic invariant
+Client ห้ามคำนวณคะแนนจาก State timeline เองและต้องถือ `score_eligible_s` ของ Server
+เป็นแหล่งจริง; `display_attributed_s` มีไว้ปิดช่องว่างบน Timeline ไม่เท่ากับเวลาที่เข้าคะแนน
 
 ### 2.2 สองโหมดและคะแนน
 
@@ -146,13 +174,13 @@ Success response ใช้ envelope:
 
 | Layer | Version |
 |---|---|
-| Sleep estimator | `bcg-audio-bed-5state-v1.27-gated-n2-progression` |
-| Evidence | `zeep-sleep-state-evidence-v3.5-gated-n2-progression` |
-| Transition policy | `zeep-semimarkov-30s-v1.16-n2-progression` |
+| Sleep estimator | `bcg-audio-bed-5state-v1.28-continuity-carry-forward` |
+| Evidence | `zeep-sleep-state-evidence-v3.6-continuity-carry-forward` |
+| Transition policy | `zeep-semimarkov-30s-v1.17-continuity-carry-forward` |
 | Personal/population baseline | `zeep-sleep-state-baseline-v1.8-sep1-cutover` |
-| Historical replay | `zeep-sleep-history-reclass-v26-gated-n2-progression` |
-| Session report | `zeep-session-report-v10.5-restore-summary` |
-| Quality | `zeep-rest-quality-v8.4-recovery-target-guardrails` |
+| Historical replay | `zeep-sleep-history-reclass-v27-continuity-carry-forward` |
+| Session report | `zeep-session-report-v10.6-continuity-accounting` |
+| Quality | `zeep-rest-quality-v8.5-continuity-score-eligibility` |
 | Sleep Score formula | `zeep-sleep-score-v1.0-20-30-30-15-5` |
 | Recovery Score formula | `zeep-recovery-score-v2.0-targeted-25-35-30-10` |
 | Restore Summary | `zeep-restore-summary-v1.0` |
@@ -180,7 +208,11 @@ target_duration_minutes: 30 | 90 | null
 - ค่า legacy เช่น `auto`, `relax`, `meditation`, `cycle_nap` ไม่อยู่ใน
   request enum ใหม่ การเปลี่ยนนี้อาจ Breaking สำหรับ Client เก่า
 
-## 5. Rerun Session ล่าสุด
+## 5. Rerun Session ก่อน Continuity release (หลักฐานเปรียบเทียบเดิม)
+
+> ตัวเลขในหัวข้อนี้สร้างด้วย Estimator v1.27 และเก็บไว้เป็น before-baseline
+> ห้ามนำไปอ้างเป็นผลหลัง v1.28 จนกว่าจะมี replay manifest และ promotion audit
+> ของ Continuity release
 
 ### 5.1 Scope และวิธีดำเนินการ
 
@@ -266,11 +298,11 @@ Sleep Stage แบบ PSG
 - Raw BCG hash: unchanged
 - ผลเดิม recover ได้จาก Backup และ Audit trail
 
-## 6. Production verification
+## 6. Production verification ของฐานก่อน Continuity release
 
 - Pi branch: `develop`
-- Pi `develop` มี Runtime release `f8f70c3` และตาม `origin/develop`;
-  docs-only commits หลัง release ไม่เปลี่ยน Runtime behavior
+- รายการด้านล่างเป็นผลตรวจของ Runtime `f8f70c3` ก่อน Continuity release;
+  Release v1.28 ต้องมี Deployment audit ใหม่แยกต่างหาก
 - Targeted regression บน Pi: `109/109` ผ่าน
 - Full suite ของ release: `546` ผ่าน, `1` skipped
 - GitHub Actions: ผ่าน
@@ -295,6 +327,12 @@ Sleep Stage แบบ PSG
 - [ ] ใช้ `level`/`level_key` จาก Server ไม่คำนวณ threshold ซ้ำใน Client
 - [ ] แสดง `protocol_status` แยกจาก Score
 - [ ] Nap ไม่หลับยังแสดง Recovery Score ได้; ห้ามบังคับวงแหวน N1/N2/N3/REM
+- [ ] แสดง `WAIT · กำลังยืนยัน` เฉพาะก่อน State แรก; หลังจากนั้นแสดง State เดิม
+  พร้อม `provisional` เฉพาะ 1–2 epoch แรกของ challenger และอย่านับช่วงนี้ในคะแนน
+- [ ] อย่านับ `pending_state` เป็น Stage/Score จน
+  `challenger_counted_as_new_state=true`
+- [ ] `NO DATA` และ `OFF BED` ต้องมีสิทธิ์เหนือ continuity hold
+- [ ] ห้ามแสดงหรือสร้าง bucket ชื่อ `Unclassified`
 - [ ] Restore Summary เป็นคำอธิบาย ไม่ใช่ Restore Score ใหม่
 - [ ] ห้ามแสดง Whole-day readiness, ความพร้อมขับรถ หรือ “สดชื่นขึ้น”
   หากไม่มี subjective/pre-post data จริง

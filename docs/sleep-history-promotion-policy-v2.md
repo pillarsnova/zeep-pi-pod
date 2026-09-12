@@ -7,6 +7,12 @@
 >
 > **หลักสำคัญ:** Raw BCG และ Timeline เป็นข้อมูลต้นฉบับ ห้ามแก้ไขจากกระบวนการนี้
 
+> **Continuity amendment — 2026-09-13:** ข้อความเดิมที่ให้ occupied Recording
+> epoch กลายเป็น `WAIT`/`NO DATA` หรือถูกหักจากคะแนนถูกยกเลิกแล้ว ตาม
+> [Current Sleep System](zeep-sleep-system-current.md) ทุกช่วงที่ยังไม่ยืนยัน
+> `OFF BED` ต้องเป็น W/N1/N2/N3/REM และเข้าคะแนน โดยช่วงหลักฐานไม่ครบจะคง State
+> ก่อนหน้า (หรือ W แรก) แบบ low-confidence และไม่เข้า Personal Baseline
+
 ## 1. เหตุผลที่ปรับนโยบาย
 
 นโยบายเดิมใช้คุณภาพข้อมูลทั้ง Session เป็น Gate เดียว: ต้องเป็น Tier A และไม่มี
@@ -32,14 +38,16 @@ Product Owner เป็นผู้กำหนด cohort และเป็น�
 - Epoch ปัจจุบันทั้ง 30 วินาทีต้องมี Bed + HR + RR + Raw BCG ครบทุก bucket;
   coverage 80% ของหน้าต่าง 60 วินาทีใช้เพื่อบริบท/confirmation เท่านั้น ไม่ได้อนุญาต
   ให้เติม Stage ลงใน Epoch ปัจจุบันที่ข้อมูลขาด
-- Off-bed ต่อเนื่องหรือข้อมูลขาดจะ reset context ตามนโยบายกลาง
+- Confirmed Off-bed latch สถานะ `OFF BED`; ข้อมูลขาด reset เฉพาะ pending
+  confirmation แต่ไม่ล้าง confirmed State/onset ของ Session
 - Evidence ที่ผ่านจึงเข้าสู่ Semi-Markov confirmation 60 วินาที หรือ N2 120 วินาที
-- ช่วงที่ไม่ผ่านไม่มี W/N1/N2/N3/REM ใหม่ และไม่ถูกนำไปนับ Stage%, Score หรือ Baseline
-- ทุก Epoch 30 วินาทีที่ไม่มี State ต้องมีสถานะปฏิบัติการอย่างใดอย่างหนึ่ง:
-  `WAIT`, `NO DATA` หรือ `OFF BED` พร้อมเหตุผลและ coverage
+- ช่วงที่ไม่ผ่านจะไม่ให้ State ใหม่แก่ผู้ท้าชิง แต่คง State ก่อนหน้า (หรือ W แรก)
+  และนับ Stage%/Score; ช่วง carry ไม่ใช้เรียนรู้ Personal Baseline
+- ทุก Epoch 30 วินาทีหลังเริ่ม Recording ต้องเป็น W/N1/N2/N3/REM หรือ confirmed
+  `OFF BED`; `WAIT` ใช้ก่อน Recording และ `NO DATA` เป็น QA/legacy metadata
 
-ดังนั้น Session ระดับ B หรือ `below_B` ยังมี Derived State ได้เฉพาะช่วงที่หลักฐานจริง
-ครบ โดยไม่เติมค่าในช่องว่างและไม่เดาจากสภาพแวดล้อม
+ดังนั้น Session ระดับ B หรือ `below_B` ยังคงปิดบัญชีเวลาได้ครบ โดยแยก State
+attribution ออกจาก Evidence coverage และไม่เดาหลักฐานจากสภาพแวดล้อม
 
 ### Baseline Fit ถูกใช้จริงอย่างไร
 
@@ -52,8 +60,9 @@ Product Owner เป็นผู้กำหนด cohort และเป็น�
 - รุ่น v1.26 ผสาน distribution ดังกล่าวกับ gated stage evidence อีกชั้นที่น้ำหนัก
   `20%`; เมื่อ Fit สูงสุดจริงตรงกับ State ที่ยืนยันก่อนหน้าและ State นั้นยังผ่าน
   gate ใช้น้ำหนัก `35%` เพื่อเพิ่ม continuity โดยไม่บังคับ State
-- Baseline Fit ช่วยจัดอันดับเฉพาะ State ที่ physiology gate เปิดแล้ว ไม่สามารถสร้าง
-  N2/N3/REM, ข้าม transition หรือเติม State ใน WAIT/NO DATA/OFF BED ได้
+- Baseline Fit ช่วยจัดอันดับเฉพาะ State ที่ physiology gate เปิดแล้ว ไม่สามารถยืนยัน
+  N2/N3/REM, ข้าม transition หรือเปลี่ยน confirmed `OFF BED` ได้; continuity carry
+  มาจาก State ก่อนหน้า ไม่ได้เกิดจาก Fit
 - Admin เห็น Baseline Fit, ระยะห่างจากช่วง HR/RR และน้ำหนักที่ใช้ได้โดยตรง
 - Personal Baseline ยังใช้เป็นบริบท/ความมั่นใจเท่านั้น การให้ผลเดิมของโมเดลกลับมา
   ฝึกตัวเองเพื่อเลือก State ถูกปิดไว้จนกว่าจะมี independent reference labels
@@ -72,7 +81,7 @@ Product Owner เป็นผู้กำหนด cohort และเป็น�
 
 - คะแนน Wellness ยังไม่ผ่าน release coverage
 - ไม่มี Epoch ที่มี physiological evidence ครบ
-- ไม่มี State ที่ผ่าน confirmation โดย Session อาจมีแต่ WAIT/NO DATA/OFF BED
+- ไม่มี direct-confirmed Evidence โดย State ทั้ง Session มาจาก low-confidence carry
 - N1/N2/N3/REM ของ Overnight ต่างจากกรอบตรวจทาน
 - Overnight ไม่มี N3 หรือ confirmed coverage ต่ำกว่า 80%
 - Nap ยาวกว่า 90 นาที
@@ -92,8 +101,9 @@ Product Owner เป็นผู้กำหนด cohort และเป็น�
 
 Issue code ใหม่ที่ยังไม่ได้จำแนกจะ fail closed เป็น blocker จนกว่าจะได้รับการทบทวน
 
-การไม่มี Evidence หรือไม่มี W/N1/N2/N3/REM ไม่ใช่ฐานข้อมูลเสียโดยอัตโนมัติ ระบบ
-สามารถเขียนสถานะ WAIT/NO DATA/OFF BED และคำเตือนได้โดยไม่สร้าง Sleep Stage ปลอม
+การไม่มี Evidence ไม่ใช่ฐานข้อมูลเสียโดยอัตโนมัติ ระบบเขียน State attribution
+ต่อเนื่องพร้อม low-confidence/QA metadata ได้โดยไม่แต่ง Evidence probability;
+เฉพาะ confirmed `OFF BED` เท่านั้นที่ไม่มี Sleep State
 
 ## 6. State Promotion และ Score Release เป็นคนละเรื่อง
 
@@ -125,8 +135,9 @@ release gate ของตนเองตาม Rest Mode และ coverage:
 
 1. ประมวลผลทุก Session ในขอบเขตวันที่และระยะเวลาที่กำหนด
 2. ตัดสินหลักฐานราย Epoch ไม่ตัดทั้ง Session จาก Tier
-3. คำนวณ W/N1/N2/N3/REM เฉพาะ Epoch ที่ Bed + HR + RR + BCG ครบ
-4. Epoch อื่นต้องเป็น WAIT, NO DATA หรือ OFF BED
+3. Epoch ที่ Bed + HR + RR + BCG ครบ ใช้คำนวณผู้ท้าชิง W/N1/N2/N3/REM ใหม่
+4. Epoch occupied ที่หลักฐานไม่ครบคง State ก่อนหน้าหรือ W แรกและเข้าคะแนน;
+   confirmed OFF BED เป็นข้อยกเว้นเดียว ส่วน WAIT/NO DATA ไม่เป็น State หลัง Recording
 5. Tier A/B เป็น Admin QA เท่านั้น
 6. Review Warning ไม่ปิดกั้นการเขียนโดยอัตโนมัติ
 7. Hard Block ใช้กับฐานเสีย, Raw หาย, Session ไม่จบ หรือ invariant ผิด

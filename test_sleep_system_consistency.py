@@ -152,7 +152,7 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertEqual(snapshot["runtime"]["confirmation_seconds"], 60.0)
         self.assertEqual(snapshot["runtime"]["confirmation_seconds_by_target"]["n2"], 120.0)
         self.assertEqual(snapshot["runtime"]["confirmation_epochs"], 2)
-        self.assertEqual(snapshot["provisional_hold_epochs"], 2)
+        self.assertEqual(snapshot["provisional_hold_epochs"], 0)
         self.assertTrue(snapshot["runtime"]["evidence_and_confirmed_state_separate"])
         self.assertEqual(snapshot["runtime"]["rolling_window_frames"], 6)
         self.assertEqual(
@@ -187,18 +187,25 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertEqual(cadence["detect_signal_gap_seconds"], 60.0)
         self.assertTrue(cadence["preserve_confirmed_context_after_signal_gap"])
         self.assertEqual(
-            cadence["signal_gap_display"], "no_data_or_restart_hold"
+            cadence["signal_gap_display"],
+            "carry_previous_or_initial_wake_scoreable_low_confidence",
         )
         self.assertEqual(
             cadence["restart_same_session_display"],
-            "last_confirmed_display_only",
+            "last_confirmed_scoreable_continuity",
         )
         self.assertEqual(cadence["restart_display_hold_max_seconds"], 60.0)
-        self.assertFalse(cadence["restart_display_persisted_as_stage"])
+        self.assertTrue(cadence["restart_display_persisted_as_stage"])
         self.assertEqual(
             probability["ambiguous_evidence_action"],
-            "hold_previous_confirmed_state",
+            "carry_previous_scoreable_low_confidence",
         )
+        self.assertEqual(
+            probability["initial_state_action"],
+            "anchor_W_on_first_occupied_epoch",
+        )
+        self.assertFalse(probability["provisional_hold_enabled"])
+        self.assertTrue(probability["continuity_hold_score_eligible"])
         self.assertEqual(probability["gate_role"], "new_state_entry_only")
         self.assertFalse(
             probability["challenger_receives_stage_time_before_confirmation"]
@@ -206,12 +213,17 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertTrue(gate["gate_controls_new_state_entry_only"])
         self.assertEqual(
             gate["valid_on_bed_gate_failure_action"],
-            "hold_previous_confirmed_state",
+            "carry_previous_scoreable_low_confidence",
         )
         self.assertEqual(
-            gate["no_previous_state_action"], "initial_confirmation_wait"
+            gate["no_previous_state_action"], "initial_awake_anchor"
         )
-        self.assertTrue(gate["no_unclassified_after_first_confirmed_state"])
+        self.assertTrue(gate["occupied_epoch_always_has_five_state"])
+        self.assertTrue(gate["no_unclassified_during_occupied_recording"])
+        self.assertTrue(gate["continuity_carry_score_eligible"])
+        self.assertFalse(
+            gate["continuity_carry_personal_baseline_eligible"]
+        )
 
     def test_sleep_stage_meanings_are_consistent_across_policy_and_ui(self):
         expected = {
@@ -283,14 +295,18 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertIn("REM → Wake", ui)
         self.assertNotIn("REM ต่อเนื่อง 5 รอบ", ui)
 
-    def test_ui_and_document_do_not_render_a_stage_when_gate_is_inactive(self):
+    def test_ui_waits_before_recording_and_document_carries_during_recording(self):
         ui = (PI5_ROOT / "static" / "index.html").read_text(encoding="utf-8")
         doc = (DOCS_ROOT / "zeep-sleep-system-current.md").read_text(
             encoding="utf-8"
         )
         self.assertIn("sl.classification_active===true", ui)
         self.assertIn("ยังไม่จัดประเภทการนอน", ui)
-        self.assertIn("probability ทั้ง 5 เป็นศูนย์", doc)
+        self.assertIn("`WAIT` อยู่ได้เฉพาะ phase", doc)
+        self.assertIn("`NO DATA` เป็น evidence-quality", doc)
+        self.assertIn("ทุก non-OFF-BED epoch ต้องมี", doc)
+        self.assertIn("continuity carry-forward ไม่สร้าง Evidence", doc)
+        self.assertIn("probability ปลอมให้ State เดิม", doc)
 
     def test_dashboard_uses_server_emitted_state_and_documents_smoothing(self):
         ui = (PI5_ROOT / "static" / "index.html").read_text(encoding="utf-8")

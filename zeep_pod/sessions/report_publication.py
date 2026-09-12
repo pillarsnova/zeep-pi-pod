@@ -209,7 +209,14 @@ def _public_report_data_quality(value: Any) -> dict[str, Any]:
     if "coverage" in source:
         public["coverage"] = scalar_map(
             source["coverage"],
-            {"recording_pct", "bcg_pct", "sleep_stage_pct", "environment_pct"},
+            {
+                "recording_pct",
+                "bcg_pct",
+                "sleep_stage_pct",
+                "state_attribution_pct",
+                "physiological_evidence_pct",
+                "environment_pct",
+            },
         )
     if "confidence_pct" in source:
         public["confidence_pct"] = scalar_map(

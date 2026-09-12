@@ -99,6 +99,66 @@ class RawBcgWindowTests(unittest.TestCase):
             "terminal_session_boundary",
         )
 
+    def test_exit_is_returned_even_when_hr_and_rr_are_missing(self):
+        packets = [{
+            "timestamp": "2026-08-25T21:29:19+00:00",
+            "heart_rate": None,
+            "respiration_rate": None,
+            "status_code": 1,
+        }]
+
+        result = RawBcgWindow(packets).reconstruct({
+            "window_start": "2026-08-25T21:29:10+00:00",
+            "window_end": "2026-08-25T21:29:20+00:00",
+            "sample_count": 2,
+        }, terminal_session_boundary=True)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["bed_status"], "Get out of bed")
+        self.assertFalse(result["vital_data_available"])
+
+    def test_return_requires_hr_and_rr_from_same_packet(self):
+        packets = [
+            {
+                "timestamp": "2026-08-25T21:29:16+00:00",
+                "heart_rate": 60.0,
+                "respiration_rate": None,
+                "status_code": 0,
+            },
+            {
+                "timestamp": "2026-08-25T21:29:17+00:00",
+                "heart_rate": None,
+                "respiration_rate": 14.0,
+                "status_code": 0,
+            },
+        ]
+
+        result = RawBcgWindow(packets).reconstruct({
+            "window_start": "2026-08-25T21:29:10+00:00",
+            "window_end": "2026-08-25T21:29:20+00:00",
+            "sample_count": 2,
+        })
+
+        self.assertIsNotNone(result)
+        self.assertFalse(result["fresh_on_bed_vitals"])
+
+    def test_return_requires_fresh_pair_in_final_requested_bucket(self):
+        packets = [{
+            "timestamp": "2026-08-25T21:29:11+00:00",
+            "heart_rate": 60.0,
+            "respiration_rate": 14.0,
+            "status_code": 0,
+        }]
+
+        result = RawBcgWindow(packets).reconstruct({
+            "window_start": "2026-08-25T21:29:10+00:00",
+            "window_end": "2026-08-25T21:29:20+00:00",
+            "sample_count": 2,
+        })
+
+        self.assertIsNotNone(result)
+        self.assertFalse(result["fresh_on_bed_vitals"])
+
 
 class HistoricalStagePathTests(unittest.TestCase):
     def test_new_cycle_is_anchored_at_wake_without_fabricated_bridge(self):
@@ -147,10 +207,28 @@ class HistoricalStagePathTests(unittest.TestCase):
         self.assertEqual(selected, "wake")
         self.assertEqual(metadata["decision"], "ambiguous_evidence_hold")
         self.assertTrue(metadata["held_previous_state"])
-        self.assertTrue(metadata["provisional"])
-        self.assertFalse(metadata["score_eligible"])
+        self.assertFalse(metadata["provisional"])
+        self.assertTrue(metadata["score_eligible"])
+        self.assertTrue(metadata["excluded_from_personal_baseline"])
         self.assertIsNone(metadata["pending_state"])
         self.assertNotIn("unclassified", metadata)
+
+    def test_first_historical_epoch_uses_same_immediate_wake_anchor(self):
+        path = HistoricalStagePath()
+
+        selected, metadata = path.stabilize(
+            None,
+            now=30.0,
+            strong_wake=False,
+        )
+
+        self.assertEqual(selected, "wake")
+        self.assertEqual(metadata["confirmed_state"], "wake")
+        self.assertEqual(metadata["decision"], "initial_awake_anchor")
+        self.assertEqual(metadata["confirmation_seconds"], 0.0)
+        self.assertFalse(metadata["provisional"])
+        self.assertTrue(metadata["score_eligible"])
+        self.assertTrue(metadata["excluded_from_personal_baseline"])
 
     def test_emitted_stage_remains_probability_winner(self):
         result = adjusted_probabilities(
@@ -190,6 +268,21 @@ class HistoricalStagePathTests(unittest.TestCase):
         self.assertFalse(path._allowed("wake", False))
         self.assertEqual(path._fallback("wake"), "n2")
         self.assertTrue(path._allowed("wake", True))
+
+    def test_confirmed_exit_resets_path_until_fresh_return(self):
+        path = HistoricalStagePath()
+        for index, stage in enumerate(("wake", "n1", "n2")):
+            path.commit(stage, index * 60.0)
+
+        path.observe_confirmed_off_bed(180.0)
+
+        self.assertTrue(path.off_bed_latched)
+        self.assertEqual(path.last, "wake")
+        self.assertFalse(path.cycle_has_n1)
+        path.observe_fresh_on_bed_vitals()
+        self.assertFalse(path.off_bed_latched)
+        selected, _ = path.stabilize("n2", 210.0, False)
+        self.assertEqual(selected, "wake")
 
 
 class ReplayAuditTests(unittest.TestCase):

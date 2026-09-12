@@ -545,7 +545,15 @@ class RbacApiTests(unittest.TestCase):
             )
             self.assertEqual(len(resume_events), 1)
             resume_value = json.loads(resume_events[0]["value"])
-            self.assertTrue(resume_value["excluded_from_score"])
+            self.assertEqual(
+                resume_value["continuity"],
+                "hold_last_confirmed_state_scoreable_low_confidence",
+            )
+            self.assertTrue(resume_value["score_eligible"])
+            self.assertFalse(resume_value["excluded_from_score"])
+            self.assertTrue(
+                resume_value["excluded_from_personal_baseline"]
+            )
             me = user.get("/api/auth/me")
             self.assertEqual(me.status_code, 200, me.text)
             self.assertTrue(me.json()["pod"]["owns_active_session"])
@@ -660,9 +668,21 @@ class RbacApiTests(unittest.TestCase):
                 restored["sleep"]["data_status"], "restored_confirmed_state"
             )
             self.assertTrue(restored["sleep"]["held_previous_state"])
-            self.assertTrue(restored["sleep"]["display_only_after_restart"])
-            # UI continuity must not fabricate a current physiological sample.
-            self.assertIsNone(pod_app.take_session_sample()["sleep"])
+            self.assertFalse(restored["sleep"]["display_only_after_restart"])
+            self.assertFalse(restored["sleep"]["evidence_active"])
+            self.assertTrue(restored["sleep"]["score_eligible"])
+            self.assertFalse(restored["sleep"]["excluded_from_score"])
+            self.assertTrue(
+                restored["sleep"]["excluded_from_personal_baseline"]
+            )
+            # Recording continuity owns time with the last durable State,
+            # while its metadata remains explicit that no fresh Evidence was
+            # fabricated and the sample cannot train Personal Baseline.
+            sample = pod_app.take_session_sample()
+            self.assertEqual(sample["sleep"], "n3")
+            self.assertEqual(sample["sleep_score_attribution_state"], "n3")
+            self.assertTrue(sample["sleep_score_eligible"])
+            self.assertTrue(sample["sleep_excluded_from_personal_baseline"])
         finally:
             pod_app.LAST_SENSOR_FRAME_PATH.unlink(missing_ok=True)
             with pod_app.state_lock:
@@ -1628,8 +1648,7 @@ class RbacApiTests(unittest.TestCase):
 
         stage_points = [
             point(30, "wake", score_eligible=True),
-            # A conflicting derived Stage at the same epoch end must not erase
-            # the persisted missing-vitals decision.
+            # Missing-vitals metadata cannot erase an occupied State.
             point(60, "wake", score_eligible=True),
             point(120, "n1", score_eligible=True),
         ]
@@ -1665,12 +1684,12 @@ class RbacApiTests(unittest.TestCase):
         self.assertFalse(use_legacy_gap_fallback)
         self.assertEqual(
             [period["state"] for period in periods],
-            ["wake", "no_data", "off_bed", "n1"],
+            ["wake", "off_bed", "n1"],
         )
-        self.assertEqual(periods[1]["data_status"], "missing_current_vitals")
+        self.assertEqual(periods[1]["data_status"], "confirmed_off_bed")
         self.assertFalse(periods[1]["sleep_stage"])
         self.assertTrue(periods[1]["excluded_from_score"])
-        self.assertTrue(periods[2]["excluded_from_personal_baseline"])
+        self.assertTrue(periods[1]["excluded_from_personal_baseline"])
 
         _, legacy_fallback = pod_app._history_sleep_timeline(
             stage_points,

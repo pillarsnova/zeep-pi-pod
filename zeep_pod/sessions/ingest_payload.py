@@ -8,6 +8,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from sleep_system_policy import (
+    ZEEP_OFF_BED_DATA_STATUSES,
+    ZEEP_OFF_BED_LABELS,
+)
+
 from .cadence import sample_interval_seconds
 
 STAGE_INDEX = {
@@ -30,9 +35,6 @@ STAGE_NAME = {
     "rem": "rem",
     "off_bed": "off_bed",
 }
-OFF_BED_STATUSES = frozenset(
-    {"empty_bed", "confirmed_off_bed", "off_bed"}
-)
 ENVIRONMENT_KEYS = {
     "temperature": "temperature",
     "humidity": "humidity",
@@ -49,8 +51,8 @@ def sample_off_bed(sample: dict[str, Any]) -> bool:
     data_status = str(sample.get("sleep_data_status") or "").lower()
     bed = str(sample.get("bed") or "").strip().lower()
     return bool(
-        data_status in OFF_BED_STATUSES
-        or bed in {"get out of bed", "off bed", "off_bed", "empty bed"}
+        data_status in ZEEP_OFF_BED_DATA_STATUSES
+        or bed in ZEEP_OFF_BED_LABELS
     )
 
 

@@ -162,7 +162,7 @@ class RescoreSessionStatusTests(unittest.TestCase):
 
         self.assertEqual(_stage_cadence([value], 10), 30)
 
-    def test_rescore_merges_operational_status_as_unscored_epochs(self):
+    def test_rescore_carries_legacy_no_data_but_preserves_off_bed(self):
         with tempfile.TemporaryDirectory() as temporary:
             data_dir = Path(temporary)
             self._database(data_dir)
@@ -181,29 +181,38 @@ class RescoreSessionStatusTests(unittest.TestCase):
             samples = build_report.call_args.args[1]
             self.assertEqual(
                 [sample.get("sleep") for sample in samples],
-                ["wake", None, None, "n1"],
+                ["wake"] * 6 + [None] * 3 + ["n1"] * 3,
             )
             self.assertEqual(
-                [sample.get("sleep_data_status") for sample in samples[1:3]],
-                ["missing_current_vitals", "confirmed_off_bed"],
+                {
+                    sample.get("sleep_data_status")
+                    for sample in samples[3:6]
+                },
+                {"continuity_hold"},
             )
             self.assertTrue(all(
                 sample["sleep_score_eligible"] is False
                 and sample["sleep_excluded_from_score"] is True
-                for sample in samples[1:3]
+                for sample in samples[6:9]
+            ))
+            self.assertTrue(all(
+                sample["sleep_score_eligible"] is True
+                and sample["sleep"] == "wake"
+                for sample in samples[3:6]
             ))
 
             item = result["sessions"][0]
             self.assertEqual(item["counts"], {
-                "wake": 1, "n1": 1, "n2": 0, "n3": 0, "rem": 0,
+                "wake": 6, "n1": 3, "n2": 0, "n3": 0, "rem": 0,
             })
             accounting = item["report"]["sleep"][
                 "classification_accounting"
             ]
             self.assertEqual(accounting["direct_confirmed_s"], 60)
-            self.assertEqual(accounting["no_data_s"], 30)
+            self.assertEqual(accounting["continuity_carried_forward_s"], 30)
+            self.assertEqual(accounting["no_data_s"], 0)
             self.assertEqual(accounting["off_bed_s"], 30)
-            self.assertEqual(accounting["score_eligible_s"], 60)
+            self.assertEqual(accounting["score_eligible_s"], 90)
             self.assertEqual(accounting["accounted_s"], 120)
             self.assertTrue(accounting["arithmetic_invariant"]["holds"])
             self.assertTrue(accounting["display_stage_total_reconciles"])

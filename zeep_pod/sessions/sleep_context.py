@@ -13,6 +13,8 @@ from .sleep_decision_projection import (
     INITIAL_CONFIRMATION_MAX_SECONDS,
     SLEEP_STATES,
     apply_sleep_decisions_to_samples,
+    sample_confirms_fresh_on_bed_return,
+    sample_confirms_off_bed,
 )
 from .sleep_event_data import (
     event_epoch as _event_epoch,
@@ -20,6 +22,7 @@ from .sleep_event_data import (
     finite_number as _finite_number,
     parse_timestamp as _timestamp,
 )
+from .sleep_occupancy import sample_has_confirmed_occupied_return
 
 __all__ = [
     "DEFAULT_HEART_RATE_RANGE",
@@ -50,6 +53,7 @@ def checkpoint_sleep_context(
         "awake_rr_reference": path.get("awake_rr_reference"),
         "sleep_onset_at": path.get("sleep_onset_at"),
         "last_valid_frame_t": path.get("last_valid_frame_t"),
+        "off_bed_latched": bool(path.get("off_bed_latched")),
     }
 
 
@@ -67,35 +71,18 @@ def restore_sleep_context(
     path = _replay_confirmed_path(session_id, stage_events)
     context = checkpoint_context or {}
     context_matches = context.get("session_id") == session_id
-
     saved_onset = context.get("sleep_onset_at") if context_matches else None
     if _finite_number(saved_onset):
         path["sleep_onset_at"] = float(saved_onset)
-    onset = path.get("sleep_onset_at")
-
-    saved_pairs = context.get("awake_vital_pairs") if context_matches else []
-    pairs = _valid_vital_pairs(
-        saved_pairs or [],
+    pairs, saved_hr, saved_rr, had_saved_pairs = _restore_awake_references(
+        context,
+        context_matches=context_matches,
+        onset=path.get("sleep_onset_at"),
+        samples=samples,
+        evidence_events=evidence_events,
         heart_rate_range=heart_rate_range,
         respiration_rate_range=respiration_rate_range,
     )
-    if not pairs and _finite_number(onset):
-        pairs = _pre_onset_pairs(
-            samples,
-            onset=float(onset),
-            heart_rate_range=heart_rate_range,
-            respiration_rate_range=respiration_rate_range,
-        )
-    pairs = sorted(pairs, key=lambda item: item[0])[-720:]
-
-    saved_hr = context.get("awake_hr_reference") if context_matches else None
-    saved_rr = context.get("awake_rr_reference") if context_matches else None
-    if len(pairs) >= 6:
-        saved_hr = _upper_quartile([item[1] for item in pairs])
-        saved_rr = _upper_quartile([item[2] for item in pairs])
-    if not (_finite_number(saved_hr) and _finite_number(saved_rr)):
-        saved_hr, saved_rr = _evidence_awake_references(evidence_events)
-
     path.update(
         {
             "awake_vital_pairs": pairs,
@@ -106,9 +93,16 @@ def restore_sleep_context(
     saved_last_frame = context.get("last_valid_frame_t") if context_matches else None
     if _finite_number(saved_last_frame):
         path["last_valid_frame_t"] = float(saved_last_frame)
-
+    _restore_off_bed_latch(
+        path,
+        samples=samples,
+        context=context,
+        context_matches=context_matches,
+        heart_rate_range=heart_rate_range,
+        respiration_rate_range=respiration_rate_range,
+    )
     source = "unavailable"
-    if context_matches and saved_pairs:
+    if context_matches and had_saved_pairs:
         source = "checkpoint"
     elif pairs:
         source = "pre_onset_timeline"
@@ -123,8 +117,81 @@ def restore_sleep_context(
             "awake_rr_reference": saved_rr,
             "sleep_onset_at": path.get("sleep_onset_at"),
             "last_confirmed_state": path.get("last"),
+            "off_bed_latched": bool(path.get("off_bed_latched")),
         },
     }
+
+
+def _restore_awake_references(
+    context: Mapping[str, Any],
+    *,
+    context_matches: bool,
+    onset: Any,
+    samples: Sequence[Mapping[str, Any]],
+    evidence_events: Sequence[Mapping[str, Any]],
+    heart_rate_range: tuple[float, float],
+    respiration_rate_range: tuple[float, float],
+) -> tuple[list[tuple[float, float, float]], Any, Any, bool]:
+    """Restore and validate the frozen pre-sleep HR/RR reference."""
+    raw_pairs = context.get("awake_vital_pairs") if context_matches else []
+    pairs = _valid_vital_pairs(
+        raw_pairs or [],
+        heart_rate_range=heart_rate_range,
+        respiration_rate_range=respiration_rate_range,
+    )
+    if not pairs and _finite_number(onset):
+        pairs = _pre_onset_pairs(
+            samples,
+            onset=float(onset),
+            heart_rate_range=heart_rate_range,
+            respiration_rate_range=respiration_rate_range,
+        )
+    pairs = sorted(pairs, key=lambda item: item[0])[-720:]
+    saved_hr = context.get("awake_hr_reference") if context_matches else None
+    saved_rr = context.get("awake_rr_reference") if context_matches else None
+    if len(pairs) >= 6:
+        saved_hr = _upper_quartile([item[1] for item in pairs])
+        saved_rr = _upper_quartile([item[2] for item in pairs])
+    if not (_finite_number(saved_hr) and _finite_number(saved_rr)):
+        saved_hr, saved_rr = _evidence_awake_references(evidence_events)
+    return pairs, saved_hr, saved_rr, bool(raw_pairs)
+
+
+def _restore_off_bed_latch(
+    path: dict[str, Any],
+    *,
+    samples: Sequence[Mapping[str, Any]],
+    context: Mapping[str, Any],
+    context_matches: bool,
+    heart_rate_range: tuple[float, float],
+    respiration_rate_range: tuple[float, float],
+) -> None:
+    """Restore OFF BED and release it only with authoritative return proof."""
+    path["off_bed_latched"] = bool(
+        context.get("off_bed_latched") if context_matches else False
+    )
+    latest = max(
+        samples,
+        key=lambda sample: (
+            float(sample.get("t"))
+            if _finite_number(sample.get("t")) else -math.inf
+        ),
+        default=None,
+    )
+    if latest is None:
+        return
+    if sample_confirms_off_bed(latest):
+        path["off_bed_latched"] = True
+        return
+    fresh_return = sample_confirms_fresh_on_bed_return(
+        latest,
+        heart_rate_range=heart_rate_range,
+        respiration_rate_range=respiration_rate_range,
+    )
+    if latest.get("sleep") in SLEEP_STATES and (
+        sample_has_confirmed_occupied_return(latest) or fresh_return
+    ):
+        path["off_bed_latched"] = False
 
 
 def restore_session_sleep_context(
@@ -187,6 +254,7 @@ def _replay_confirmed_path(
         "awake_hr_reference": None,
         "awake_rr_reference": None,
         "last_valid_frame_t": None,
+        "off_bed_latched": False,
     }
     for event in events:
         value = _event_value(event)

@@ -89,9 +89,20 @@ def _sleep_quality(*, available: bool = True) -> dict:
             "level": "high",
             "label": "หลักฐานสูง",
             "session_coverage_pct": 98.0,
+            "timeline_coverage_pct": 98.0,
+            "state_attribution_coverage_pct": 98.0,
+            "physiological_evidence_coverage_pct": 96.0,
             "paired_hr_rr_coverage_pct": 96.0,
         },
-        "data_coverage": {"score_component": True, "points": 5, "max_points": 5},
+        "data_coverage": {
+            "score_component": True,
+            "points": 5,
+            "max_points": 5,
+            "state_attribution_ratio": 0.98,
+            "state_attribution_pct": 98.0,
+            "physiological_evidence_ratio": 0.96,
+            "physiological_evidence_pct": 96.0,
+        },
     }
 
 
@@ -427,6 +438,43 @@ class UsageResponseModelTests(unittest.TestCase):
         self.assertEqual(accounting.score_eligible_s, 5)
         self.assertTrue(accounting.arithmetic_invariant.holds)
         self.assertEqual(parsed.report.environment[0].key, "temperature")
+        self.assertEqual(
+            parsed.report.data_quality.coverage.state_attribution_pct,
+            100,
+        )
+        self.assertEqual(
+            parsed.report.data_quality.coverage.
+            physiological_evidence_pct,
+            100,
+        )
+        self.assertEqual(
+            parsed.data_quality.coverage.state_attribution_pct,
+            100,
+        )
+        self.assertEqual(
+            parsed.data_quality.coverage.physiological_evidence_pct,
+            100,
+        )
+        self.assertEqual(
+            parsed.report.quality.score_confidence.
+            state_attribution_coverage_pct,
+            98,
+        )
+        self.assertEqual(
+            parsed.report.quality.score_confidence.
+            physiological_evidence_coverage_pct,
+            96,
+        )
+        self.assertEqual(
+            parsed.data_quality.confidence.
+            state_attribution_coverage_pct,
+            98,
+        )
+        self.assertEqual(
+            parsed.data_quality.confidence.
+            physiological_evidence_coverage_pct,
+            96,
+        )
 
     def test_current_sleep_and_recovery_quality_shapes_validate(self):
         samples = [
@@ -464,9 +512,33 @@ class UsageResponseModelTests(unittest.TestCase):
 
         for quality in cases:
             with self.subTest(quality_type=quality["quality_type"]):
-                parsed = _validate(PublicQuality, public_quality_payload(quality))
+                public = public_quality_payload(quality)
+                parsed = _validate(PublicQuality, public)
                 self.assertEqual(parsed.quality_type, quality["quality_type"])
                 self.assertIsNotNone(parsed.score_confidence)
+                self.assertEqual(
+                    parsed.data_coverage.physiological_evidence_pct,
+                    quality["data_coverage"][
+                        "physiological_evidence_pct"
+                    ],
+                )
+                self.assertEqual(
+                    parsed.data_coverage.state_attribution_pct,
+                    quality["data_coverage"]["state_attribution_pct"],
+                )
+                self.assertEqual(
+                    parsed.score_confidence.
+                    physiological_evidence_coverage_pct,
+                    quality["score_confidence"][
+                        "physiological_evidence_coverage_pct"
+                    ],
+                )
+                self.assertEqual(
+                    parsed.score_confidence.state_attribution_coverage_pct,
+                    quality["score_confidence"][
+                        "state_attribution_coverage_pct"
+                    ],
+                )
 
     def test_recovery_v83_nested_quality_shape_remains_readable(self):
         legacy = {

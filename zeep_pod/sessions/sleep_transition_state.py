@@ -169,38 +169,33 @@ def _initial_transition(
     confirm_epochs: int,
     confirm_ticks: Mapping[str, int],
 ) -> tuple[str, dict[str, Any]]:
-    if path.get("candidate") == target:
-        path["candidate_ticks"] += 1
-    else:
-        path["candidate"] = target
-        path["candidate_ticks"] = 1
-    ticks = int(path["candidate_ticks"])
-    required = int(confirm_ticks.get(target, confirm_epochs))
-    held = ticks < required
+    """Anchor the first occupied 30-second Epoch at conscious Wake.
+
+    Login and the Session start establish that a person entered ZEEP awake.
+    Requiring a second identical Wake decision used to create an artificial
+    hole at the start of every Session without adding physiological evidence.
+    """
+    del stage_confirmation_seconds
+    del default_confirmation_seconds
+    del confirm_epochs
+    del confirm_ticks
+    target = "wake"
+    path["candidate"] = None
+    path["candidate_ticks"] = 0
     path["continuity_hold_ticks"] = 0
     guard.update({
-        "required_ticks": required,
-        "candidate_ticks": ticks,
-        "candidate_epochs": ticks,
-        "required_epochs": required,
-        "confirmation_seconds": stage_confirmation_seconds.get(
-            target,
-            default_confirmation_seconds,
-        ),
-        "held": held,
-        "held_previous_state": False,
-        "confirmation_complete": not held,
-        "confirmed_state": None if held else target,
-        "provisional": False,
-        "decision": "initial_confirmation_wait" if held else "confirmed",
-        "decision_kind": (
-            "initial_confirmation_wait" if held else "confirmed_state"
-        ),
-        "data_status": "confirming_initial_state" if held else "live",
-        "score_eligible": not held,
-        "excluded_from_score": held,
-        "excluded_from_personal_baseline": held,
+        "required_ticks": 1,
+        "candidate_ticks": 1,
+        "candidate_epochs": 1,
+        "required_epochs": 1,
+        "confirmation_seconds": 0.0,
+        "confirmation_complete": True,
     })
+    guard.update(continuity_hold_contract(
+        None,
+        candidate=target,
+        decision="initial_awake_anchor",
+    ))
     return target, guard
 
 

@@ -17,15 +17,11 @@ from __future__ import annotations
 
 import base64
 from datetime import datetime, timezone
-import json
 import math
 import struct
 from typing import Any, Iterable, Mapping, Optional
 
-from sleep_system_policy import (
-    SLEEP_CLASSIFICATION_GAP_VERSION,
-    TERMINAL_WAKE_POLICY_VERSION,
-)
+from sleep_system_policy import TERMINAL_WAKE_POLICY_VERSION
 
 
 BCG_SAMPLE_RATE_HZ = 25.0
@@ -33,38 +29,6 @@ MIN_WAVEFORM_SECONDS = 20.0
 HR_SANITY_RANGE_BPM = (25.0, 220.0)
 RR_SANITY_RANGE_PER_MIN = (2.0, 60.0)
 TERMINAL_OCCUPANCY_POLICY_VERSION = "zeep-terminal-occupancy-v1.0"
-
-
-def sleep_classification_gap_controls(
-    events: Iterable[Mapping[str, Any]],
-) -> dict[str, Any]:
-    """Extract restart markers and audited display overrides from events."""
-    pause_times: list[Any] = []
-    resume_times: list[Any] = []
-    hold_after_first = False
-    for event in events:
-        event_type = str(event.get("type") or "")
-        if event_type == "service_pause":
-            pause_times.append(event.get("timestamp"))
-        elif event_type == "service_resume":
-            resume_times.append(event.get("timestamp"))
-        elif event_type == "classification_gap_annotation":
-            value = event.get("value")
-            try:
-                value = json.loads(value) if isinstance(value, str) else value
-            except json.JSONDecodeError:
-                continue
-            hold_after_first = bool(
-                isinstance(value, Mapping)
-                and value.get("policy") == "hold_previous_confirmed_state"
-                and value.get("scope") == "after_initial_wait"
-                and value.get("display_only") is True
-            )
-    return {
-        "service_pause_times": pause_times,
-        "service_resume_times": resume_times,
-        "hold_unclassified_after_first_state": hold_after_first,
-    }
 
 
 def movement_window_metrics(
@@ -282,10 +246,9 @@ def terminal_occupancy_timeline(
     Missing HR/RR alone can be a Sensor fault, so it must never be converted
     directly to Wake or an exit.  A completed Session receives an operational
     terminal sequence only when a debounced ``Get out of bed`` run occurs and
-    no valid HR+RR pair returns afterwards.  The sequence is backdated to the
-    first missing-vitals bucket that leads into that confirmed exit:
-
-    ``no_user_on_bed`` -> ``exited_zeep`` -> Session end.
+    no valid HR+RR pair returns afterwards. Missing HR/RR before that confirmed
+    boundary is Sensor uncertainty, not proof that the person left; it remains
+    ordinary five-state continuity.
 
     These periods explain the gap after the final human Sleep State.  They are
     deliberately excluded from Wake/N1/N2/N3/REM percentages and personal
@@ -359,23 +322,10 @@ def terminal_occupancy_timeline(
     if exit_index is None:
         return []
 
-    last_vital_index = next(
-        (position for position in range(exit_index - 1, -1, -1)
-         if valid_pairs[position]),
-        None,
-    )
-    missing_index = (
-        last_vital_index + 1 if last_vital_index is not None else exit_index
-    )
-    missing_end_epoch = sample_epoch(rows[missing_index])
     exit_end_epoch = sample_epoch(rows[exit_index])
     end_epoch = epoch(session_end)
     if exit_end_epoch is None:
         return []
-    no_user_start = (
-        missing_end_epoch - interval
-        if missing_end_epoch is not None else exit_end_epoch - interval
-    )
     exit_start = exit_end_epoch - interval
     if end_epoch is None:
         last_epoch = sample_epoch(rows[-1])
@@ -385,23 +335,7 @@ def terminal_occupancy_timeline(
     def iso(value: float) -> str:
         return datetime.fromtimestamp(value, timezone.utc).isoformat()
 
-    periods: list[dict[str, Any]] = []
-    if no_user_start < exit_start:
-        periods.append({
-            "version": TERMINAL_OCCUPANCY_POLICY_VERSION,
-            "state": "no_user_on_bed",
-            "label": "ไม่มีผู้ใช้งานบนเตียง",
-            "start_time": iso(no_user_start),
-            "end_time": iso(exit_start),
-            "duration_s": round(exit_start - no_user_start, 1),
-            "reason": (
-                "HR และ RR หายต่อเนื่องก่อน Bed Status ยืนยันการออกจากเตียง"
-            ),
-            "hr_available": False,
-            "rr_available": False,
-            "sleep_stage": False,
-        })
-    periods.append({
+    periods = [{
         "version": TERMINAL_OCCUPANCY_POLICY_VERSION,
         "state": "exited_zeep",
         "label": "ออกจาก ZEEP",
@@ -419,7 +353,7 @@ def terminal_occupancy_timeline(
             else "terminal_single_sample"
         ),
         "confirmed_exit_samples": confirmed_run,
-    })
+    }]
     return periods
 
 
@@ -506,276 +440,6 @@ def terminal_wake_transition(
         "excluded_from_personal_baseline": True,
         "aasm_psg_equivalent": False,
     }
-
-
-def sleep_classification_gap_timeline(
-    sleep_periods: Iterable[Mapping[str, Any]],
-    sensor_samples: Iterable[Mapping[str, Any]],
-    *,
-    session_start: Any,
-    classification_end: Any,
-    sensor_sample_interval_s: float = 10.0,
-    minimum_gap_s: Optional[float] = None,
-    service_pause_times: Iterable[Any] = (),
-    service_resume_times: Iterable[Any] = (),
-    hold_unclassified_after_first_state: bool = False,
-    initial_wait_max_s: float = 120.0,
-) -> list[dict[str, Any]]:
-    """Expose unclassified wall-clock gaps without inventing Sleep Stages.
-
-    Confirmed decisions are intentionally absent while the occupant is off the
-    bed, current HR/RR is invalid, the Sensor stream is unavailable, or the
-    estimator is rebuilding its confirmation window after a restart.  A report
-    that returns only confirmed periods makes those intervals look deleted.
-    This helper inserts explicit ``OFF``/``WAIT`` periods for display and audit;
-    they stay outside W/N1/N2/N3/REM totals, score, WASO and personal baseline.
-    """
-    interval = max(0.1, float(sensor_sample_interval_s or 10.0))
-    minimum = (
-        max(15.0, interval * 1.5)
-        if minimum_gap_s is None else max(0.1, float(minimum_gap_s))
-    )
-
-    def field(row: Mapping[str, Any], *keys: str) -> Any:
-        for key in keys:
-            try:
-                value = row.get(key) if hasattr(row, "get") else row[key]
-            except (IndexError, KeyError, TypeError):
-                continue
-            if value is not None:
-                return value
-        return None
-
-    def epoch(value: Any) -> Optional[float]:
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            return float(value) if math.isfinite(float(value)) else None
-        try:
-            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        except (TypeError, ValueError, OverflowError):
-            return None
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        return parsed.timestamp()
-
-    start_epoch = epoch(session_start)
-    end_epoch = epoch(classification_end)
-    if start_epoch is None or end_epoch is None or end_epoch <= start_epoch:
-        return []
-
-    periods: list[tuple[float, float, str]] = []
-    for period in sleep_periods:
-        period_state = str(field(period, "state") or "").casefold()
-        if period_state not in {
-            "wake", "n1", "n2", "n3", "rem",
-        }:
-            continue
-        period_start = epoch(field(period, "start_time", "timestamp"))
-        period_end = epoch(field(period, "end_time", "window_end", "timestamp"))
-        if period_start is None or period_end is None:
-            continue
-        periods.append((
-            max(start_epoch, period_start),
-            min(end_epoch, period_end),
-            period_state,
-        ))
-    periods.sort()
-
-    pause_epochs = [
-        value for item in service_pause_times
-        if (value := epoch(item)) is not None
-    ]
-    resume_epochs = [
-        value for item in service_resume_times
-        if (value := epoch(item)) is not None
-    ]
-
-    gaps: list[tuple[float, float]] = []
-    cursor = start_epoch
-    for period_start, period_end, _ in periods:
-        if period_end <= cursor:
-            continue
-        if period_start - cursor >= minimum:
-            gaps.append((cursor, period_start))
-        cursor = max(cursor, period_end)
-    if end_epoch - cursor >= minimum:
-        gaps.append((cursor, end_epoch))
-
-    # WAIT is an acquisition/confirmation state, never an unlimited fallback.
-    # Split a long leading gap so at most the configured 60/120-second window
-    # can be labelled WAIT; any remainder is explicit NO DATA until a durable
-    # five-state decision exists.
-    wait_max = max(interval, float(initial_wait_max_s or 120.0))
-    bounded_gaps: list[tuple[float, float]] = []
-    for gap_start, gap_end in gaps:
-        has_previous = any(
-            period_end <= gap_start + interval
-            for _, period_end, _ in periods
-        )
-        wait_boundary = min(gap_end, start_epoch + wait_max)
-        if not has_previous and gap_start < wait_boundary < gap_end:
-            bounded_gaps.append((gap_start, wait_boundary))
-            bounded_gaps.append((wait_boundary, gap_end))
-        else:
-            bounded_gaps.append((gap_start, gap_end))
-    gaps = bounded_gaps
-
-    sample_rows: list[tuple[float, Mapping[str, Any]]] = []
-    for sample in sensor_samples:
-        sample_epoch = epoch(field(sample, "t", "timestamp"))
-        if sample_epoch is not None:
-            sample_rows.append((sample_epoch, sample))
-
-    def iso(value: float) -> str:
-        return datetime.fromtimestamp(value, timezone.utc).isoformat()
-
-    results: list[dict[str, Any]] = []
-    for gap_start, gap_end in gaps:
-        restart_markers = [
-            value for value in (*pause_epochs, *resume_epochs)
-            if gap_start - interval <= value <= gap_end + interval
-        ]
-        previous_periods = [
-            period for period in periods
-            if period[1] <= gap_start + interval
-        ]
-        following_periods = [
-            period for period in periods
-            if period[0] >= gap_end - interval
-        ]
-        held_stage = previous_periods[-1][2] if previous_periods else None
-        operational_hold = bool(
-            (restart_markers or hold_unclassified_after_first_state)
-            and held_stage in {"wake", "n1", "n2", "n3", "rem"}
-            and (following_periods or hold_unclassified_after_first_state)
-        )
-        hold_source = (
-            "service_event" if restart_markers
-            else "session_operational_annotation"
-        ) if operational_hold else None
-        rows = [
-            row for sample_epoch, row in sample_rows
-            if gap_start <= sample_epoch < gap_end
-        ]
-        bed_labels = [
-            str(field(row, "bed", "bed_status") or "") for row in rows
-        ]
-        valid_pairs = 0
-        for row in rows:
-            hr = filter_vital_values(
-                [field(row, "hr", "heart_rate")], HR_SANITY_RANGE_BPM)
-            rr = filter_vital_values(
-                [field(row, "rr", "respiration_rate")],
-                RR_SANITY_RANGE_PER_MIN,
-            )
-            valid_pairs += int(bool(hr and rr))
-        off_bed = sum(
-            label.casefold() == "get out of bed" for label in bed_labels)
-        on_bed = sum(
-            label.casefold() in {
-                "on bed", "moving", "weak breathing", "snoring",
-            }
-            for label in bed_labels
-        )
-        if operational_hold:
-            state = "restart_hold"
-            label = {
-                "wake": "W · ตื่น",
-                "n1": "N1 · หลับตื้น / เคลิ้มหลับ",
-                "n2": "N2 · หลับตื้นต่อเนื่อง",
-                "n3": "N3 · หลับลึก",
-                "rem": "REM · หลับฝัน",
-            }[held_stage] + " · คงสถานะก่อน Restart"
-            evidence = (
-                "พบ event หยุด/เริ่ม Service"
-                if restart_markers else "มี Operational annotation ที่มี Audit"
-            )
-            reason = (
-                f"{evidence} จึงแสดงสถานะที่ยืนยันล่าสุดเพื่อความต่อเนื่อง"
-                "เท่านั้น โดยไม่สร้างหลักฐาน Sleep Stage และไม่นำช่วงนี้ไป"
-                "คิดคะแนนหรือ Baseline"
-            )
-            status = "service_restart_hold"
-        elif not rows:
-            state = "sensor_gap"
-            label = "NO DATA · ไม่มีข้อมูล Sensor"
-            reason = "ไม่มี Timeline Sensor ในช่วงนี้"
-            status = "sensor_unavailable"
-        elif off_bed > on_bed:
-            state = "off_bed"
-            label = "OFF · ไม่มีผู้ใช้งานบนเตียง"
-            reason = (
-                "Bed Status ส่วนใหญ่เป็น Get out of bed; "
-                "ช่วงนี้ไม่ใช่ Sleep Stage"
-            )
-            status = "confirmed_or_dominant_off_bed"
-        elif valid_pairs == 0:
-            state = "no_data"
-            label = "NO DATA · ไม่มี HR/RR ที่ใช้ได้"
-            reason = "มี Timeline แต่ไม่มีคู่ HR และ RR ที่ผ่าน sanity gate"
-            status = "missing_current_vitals"
-        elif valid_pairs < max(2, math.ceil(len(rows) * 0.5)):
-            state = "no_data"
-            label = "NO DATA · HR/RR ไม่ต่อเนื่อง"
-            reason = (
-                "HR/RR ที่ใช้ได้ไม่ต่อเนื่องพอสำหรับยืนยัน Sleep State"
-            )
-            status = "insufficient_vital_coverage"
-        elif not previous_periods and gap_end <= start_epoch + wait_max + 0.001:
-            state = "no_data"
-            label = "WAIT · กำลังยืนยันสถานะ"
-            reason = (
-                "Sensor มีข้อมูลและกำลังยืนยัน Sleep State แรก "
-                "60 วินาที หรือ 120 วินาทีสำหรับ N2"
-            )
-            status = "confirming_initial_state"
-        elif not previous_periods:
-            state = "no_data"
-            label = "NO DATA · ยังไม่มีสถานะยืนยัน"
-            reason = (
-                "ครบช่วงสะสมและยืนยันสูงสุด 120 วินาทีแล้ว "
-                "แต่ไม่มี derived Sleep State ที่ยืนยันได้"
-            )
-            status = "initial_confirmation_timeout"
-        else:
-            state = "no_data"
-            label = "NO DATA · หลักฐานยังไม่ครบ"
-            reason = (
-                "Sensor มีข้อมูลหลังมี confirmed Sleep State แล้ว "
-                "แต่ช่วงนี้ไม่มี continuity attribution ที่ยืนยันได้"
-            )
-            status = "no_data_unconfirmed_evidence"
-        results.append({
-            "version": SLEEP_CLASSIFICATION_GAP_VERSION,
-            "state": state,
-            "label": label,
-            "start_time": iso(gap_start),
-            "end_time": iso(gap_end),
-            "duration_s": round(gap_end - gap_start, 1),
-            "round_count": 0,
-            "sample_interval_s": interval,
-            "confidence": "unavailable",
-            "probabilities": {},
-            "metrics": {},
-            "reason": reason,
-            "decision_kind": "classification_gap",
-            "data_status": status,
-            "held_previous_state": operational_hold,
-            "held_state": held_stage if operational_hold else None,
-            "operational_hold_source": hold_source,
-            "service_restart_marker_count": len(restart_markers),
-            "sleep_stage": False,
-            "excluded_from_stage_statistics": True,
-            "excluded_from_score": True,
-            "excluded_from_personal_baseline": True,
-            "aasm_psg_equivalent": False,
-            "coverage": {
-                "sensor_rows": len(rows),
-                "valid_hr_rr_pairs": valid_pairs,
-                "off_bed_rows": off_bed,
-                "on_bed_context_rows": on_bed,
-            },
-        })
-    return results
 
 
 def sleep_movement_evidence(

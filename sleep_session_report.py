@@ -23,6 +23,7 @@ from sleep_signal_features import (
     filter_vital_values,
 )
 from zeep_pod.sessions.restore_summary import build_restore_summary
+from zeep_pod.sessions.sleep_occupancy import sample_confirms_off_bed
 from sleep_system_policy import (
     ENVIRONMENT_ACCEPTABLE_MIN_LEVEL,
     ENVIRONMENT_CONTEXT_CRITERIA,
@@ -46,6 +47,7 @@ from sleep_system_policy import (
     SLEEP_SCORE_FORMULA_VERSION,
     SLEEP_QUALITY_COMPONENT_MAX_POINTS,
     SLEEP_QUALITY_VERSION,
+    ZEEP_OFF_BED_DATA_STATUSES,
     environment_criterion,
     environment_level_for_value,
     environment_policy_snapshot,
@@ -91,7 +93,7 @@ _AWAKE_REST_MODES = {
 
 _TARGET_UNSET = object()
 CLASSIFICATION_ACCOUNTING_VERSION = (
-    "zeep-classification-accounting-v1.0-continuity-carry-forward"
+    "zeep-classification-accounting-v1.1-complete-occupied-epochs"
 )
 
 _RESTART_DISPLAY_STATUSES = {
@@ -99,12 +101,6 @@ _RESTART_DISPLAY_STATUSES = {
     "restored_confirmed_state",
     "restored_waiting_live_frame",
     "restart_hold",
-}
-_OFF_BED_STATUSES = {
-    "confirmed_off_bed",
-    "confirmed_or_dominant_off_bed",
-    "empty_bed",
-    "off_bed",
 }
 _NO_DATA_STATUSES = {
     "incomplete_current_epoch",
@@ -141,6 +137,17 @@ def _number(value: Any) -> Optional[float]:
     return float(value)
 
 
+def _row_duration_seconds(
+    row: Dict[str, Any],
+    fallback_interval_s: float,
+) -> float:
+    """Return the exact report time owned by one normalized row."""
+    value = _number(row.get("sample_interval_s"))
+    if value is None or value <= 0:
+        value = max(0.1, float(fallback_interval_s))
+    return value
+
+
 def _percent(numerator: float, denominator: float) -> int:
     if denominator <= 0:
         return 0
@@ -170,7 +177,13 @@ def _normalise_stage_counts(raw: Optional[Dict[str, Any]]) -> Dict[str, float]:
 def _score_eligible_stage_sequence(
     stage_sequence: Optional[Iterable[Any]],
 ) -> list[Any]:
-    """Exclude provisional display holds from score-facing sequence metrics."""
+    """Keep every score-attributed State in sequence-facing score metrics.
+
+    Under the complete occupied-epoch contract, ``provisional`` describes
+    confidence in the evidence for a *new* State.  It does not, by itself,
+    remove the already-attributed State from Sleep Score.  Only an explicit
+    score exclusion may remove a row from arousal/cycle calculations.
+    """
     eligible = []
     for item in stage_sequence or []:
         if not isinstance(item, dict):
@@ -188,12 +201,7 @@ def _score_eligible_stage_sequence(
             or item.get("excluded_from_score")
             or confirmation.get("excluded_from_score")
         )
-        provisional = bool(
-            item.get("sleep_provisional")
-            or item.get("provisional")
-            or confirmation.get("provisional")
-        )
-        if explicit is False or excluded or provisional:
+        if explicit is False or excluded:
             continue
         eligible.append(item)
     return eligible
@@ -227,6 +235,30 @@ def _paired_vitals_available(sample: Dict[str, Any]) -> bool:
             [sample.get("rr")], RR_SANITY_RANGE_PER_MIN
         )
     )
+
+
+def _row_has_measured_paired_vitals(sample: Dict[str, Any]) -> bool:
+    """Accept paired HR/RR only from a measured, occupied BCG row.
+
+    Projected continuity rows can legitimately retain a Sleep State, but they
+    are not new physiological evidence.  Likewise, a confirmed OFF BED row or
+    an explicitly invalid BCG analysis must never satisfy a score-release
+    gate merely because stale HR/RR values remain on the row.
+    """
+    if (
+        sample.get("synthetic_sleep_gap") is True
+        or sample.get("bcg_analysis_valid") is False
+        or sample.get("heart_rate_held") is True
+        or sample.get("respiration_held") is True
+        or sample.get("heart_rate_current_valid") is False
+        or sample.get("respiration_current_valid") is False
+        or sample_confirms_off_bed(sample)
+    ):
+        return False
+    explicit_paired = _number(sample.get("_paired_hr_rr_rows"))
+    if explicit_paired is not None:
+        return explicit_paired > 0
+    return _paired_vitals_available(sample)
 
 
 def _explicitly_excluded_from_score(sample: Dict[str, Any]) -> bool:
@@ -277,13 +309,12 @@ def _classification_accounting(
 ) -> Dict[str, Any]:
     """Reconcile every report second to one classification-time category.
 
-    A carried-forward State remains display-attributed to the last confirmed
-    State. Its first two provisional epochs are excluded from score; later
-    held epochs can score as that preceding State. An unconfirmed challenger
-    receives no new-State time. WAIT is limited to the first 60/120-second
-    confirmation window. Missing vitals,
-    confirmed bed exit, restart display-only holds and acquisition gaps remain
-    operational time and never become Sleep Stage evidence.
+    A carried-forward State remains attributed to the last confirmed State
+    and is scoreable; an unconfirmed challenger receives no new-State time.
+    Missing/stale/restart intervals therefore remain continuous State time at
+    low confidence while confirmed OFF BED remains operational and unscored.
+    Measured physiological-evidence coverage is calculated separately, so a
+    complete State timeline never pretends that missing HR/RR/BCG was observed.
 
     Older reports may contain Stage totals without row-level labels.  Those
     reports use a clearly identified count fallback rather than inventing
@@ -292,7 +323,9 @@ def _classification_accounting(
     interval = max(0.1, float(sample_interval_s or 0.1))
     recording_s = max(0.0, float(duration_s or 0.0))
     if recording_s <= 0 and rows:
-        recording_s = len(rows) * interval
+        recording_s = sum(
+            _row_duration_seconds(row, interval) for row in rows
+        )
 
     categories = {
         "direct_confirmed_s": 0.0,
@@ -325,23 +358,26 @@ def _classification_accounting(
             "initial_wait_s": 0.0,
         }
         for sample in rows:
+            seconds = _row_duration_seconds(sample, interval)
             status = _row_data_status(sample)
-            bed = str(sample.get("bed") or "").strip().lower()
             if (
                 sample.get("display_only_after_restart")
                 or sample.get("sleep_display_only_after_restart")
                 or status in _RESTART_DISPLAY_STATUSES
             ):
-                explicit["restart_display_hold_s"] += interval
-            elif status in _OFF_BED_STATUSES or bed == "get out of bed":
-                explicit["off_bed_s"] += interval
+                explicit["restart_display_hold_s"] += seconds
+            elif (
+                status in ZEEP_OFF_BED_DATA_STATUSES
+                or sample_confirms_off_bed(sample)
+            ):
+                explicit["off_bed_s"] += seconds
             elif status in _INITIAL_WAIT_STATUSES:
-                explicit["initial_wait_s"] += interval
+                explicit["initial_wait_s"] += seconds
             elif (
                 _is_no_data_status(status)
                 or _explicitly_excluded_from_score(sample)
             ):
-                explicit["no_data_s"] += interval
+                explicit["no_data_s"] += seconds
         for key in (
             "restart_display_hold_s",
             "off_bed_s",
@@ -368,7 +404,10 @@ def _classification_accounting(
         for sample in rows:
             if remaining <= 0:
                 break
-            seconds = min(interval, remaining)
+            seconds = min(
+                _row_duration_seconds(sample, interval),
+                remaining,
+            )
             remaining -= seconds
             status = _row_data_status(sample)
             stage = _row_sleep_stage(sample)
@@ -376,10 +415,17 @@ def _classification_accounting(
             confirmation = (
                 confirmation if isinstance(confirmation, dict) else {}
             )
+            explicitly_scoreable = bool(
+                sample.get("sleep_score_eligible") is True
+                or sample.get("score_eligible") is True
+            )
             restart_display = bool(
                 sample.get("display_only_after_restart")
                 or sample.get("sleep_display_only_after_restart")
-                or status in _RESTART_DISPLAY_STATUSES
+                or (
+                    status in _RESTART_DISPLAY_STATUSES
+                    and not explicitly_scoreable
+                )
             )
             if restart_display:
                 categories["restart_display_hold_s"] += seconds
@@ -390,8 +436,10 @@ def _classification_accounting(
             # label.  Likewise, an explicit score exclusion must be honoured
             # before the compatibility fallback considers valid HR/RR as a
             # carried-forward State.
-            bed = str(sample.get("bed") or "").strip().lower()
-            if status in _OFF_BED_STATUSES or bed == "get out of bed":
+            if (
+                status in ZEEP_OFF_BED_DATA_STATUSES
+                or sample_confirms_off_bed(sample)
+            ):
                 categories["off_bed_s"] += seconds
                 continue
             if _is_no_data_status(status):
@@ -421,10 +469,7 @@ def _classification_accounting(
                 )
                 if provisional:
                     provisional_hold_s += seconds
-                if (
-                    not provisional
-                    and not _explicitly_excluded_from_score(sample)
-                ):
+                if not _explicitly_excluded_from_score(sample):
                     score_eligible_s += seconds
                 previous_stage = stage
                 continue
@@ -768,9 +813,67 @@ def _regularity(values: list[float], *, soft_cv: float) -> Optional[float]:
     return max(0.0, min(1.0, 1.0 - cv / max(0.0001, soft_cv)))
 
 
+def _physiological_evidence_coverage(
+    rows: list[Dict[str, Any]],
+    *,
+    duration_s: float,
+    sample_interval_s: float,
+) -> Dict[str, Any]:
+    """Measure real paired HR/RR time without counting projected gap rows.
+
+    Sleep-State attribution may intentionally cover an occupied wall-clock gap
+    by carrying the last confirmed State.  That continuity is useful for the
+    timeline, but it is not newly observed physiology.  Keep both denominators
+    explicit so a complete State timeline cannot masquerade as complete Sensor
+    evidence.
+    """
+    source_samples = 0
+    paired_samples = 0
+    evidence_seconds = 0.0
+    fallback_interval = max(0.1, float(sample_interval_s or 0.1))
+    for row in rows:
+        source_count = max(1, int(_number(row.get("_source_rows")) or 1))
+        explicit_paired = _number(row.get("_paired_hr_rr_rows"))
+        if explicit_paired is not None:
+            paired_count = (
+                max(0, min(source_count, int(explicit_paired)))
+                if _row_has_measured_paired_vitals(row)
+                else 0
+            )
+        else:
+            paired_count = source_count * int(
+                _row_has_measured_paired_vitals(row)
+            )
+        source_samples += source_count
+        paired_samples += paired_count
+
+        row_interval = max(
+            0.0,
+            _number(row.get("sample_interval_s")) or fallback_interval,
+        )
+        evidence_seconds += row_interval * paired_count / source_count
+
+    duration = max(0.0, float(duration_s or 0.0))
+    evidence_seconds = min(duration, evidence_seconds)
+    return {
+        "source_samples": source_samples,
+        "paired_samples": paired_samples,
+        "paired_ratio": (
+            paired_samples / source_samples if source_samples else 0.0
+        ),
+        "evidence_seconds": evidence_seconds,
+        "evidence_ratio": (
+            evidence_seconds / duration if duration > 0.0 else 0.0
+        ),
+    }
+
+
 def _score_confidence(
-    coverage_ratio: float,
-    paired_vital_ratio: float,
+    timeline_coverage_ratio: float,
+    physiological_evidence_ratio: float,
+    *,
+    paired_vital_ratio: Optional[float] = None,
+    state_attribution_ratio: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Describe score evidence completeness without suppressing the score.
 
@@ -778,7 +881,15 @@ def _score_confidence(
     bounded score component.  It must not become a second, hidden veto after
     minimum paired HR/RR evidence has passed.
     """
-    evidence_floor = min(coverage_ratio, paired_vital_ratio)
+    evidence_floor = min(
+        timeline_coverage_ratio,
+        physiological_evidence_ratio,
+    )
+    attribution_ratio = (
+        timeline_coverage_ratio
+        if state_attribution_ratio is None
+        else state_attribution_ratio
+    )
     if evidence_floor >= 0.80:
         level, label = "high", "หลักฐานสูง"
     elif evidence_floor >= 0.50:
@@ -788,9 +899,27 @@ def _score_confidence(
     return {
         "level": level,
         "label": label,
-        "session_coverage_pct": round(coverage_ratio * 100.0, 1),
+        # Backward-compatible alias: historically this field meant attributed
+        # Session time, not direct physiology.
+        "session_coverage_pct": round(
+            timeline_coverage_ratio * 100.0, 1
+        ),
+        "timeline_coverage_pct": round(
+            timeline_coverage_ratio * 100.0, 1
+        ),
+        "state_attribution_coverage_pct": round(
+            attribution_ratio * 100.0, 1
+        ),
+        "physiological_evidence_coverage_pct": round(
+            physiological_evidence_ratio * 100.0, 1
+        ),
         "paired_hr_rr_coverage_pct": round(
-            paired_vital_ratio * 100.0, 1
+            (
+                physiological_evidence_ratio
+                if paired_vital_ratio is None
+                else paired_vital_ratio
+            ) * 100.0,
+            1,
         ),
         "coverage_is_admin_qa_context": True,
         "coverage_can_hide_score": False,
@@ -928,31 +1057,81 @@ def _recovery_environment_summary(
     }
 
 
+def _row_has_recovery_presence(row: Dict[str, Any]) -> bool:
+    """Return whether one row belongs to the user's Recovery exposure.
+
+    A complete projected W/N1/N2/N3/REM row is occupied time even when its
+    physiology is carried through a Sensor gap.  Legacy rows may instead use
+    affirmative Bed Status or a sane HR/RR pair.  A raw vendor Bed label never
+    overrides a projected State; only canonical confirmed OFF BED does.
+    """
+    if sample_confirms_off_bed(row):
+        return False
+    if _row_sleep_stage(row) is not None:
+        return True
+    bed = str(
+        row.get("bed") or row.get("bed_status") or ""
+    ).strip().casefold()
+    if bed in {"on bed", "moving", "weak breathing", "snoring"}:
+        return True
+    return _paired_vitals_available(row)
+
+
+def _recovery_presence_rows(
+    rows: list[Dict[str, Any]],
+) -> list[Dict[str, Any]]:
+    """Select rows that may contribute to the Recovery experience score."""
+    return [row for row in rows if _row_has_recovery_presence(row)]
+
+
+def _confirmed_exit_summary(
+    rows: list[Dict[str, Any]],
+) -> Dict[str, int]:
+    """Count canonical OFF BED bouts and retain raw-only labels as QA."""
+    event_count = 0
+    confirmed_samples = 0
+    transient_samples = 0
+    in_exit = False
+    for row in rows:
+        confirmed = sample_confirms_off_bed(row)
+        if confirmed:
+            confirmed_samples += 1
+            if not in_exit:
+                event_count += 1
+            in_exit = True
+            continue
+        in_exit = False
+        bed = str(
+            row.get("bed") or row.get("bed_status") or ""
+        ).strip().casefold()
+        if bed in {"get out of bed", "off bed", "off_bed", "empty bed"}:
+            transient_samples += 1
+    return {
+        "event_count": event_count,
+        "confirmed_samples": confirmed_samples,
+        "transient_samples": transient_samples,
+    }
+
+
 def _eligible_rest_seconds(
     rows: list[Dict[str, Any]], interval: float, duration: float,
 ) -> float:
-    """Count recorded time with evidence that the user remained in ZEEP.
+    """Count all attributed rest time except confirmed OFF BED.
 
     Nap & Refresh may be quiet wakefulness, so sleep stages are deliberately
-    not required.  Moving, weak breathing and snoring still mean the user is
-    on the bed.  For legacy rows without Bed Status, valid paired HR/RR is the
-    occupancy fallback.  Confirmed ``Get out of bed`` and unknown rows do not
-    earn goal-duration time.
+    not required. Under the complete occupied-epoch contract, a projected
+    W/N1/N2/N3/REM row remains eligible through a Sensor/restart gap because
+    the gap carries the preceding occupied State at low confidence. A raw
+    Bed Status label alone cannot remove that time; only canonical confirmed
+    OFF BED does. Legacy rows may still use affirmative Bed Status or paired
+    HR/RR as their occupancy fallback.
     """
-    occupied_labels = {"on bed", "moving", "weak breathing", "snoring"}
-    eligible_rows = 0
-    for row in rows:
-        bed = str(row.get("bed") or row.get("bed_status") or "").strip().casefold()
-        if bed in occupied_labels:
-            eligible_rows += 1
-            continue
-        if bed:
-            continue
-        hr_ok = bool(filter_vital_values([row.get("hr")], HR_SANITY_RANGE_BPM))
-        rr_ok = bool(filter_vital_values([row.get("rr")], RR_SANITY_RANGE_PER_MIN))
-        if hr_ok and rr_ok:
-            eligible_rows += 1
-    return min(max(0.0, duration), eligible_rows * interval)
+    eligible_seconds = sum(
+        _row_duration_seconds(row, interval)
+        for row in rows
+        if _row_has_recovery_presence(row)
+    )
+    return min(max(0.0, duration), eligible_seconds)
 
 
 def _build_awake_rest_quality(
@@ -981,6 +1160,7 @@ def _build_awake_rest_quality(
     no_sensor_evidence = not rows
     target = dict(mode.get("target") or {})
     duration_goal_s = _rest_goal_seconds(target)
+    presence_rows = _recovery_presence_rows(rows)
     eligible_rest_s = _eligible_rest_seconds(rows, interval, duration)
     duration_factor = (
         min(1.0, eligible_rest_s / duration_goal_s)
@@ -991,8 +1171,18 @@ def _build_awake_rest_quality(
         0.0 if no_sensor_evidence else round(25.0 * duration_factor, 1)
     )
 
-    hr = [value for value in _values(rows, "hr") if 30 <= value <= 220]
-    rr = [value for value in _values(rows, "rr") if 4 <= value <= 60]
+    physiology_rows = [
+        row for row in presence_rows
+        if _row_has_measured_paired_vitals(row)
+    ]
+    hr = [
+        value for value in _values(physiology_rows, "hr")
+        if 30 <= value <= 220
+    ]
+    rr = [
+        value for value in _values(physiology_rows, "rr")
+        if 4 <= value <= 60
+    ]
     hr_regularity = _regularity(hr, soft_cv=0.12)
     rr_regularity = _regularity(rr, soft_cv=0.18)
     regularity_parts = [
@@ -1015,9 +1205,21 @@ def _build_awake_rest_quality(
         physiology_factor = 0.85 * regularity + 0.15 * (settling if settling is not None else 0.5)
     physiology_points = round(35.0 * physiology_factor, 1)
 
-    bed_labels = [str(row.get("bed") or "") for row in rows if row.get("bed")]
-    moving = sum(label == "Moving" for label in bed_labels)
-    exit_summary = bed_exit_event_summary(bed_labels)
+    # A materialised restart/Sensor gap may carry the preceding Sleep State so
+    # elapsed rest remains complete, but it must not fabricate extra stillness
+    # or repeat a stale ``Moving`` label.  Body-response evidence therefore
+    # uses only rows that came from an actual Sensor observation.
+    body_rows = [
+        row for row in presence_rows
+        if not row.get("synthetic_sleep_gap")
+    ]
+    bed_labels = [
+        str(row.get("bed") or row.get("bed_status") or "")
+        for row in body_rows
+        if row.get("bed") or row.get("bed_status")
+    ]
+    moving = sum(label.strip().casefold() == "moving" for label in bed_labels)
+    exit_summary = _confirmed_exit_summary(rows)
     exits = exit_summary["event_count"]
     if bed_labels:
         movement_ratio = moving / len(bed_labels)
@@ -1030,7 +1232,18 @@ def _build_awake_rest_quality(
     # Use the same versioned bands as Dashboard/Session findings. Quality is
     # calculated only from available channels; missing channels are coverage,
     # not a fabricated poor measurement.
-    environment = _recovery_environment_summary(rows, "nap_recovery")
+    # Environment can explain and support Recovery only while the user has an
+    # attributed presence interval. Confirmed OFF BED and materialised Sensor
+    # gaps remain visible to Admin QA in the full Session report, but cannot
+    # add or remove points from the user's Recovery exposure.
+    environment_rows = [
+        row for row in presence_rows
+        if not row.get("synthetic_sleep_gap")
+    ]
+    environment = _recovery_environment_summary(
+        environment_rows,
+        "nap_recovery",
+    )
     environment_factor = _number(environment.get("quality_factor"))
     environment_points = (
         round(10.0 * environment_factor, 1)
@@ -1038,25 +1251,28 @@ def _build_awake_rest_quality(
         else None
     )
 
-    recorded_s = len(rows) * interval
+    recorded_s = sum(
+        _row_duration_seconds(row, interval) for row in rows
+    )
     state_s = sum(counts.values()) * interval
-    coverage_ratio = max(0.0, min(1.0, max(recorded_s, state_s) / max(1.0, duration)))
-    source_vital_samples = sum(
-        max(1, int(_number(row.get("_source_rows")) or 1)) for row in rows
+    state_attribution_ratio = max(
+        0.0,
+        min(1.0, state_s / max(1.0, duration)),
     )
-    paired_vital_samples = sum(
-        max(0, int(_number(row.get("_paired_hr_rr_rows")) or 0))
-        if "_paired_hr_rr_rows" in row else int(
-            isinstance(row.get("hr"), (int, float))
-            and 30 <= float(row["hr"]) <= 220
-            and isinstance(row.get("rr"), (int, float))
-            and 4 <= float(row["rr"]) <= 60
-        )
-        for row in rows
+    recording_coverage_ratio = max(
+        0.0,
+        min(1.0, recorded_s / max(1.0, duration)),
     )
-    paired_vital_ratio = (
-        paired_vital_samples / source_vital_samples
-        if source_vital_samples else 0.0
+    evidence_coverage = _physiological_evidence_coverage(
+        rows,
+        duration_s=duration,
+        sample_interval_s=interval,
+    )
+    source_vital_samples = int(evidence_coverage["source_samples"])
+    paired_vital_samples = int(evidence_coverage["paired_samples"])
+    paired_vital_ratio = float(evidence_coverage["paired_ratio"])
+    physiological_evidence_ratio = float(
+        evidence_coverage["evidence_ratio"]
     )
     component_points = {
         "goal_duration": duration_points,
@@ -1100,9 +1316,19 @@ def _build_awake_rest_quality(
         and rr_regularity is not None
     )
     timing_releasable = bool(protocol_status.get("score_releasable"))
-    score_available = evidence_available and timing_releasable
+    eligible_duration_releasable = (
+        eligible_rest_s >= NAP_RECOVERY_MINIMUM_SCORE_SECONDS
+    )
+    score_available = bool(
+        evidence_available
+        and timing_releasable
+        and eligible_duration_releasable
+    )
     score_confidence = _score_confidence(
-        coverage_ratio, paired_vital_ratio
+        recording_coverage_ratio,
+        physiological_evidence_ratio,
+        paired_vital_ratio=paired_vital_ratio,
+        state_attribution_ratio=state_attribution_ratio,
     )
     return {
         "available": score_available,
@@ -1117,7 +1343,15 @@ def _build_awake_rest_quality(
             "paired_hr_rr_coverage_blocks_score": False,
             "minimum_paired_samples": 6,
             "paired_hr_rr_required": True,
+            "state_attribution_coverage_pct": round(
+                state_attribution_ratio * 100.0, 1
+            ),
+            "physiological_evidence_coverage_pct": round(
+                physiological_evidence_ratio * 100.0, 1
+            ),
             "minimum_session_seconds": NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
+            "eligible_rest_seconds": round(eligible_rest_s, 1),
+            "eligible_duration_releasable": eligible_duration_releasable,
             "timing_status": protocol_status.get("status"),
             "timing_releasable": timing_releasable,
             "review_required": bool(protocol_status.get("review_required")),
@@ -1127,6 +1361,12 @@ def _build_awake_rest_quality(
             None
             if score_available
             else protocol_status.get("reason")
+            or (
+                "เวลาพักที่ยืนยันได้ยังไม่ถึง 10 นาที "
+                "จึงยังไม่ออก Recovery Score"
+                if not eligible_duration_releasable
+                else None
+            )
             or "ข้อมูล HR/RR ที่จับคู่กันยังไม่พอสำหรับคำนวณ Recovery Score"
         ),
         "score_title": policy["score_title"],
@@ -1160,7 +1400,8 @@ def _build_awake_rest_quality(
             "completion_pct": round(100.0 * duration_factor, 1),
             "basis": (
                 f"เป้าหมาย {target.get('label') or policy['label']}; "
-                "นับเวลาที่มีหลักฐานว่าอยู่ใน ZEEP และไม่หักเมื่อพักเกินเป้าหมาย"
+                "นับทุก State attribution ที่ไม่ใช่ confirmed OFF BED; "
+                "Continuity แสดง confidence แยกและไม่หักเมื่อพักเกินเป้าหมาย"
             ),
         },
         "physiology": {
@@ -1193,10 +1434,29 @@ def _build_awake_rest_quality(
             "max_points": 10.0,
         },
         "data_coverage": {
-            "ratio": round(coverage_ratio, 3),
-            "pct": round(coverage_ratio * 100.0, 1),
+            "ratio": round(physiological_evidence_ratio, 3),
+            "pct": round(physiological_evidence_ratio * 100.0, 1),
+            "physiological_evidence_ratio": round(
+                physiological_evidence_ratio, 3
+            ),
+            "physiological_evidence_pct": round(
+                physiological_evidence_ratio * 100.0, 1
+            ),
+            "state_attribution_ratio": round(
+                state_attribution_ratio, 3
+            ),
+            "state_attribution_pct": round(
+                state_attribution_ratio * 100.0, 1
+            ),
+            "recording_ratio": round(recording_coverage_ratio, 3),
+            "recording_pct": round(recording_coverage_ratio * 100.0, 1),
+            "paired_hr_rr_pct": round(paired_vital_ratio * 100.0, 1),
             "score_component": False,
             "environment_pct": environment["coverage_pct"],
+            "basis": (
+                "Physiological evidence นับเฉพาะเวลาที่มี HR/RR คู่จริง; "
+                "State attribution แสดงแยกและอาจรวม continuity carry"
+            ),
         },
         "component_points": component_points,
         "component_max_points": component_max,
@@ -1375,18 +1635,17 @@ def analyse_arousal_proxy(
     AASM arousal, but the result remains a non-EEG BCG disturbance proxy.
     """
     interval = max(0.1, _number(sample_interval_s) or 5.0)
-    minimum_sleep_ticks = max(1, int(round(prior_sleep_s / interval)))
-    quiet_ticks = max(1, int(round(quiet_gap_s / interval)))
-    sleep_run_ticks = 0
-    quiet_run_ticks = quiet_ticks
+    sleep_run_s = 0.0
+    quiet_run_s = quiet_gap_s
     active = False
     episodes = 0
     evidence_windows = 0
     available_windows = 0
-    sleep_ticks = 0
+    sleep_seconds = 0.0
 
     for raw in stage_sequence or []:
         if isinstance(raw, dict):
+            row_duration = _row_duration_seconds(raw, interval)
             stage = raw.get("sleep") or raw.get("state")
             metrics = raw.get("metrics") if isinstance(raw.get("metrics"), dict) else raw
             proxy = metrics.get("arousal_proxy") if isinstance(metrics.get("arousal_proxy"), dict) else {}
@@ -1400,13 +1659,14 @@ def analyse_arousal_proxy(
             available = shift is not None or movement is not None or bool(bed_status)
         else:
             stage, shift, movement, bed_status, available = raw, None, None, "", False
+            row_duration = interval
         stage = {"nrem_light": "n2", "nrem_deep": "n3"}.get(str(stage), str(stage))
-        prior_sleep_ticks = sleep_run_ticks
+        prior_sleep_duration = sleep_run_s
         if stage in SLEEP_STAGES:
-            sleep_run_ticks += 1
-            sleep_ticks += 1
+            sleep_run_s += row_duration
+            sleep_seconds += row_duration
         else:
-            sleep_run_ticks = 0
+            sleep_run_s = 0.0
         if not available:
             continue
         available_windows += 1
@@ -1417,14 +1677,17 @@ def analyse_arousal_proxy(
         )
         if flag:
             evidence_windows += 1
-            if prior_sleep_ticks >= minimum_sleep_ticks and (not active or quiet_run_ticks >= quiet_ticks):
+            if (
+                prior_sleep_duration >= prior_sleep_s
+                and (not active or quiet_run_s >= quiet_gap_s)
+            ):
                 episodes += 1
                 active = True
-            quiet_run_ticks = 0
+            quiet_run_s = 0.0
         elif active:
-            quiet_run_ticks += 1
+            quiet_run_s += row_duration
 
-    sleep_hours = sleep_ticks * interval / 3600.0
+    sleep_hours = sleep_seconds / 3600.0
     index = episodes / sleep_hours if sleep_hours > 0 and available_windows else None
     return {
         "available": bool(available_windows and sleep_hours > 0),
@@ -1457,13 +1720,18 @@ def analyse_sleep_cycles(
     oscillation from being reported as many sleep cycles. This is a ZEEP proxy,
     not a PSG/AASM cycle count.
     """
-    sequence = []
+    sequence: list[tuple[str, float]] = []
     aliases = {"nrem_light": "n2", "nrem_deep": "n3"}
     for raw in stage_sequence or []:
         stage = (raw.get("sleep") or raw.get("state")) if isinstance(raw, dict) else raw
         stage = aliases.get(str(stage), str(stage))
         if stage in STAGE_ORDER:
-            sequence.append(stage)
+            duration = (
+                _row_duration_seconds(raw, sample_interval_s)
+                if isinstance(raw, dict)
+                else sample_interval_s
+            )
+            sequence.append((stage, duration))
     if not sequence:
         return {
             "available": False,
@@ -1476,9 +1744,9 @@ def analyse_sleep_cycles(
     completed = 0
     nrem_s = 0.0
     in_rem = False
-    for stage in sequence:
+    for stage, duration in sequence:
         if stage in {"n1", "n2", "n3"}:
-            nrem_s += sample_interval_s
+            nrem_s += duration
             in_rem = False
         elif stage == "rem":
             if not in_rem and nrem_s >= minimum_nrem_s:
@@ -1548,22 +1816,20 @@ def build_sleep_quality(
     estimated_sleep_s = total_sleep_samples * interval
     rows = list(sensor_samples or [])
     score_stage_sequence = _score_eligible_stage_sequence(stage_sequence)
-    source_vital_rows = 0
-    paired_vital_rows = 0
-    for row in rows:
-        source_rows = max(1, int(_number(row.get("_source_rows")) or 1))
-        source_vital_rows += source_rows
-        explicit_paired = _number(row.get("_paired_hr_rr_rows"))
-        if explicit_paired is not None:
-            paired_vital_rows += max(0, min(source_rows, int(explicit_paired)))
-            continue
-        if (
-            filter_vital_values([row.get("hr")], HR_SANITY_RANGE_BPM)
-            and filter_vital_values([row.get("rr")], RR_SANITY_RANGE_PER_MIN)
-        ):
-            paired_vital_rows += source_rows
-    paired_vital_ratio = (
-        paired_vital_rows / source_vital_rows if source_vital_rows else 0.0
+    state_attribution_ratio = max(
+        0.0,
+        min(1.0, actual_scored_s / max(1.0, duration)),
+    )
+    evidence_coverage = _physiological_evidence_coverage(
+        rows,
+        duration_s=duration,
+        sample_interval_s=interval,
+    )
+    source_vital_rows = int(evidence_coverage["source_samples"])
+    paired_vital_rows = int(evidence_coverage["paired_samples"])
+    paired_vital_ratio = float(evidence_coverage["paired_ratio"])
+    physiological_evidence_ratio = float(
+        evidence_coverage["evidence_ratio"]
     )
     mode = _resolve_rest_mode(rest_mode, actual_scored_s, estimated_sleep_s)
     target = resolve_rest_target(
@@ -1672,10 +1938,9 @@ def build_sleep_quality(
     cycles["points"] = cycle_points
     cycles["max_points"] = 15.0
 
-    # 5) Data coverage — 5 points. A wall-clock gap cannot silently receive a
-    # perfect score even when the available Sleep State rounds look good.
-    coverage_ratio = max(0.0, min(1.0, actual_scored_s / max(1.0, duration)))
-    coverage_points = round(5.0 * coverage_ratio, 1)
+    # 5) Data coverage — 5 points. Continuity carry can fill the State timeline,
+    # but only paired, non-synthetic HR/RR time earns evidence coverage points.
+    coverage_points = round(5.0 * physiological_evidence_ratio, 1)
 
     component_points = {
         "sleep_opportunity": opportunity_points,
@@ -1745,7 +2010,10 @@ def build_sleep_quality(
         and paired_vital_rows >= 6
     )
     score_confidence = _score_confidence(
-        coverage_ratio, paired_vital_ratio
+        state_attribution_ratio,
+        physiological_evidence_ratio,
+        paired_vital_ratio=paired_vital_ratio,
+        state_attribution_ratio=state_attribution_ratio,
     )
     return {
         "available": score_available,
@@ -1764,6 +2032,12 @@ def build_sleep_quality(
             "paired_hr_rr_rows": paired_vital_rows,
             "source_vital_rows": source_vital_rows,
             "paired_hr_rr_coverage_pct": round(paired_vital_ratio * 100.0, 1),
+            "state_attribution_coverage_pct": round(
+                state_attribution_ratio * 100.0, 1
+            ),
+            "physiological_evidence_coverage_pct": round(
+                physiological_evidence_ratio * 100.0, 1
+            ),
             "passed": score_available,
         },
         "reason": (
@@ -1812,10 +2086,27 @@ def build_sleep_quality(
             "arousal_proxy": arousal,
         },
         "data_coverage": {
-            "ratio": round(coverage_ratio, 3),
-            "pct": round(coverage_ratio * 100.0, 1),
+            "ratio": round(physiological_evidence_ratio, 3),
+            "pct": round(physiological_evidence_ratio * 100.0, 1),
+            "physiological_evidence_ratio": round(
+                physiological_evidence_ratio, 3
+            ),
+            "physiological_evidence_pct": round(
+                physiological_evidence_ratio * 100.0, 1
+            ),
+            "state_attribution_ratio": round(
+                state_attribution_ratio, 3
+            ),
+            "state_attribution_pct": round(
+                state_attribution_ratio * 100.0, 1
+            ),
+            "paired_hr_rr_pct": round(paired_vital_ratio * 100.0, 1),
             "points": coverage_points,
             "max_points": 5.0,
+            "basis": (
+                "คะแนนความครบของข้อมูลใช้เวลาที่มี HR/RR คู่จริง; "
+                "State attribution แสดงแยกและอาจรวม continuity carry"
+            ),
         },
         "cycles": cycles,
         "component_points": component_points,
@@ -2096,8 +2387,9 @@ def build_session_report(
                 round(count * 100.0 / total_sleep_count, 1)
                 if stage in SLEEP_STAGES and total_sleep_count else None
             ),
-            # Display attribution remains complete while score attribution
-            # excludes the first 1–2 provisional continuity epochs.
+            # Every occupied five-state attribution is scoreable.  Low-
+            # confidence continuity remains separately visible in accounting
+            # and is excluded only from Personal Baseline learning.
             "score_eligible_samples": int(score_count),
             "score_eligible_duration_s": round(
                 score_count * sample_interval_s, 1
@@ -2146,18 +2438,30 @@ def build_session_report(
         quality_mode["target"],
     )
     environment_mode = quality_mode.get("group") or quality_mode.get("resolved") or rest_mode
-    recovery_environment_contributes = (
-        quality_mode.get("group") == "nap_recovery"
-    )
+    # ``report.environment`` is the full-Session Sensor QA/context view.  The
+    # only environment values allowed to affect Recovery Score live in
+    # ``quality.environment_support``, which is scoped to eligible rest rows.
+    # Keeping these roles separate prevents confirmed OFF BED measurements
+    # from being described as score drivers while retaining Admin visibility.
+    report_environment_contributes = False
 
-    waso_samples = 0
+    waso_seconds = 0.0
     sleep_started = False
     for sample in rows:
-        stage = sample.get("sleep")
+        stage = (
+            "off_bed"
+            if sample_confirms_off_bed(sample)
+            else _row_sleep_stage(sample)
+            if not _explicitly_excluded_from_score(sample)
+            else None
+        )
         if stage in SLEEP_STAGES or stage in {"nrem_light", "nrem_deep"}:
             sleep_started = True
-        elif sleep_started and stage == "wake":
-            waso_samples += 1
+        elif sleep_started and stage in {"wake", "off_bed"}:
+            waso_seconds += _row_duration_seconds(
+                sample,
+                sample_interval_s,
+            )
 
     environment = [
         _environment_metric(rows, criterion_key=key, rest_mode=environment_mode)
@@ -2194,7 +2498,7 @@ def build_session_report(
                     if legacy_unstored
                     else f"ตรวจ {metric['source']} และ freshness"
                 ),
-                "context_only": not recovery_environment_contributes,
+                "context_only": True,
                 "sleep_stage_context_only": True,
                 # Recovery normalises its environment component across the
                 # channels that are available. Missing Sensor data therefore
@@ -2236,11 +2540,9 @@ def build_session_report(
                 )
             ),
             "action": action_text,
-            "context_only": not recovery_environment_contributes,
+            "context_only": True,
             "sleep_stage_context_only": True,
-            "contributes_to_primary_score": (
-                recovery_environment_contributes
-            ),
+            "contributes_to_primary_score": report_environment_contributes,
             "aggregation_version": metric["aggregation_version"],
             "peak_status_key": metric["peak_status_key"],
             "transient_critical_observed": metric[
@@ -2381,35 +2683,46 @@ def build_session_report(
         "safety_excursions": safety_excursions,
         "safety_excursions_change_sustained_assessment": False,
         "safety_excursions_change_score": False,
-        "context_only": not recovery_environment_contributes,
+        "context_only": True,
         "sleep_stage_context_only": True,
-        "contributes_to_primary_score": recovery_environment_contributes,
-        "primary_score": (
-            "Recovery Score" if recovery_environment_contributes else None
-        ),
-        "max_score_points": (
-            RECOVERY_SCORE_COMPONENT_MAX_POINTS["environment_support"]
-            if recovery_environment_contributes else 0.0
-        ),
+        "contributes_to_primary_score": report_environment_contributes,
+        "primary_score": None,
+        "max_score_points": 0.0,
         "direct_stage_influence": False,
         "safety_thresholds_unchanged": True,
     }
 
     total_rows = len(rows)
-    bcg_rows = sum(
-        sample.get("bed") is not None
-        and (sample.get("hr") is not None or sample.get("rr") is not None)
+    total_row_seconds = sum(
+        _row_duration_seconds(sample, sample_interval_s)
         for sample in rows
     )
-    stage_rows = sum(sample.get("sleep") in STAGE_ORDER for sample in rows)
-    if stage_rows == 0 and total_rows:
-        stage_rows = min(total_rows, int(display_count))
+    stage_seconds = float(
+        classification_accounting["display_attributed_s"]
+    )
+    evidence_coverage = _physiological_evidence_coverage(
+        rows,
+        duration_s=duration,
+        sample_interval_s=sample_interval_s,
+    )
     environment_coverages = [item["coverage_pct"] for item in environment if item.get("available")]
-    recording_coverage = _percent(total_rows * sample_interval_s, duration) if duration else 0
+    recording_coverage = (
+        _percent(total_row_seconds, duration) if duration else 0
+    )
+    state_attribution_coverage = (
+        _percent(stage_seconds, duration) if duration else 0
+    )
+    physiological_evidence_coverage = round(
+        float(evidence_coverage["evidence_ratio"]) * 100.0
+    )
     coverage = {
         "recording_pct": recording_coverage,
-        "bcg_pct": _percent(bcg_rows, total_rows),
-        "sleep_stage_pct": _percent(stage_rows, total_rows),
+        # Compatibility aliases now use direct physiological evidence and
+        # explicit State attribution instead of treating carried State as BCG.
+        "bcg_pct": physiological_evidence_coverage,
+        "sleep_stage_pct": state_attribution_coverage,
+        "state_attribution_pct": state_attribution_coverage,
+        "physiological_evidence_pct": physiological_evidence_coverage,
         "environment_pct": (
             round(sum(environment_coverages) / len(environment_coverages))
             if environment_coverages else 0
@@ -2425,7 +2738,11 @@ def build_session_report(
         name: _percent(value, confidence_total) for name, value in confidence_counts.items()
     } if confidence_total else None
 
-    core_coverage = min(coverage["recording_pct"], coverage["bcg_pct"], coverage["sleep_stage_pct"])
+    core_coverage = min(
+        coverage["recording_pct"],
+        coverage["physiological_evidence_pct"],
+        coverage["state_attribution_pct"],
+    )
     if core_coverage >= 90:
         data_level, data_label = "high", "ความครอบคลุมดี"
     elif core_coverage >= 70:
@@ -2477,7 +2794,7 @@ def build_session_report(
             "wake_s": round(wake_s, 1),
             "score_wake_s": round(score_wake_s, 1),
             "sleep_onset_proxy_s": _number(night.get("sleep_onset_proxy_s")),
-            "waso_proxy_s": round(waso_samples * sample_interval_s, 1),
+            "waso_proxy_s": round(waso_seconds, 1),
             "score_waso_proxy_s": _number(night.get("waso_proxy_s")),
             "sleep_efficiency_pct": quality.get("sleep_efficiency_pct"),
             "actual_scored_s": classification_accounting[

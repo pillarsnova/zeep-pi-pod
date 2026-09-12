@@ -10,7 +10,6 @@ import math
 import os
 import shutil
 import socket
-import struct
 import subprocess
 import threading
 import time
@@ -18,7 +17,7 @@ import uuid
 import secrets
 from collections import Counter, deque
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -32,7 +31,6 @@ except Exception:
     mqtt = None
     MQTT_AVAILABLE = False
 from fastapi import (
-    Cookie,
     Depends,
     FastAPI,
     Header,
@@ -82,7 +80,6 @@ from control_protocol import (
 from database import DatabaseManager
 from api_v1 import create_api_v1_router
 from zeep_pod.identity.profile_fields import (
-    age_from_dob as _age_from_dob,
     health_reference_from_profile as build_health_reference,
     normalise_blood_group as _normalise_blood_group,
     normalise_body_measurement as _normalise_body_measurement,
@@ -90,8 +87,6 @@ from zeep_pod.identity.profile_fields import (
     normalize_account_key as _normalize_account_key,
     normalize_email as _normalize_email,
     normalize_username as _normalize_username,
-    profile_value as _profile_value,
-    zeep_gender as _zeep_gender,
     zeep_health_reference as _zeep_health_reference,
 )
 from zeep_pod.identity.zeep_account import authenticate_password, identity_from_auth_data
@@ -117,7 +112,6 @@ from zeep_pod.sessions.lifecycle import (
     service_resume_event,
 )
 from zeep_pod.sessions.sleep_context import (
-    apply_sleep_decisions_to_samples,
     checkpoint_sleep_context,
     restore_session_sleep_context,
 )
@@ -134,25 +128,24 @@ from zeep_pod.sessions.history_service import (
 from zeep_pod.sessions.history_quality import (
     released_historical_quality as _released_historical_quality,
 )
+from zeep_pod.sessions import history_detail_support as history_support
 from zeep_pod.sessions.history_sleep_timeline import (
-    clip_history_sleep_timeline as _clip_history_sleep_timeline,
-    compress_sleep_stage_points as _compress_sleep_stage_points,
-    history_sleep_timeline as _history_sleep_timeline,
+    clip_history_sleep_timeline as _clip_history_sleep_timeline,  # noqa: F401
+    compress_sleep_stage_points as _compress_sleep_stage_points,  # noqa: F401
+    history_sleep_timeline as _history_sleep_timeline,  # noqa: F401
 )
+from zeep_pod.sessions import report_projection
 from zeep_pod.sessions.ingest_payload import (
-    build_environment as _ingest_environment,
     build_ingest_payload as _build_account_ingest_payload,
-    build_stage_runs as _ingest_stage_runs,
     sample_off_bed as _sample_off_bed,
 )
 from zeep_pod.sessions.sleep_between_epochs import (
     between_evidence_epoch_value,
     current_frame_issue,
+    sensor_frame_wait_value,
 )
 from zeep_pod.sessions.sleep_runtime_evidence import (
-    INITIAL_WAIT_HARD_CAP_SECONDS,
     baseline_interval_proximity as _baseline_interval_proximity,
-    enforce_initial_wait_hard_cap,
     sleep_auxiliary_evidence as _build_sleep_auxiliary_evidence,
     sleep_environment_context as _build_sleep_environment_context,
     sleep_status_event as _build_sleep_status_event,
@@ -224,8 +217,6 @@ from sleep_signal_features import (
     debounced_bed_status_labels,
     filter_vital_values,
     movement_window_metrics,
-    sleep_classification_gap_controls,
-    sleep_classification_gap_timeline,
     summary_features,
     terminal_occupancy_timeline,
     terminal_wake_transition,
@@ -240,7 +231,7 @@ from sleep_stage_scoring import (
     score_sleep_evidence,
     softmax_stage_evidence,
     smooth_stage_probabilities,
-    stable_probability_candidate,
+    stable_probability_candidate,  # noqa: F401
 )
 from sleep_stage_annotations import apply_annotations, load_annotations
 from sleep_session_report import (
@@ -305,6 +296,8 @@ from sleep_system_policy import (
     PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED,
     TERMINAL_WAKE_POLICY_VERSION,
     ZEEP_SLEEP_BASELINE_VERSION,
+    ZEEP_OFF_BED_DATA_STATUSES,
+    ZEEP_ON_BED_STATUS_CODES,
     ZEEP_SLEEP_STATES,
     ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
     age_group as _age_group,
@@ -777,7 +770,7 @@ STATUS_TEXT = {
     4: "Heavy object on bed",
     5: "Snoring",
 }
-ON_BED_CODES = {0, 2, 3, 5}  # On bed / Moving / Weak breathing / Snoring
+ON_BED_CODES = ZEEP_ON_BED_STATUS_CODES
 
 # Rolling BCG summary history feeding the sleep-state estimator
 # (~1 frame per 2-4 s → maxlen 600 covers well over the analysis window).
@@ -1260,7 +1253,8 @@ sessions_file_lock = threading.Lock()
 session_lock = threading.Lock()
 last_sensor_frame_lock = threading.Lock()
 ingest_outbox_lock = threading.Lock()
-sleep_path_lock = threading.Lock()
+# RLock permits atomic nested Sleep lifecycle helpers.
+sleep_path_lock = threading.RLock()
 analysis_frame_lock = threading.Lock()
 # {"record": {...}, "samples": [...], "counters": {...}, "last_sample": float}
 _active_session: Optional[Dict[str, Any]] = None
@@ -1272,10 +1266,10 @@ _sleep_stage_path = {
     "last_evidence_result": None, "awake_vital_pairs": [],
     "awake_hr_reference": None, "awake_rr_reference": None,
     "sleep_onset_at": None, "last_valid_frame_t": None,
-    "restart_hold_result": None, "restart_hold_until_epoch_s": None,
+    "off_bed_latched": False,
+        "restart_hold_result": None, "restart_hold_until_epoch_s": None,
 }
 _analysis_frame: Optional[Dict[str, Any]] = None
-
 LAST_SENSOR_FRAME_VERSION = 1
 INGEST_OUTBOX_VERSION = 1
 
@@ -1475,6 +1469,7 @@ def _restore_latest_sensor_frame() -> bool:
         return False
     with state_lock:
         current_session_id = state["session"].get("session_id")
+        session_recording = bool(state["session"].get("recording"))
     frame = max(candidates, key=lambda item: float(item.get("epoch_s") or 0))
     original_session_id = frame.get("session_id")
     same_session = bool(
@@ -1521,6 +1516,48 @@ def _restore_latest_sensor_frame() -> bool:
         )
         if same_session else None
     )
+    with sleep_path_lock:
+        restored_off_bed = bool(_sleep_stage_path.get("off_bed_latched"))
+    restart_fallback = {
+        "state": "off_bed" if restored_off_bed else "no_data",
+        "confirmed_state": None,
+        "version": SLEEP_ESTIMATOR_VERSION,
+        "evidence_version": SLEEP_EVIDENCE_VERSION,
+        "classification_active": False,
+        "evidence_active": False,
+        "probabilities": {key: 0.0 for key in ZEEP_SLEEP_STATES},
+        "confidence": "low",
+        "data_status": (
+            "empty_bed"
+            if restored_off_bed
+            else "restored_waiting_live_frame"
+        ),
+        "reason": (
+            "สถานะล่าสุดยืนยัน OFF BED · รอหลักฐานว่ากลับขึ้นเตียง"
+            if restored_off_bed
+            else "แสดงค่าล่าสุดก่อน Restart · รอ Sensor frame สด"
+        ),
+        "score_eligible": False,
+        "excluded_from_score": True,
+        "excluded_from_personal_baseline": True,
+    }
+    if same_session and session_recording and not restored_off_bed:
+        confirmation = continuity_hold_contract(
+            None,
+            decision="restart_initial_awake_anchor",
+        )
+        restart_fallback.update({
+            "state": "wake",
+            "confirmed_state": "wake",
+            "classification_active": True,
+            "provisional": False,
+            "data_status": confirmation["data_status"],
+            "reason": "Session กำลังบันทึก · เริ่มความต่อเนื่องที่ W",
+            "score_eligible": True,
+            "excluded_from_score": False,
+            "confirmation": confirmation,
+            "score_attribution_state": "wake",
+        })
     restored.update({
         "source": "restored_after_restart",
         "restored_source": frame.get("source") or "unknown",
@@ -1530,23 +1567,13 @@ def _restore_latest_sensor_frame() -> bool:
         "session_id": current_session_id,
         "environment": environment,
         "bcg": bcg,
-        # Only a stage already confirmed in this same Session may bridge a
-        # planned restart. It remains display-only until fresh evidence resumes.
-        "sleep": held_sleep or {
-            "state": "no_data", "confirmed_state": None,
-            "version": SLEEP_ESTIMATOR_VERSION,
-            "evidence_version": SLEEP_EVIDENCE_VERSION,
-            "classification_active": False, "evidence_active": False,
-            "probabilities": {key: 0.0 for key in ZEEP_SLEEP_STATES},
-            "confidence": "low", "data_status": "restored_waiting_live_frame",
-            "reason": "แสดงค่าล่าสุดก่อน Restart · รอ Sensor frame สด",
-        },
+        "sleep": held_sleep or restart_fallback,
     })
     with analysis_frame_lock:
         _analysis_frame = restored
     _sleep_cache.update({
         "t": time.monotonic(),
-        "value": json.loads(json.dumps(held_sleep)) if held_sleep else None,
+        "value": json.loads(json.dumps(held_sleep or restart_fallback)),
         "session_id": current_session_id, "sequence": None,
     })
     log_event(
@@ -1570,7 +1597,8 @@ def _reset_sleep_stage_path(session_id: Optional[str]) -> None:
         "last_evidence_result": None, "awake_vital_pairs": [],
         "awake_hr_reference": None, "awake_rr_reference": None,
         "sleep_onset_at": None, "last_valid_frame_t": None,
-        "restart_hold_result": None, "restart_hold_until_epoch_s": None,
+        "off_bed_latched": False,
+    "restart_hold_result": None, "restart_hold_until_epoch_s": None,
     })
 
 
@@ -1589,11 +1617,11 @@ def _install_restart_sleep_hold(
     session_id: Optional[str],
     source_epoch_s: float,
 ) -> Optional[Dict[str, Any]]:
-    """Restore a verified pre-restart label for display, never persistence.
+    """Restore a verified pre-restart label as occupied continuity.
 
-    The saved browser frame alone is not trusted. Its label must agree with
-    the latest durable ``sleep_stage`` event already restored into this same
-    Session. A first-ever Session therefore still starts at WAIT.
+    Trust the saved frame only when it matches this Session's latest durable
+    State. Keep that State until fresh evidence confirms a challenger; a
+    confirmed OFF BED event still overrides it.
     """
     source_stage = source_sleep.get("confirmed_state") or source_sleep.get("state")
     with sleep_path_lock:
@@ -1604,27 +1632,41 @@ def _install_restart_sleep_hold(
             and source_sleep.get("classification_active") is True
             and source_stage in ZEEP_SLEEP_STATES
             and source_stage == durable_stage
+            and not _sleep_stage_path.get("off_bed_latched")
         ):
             _clear_restart_sleep_hold_locked()
             return None
         held = json.loads(json.dumps(source_sleep))
+        confirmation = continuity_hold_contract(
+            durable_stage,
+            decision="restart_continuity_hold",
+        )
         held.update({
             "state": durable_stage,
             "confirmed_state": durable_stage,
             "classification_active": True,
             "evidence_active": False,
             "confidence": "low",
-            "provisional": True,
+            "provisional": False,
             "data_status": "restored_confirmed_state",
             "reason": (
                 "ยึดสถานะยืนยันล่าสุดก่อน Restart · "
                 "กำลังสร้างหลักฐานสดรอบใหม่"
             ),
-            "held_previous_state": True,
-            "score_eligible": False,
-            "excluded_from_score": True,
+            "held_previous_state": bool(
+                confirmation["held_previous_state"]
+            ),
+            "score_attribution_state": confirmation[
+                "score_attribution_state"
+            ],
+            "challenger_counted_as_new_state": False,
+            "score_eligible": bool(confirmation["score_eligible"]),
+            "excluded_from_score": bool(
+                confirmation["excluded_from_score"]
+            ),
             "excluded_from_personal_baseline": True,
-            "display_only_after_restart": True,
+            "confirmation": confirmation,
+            "display_only_after_restart": False,
             "restored_after_restart": True,
             "restored_source_epoch_s": source_epoch_s,
             "restart_hold_max_s": RESTART_SLEEP_STATE_HOLD_SECONDS,
@@ -1845,6 +1887,69 @@ def _apply_stage_to_path(stage: str, now: Optional[float] = None) -> None:
     _sleep_stage_path["last"] = stage
 
 
+def _latch_confirmed_bed_exit(
+    session_id: Optional[str],
+    *,
+    now: float,
+) -> bool:
+    """Keep OFF BED authoritative until fresh on-bed vitals return."""
+    with sleep_path_lock:
+        if _sleep_stage_path.get("session_id") != session_id:
+            _reset_sleep_stage_path(session_id)
+        changed = not bool(_sleep_stage_path.get("off_bed_latched"))
+        _apply_stage_to_path("wake", now=now)
+        _sleep_stage_path["off_bed_latched"] = True
+        _sleep_stage_path["probability_ema"] = None
+        _clear_restart_sleep_hold_locked()
+    if changed:
+        with session_lock:
+            active = _active_session
+        if (
+            active is not None
+            and active.get("phase") == "recording"
+            and active["record"].get("session_id") == session_id
+        ):
+            try:
+                _save_active_session_checkpoint(active)
+            except Exception as exc:
+                log_event(
+                    "session",
+                    "off_bed_checkpoint_failed",
+                    session_id=session_id,
+                    error=str(exc),
+                )
+    return changed
+
+
+def _off_bed_remains_latched(
+    *,
+    status_code: Any,
+    current_vitals_valid: bool,
+) -> bool:
+    """Release OFF BED only on affirmative Bed Status plus fresh vitals."""
+    released = False
+    with sleep_path_lock:
+        latched = bool(_sleep_stage_path.get("off_bed_latched"))
+        if latched and status_code in ON_BED_CODES and current_vitals_valid:
+            _sleep_stage_path["off_bed_latched"] = False
+            released = True
+            latched = False
+    if released:
+        with session_lock:
+            active = _active_session
+        if active is not None and active.get("phase") == "recording":
+            try:
+                _save_active_session_checkpoint(active)
+            except Exception as exc:
+                log_event(
+                    "session",
+                    "on_bed_checkpoint_failed",
+                    session_id=active["record"].get("session_id"),
+                    error=str(exc),
+                )
+    return latched
+
+
 def _sleep_decision_provenance() -> Dict[str, str]:
     """Versions persisted with every decision and final Session summary."""
     return {
@@ -1911,22 +2016,24 @@ def _persist_sleep_stage_status(
     *,
     epoch_s: float,
 ) -> None:
-    """Persist one canonical WAIT/NO DATA/OFF BED derived epoch."""
+    """Persist confirmed OFF BED; never persist a Recording data gap."""
     with state_lock:
         session_id = state["session"].get("session_id")
+        state_recording = bool(state["session"].get("recording"))
+    data_status = str(sleep_result.get("data_status") or "").lower()
+    off_bed = bool(
+        sleep_result.get("state") == "off_bed"
+        or data_status in ZEEP_OFF_BED_DATA_STATUSES - {"no_session"}
+    )
     with session_lock:
         active = _active_session
         recording = bool(
-            active
+            state_recording and off_bed and active
             and active.get("phase") == "recording"
             and active["record"].get("session_id") == session_id
         )
     if not recording:
         return
-    sleep_result = _apply_initial_wait_hard_cap(
-        sleep_result,
-        epoch_s=float(epoch_s),
-    )
     database.enqueue(
         "sessions",
         "event",
@@ -2419,9 +2526,6 @@ def estimate_sleep_state() -> Dict[str, Any]:
     if not had_previous_stage:
         previous_valid_stage = "wake"
     result: Dict[str, Any] = {
-        # A Sleep State exists only while an occupied, recording Session has a
-        # fresh HR+RR pair. ``no_data``/``off_bed`` are operational statuses,
-        # not a sixth Sleep Stage and are never persisted as stage decisions.
         "state": "no_data",
         "version": SLEEP_ESTIMATOR_VERSION,
         "evidence_version": SLEEP_EVIDENCE_VERSION,
@@ -2504,39 +2608,20 @@ def estimate_sleep_state() -> Dict[str, Any]:
         *,
         display_state: str = "no_data",
     ) -> Dict[str, Any]:
-        """Return an explicit non-classification instead of inventing sleep.
-
-        The last valid stage is retained only as Admin provenance. It is never
-        shown as the current result, assigned 100%, or written to the Session
-        Sleep State event stream while occupancy/vital evidence is unavailable.
-        """
-        # A missing/invalid canonical epoch interrupts confirmation. Pending
-        # challenger evidence must be consecutive, so keep the last confirmed
-        # State/onset/reference but clear candidate/EMA progress at the boundary.
+        """Return an operational status only outside occupied recording."""
+        if session_active and session_recording and data_status not in {
+            "empty_bed",
+            "confirmed_off_bed",
+            "no_session",
+            "waiting_for_vitals",
+        }:
+            return carry_occupied_epoch(reason, data_status=data_status)
         with sleep_path_lock:
             if _sleep_stage_path.get("session_id") == active_session_id:
                 _sleep_stage_path["candidate"] = None
                 _sleep_stage_path["candidate_ticks"] = 0
                 _sleep_stage_path["continuity_hold_ticks"] = 0
                 _sleep_stage_path["probability_ema"] = None
-        restart_hold = (
-            _restart_sleep_hold_result(active_session_id)
-            if session_active
-            and session_recording
-            and data_status in {
-                "no_frame", "stale", "missing_bed_status",
-                "invalid_or_missing_current_vitals",
-                "invalid_or_missing_vitals",
-            }
-            else None
-        )
-        if restart_hold is not None:
-            # The old label is a UI continuity bridge, not present evidence.
-            # Keep the reason for the fresh-data pause available to Admin.
-            result.update(restart_hold)
-            result["current_data_status"] = data_status
-            result["current_data_reason"] = reason
-            return result
         result.update({
             "state": display_state,
             "probabilities": {
@@ -2546,7 +2631,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
             "evidence_active": False,
             "confirmed_state": None,
             "confidence": "low",
-            "provisional": True,
+            "provisional": False,
             "data_status": data_status,
             "reason": reason,
             "last_valid_state": previous_valid_stage if had_previous_stage else None,
@@ -2557,70 +2642,62 @@ def estimate_sleep_state() -> Dict[str, Any]:
         })
         return result
 
-    def hold_previous_during_window_rebuild(
+    def carry_occupied_epoch(
         reason: str,
         *,
-        current_epoch: List[Dict[str, Any]],
+        data_status: str,
+        current_epoch: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
-        """Carry the durable State while a fresh 60 s window is rebuilt.
-
-        A service restart, a short Sensor interruption, or a confirmed return
-        to bed can leave fewer than six fresh 10-second frames even though the
-        *current* 30-second epoch has valid Bed + HR + RR + BCG evidence.  That
-        is not evidence that the sleeper woke and it must not manufacture a
-        WAIT/NO DATA hole.  The first two carried epochs remain provisional and
-        unscored; later ambiguity keeps the same State and becomes score
-        eligible under the shared continuity contract.
-        """
+        """Assign every occupied Epoch to W or the last confirmed State."""
+        epoch_frames = list(
+            current_epoch
+            if current_epoch is not None
+            else frames[-SLEEP_SENSOR_FRAMES_PER_EPOCH:]
+        )
+        frame_times = [
+            float(frame["t"])
+            for frame in epoch_frames
+            if isinstance(frame.get("t"), (int, float))
+        ]
+        epoch_end_s = max(frame_times) if frame_times else now
         with sleep_path_lock:
-            previous = _sleep_stage_path.get("last")
-        if previous not in ZEEP_SLEEP_STATES:
-            return suspend_classification(
-                reason,
-                "confirming_initial_state",
-            )
-        with sleep_path_lock:
-            latest_epoch_t = max(
-                float(frame.get("t") or 0.0) for frame in current_epoch
-            )
-            prior_valid_t = _sleep_stage_path.get("last_valid_frame_t")
-            gap_detected = bool(
-                isinstance(prior_valid_t, (int, float))
-                and latest_epoch_t - float(prior_valid_t)
-                >= SLEEP_CONTEXT_RESET_GAP_SECONDS
-            )
-            if gap_detected:
-                _sleep_stage_path["continuity_hold_ticks"] = 0
+            if _sleep_stage_path.get("session_id") != active_session_id:
+                _reset_sleep_stage_path(active_session_id)
+            prior = _sleep_stage_path.get("last")
+            previous = prior if prior in ZEEP_SLEEP_STATES else None
             _sleep_stage_path["candidate"] = None
             _sleep_stage_path["candidate_ticks"] = 0
             _sleep_stage_path["probability_ema"] = None
-            hold_epochs = int(
-                _sleep_stage_path.get("continuity_hold_ticks") or 0
-            ) + 1
+            hold_epochs = (
+                int(_sleep_stage_path.get("continuity_hold_ticks") or 0) + 1
+                if previous is not None
+                else 1
+            )
             _sleep_stage_path["continuity_hold_ticks"] = hold_epochs
-            _sleep_stage_path["last_valid_frame_t"] = latest_epoch_t
 
         confirmation = continuity_hold_contract(
             previous,
-            decision="rebuilding_confirmation_window_hold",
+            decision="occupied_evidence_gap_hold",
             hold_epochs=hold_epochs,
         )
         confirmation.update({
-            "candidate_epochs": min(hold_epochs, SLEEP_CONFIRM_EPOCHS),
-            "required_epochs": SLEEP_CONFIRM_EPOCHS,
-            "confirmation_seconds": SLEEP_CONFIRMATION_SECONDS,
-            "confirmation_complete": False,
+            "candidate_epochs": 0,
+            "required_epochs": 0,
+            "confirmation_seconds": 0.0,
+            "confirmation_complete": True,
+            "evidence_data_status": data_status,
         })
+        stage = str(confirmation["confirmed_state"])
         display_probabilities = {
-            stage: 1.0 if stage == previous else 0.0
-            for stage in ZEEP_SLEEP_STATES
+            name: 1.0 if name == stage else 0.0
+            for name in ZEEP_SLEEP_STATES
         }
         current_hrs = filter_vital_values(
-            [frame.get("hr") for frame in current_epoch],
+            [frame.get("hr") for frame in epoch_frames],
             HR_SANITY_RANGE_BPM,
         )
         current_rrs = filter_vital_values(
-            [frame.get("rr") for frame in current_epoch],
+            [frame.get("rr") for frame in epoch_frames],
             RR_SANITY_RANGE_PER_MIN,
         )
         mean_epoch_hr = (
@@ -2630,12 +2707,13 @@ def estimate_sleep_state() -> Dict[str, Any]:
             sum(current_rrs) / len(current_rrs) if current_rrs else None
         )
         window_start = datetime.fromtimestamp(
-            float(current_epoch[0]["t"]) - SLEEP_SAMPLE_SECONDS,
+            epoch_end_s - SLEEP_EVIDENCE_EPOCH_SECONDS,
             timezone.utc,
         ).isoformat()
         window_end = datetime.fromtimestamp(
-            float(current_epoch[-1]["t"]), timezone.utc
+            epoch_end_s, timezone.utc
         ).isoformat()
+        latest_frame = epoch_frames[-1] if epoch_frames else {}
         decision_metrics = {
             "mean_hr": (
                 round(mean_epoch_hr, 1) if mean_epoch_hr is not None else None
@@ -2644,19 +2722,17 @@ def estimate_sleep_state() -> Dict[str, Any]:
                 round(mean_epoch_rr, 1) if mean_epoch_rr is not None else None
             ),
             "bed_status": STATUS_TEXT.get(
-                current_epoch[-1].get(
-                    "confirmed_status", current_epoch[-1].get("status")
+                latest_frame.get(
+                    "confirmed_status", latest_frame.get("status")
                 ),
                 "Unknown",
             ),
-            "window_rebuild": True,
-            "gap_detected": gap_detected,
+            "evidence_data_status": data_status,
+            "continuity_carry": True,
         }
-        provisional = bool(confirmation.get("provisional"))
-        score_eligible = bool(confirmation.get("score_eligible"))
         result.update({
-            "state": previous,
-            "confirmed_state": previous,
+            "state": stage,
+            "confirmed_state": stage,
             "classification_active": True,
             "evidence_active": False,
             "probabilities": display_probabilities,
@@ -2665,17 +2741,21 @@ def estimate_sleep_state() -> Dict[str, Any]:
             },
             "confirmed_probabilities": display_probabilities,
             "confidence": "low",
-            "provisional": provisional,
-            "held_previous_state": True,
-            "continuity_hold_epochs": hold_epochs,
-            "score_attribution_state": previous,
-            "challenger_counted_as_new_state": False,
-            "score_eligible": score_eligible,
-            "excluded_from_score": not score_eligible,
-            "excluded_from_personal_baseline": True,
-            "data_status": (
-                "provisional_hold" if provisional else "continuity_hold"
+            "provisional": False,
+            "held_previous_state": bool(
+                confirmation["held_previous_state"]
             ),
+            "continuity_hold_epochs": int(
+                confirmation["continuity_hold_epochs"]
+            ),
+            "score_attribution_state": stage,
+            "challenger_counted_as_new_state": False,
+            "score_eligible": True,
+            "excluded_from_score": False,
+            "excluded_from_personal_baseline": True,
+            "data_status": confirmation["data_status"],
+            "current_data_status": data_status,
+            "current_data_reason": reason,
             "reason": reason,
             "mean_hr": decision_metrics["mean_hr"],
             "mean_rr": decision_metrics["mean_rr"],
@@ -2691,14 +2771,14 @@ def estimate_sleep_state() -> Dict[str, Any]:
                 "window_seconds": SLEEP_WINDOW_SECONDS,
                 "window_start": window_start,
                 "window_end": window_end,
-                "status": "rebuilding_confirmation_window",
+                "status": data_status,
             },
             "transition_policy": confirmation,
             "previous_state": previous,
             "display_probability_basis": "previous_confirmed_state",
         })
         result["stage_progression"] = _commit_sleep_stage(
-            previous,
+            stage,
             display_probabilities,
             reason,
             confidence="low",
@@ -2706,7 +2786,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
             confirmation=confirmation,
             window_start=window_start,
             window_end=window_end,
-            sample_count=len(current_epoch),
+            sample_count=len(epoch_frames),
         )
         return result
 
@@ -2721,9 +2801,37 @@ def estimate_sleep_state() -> Dict[str, Any]:
             "รอผู้ใช้งานบนเตียงและ HR/RR สดก่อนเริ่มประเมิน",
             "waiting_for_vitals",
         )
+    latest_frame = frames[-1] if frames else {}
+    latest_bcg_t = max(
+        (frame.get("bcg_latest_t") or 0 for frame in frames),
+        default=0,
+    )
+    latest_hr = filter_vital_values(
+        [latest_frame.get("hr")], HR_SANITY_RANGE_BPM
+    )
+    latest_rr = filter_vital_values(
+        [latest_frame.get("rr")], RR_SANITY_RANGE_PER_MIN
+    )
+    fresh_on_bed_vitals = bool(
+        latest_bcg_t
+        and now - latest_bcg_t <= max(15, SLEEP_SAMPLE_SECONDS * 3)
+        and latest_frame.get("bcg_valid")
+        and latest_hr
+        and latest_rr
+    )
+    if _off_bed_remains_latched(
+        status_code=latest_frame.get(
+            "confirmed_status", latest_frame.get("status")
+        ),
+        current_vitals_valid=fresh_on_bed_vitals,
+    ):
+        return suspend_classification(
+            "ยังไม่มี Bed Status พร้อม HR/RR สดยืนยันว่ากลับขึ้นเตียง",
+            "empty_bed",
+            display_state="off_bed",
+        )
     if not frames:
         return suspend_classification("ยังไม่มีรอบข้อมูล BCG ใหม่", "no_frame")
-    latest_bcg_t = max((f.get("bcg_latest_t") or 0 for f in frames), default=0)
     if not latest_bcg_t or now - latest_bcg_t > max(15, SLEEP_SAMPLE_SECONDS * 3):
         return suspend_classification("BCG ขาดข้อมูลใหม่ · ไม่ประเมิน Sleep State", "stale")
     statuses = [
@@ -2740,21 +2848,13 @@ def estimate_sleep_state() -> Dict[str, Any]:
     if statuses[-1] == 1 and latest_exit.get("confirmed"):
         # Reset the continuity path for a possible return to bed, but do not
         # label an empty Pod as Wake: Wake is a human state, not occupancy.
-        with sleep_path_lock:
-            if _sleep_stage_path["session_id"] != active_session_id:
-                _reset_sleep_stage_path(active_session_id)
-            _apply_stage_to_path("wake", now=now)
-            _clear_restart_sleep_hold_locked()
-            _sleep_stage_path["probability_ema"] = None
+        _latch_confirmed_bed_exit(active_session_id, now=now)
         result["bed_exit_evidence"] = latest_exit
         return suspend_classification(
             "Bed Status ยืนยันว่าไม่มีผู้ใช้งานบนเตียง · ไม่ประเมิน Sleep State",
             "empty_bed",
             display_state="off_bed",
         )
-    latest_frame = frames[-1]
-    latest_hr = filter_vital_values([latest_frame.get("hr")], HR_SANITY_RANGE_BPM)
-    latest_rr = filter_vital_values([latest_frame.get("rr")], RR_SANITY_RANGE_PER_MIN)
     if not latest_frame.get("bcg_valid") or not latest_hr or not latest_rr:
         return suspend_classification(
             "รอบปัจจุบันไม่มี HR/RR สดที่ใช้ได้ · ไม่ประเมิน Sleep State",
@@ -2841,11 +2941,12 @@ def estimate_sleep_state() -> Dict[str, Any]:
             or not rolling_window_contiguous
         )
     ):
-        return hold_previous_during_window_rebuild(
+        return carry_occupied_epoch(
             (
                 "ยึด State ที่ยืนยันก่อนหน้าไว้ชั่วคราว · "
                 "กำลังสร้างหน้าต่าง HR/RR + BCG สด 60 วินาทีใหม่"
             ),
+            data_status="rebuilding_confirmation_window",
             current_epoch=current_epoch,
         )
     if not hrs or not rrs:
@@ -3076,11 +3177,8 @@ def estimate_sleep_state() -> Dict[str, Any]:
     )
     decision_candidate = "wake" if strong_wake else evidence_candidate
     # The Session starts only after a conscious Login plus occupied-bed and
-    # fresh HR/RR gates.  Once the first valid 60-second physiology window is
-    # available, anchor the path at W before allowing a sleep transition.  It
-    # prevents an initially ambiguous/N1-like window from leaving WAIT active
-    # indefinitely and keeps first publication within the 60/120-second
-    # confirmation contract.
+    # fresh HR/RR gates. The first complete occupied 30-second Epoch anchors W
+    # immediately; only a transition away from W needs 60/120-second evidence.
     if probability_current_stage is None and decision_candidate != "wake":
         decision_candidate = "wake"
         probability_transition.update({
@@ -3154,17 +3252,15 @@ def estimate_sleep_state() -> Dict[str, Any]:
         confidence = "low"
     if decision_candidate is None:
         confidence = "low"
-    # A result is available from the first bucket, but a full rolling baseline
-    # window is required before it can be labelled non-provisional.
     held_previous_state = bool(
         transition_meta.get("held_previous_state")
     )
     provisional = bool(
-        len(frames) < SLEEP_MIN_FRAMES
-        or confirmed_state is None
-        or transition_meta.get("provisional")
+        confirmed_state is None or transition_meta.get("provisional")
     )
-    if provisional:
+    if provisional or transition_meta.get("state_source") == (
+        "initial_awake_anchor"
+    ):
         confidence = "low"
     if (missing_ratio > 0.25 or environment["coverage_percent"] < 50
             or environment_context["coverage_percent"] < 50):
@@ -3423,14 +3519,15 @@ def estimate_sleep_state() -> Dict[str, Any]:
     return result
 
 
-# Cache: the sampler publishes exactly one canonical analysis frame per
-# 10-second bucket. WebSocket/REST can still carry live control/safety feedback
-# more frequently without reclassifying physiology between sensor rounds.
+# Sampler owns the 10-second analysis cache; REST/WebSocket never reclassifies.
+# Live control and safety feedback may continue on their faster clocks.
 _sleep_cache = {"t": 0.0, "value": None, "session_id": None, "sequence": None}
 _health_cache = {"t": 0.0, "value": {}}
 
 
-def _reset_live_sleep_inference(session_id: Optional[str]) -> None:
+def _reset_live_sleep_inference(
+    session_id: Optional[str], *, recording: bool = False,
+) -> None:
     """Drop rolling physiology when occupant ownership changes.
 
     A completed occupant's BCG window must never be classified for an empty Pod
@@ -3443,7 +3540,15 @@ def _reset_live_sleep_inference(session_id: Optional[str]) -> None:
         _reset_sleep_stage_path(session_id)
     with analysis_frame_lock:
         _analysis_frame = None
-    _sleep_cache.update({"t": 0.0, "value": None, "session_id": session_id, "sequence": None})
+    initial = sensor_frame_wait_value(
+        recording=recording, sleep_states=tuple(ZEEP_SLEEP_STATES),
+        estimator_version=SLEEP_ESTIMATOR_VERSION,
+        evidence_version=SLEEP_EVIDENCE_VERSION,
+    ) if recording else None
+    _sleep_cache.update({
+        "t": time.monotonic() if initial else 0.0, "value": initial,
+        "session_id": session_id, "sequence": None,
+    })
 
 
 def analysis_frame_cached() -> Optional[Dict[str, Any]]:
@@ -3456,11 +3561,17 @@ def sleep_state_cached() -> Dict[str, Any]:
     now = time.monotonic()
     with state_lock:
         session_id = state["session"].get("session_id")
+        recording = bool(state["session"].get("recording"))
     frame = analysis_frame_cached()
     if (
         frame is not None
         and not frame.get("restored_after_restart")
         and frame.get("session_id") == session_id
+        and (
+            not recording
+            or (frame.get("sleep") or {}).get("state")
+            in {*ZEEP_SLEEP_STATES, "off_bed"}
+        )
     ):
         value = dict(frame["sleep"])
         age_s = max(0.0, time.time() - float(frame["epoch_s"]))
@@ -3468,24 +3579,19 @@ def sleep_state_cached() -> Dict[str, Any]:
         return value
     cached = _sleep_cache["value"]
     refresh_s = SLEEP_SAMPLE_SECONDS
-    if cached is None or session_id != _sleep_cache["session_id"]:
+    if (
+        cached is None
+        or session_id != _sleep_cache["session_id"]
+        or recording
+        and cached.get("state") not in {*ZEEP_SLEEP_STATES, "off_bed"}
+    ):
         # REST/WebSocket reads must never manufacture an evidence epoch. Only
         # the sensor sampler may advance the 10s -> 30s -> 60s pipeline.
-        _sleep_cache["value"] = {
-            "state": "no_data",
-            "confirmed_state": None,
-            "version": SLEEP_ESTIMATOR_VERSION,
-            "evidence_version": SLEEP_EVIDENCE_VERSION,
-            "classification_active": False,
-            "evidence_active": False,
-            "probabilities": {key: 0.0 for key in ZEEP_SLEEP_STATES},
-            "confidence": "low",
-            "data_status": "waiting_for_sensor_frame",
-            "reason": "รอ Sensor frame 10 วินาที",
-            "sample_s": SLEEP_SAMPLE_SECONDS,
-            "evidence_epoch_s": SLEEP_EVIDENCE_EPOCH_SECONDS,
-            "confirmation_s": SLEEP_CONFIRMATION_SECONDS,
-        }
+        _sleep_cache["value"] = sensor_frame_wait_value(
+            recording=recording, sleep_states=tuple(ZEEP_SLEEP_STATES),
+            estimator_version=SLEEP_ESTIMATOR_VERSION,
+            evidence_version=SLEEP_EVIDENCE_VERSION,
+        )
         _sleep_cache["t"] = now
         _sleep_cache["session_id"] = session_id
     value = dict(_sleep_cache["value"])
@@ -4782,28 +4888,6 @@ def sensor_frame_sampler():
         bucket_start = bucket_end
 
 
-def _apply_initial_wait_hard_cap(
-    sleep_result: Dict[str, Any],
-    *,
-    epoch_s: float,
-) -> Dict[str, Any]:
-    """Bound live initial WAIT from the recording start wall clock."""
-    with state_lock:
-        started_at = state["session"].get("started_at")
-        recording = bool(state["session"].get("recording"))
-    elapsed = (
-        max(0.0, float(epoch_s) - float(started_at))
-        if recording and isinstance(started_at, (int, float))
-        else None
-    )
-    return enforce_initial_wait_hard_cap(
-        sleep_result,
-        elapsed_seconds=elapsed,
-        maximum_seconds=INITIAL_WAIT_HARD_CAP_SECONDS,
-        sleep_states=tuple(ZEEP_SLEEP_STATES),
-    )
-
-
 def _sleep_value_between_evidence_epochs(
     feature: Dict[str, Any],
     session_id: Optional[str],
@@ -4819,6 +4903,19 @@ def _sleep_value_between_evidence_epochs(
         and (feature.get("bed_exit_evidence") or {}).get("confirmed")
     )
     current_vitals_valid = bool(feature.get("bcg_valid"))
+    newly_latched_off_bed = False
+    if exit_confirmed:
+        newly_latched_off_bed = _latch_confirmed_bed_exit(
+            session_id,
+            now=float(feature["t"]),
+        )
+    exit_confirmed = bool(
+        exit_confirmed
+        or _off_bed_remains_latched(
+            status_code=status_code,
+            current_vitals_valid=current_vitals_valid,
+        )
+    )
     restart_hold = _restart_sleep_hold_result(session_id)
     cached = _last_sleep_evidence_result()
     with sleep_path_lock:
@@ -4846,27 +4943,26 @@ def _sleep_value_between_evidence_epochs(
                 "empty_bed",
             }:
                 _clear_restart_sleep_hold_locked()
-            _sleep_stage_path["last_evidence_result"] = None
+                _sleep_stage_path["last_evidence_result"] = None
     value = between_evidence_epoch_value(
         issue=issue,
         restart_hold=restart_hold,
         cached=cached,
-        previous_stage=(previous_stage if current_vitals_valid else None),
+        previous_stage=previous_stage,
         continuity_hold_epochs=continuity_hold_epochs,
         sleep_states=tuple(ZEEP_SLEEP_STATES),
         estimator_version=SLEEP_ESTIMATOR_VERSION,
         evidence_version=SLEEP_EVIDENCE_VERSION,
-        sample_seconds=SLEEP_SAMPLE_SECONDS,
-        required_samples=SLEEP_MIN_FRAMES,
-        evidence_epoch_seconds=SLEEP_EVIDENCE_EPOCH_SECONDS,
-        confirmation_seconds=SLEEP_CONFIRMATION_SECONDS,
     )
-    value = _apply_initial_wait_hard_cap(value, epoch_s=float(feature["t"]))
     value.update({
         "sensor_frame_clock": clock,
         "evidence_epoch_due": False,
         "next_evidence_s": clock["next_evidence_s"],
     })
+    if newly_latched_off_bed:
+        # Bed-exit confirmation may arrive between 30-second evidence ticks.
+        # Persist it immediately so a fast End/Restart cannot lose occupancy.
+        _persist_sleep_stage_status(value, epoch_s=float(feature["t"]))
     return value
 
 
@@ -4880,10 +4976,6 @@ def _publish_sensor_frame(feature: Dict[str, Any], environment: Dict[str, Any],
     clock = _advance_sleep_evidence_clock(session_id)
     if clock["evidence_due"]:
         sleep_value = estimate_sleep_state()
-        sleep_value = _apply_initial_wait_hard_cap(
-            sleep_value,
-            epoch_s=epoch_s,
-        )
         sleep_value.update({
             "sensor_frame_clock": clock,
             "evidence_epoch_due": True,
@@ -4988,6 +5080,7 @@ def take_session_sample() -> Dict[str, Any]:
         "hr": b.get("heart_rate_bpm") if b_ok else None,
         "rr": b.get("respiration_rate") if b_ok else None,
         "bed": b.get("status_text") if b_ok else None,
+        "bed_exit_evidence": dict(b.get("bed_exit_evidence") or {}),
         # Derived acquisition integrity used only to decide whether an unfinished
         # (<30 s) tail may display the previous confirmed State provisionally.
         # It is not written into the immutable Sensor Timeline table.
@@ -5082,7 +5175,6 @@ def _begin_recording(active: Dict[str, Any]):
         )
     now_iso = datetime.now(timezone.utc).isoformat()
     with session_lock:
-        active["phase"] = "recording"
         active["last_sample"] = float("-inf")  # เก็บ sample แรกทันที
         record["started_at_utc"] = now_iso
         record["started_monotonic"] = time.monotonic()
@@ -5100,29 +5192,24 @@ def _begin_recording(active: Dict[str, Any]):
         "target_duration_s": record.get("target_duration_s"),
         "start_time": now_iso, "created_at": record["armed_at_utc"],
     })
-    # The open DB row must be durable before the checkpoint announces the
-    # recording phase. A hard reboot at either side can therefore restore a
-    # coherent state instead of inventing or truncating a sleep record.
+    # Make the DB row durable before announcing the Recording phase.
     if not database.flush(30):
         raise RuntimeError("database writer did not flush Session start")
-    _save_active_session_checkpoint(active)
+    _reset_live_sleep_inference(record["session_id"], recording=True)
     bcg_storage.start_session(record["session_id"])
+    with state_lock:
+        with session_lock:
+            if _active_session is not active:
+                raise RuntimeError("active Session changed during start")
+            active["phase"] = "recording"
+            state["session"].update({
+                "recording": True, "started_at": time.time(), "bed_wait_s": 0,
+                "vital_gate": {**vital_gate, "ready": True, "reason": "recording"},
+            })
+    _save_active_session_checkpoint(active)
     log_event("session", "bed_confirmed_start", session_id=record["session_id"],
               user=record["username"], required_s=BED_START_SECONDS,
               vital_packets=SESSION_VITAL_START_PACKETS)
-    with state_lock:
-        state["session"].update({
-            "recording": True, "started_at": time.time(), "bed_wait_s": 0,
-            "vital_gate": {
-                **vital_gate,
-                "ready": True,
-                "reason": "recording",
-            },
-        })
-    # Start the stable-30s epoch clock at the recording boundary. Frames used
-    # only to satisfy the pre-recording HR/RR gate must not shorten the first
-    # 30-second evidence epoch or the initial 60-second confirmation.
-    _reset_live_sleep_inference(record["session_id"])
 
 
 def session_sampler():
@@ -5448,6 +5535,22 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
     samples = active["samples"]
     acquisition_interval_s = _sample_interval_seconds(
         record.get("sample_interval_s"), SESSION_SAMPLE_SECONDS)
+    ended_at_utc = datetime.now(timezone.utc).isoformat()
+    started_monotonic = record.pop("started_monotonic", None)
+    never_recorded = started_monotonic is None
+    duration = (
+        0.0
+        if never_recorded
+        else max(0.0, time.monotonic() - started_monotonic)
+    )
+    start_epoch: Optional[float] = None
+    if not never_recorded:
+        try:
+            start_epoch = datetime.fromisoformat(
+                str(record.get("started_at_utc"))
+            ).timestamp()
+        except (TypeError, ValueError):
+            start_epoch = time.time() - duration
     # Sleep decisions are emitted at the end of a 30-second Evidence epoch,
     # whereas Sensor samples arrive every 10 seconds.  Reproject the durable
     # right-closed intervals before any count/score/upload work so the decision
@@ -5481,27 +5584,13 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
         "ORDER BY timestamp",
         (record["session_id"],),
     )
-    apply_sleep_decisions_to_samples(
-        samples,
-        stage_events=stage_events,
-        status_events=status_events,
-        fallback_interval_s=SLEEP_EVIDENCE_EPOCH_SECONDS,
-        heart_rate_range=HR_SANITY_RANGE_BPM,
-        respiration_rate_range=RR_SANITY_RANGE_PER_MIN,
-    )
-    report_samples, sample_interval_s, cadence_summary = (
-        _normalise_samples_for_report(samples, acquisition_interval_s)
-    )
-    started_monotonic = record.pop("started_monotonic", None)
-    never_recorded = started_monotonic is None
-    duration = 0.0 if never_recorded else max(0.0, time.monotonic() - started_monotonic)
     if never_recorded:
         # Login/occupancy is not a recorded sleep Session. If the bed + fresh
         # HR/RR gate never passes, close only the Login lease/checkpoint and do
         # not create a zero-duration report, timeline, or personal baseline.
         vital_gate = session_vital_gate_now(active)
         record.update({
-            "ended_at_utc": datetime.now(timezone.utc).isoformat(),
+            "ended_at_utc": ended_at_utc,
             "end_reason": (
                 "not_recorded" if reason == "logout"
                 else f"{reason}_not_recorded"
@@ -5559,18 +5648,34 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
         _reset_live_sleep_inference(None)
         report_shares.discard(record.get("identity_subject"))
         return record
-    bed_counts: Dict[str, int] = {}
-    sleep_counts: Dict[str, int] = {}
-    sleep_score_counts: Dict[str, int] = {}
-    for smp in report_samples:
-        if smp.get("bed"):
-            bed_counts[smp["bed"]] = bed_counts.get(smp["bed"], 0) + 1
-        if smp.get("sleep"):
-            sleep_counts[smp["sleep"]] = sleep_counts.get(smp["sleep"], 0) + 1
-            if smp.get("sleep_score_eligible") is not False:
-                sleep_score_counts[smp["sleep"]] = (
-                    sleep_score_counts.get(smp["sleep"], 0) + 1
-                )
+    projection = report_projection.project_report_samples(
+        samples,
+        start_at=start_epoch,
+        end_at=float(start_epoch) + duration,
+        cadence_segments=record.get("sample_cadence_segments") or [],
+        sensor_interval_s=acquisition_interval_s,
+        decision_interval_s=SLEEP_EVIDENCE_EPOCH_SECONDS,
+        stage_events=stage_events,
+        status_events=status_events,
+        heart_rate_range=HR_SANITY_RANGE_BPM,
+        respiration_rate_range=RR_SANITY_RANGE_PER_MIN,
+    )
+    samples = projection["samples"]
+    report_samples = projection["report_samples"]
+    sample_interval_s = projection["report_interval_s"]
+    cadence_summary = projection["cadence_summary"]
+    sample_grid_summary = projection["grid_summary"]
+    if not sample_grid_summary["classification_complete"]:
+        with session_lock:
+            if _active_session is None:
+                _active_session = active
+        report_shares.discard(record.get("identity_subject"))
+        raise RuntimeError(
+            "report continuity invariant failed: unattributed recording time"
+        )
+    bed_counts = projection["bed_status_counts"]
+    sleep_counts = projection["sleep_state_counts"]
+    sleep_score_counts = projection["sleep_score_state_counts"]
     estimator_versions = Counter(
         smp.get("sleep_estimator_version") for smp in samples
         if smp.get("sleep_estimator_version")
@@ -5581,13 +5686,14 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
         SLEEP_ESTIMATOR_VERSION,
     )
     record.update({
-        "ended_at_utc": datetime.now(timezone.utc).isoformat(),
+        "ended_at_utc": ended_at_utc,
         "end_reason": reason,
         "duration_s": round(duration, 1),
         "sample_interval_s": sample_interval_s,
         "sensor_sample_interval_s": acquisition_interval_s,
         "sample_cadence_segments": record.get("sample_cadence_segments") or [],
         "sample_cadence_summary": cadence_summary,
+        "report_sample_grid": sample_grid_summary,
         "samples": samples,
         "summary": {
             # Mixed-cadence rows are expanded only for calculation so these are
@@ -5639,7 +5745,7 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
     awakenings = 0
     asleep = False
     sleep_started = False
-    waso_samples = 0
+    waso_seconds = 0.0
     try:
         started_epoch = datetime.fromisoformat(record["started_at_utc"]).timestamp()
     except (TypeError, ValueError):
@@ -5651,12 +5757,20 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
         )
         if st in sleep_like:
             if onset_proxy_s is None and started_epoch:
-                onset_proxy_s = round(max(0.0, smp["t"] - started_epoch), 1)
+                interval_s = _sample_interval_seconds(
+                    smp.get("sample_interval_s"), sample_interval_s
+                )
+                onset_proxy_s = round(
+                    max(0.0, smp["t"] - interval_s - started_epoch),
+                    1,
+                )
             asleep = True
             sleep_started = True
         elif st in ("wake", "off_bed"):
             if sleep_started:
-                waso_samples += 1
+                waso_seconds += _sample_interval_seconds(
+                    smp.get("sample_interval_s"), sample_interval_s
+                )
             if asleep:
                 awakenings += 1
                 asleep = False
@@ -5670,7 +5784,7 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
     night_summary = {
         "sleep_onset_proxy_s": onset_proxy_s,
         "awakenings": awakenings,
-        "waso_proxy_s": round(waso_samples * sample_interval_s, 1),
+        "waso_proxy_s": round(waso_seconds, 1),
         "estimated_sleep_s": round(min(duration, total_sleep_samples * sample_interval_s), 1),
         "sleep_efficiency": (round(total_sleep_samples / total_scored, 3)
                              if total_scored else None),
@@ -5745,6 +5859,7 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
             "timeline_schema_version": SESSION_TIMELINE_SCHEMA_VERSION,
             "sample_cadence_segments": record.get("sample_cadence_segments") or [],
             "sample_cadence_summary": cadence_summary,
+            "report_sample_grid": sample_grid_summary,
             # Snapshot the non-diagnostic Profile context used during this
             # Session so later account edits do not rewrite historical reports.
             "health_reference": record.get("health_reference") or {},
@@ -8233,33 +8348,15 @@ def history_detail(
     timeline_interval_s = _timeline_sample_interval(timeline, 5.0)
     canonical_bed_labels = debounced_bed_status_labels(
         [x["bed_status"] for x in timeline])
-    samples = []
-    for x, canonical_bed in zip(timeline, canonical_bed_labels):
-        sample = {
-            "t": datetime.fromisoformat(x["timestamp"]).timestamp(),
-            "temp": x["temperature"], "hum": x["humidity"], "co2": x["co2"],
-            "pm2_5": x["pm2_5"], "voc": x["voc_index"],
-            "lux": x["lux"], "dba": x["sound"], "hr": x["heart_rate"],
-            "rr": x["respiration_rate"], "bed": canonical_bed,
-            "sample_interval_s": timeline_interval_s,
-        }
-        if principal.is_admin:
-            # Admin retains the byte-for-byte historical label for Sensor
-            # integrity work; User reports receive the debounced canonical view.
-            sample["raw_bed_status"] = x["bed_status"]
-        samples.append(sample)
+    samples = history_support.history_samples_from_rows(
+        timeline,
+        canonical_bed_labels,
+        sample_interval_s=timeline_interval_s,
+        include_raw_bed_status=principal.is_admin,
+    )
     events = database.read_sessions(
         "SELECT timestamp,type,value FROM events WHERE session_id=? ORDER BY timestamp", (session_id,))
-    counters: Dict[str, int] = {}
-    final_summary: Dict[str, Any] = {}
-    for event in reversed(events):
-        if event["type"] != "final_summary":
-            continue
-        try:
-            final_summary = json.loads(event["value"] or "{}")
-        except (TypeError, json.JSONDecodeError):
-            final_summary = {}
-        break
+    final_summary = history_support.latest_final_summary(events)
     history_interval_s = _sample_interval_seconds(
         final_summary.get("sample_interval_s"), timeline_interval_s)
     cadence_segments = _normalise_cadence_segments(
@@ -8273,146 +8370,49 @@ def history_detail(
     report_samples, history_interval_s, cadence_summary = (
         _normalise_samples_for_report(samples, history_interval_s)
     )
-    stage_points = []
-    status_points = []
-    terminal_wake_event: Optional[Dict[str, Any]] = None
     annotation_rows = [event for event in events
                        if event["type"] == "sleep_stage_annotation"]
     annotations = load_annotations(annotation_rows)
-    gap_controls = sleep_classification_gap_controls(events)
-    for event in events:
-        if event["type"] == "final_summary":
-            continue
-        if event["type"] == "sleep_stage":
-            try:
-                value = json.loads(event["value"] or "{}")
-            except (TypeError, json.JSONDecodeError):
-                value = {}
-            decision_interval_s = _sample_interval_seconds(
-                value.get("sample_interval_s"), history_interval_s)
-            value, _ = apply_annotations(
-                value, event["timestamp"], annotations,
-                sample_interval_s=decision_interval_s,
-            )
-            value["sample_interval_s"] = decision_interval_s
-            if value.get("state") in {"wake", "n1", "n2", "n3", "rem"}:
-                stage_points.append({"timestamp": event["timestamp"], **value})
-            continue
-        if event["type"] == "sleep_stage_status":
-            try:
-                value = json.loads(event["value"] or "{}")
-            except (TypeError, json.JSONDecodeError):
-                value = {}
-            if value.get("state") in {"wait", "no_data", "off_bed"}:
-                decision_interval_s = _sample_interval_seconds(
-                    value.get("sample_interval_s"), history_interval_s
-                )
-                value.update({
-                    "sample_interval_s": decision_interval_s,
-                    "window_start": (
-                        value.get("attribution_start")
-                        or value.get("window_start")
-                    ),
-                    "window_end": (
-                        value.get("attribution_end")
-                        or value.get("window_end")
-                        or event["timestamp"]
-                    ),
-                    "score_eligible": False,
-                    "excluded_from_score": True,
-                    "excluded_from_personal_baseline": True,
-                    "sleep_stage": False,
-                })
-                status_points.append({"timestamp": event["timestamp"], **value})
-            continue
-        if event["type"] == "session_terminal_wake":
-            try:
-                value = json.loads(event["value"] or "{}")
-            except (TypeError, json.JSONDecodeError):
-                value = {}
-            if isinstance(value, dict) and value.get("state") == "wake":
-                terminal_wake_event = value
-            continue
-        kind = event["type"].removeprefix("legacy_counter:")
-        amount = int(event["value"]) if event["type"].startswith("legacy_counter:") else 1
-        counters[kind] = counters.get(kind, 0) + amount
-    # Rebuild the displayed counts from canonical labels every time. Persisted
-    # raw Timeline rows remain unchanged and are exposed only to Admin above.
-    bed_counts: Dict[str, int] = {}
-    for sample in report_samples:
-        if sample.get("bed"):
-            bed_counts[sample["bed"]] = bed_counts.get(sample["bed"], 0) + 1
-    if not bed_counts:
-        bed_counts = final_summary.get("bed_status_counts") or {}
+    parsed_events = history_support.parse_history_sleep_events(
+        events,
+        annotations=annotations,
+        sample_interval_s=history_interval_s,
+        apply_annotations=apply_annotations,
+    )
+    stage_points = parsed_events["stage_points"]
+    status_points = parsed_events["status_points"]
+    terminal_wake_event = parsed_events["terminal_wake_event"]
+    counters = parsed_events["counters"]
+    bed_counts = history_support.history_bed_counts(
+        report_samples,
+        final_summary.get("bed_status_counts"),
+    )
     report_end = row["end_time"] or datetime.now(timezone.utc).isoformat()
-    # The database retains every versioned-cadence decision for audit/re-scoring. A
-    # user report only needs contiguous stage periods; returning all metrics for
-    # 3,000+ rounds made one overnight report several MB and overloaded tablets.
-    sleep_timeline, use_legacy_gap_fallback = _history_sleep_timeline(
+    timeline_result = history_support.assemble_history_sleep_timeline(
         stage_points,
         status_points,
+        raw_timeline=timeline,
         report_end=report_end,
+        session_start=row["start_time"],
+        session_end=row["end_time"],
+        end_reason=row["end_reason"],
         sample_interval_s=history_interval_s,
         fallback_estimator=final_summary.get("sleep_estimator"),
+        persisted_terminal_wake=final_summary.get(
+            "terminal_wake_transition"
+        ),
+        terminal_wake_event=terminal_wake_event,
     )
-    # Keep terminal occupancy beside, never inside, the five-state Sleep
-    # timeline. This closes the visible gap between the final Wake decision and
-    # Logout without counting an empty Pod as human Wake or sleep.
-    terminal_occupancy = terminal_occupancy_timeline(
-        timeline,
-        session_end=report_end,
-        sample_interval_s=history_interval_s,
+    sleep_timeline = timeline_result["sleep_timeline"]
+    terminal_occupancy = timeline_result["terminal_occupancy"]
+    classification_end = timeline_result["classification_end"]
+    terminal_wake = timeline_result["terminal_wake"]
+    classification_gaps: List[Dict[str, Any]] = []
+    sleep_continuity_accounting = history_support.history_continuity_accounting(
+        sleep_timeline,
+        session_start=row["start_time"],
+        classification_end=classification_end,
     )
-    classification_end = (
-        terminal_occupancy[0].get("start_time")
-        if terminal_occupancy else report_end
-    )
-    if terminal_occupancy:
-        sleep_timeline = _clip_history_sleep_timeline(
-            sleep_timeline,
-            classification_end=classification_end,
-        )
-    classification_gaps = []
-    if use_legacy_gap_fallback:
-        classification_gaps = sleep_classification_gap_timeline(
-            sleep_timeline,
-            samples,
-            session_start=row["start_time"],
-            classification_end=classification_end,
-            sensor_sample_interval_s=_sample_interval_seconds(
-                final_summary.get("sensor_sample_interval_s"),
-                history_interval_s,
-            ),
-            **gap_controls,
-        )
-    if classification_gaps:
-        sleep_timeline = sorted(
-            [*sleep_timeline, *classification_gaps],
-            key=lambda item: str(item.get("start_time") or ""),
-        )
-    terminal_wake = final_summary.get("terminal_wake_transition")
-    if not isinstance(terminal_wake, dict):
-        terminal_wake = terminal_wake_event
-    if not isinstance(terminal_wake, dict) and row["end_time"]:
-        # Display-only compatibility for Sessions completed before the
-        # versioned terminal marker existed. Raw decisions and statistics are
-        # untouched; the returned marker states this provenance explicitly.
-        terminal_wake = terminal_wake_transition(
-            sleep_timeline,
-            terminal_occupancy=terminal_occupancy,
-            session_end=report_end,
-            end_reason=row["end_reason"],
-        )
-        if terminal_wake:
-            terminal_wake["display_reconstructed"] = True
-            terminal_wake["persisted_record_unchanged"] = True
-    if (
-        isinstance(terminal_wake, dict)
-        and terminal_wake.get("state") == "wake"
-        and sleep_timeline
-        and sleep_timeline[-1].get("state") != "wake"
-    ):
-        sleep_timeline.append(terminal_wake)
     with profile_lock:
         profile = _load_profiles().get(row["username_key"], {})
     history_rest_mode = (
@@ -8435,27 +8435,45 @@ def history_detail(
         if isinstance(persisted_session_report, dict) else None
     )
     session_report = persisted_session_report
+    history_sleep_counts = final_summary.get("sleep_state_counts") or {}
     if (
         not isinstance(session_report, dict)
         or persisted_report_version != SESSION_REPORT_VERSION
     ):
-        # Display-only upgrade; persisted history/version remain unchanged.
+        projection = history_support.project_history_report_samples(
+            samples,
+            start_at=row["start_time"],
+            end_at=report_end,
+            cadence_segments=cadence_segments,
+            sensor_interval_s=_sample_interval_seconds(
+                final_summary.get("sensor_sample_interval_s"),
+                timeline_interval_s,
+            ),
+            decision_interval_s=history_interval_s,
+            stage_points=stage_points,
+            status_points=status_points,
+            timeline_periods=sleep_timeline,
+            terminal_occupancy=terminal_occupancy,
+            heart_rate_range=HR_SANITY_RANGE_BPM,
+            respiration_rate_range=RR_SANITY_RANGE_PER_MIN,
+        )
+        projected_report_samples = projection["report_samples"]
+        projected_interval_s = projection["report_interval_s"]
+        projected_sleep_counts = projection["sleep_state_counts"]
+        projected_score_counts = projection["sleep_score_state_counts"]
+        history_sleep_counts = projected_sleep_counts
         session_report = build_session_report(
-            row["duration"], report_samples, night_summary,
-            final_summary.get("sleep_state_counts") or {}, sleep_quality,
+            row["duration"], projected_report_samples, night_summary,
+            projected_sleep_counts, sleep_quality,
             rest_mode=history_rest_mode,
-            sample_interval_s=history_interval_s,
+            sample_interval_s=projected_interval_s,
             estimator_version=final_summary.get("sleep_estimator"),
             completed=bool(row["end_time"]),
             timeline_schema_version=int(
                 final_summary.get("timeline_schema_version") or 3),
             target_duration_s=history_target_duration_s,
             personal_context=restore_context, trend_context=restore_context,
-            sleep_score_state_counts=(
-                final_summary.get("sleep_score_state_counts")
-                or final_summary.get("sleep_state_counts")
-                or {}
-            ),
+            sleep_score_state_counts=projected_score_counts,
         )
         session_report["display_recomputed"] = True
         session_report["display_recomputed_from_version"] = persisted_report_version
@@ -8488,9 +8506,9 @@ def history_detail(
         "sleep_timeline_rounds": len(stage_points),
         "sleep_status_timeline_rounds": len(status_points),
         "sleep_timeline_source": (
-            "persisted_decision_events"
-            if status_points else "legacy_stage_events_with_gap_fallback"
+            "persisted_decisions_with_continuity_fill"
         ),
+        "sleep_continuity_accounting": sleep_continuity_accounting,
         "sleep_classification_gap_count": len(classification_gaps),
         "sleep_classification_gap_seconds": round(sum(
             float(period.get("duration_s") or 0.0)
@@ -8521,7 +8539,7 @@ def history_detail(
             "heart_rate_bpm": _series_stats([s["hr"] for s in samples]),
             "respiration_rate": _series_stats([s["rr"] for s in samples]),
             "bed_status_counts": bed_counts,
-            "sleep_state_counts": final_summary.get("sleep_state_counts") or {},
+            "sleep_state_counts": history_sleep_counts,
         },
         "counters": final_summary.get("counters") or counters,
     }

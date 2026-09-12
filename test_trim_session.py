@@ -101,7 +101,7 @@ class TrimSessionTests(unittest.TestCase):
             self.assertEqual(result["after"]["timeline_after_cutoff"], 0)
             self.assertEqual(result["after"]["bcg_packets_after_cutoff"], 0)
             self.assertEqual(result["duration_s"], 600)
-            self.assertEqual(result["sleep_state_counts"]["n2"], 1)
+            self.assertEqual(result["sleep_state_counts"]["n2"], 66)
 
             sessions = sqlite3.connect(data_dir / "sessions.db")
             sessions.row_factory = sqlite3.Row
@@ -113,6 +113,22 @@ class TrimSessionTests(unittest.TestCase):
             self.assertIn("session_report", final)
             self.assertEqual(final["rest_mode"], "auto")
             self.assertIn("waso_proxy_s", final["night_summary"])
+            self.assertEqual(
+                final["night_summary"]["sleep_onset_proxy_s"],
+                270,
+            )
+            self.assertTrue(
+                final["report_sample_grid"]["classification_complete"]
+            )
+            self.assertEqual(
+                final["report_sample_grid"]["five_state_seconds"],
+                600,
+            )
+            accounting = final["session_report"]["sleep"][
+                "classification_accounting"
+            ]
+            self.assertEqual(accounting["score_eligible_s"], 600)
+            self.assertEqual(accounting["no_data_s"], 0)
             sessions.close()
 
             bcg = sqlite3.connect(data_dir / "bcg.db")
@@ -156,7 +172,7 @@ class TrimSessionTests(unittest.TestCase):
             self.assertEqual(final["rest_mode"], "short_nap")
             sessions.close()
 
-    def test_trim_preserves_display_holds_but_excludes_provisional_score(self):
+    def test_trim_scores_legacy_provisional_as_continuity_state(self):
         with tempfile.TemporaryDirectory() as temporary:
             data_dir = self._data_dir(Path(temporary))
             sessions = sqlite3.connect(data_dir / "sessions.db")
@@ -234,37 +250,166 @@ class TrimSessionTests(unittest.TestCase):
                 apply=True,
             )
 
-            self.assertEqual(result["sleep_state_counts"]["n2"], 3)
-            self.assertEqual(result["sleep_score_state_counts"]["n2"], 1)
+            self.assertEqual(result["sleep_state_counts"]["n2"], 11)
+            self.assertEqual(result["sleep_score_state_counts"]["n2"], 11)
             sessions = sqlite3.connect(data_dir / "sessions.db")
             persisted = json.loads(sessions.execute(
                 "SELECT value FROM events WHERE type='final_summary'"
             ).fetchone()[0])
             sessions.close()
-            self.assertEqual(persisted["sleep_state_counts"]["n2"], 3)
+            self.assertEqual(persisted["sleep_state_counts"]["n2"], 11)
             self.assertEqual(
                 persisted["sleep_score_state_counts"]["n2"],
-                1,
+                11,
             )
             self.assertEqual(
                 persisted["night_summary"]["estimated_sleep_s"],
-                30,
+                330,
             )
             self.assertEqual(
                 persisted["night_summary"]["sleep_quality"][
                     "actual_scored_s"
                 ],
-                30,
+                600,
             )
             sleep = persisted["session_report"]["sleep"]
-            self.assertEqual(sleep["continuity_carried_forward_s"], 90)
+            self.assertEqual(sleep["continuity_carried_forward_s"], 570)
             self.assertEqual(sleep["provisional_hold_s"], 60)
-            self.assertEqual(sleep["actual_scored_s"], 30)
+            self.assertEqual(sleep["actual_scored_s"], 600)
+            self.assertEqual(sleep["excluded_from_score_s"], 0)
             self.assertTrue(
                 sleep["classification_accounting"][
                     "score_stage_total_reconciles"
                 ]
             )
+
+    def test_trim_ignores_legacy_no_data_but_preserves_off_bed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            data_dir = self._data_dir(Path(temporary))
+            sessions = sqlite3.connect(data_dir / "sessions.db")
+            sessions.execute(
+                "DELETE FROM events WHERE type IN "
+                "('sleep_stage','sleep_stage_status')"
+            )
+            sessions.execute("DELETE FROM timeline")
+
+            events = (
+                (
+                    10,
+                    "2026-08-26T00:02:00+00:00",
+                    "sleep_stage",
+                    {
+                        "state": "n2",
+                        "attribution_start": (
+                            "2026-08-26T00:01:30+00:00"
+                        ),
+                        "attribution_end": (
+                            "2026-08-26T00:02:00+00:00"
+                        ),
+                        "score_eligible": False,
+                        "excluded_from_score": True,
+                    },
+                ),
+                (
+                    11,
+                    "2026-08-26T00:04:00+00:00",
+                    "sleep_stage_status",
+                    {
+                        "state": "no_data",
+                        "data_status": "missing_current_vitals",
+                        "attribution_start": (
+                            "2026-08-26T00:03:30+00:00"
+                        ),
+                        "attribution_end": (
+                            "2026-08-26T00:04:00+00:00"
+                        ),
+                    },
+                ),
+                (
+                    12,
+                    "2026-08-26T00:06:00+00:00",
+                    "sleep_stage_status",
+                    {
+                        "state": "off_bed",
+                        "data_status": "confirmed_off_bed",
+                        "attribution_start": (
+                            "2026-08-26T00:05:00+00:00"
+                        ),
+                        "attribution_end": (
+                            "2026-08-26T00:06:00+00:00"
+                        ),
+                    },
+                ),
+                (
+                    13,
+                    "2026-08-26T00:08:00+00:00",
+                    "sleep_stage",
+                    {
+                        "state": "n2",
+                        "attribution_start": (
+                            "2026-08-26T00:07:30+00:00"
+                        ),
+                        "attribution_end": (
+                            "2026-08-26T00:08:00+00:00"
+                        ),
+                    },
+                ),
+            )
+            for event_id, timestamp, event_type, value in events:
+                sessions.execute(
+                    "INSERT INTO events VALUES (?,?,?,?,?)",
+                    (
+                        event_id,
+                        "session-1",
+                        timestamp,
+                        event_type,
+                        json.dumps(value),
+                    ),
+                )
+            sessions.execute(
+                "UPDATE events SET value=? WHERE type='final_summary'",
+                (json.dumps({
+                    "sleep_estimator": "continuity-test",
+                    "rest_mode": "overnight",
+                    "sample_interval_s": 30,
+                    "sensor_sample_interval_s": 30,
+                    "timeline_schema_version": 4,
+                }),),
+            )
+            sessions.commit()
+            sessions.close()
+
+            trim_session(
+                data_dir,
+                "session-1",
+                datetime(2026, 8, 26, 0, 10, tzinfo=timezone.utc),
+                "off-bed-regression",
+                apply=True,
+            )
+
+            sessions = sqlite3.connect(data_dir / "sessions.db")
+            persisted = json.loads(sessions.execute(
+                "SELECT value FROM events WHERE type='final_summary'"
+            ).fetchone()[0])
+            sessions.close()
+            grid = persisted["report_sample_grid"]
+            self.assertTrue(grid["classification_complete"])
+            self.assertEqual(grid["five_state_seconds"], 450)
+            self.assertEqual(grid["off_bed_seconds"], 150)
+            self.assertEqual(grid["unattributed_seconds"], 0)
+            self.assertEqual(persisted["sleep_state_counts"]["wake"], 3)
+            self.assertEqual(persisted["sleep_state_counts"]["n2"], 12)
+            self.assertEqual(
+                persisted["sleep_state_counts"],
+                persisted["sleep_score_state_counts"],
+            )
+            accounting = persisted["session_report"]["sleep"][
+                "classification_accounting"
+            ]
+            self.assertEqual(accounting["score_eligible_s"], 450)
+            self.assertEqual(accounting["off_bed_s"], 150)
+            self.assertEqual(accounting["no_data_s"], 0)
+            self.assertTrue(accounting["arithmetic_invariant"]["holds"])
 
 
 if __name__ == "__main__":

@@ -80,7 +80,7 @@ Case study ภาคสนามที่ตัดข้อมูลระบุ
 | `esp32_reader` (thread) | อ่าน JSON ทีละบรรทัดจาก USB serial → temperature / humidity / lux / sound |
 | `bcg_reader` (thread) | แกะ frame 66-byte ของ LSM-800-T → waveform / HR / RR / bed status · แยก "ช่วงเงียบปกติ" ออกจาก "หลุดจริง" |
 | `session_sampler` (thread) | เก็บ snapshot สิ่งแวดล้อม + ชีวสัญญาณทุก 10 วินาทีระหว่างมี Recording Session |
-| `estimate_sleep_state` | exploratory 5-state Wake/N1/N2/N3/REM ทุก 10 วินาที จาก rolling 6 ชุด · BCG/HR/RR/movement เป็นหลัก · environment 7 ปัจจัยเป็น context · pre-G2 · ไม่ใช้ควบคุมอุปกรณ์ |
+| `estimate_sleep_state` | exploratory 5-state Wake/N1/N2/N3/REM ทุก 10 วินาที จาก rolling 6 ชุด · Recording เริ่มด้วย W และทุก non-OFF-BED interval มี score attribution · BCG/HR/RR/movement เป็นหลัก · environment 7 ปัจจัยเป็น context · pre-G2 · ไม่ใช้ควบคุมอุปกรณ์ |
 | Profile/Session store | login/logout รายบุคคล · ประวัติย้อนหลัง · รายงาน · ลบข้อมูล (PDPA) |
 
 ## User / Admin และ Pod Session
@@ -108,6 +108,9 @@ email key อัตโนมัติเมื่อเริ่มบริก�
 ไฟล์ checkpoint ไม่เก็บ password/access token/refresh token และจะถูกลบหลัง
 ผู้ใช้กดจบ Session/ออกจากระบบ หรือ Admin ยืนยัน End/Kick เท่านั้น เมื่อบริการ
 กลับมา UI จะต่อ WebSocket ใหม่และใช้ Session ID/ผู้ใช้/Rest Mode เดิมต่อทันที
+หากอยู่ใน Recording ระบบ restore State ที่ยืนยันล่าสุดและ carry ต่อแบบ
+low-confidence จน Evidence สดกลับมา ช่วงนี้เข้าคะแนนของ State เดิมแต่ไม่เข้า
+Personal Baseline; confirmed OFF BED เท่านั้นที่ยุติ carry
 
 Local fallback เปิดได้เฉพาะหลัง Pi ติดต่อ ZEEP API ไม่ได้จริง โดยต้องใช้ one-time
 offline ticket อายุ 5 นาที การเรียก `/api/session/login` ตรง ๆ จะถูกปฏิเสธ
@@ -390,20 +393,23 @@ HR/RR เป็นค่า directional จาก sensor (pre-G2) ไม่ใ�
 
 แถบในการ์ด BCG รับ Sensor frame ทุก 10 วินาที สร้าง evidence ทุก 30 วินาที
 จาก rolling 6 ชุด (60 วินาที; candidate
-`bcg-audio-bed-5state-v1.28-continuity-carry-forward`)
+`bcg-audio-bed-5state-v1.29-complete-occupied-epochs`)
 และยืนยัน State เมื่อ candidate เดิมต่อเนื่องตาม target: W/N1/N3/REM ใช้
 2 epoch/60 วินาที ส่วน N2 ใช้ 4 epoch/120 วินาที; EMA เป็น continuity หลัก
 ของ W/N1/N2/REM ส่วน N3 ที่ชนะและผ่าน physiology gate ใช้หลักฐานปัจจุบันก่อน EMA
 เพื่อไม่ให้การกรองซ้ำกด N3 ที่มีหลักฐานครบจนหายไป ช่วง 5 นาทีแรกคง W เพื่อเก็บ
 Awake/settling evidence และจะเข้า N1 ได้เมื่อเตียงนิ่งพร้อม HR/RR ลดลงต่อเนื่อง
 ครบเงื่อนไข 2 evidence epochs; เวลาเริ่ม Session หรือความนิ่งเพียงอย่างเดียวสร้าง N1 ไม่ได้
-`WAIT` ใช้เฉพาะการยืนยัน State แรกสูงสุด 60/120 วินาที หลังมี State แล้ว
-ผู้ท้าชิงที่ยังไม่ชัดจะคง State ก่อนหน้า โดย 1–2 epoch แรกเป็น `provisional`
-และไม่เข้าคะแนน หลังจากนั้นจึงนับให้ State เดิมจน State ใหม่ผ่าน Gate และการยืนยัน:
+เมื่อเริ่ม Recording ระบบกำหนด W เป็น initial awake anchor ทันที `WAIT` ใช้เฉพาะ
+phase `waiting_bed` ก่อน Recording ผู้ท้าชิงที่ยังไม่ชัด รวมถึงช่วงหลักฐาน
+missing/stale/restart จะคง State ก่อนหน้าแบบ low-confidence และนับเวลา/คะแนนให้
+State เดิมจน State ใหม่ผ่าน Gate และการยืนยัน; `provisional` เป็น diagnostic
+metadata เท่านั้นและไม่หักคะแนน ส่วน low-confidence carry ไม่เข้า Personal Baseline:
 
 | หลักฐานเด่น | ผลแบบ exploratory |
 |---|---|
-| ไม่อยู่บนเตียง/ขยับเด่น หรือ HR/RR ใกล้ awake baseline | **Wake** |
+| ยืนยันว่าไม่อยู่บนเตียง | **OFF BED** — Occupancy exception; ไม่ใช่ Sleep State และไม่เข้าคะแนน |
+| ยังอยู่บนเตียงและขยับเด่น หรือ HR/RR ใกล้ awake baseline | **Wake** |
 | เพิ่งลดจาก Wake, movement ลด, อยู่ในช่วงเปลี่ยนผ่าน | **N1** |
 | HR/RR ลดและค่อนข้างสม่ำเสมอ | **N2** |
 | HR/RR อยู่กลุ่มต่ำ, variability ต่ำมาก, movement ต่ำ | **N3 label** |
@@ -415,7 +421,7 @@ Awake/settling evidence และจะเข้า N1 ได้เมื่อ�
 **กรอบวินัย:** N1/N2/N3/REM บนหน้าจอเป็น **proxy ไม่ใช่ EEG/EOG/EMG staging** —
 คลาสที่บันทึกคือ `wake/n1/n2/n3/rem` พร้อม estimator/evidence version; G2 primary
 เปรียบเทียบ W/N1/N2/N3/REM แบบ one-to-one ส่วนการยุบ N1/N2/N3 เป็น NREM เป็น
-secondary robustness analysis ตาม [ZEEP Sleep-State Baseline v1.8](../docs/zeep-sleep-state-baseline-v1.0.md)
+secondary robustness analysis ตาม [ZEEP Sleep-State Baseline v1.8](docs/zeep-sleep-state-baseline-v1.0.md)
 **ห้ามใช้เป็นเงื่อนไขควบคุมอุปกรณ์** · ทุก record ติด `sleep_estimator` version
 เพื่อ provenance · แอปผู้บริโภคยังห้ามแสดง sleep state จนผ่าน G2
 
@@ -430,6 +436,9 @@ secondary robustness analysis ตาม [ZEEP Sleep-State Baseline v1.8](../docs
   Movement baseline · เวลาที่มักเข้านอน/ตื่น
 - ค่าเหล่านี้ใช้เป็น **บริบทพฤติกรรมและคำแนะนำหลัง Session**; รุ่น pilot ไม่ให้
   ผลทำนายเก่าย้อนกลับไปเลื่อนช่วง HR/RR ของ staging engine เพื่อป้องกัน feedback loop
+- ภายใน Session ที่เข้าเกณฑ์ ระบบเรียนเฉพาะ epoch ที่
+  `excluded_from_personal_baseline=false`; pending/ambiguous/missing/stale/restart carry
+  ยังเข้าคะแนนแต่ไม่ถูกใช้สอน Baseline และการขาดข้อมูลบางช่วงไม่ทำให้ทิ้งทั้ง Session
 - แผง **AI Adaptive** ในการ์ดประวัติแสดงสถานะการเรียนรู้ (n/3 คืน) +
   คำแนะนำจากข้อมูลของเขาเอง · `GET /api/baseline/{username}`
 - Baseline อัปเดตอัตโนมัติหลัง logout ทุกครั้ง · เก็บที่ `data/baselines.json`

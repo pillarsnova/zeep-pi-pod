@@ -72,6 +72,12 @@ class UsageCoverage(ContractModel):
     recording_pct: float | None = Field(default=None, ge=0, le=100)
     bcg_pct: float | None = Field(default=None, ge=0, le=100)
     sleep_stage_pct: float | None = Field(default=None, ge=0, le=100)
+    state_attribution_pct: float | None = Field(default=None, ge=0, le=100)
+    physiological_evidence_pct: float | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+    )
     environment_pct: float | None = Field(default=None, ge=0, le=100)
     ratio: float | None = Field(default=None, ge=0, le=1)
     pct: float | None = Field(default=None, ge=0, le=100)
@@ -84,6 +90,17 @@ class UsageConfidence(ContractModel):
     level: str | None = None
     label: str | None = None
     session_coverage_pct: float | None = Field(default=None, ge=0, le=100)
+    timeline_coverage_pct: float | None = Field(default=None, ge=0, le=100)
+    state_attribution_coverage_pct: float | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+    )
+    physiological_evidence_coverage_pct: float | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+    )
     paired_hr_rr_coverage_pct: float | None = Field(default=None, ge=0, le=100)
     coverage_is_admin_qa_context: bool | None = None
     coverage_can_hide_score: bool | None = None

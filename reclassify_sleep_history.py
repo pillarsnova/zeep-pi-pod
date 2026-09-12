@@ -72,6 +72,10 @@ from sleep_system_policy import (
     ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
     continuity_hold_contract,
 )
+from zeep_pod.sessions.sleep_transition_state import (
+    transition_allowed,
+    transition_fallback_state,
+)
 
 
 MAINTENANCE_TOOL_NAME = "reclassify_sleep_history.py"
@@ -157,12 +161,18 @@ class RawBcgWindow:
         invalid_rr_packets = 0
         latest_raw_exit_frames = 0
         latest_raw_total_frames = 0
+        latest_bucket_pair_valid = False
+        latest_bucket_status: Optional[int] = None
         for index in range(requested):
             bucket_start = start + index * self.sample_seconds
             bucket_end = min(end, bucket_start + self.sample_seconds)
             left = bisect_right(self.timestamps, bucket_start)
             right = bisect_right(self.timestamps, bucket_end)
             rows = self.packets[left:right]
+            # Return-from-OFF-BED freshness belongs to the final requested
+            # bucket only. An earlier valid pair must not bridge an empty tail.
+            latest_bucket_pair_valid = False
+            latest_bucket_status = None
             if not rows:
                 continue
             for packet_samples in self.packet_samples[left:right]:
@@ -173,6 +183,15 @@ class RawBcgWindow:
                        if row["respiration_rate"] is not None]
             hrs = filter_vital_values(raw_hrs, HR_SANITY_RANGE_BPM)
             rrs = filter_vital_values(raw_rrs, RR_SANITY_RANGE_PER_MIN)
+            paired_vitals = [
+                row for row in rows
+                if filter_vital_values(
+                    [row["heart_rate"]], HR_SANITY_RANGE_BPM
+                )
+                and filter_vital_values(
+                    [row["respiration_rate"]], RR_SANITY_RANGE_PER_MIN
+                )
+            ]
             invalid_hr_packets += len(raw_hrs) - len(hrs)
             invalid_rr_packets += len(raw_rrs) - len(rrs)
             statuses = [int(row["status_code"]) for row in rows if row["status_code"] is not None]
@@ -185,15 +204,9 @@ class RawBcgWindow:
             if rr is not None:
                 bucket_rrs.append(rr)
             if statuses:
-                bucket_statuses.append(2 if 2 in statuses else statuses[-1])
-        if not bucket_hrs or not bucket_rrs:
-            return None
-        mean_hr = self._mean(bucket_hrs) or 0.0
-        mean_rr = self._mean(bucket_rrs) or 0.0
-        hr_sd = math.sqrt(sum((item - mean_hr) ** 2 for item in bucket_hrs) / len(bucket_hrs))
-        rr_sd = math.sqrt(sum((item - mean_rr) ** 2 for item in bucket_rrs) / len(bucket_rrs))
-        trends = summary_features(bucket_hrs, bucket_rrs, self.sample_seconds)
-        signal = waveform_features(raw_samples)
+                latest_bucket_status = 2 if 2 in statuses else statuses[-1]
+                bucket_statuses.append(latest_bucket_status)
+            latest_bucket_pair_valid = bool(paired_vitals)
         movement_window = movement_window_metrics(bucket_statuses)
         bed_exit = bed_exit_window_evidence(
             bucket_statuses,
@@ -201,6 +214,25 @@ class RawBcgWindow:
             latest_raw_total_frames=latest_raw_total_frames,
             terminal_session_boundary=terminal_session_boundary,
         )
+        if not bucket_hrs or not bucket_rrs:
+            if bed_exit["confirmed"]:
+                return {
+                    "bed_status": "Get out of bed",
+                    "bed_exit_evidence": bed_exit,
+                    "raw_packets_used": packets_used,
+                    "invalid_hr_packets": invalid_hr_packets,
+                    "invalid_rr_packets": invalid_rr_packets,
+                    "feature_buckets": 0,
+                    "vital_data_available": False,
+                    "fresh_on_bed_vitals": False,
+                }
+            return None
+        mean_hr = self._mean(bucket_hrs) or 0.0
+        mean_rr = self._mean(bucket_rrs) or 0.0
+        hr_sd = math.sqrt(sum((item - mean_hr) ** 2 for item in bucket_hrs) / len(bucket_hrs))
+        rr_sd = math.sqrt(sum((item - mean_rr) ** 2 for item in bucket_rrs) / len(bucket_rrs))
+        trends = summary_features(bucket_hrs, bucket_rrs, self.sample_seconds)
+        signal = waveform_features(raw_samples)
         return {
             "mean_hr": round(mean_hr, 1),
             "mean_rr": round(mean_rr, 1),
@@ -219,6 +251,12 @@ class RawBcgWindow:
             "invalid_hr_packets": invalid_hr_packets,
             "invalid_rr_packets": invalid_rr_packets,
             "feature_buckets": max(len(bucket_hrs), len(bucket_rrs)),
+            "vital_data_available": True,
+            "fresh_on_bed_vitals": bool(
+                latest_bucket_pair_valid
+                and latest_bucket_status in {0, 2, 3, 5}
+                and not bed_exit["confirmed"]
+            ),
             **trends,
             **signal,
         }
@@ -239,25 +277,38 @@ class HistoricalStagePath:
         self.continuity_hold_ticks = 0
         self.cycle_has_n1 = False
         self.probability_ema: Optional[dict[str, float]] = None
+        self.off_bed_latched = False
+
+    def observe_confirmed_off_bed(self, now: float) -> None:
+        """Reset sleep progression and latch occupancy outside the bed."""
+        self.commit("wake", now)
+        self.off_bed_latched = True
+        self.probability_ema = None
+        self.candidate = None
+        self.candidate_ticks = 0
+        self.continuity_hold_ticks = 0
+
+    def observe_fresh_on_bed_vitals(self) -> None:
+        """Release OFF BED only when Raw BCG again supplies HR and RR."""
+        self.off_bed_latched = False
 
     def _allowed(self, candidate: Optional[str], strong_wake: bool) -> bool:
-        previous = self.last
-        if previous is None:
-            return candidate == "wake"
-        if candidate == "wake" and strong_wake:
-            return True
-        if previous == "wake":
-            return candidate in {"wake", "n1"}
-        if candidate in {"n2", "n3", "rem"} and not self.cycle_has_n1:
+        if candidate not in STAGES:
             return False
-        return candidate in SLEEP_ALLOWED_TRANSITIONS.get(
-            previous, frozenset({"wake"}))
+        return transition_allowed(
+            candidate,
+            previous=self.last,
+            cycle_has_n1=self.cycle_has_n1,
+            strong_wake=strong_wake,
+            allowed_transitions=SLEEP_ALLOWED_TRANSITIONS,
+        )
 
     def _fallback(self, blocked: Optional[str]) -> str:
-        previous = self.last
-        if previous in STAGES:
-            return previous
-        return "wake"
+        del blocked
+        return transition_fallback_state(
+            self.last,
+            sleep_states=frozenset(STAGES),
+        )
 
     def stabilize(
         self,
@@ -265,6 +316,33 @@ class HistoricalStagePath:
         now: float,
         strong_wake: bool,
     ) -> tuple[str, dict[str, Any]]:
+        if self.last is None:
+            self.candidate = None
+            self.candidate_ticks = 0
+            self.continuity_hold_ticks = 0
+            meta = {
+                "raw_candidate": candidate,
+                "bridge_state": None,
+                "blocked_candidate": (
+                    candidate if candidate != "wake" else None
+                ),
+                "transition_allowed": candidate == "wake",
+                "previous_state": None,
+                "strong_wake_override": strong_wake,
+                "policy": ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
+                "required_ticks": 1,
+                "candidate_ticks": 1,
+                "candidate_epochs": 1,
+                "required_epochs": 1,
+                "confirmation_seconds": 0.0,
+                "confirmation_complete": True,
+            }
+            meta.update(continuity_hold_contract(
+                None,
+                candidate=candidate,
+                decision="initial_awake_anchor",
+            ))
+            return "wake", meta
         allowed = self._allowed(candidate, strong_wake)
         target = candidate if allowed else self._fallback(candidate)
         meta: dict[str, Any] = {
@@ -300,39 +378,6 @@ class HistoricalStagePath:
                 hold_epochs=self.continuity_hold_ticks,
             ))
             return (self.last or "wake"), meta
-        if self.last is None:
-            if self.candidate == target:
-                self.candidate_ticks += 1
-            else:
-                self.candidate = target
-                self.candidate_ticks = 1
-            required = int(self.confirm_ticks.get(target, SLEEP_CONFIRM_EPOCHS))
-            held = self.candidate_ticks < required
-            self.continuity_hold_ticks = 0
-            meta.update({
-                "required_ticks": required,
-                "candidate_ticks": self.candidate_ticks,
-                "candidate_epochs": self.candidate_ticks,
-                "required_epochs": required,
-                "confirmation_seconds": SLEEP_STAGE_CONFIRMATION_SECONDS.get(
-                    target, SLEEP_CONFIRMATION_SECONDS),
-                "held": held,
-                "confirmation_complete": not held,
-                "confirmed_state": None if held else target,
-                "held_previous_state": False,
-                "provisional": False,
-                "decision": (
-                    "initial_confirmation_wait" if held else "confirmed"
-                ),
-                "decision_kind": (
-                    "initial_confirmation_wait" if held
-                    else "confirmed_state"
-                ),
-                "score_eligible": not held,
-                "excluded_from_score": held,
-                "excluded_from_personal_baseline": held,
-            })
-            return target, meta
         if target == self.last:
             self.candidate = None
             self.candidate_ticks = 0
@@ -983,16 +1028,46 @@ def main() -> None:
     reconstructed_rounds = 0
     skipped_without_raw = 0
     preserved_current_without_raw = 0
+    continuity_carried_without_raw = 0
     session_start = parse_timestamp(session["start_time"])
-    for event_index, (row, value) in enumerate(parsed):
+    session_end = (
+        parse_timestamp(session["end_time"])
+        if session.get("end_time")
+        else None
+    )
+    for row, value in parsed:
+        window_end = (
+            parse_timestamp(value["window_end"])
+            if value.get("window_end")
+            else None
+        )
+        terminal_session_boundary = bool(
+            session_end is not None
+            and window_end is not None
+            and 0.0 <= session_end - window_end <= replay_interval_s
+        )
         reconstructed = raw_bcg.reconstruct(
             value,
-            terminal_session_boundary=event_index == len(parsed) - 1,
+            terminal_session_boundary=terminal_session_boundary,
         )
         if reconstructed is None:
             metrics = value.get("metrics") or {}
+            bed_exit_evidence = metrics.get("bed_exit_evidence") or {}
+            if (
+                str(metrics.get("bed_status") or "") == "Get out of bed"
+                and bed_exit_evidence.get("confirmed") is True
+            ):
+                path.observe_confirmed_off_bed(
+                    parse_timestamp(row["timestamp"])
+                )
+                skipped_without_raw += 1
+                continue
+            if path.off_bed_latched:
+                skipped_without_raw += 1
+                continue
             trusted_recent_estimate = bool(
-                value.get("estimator_version") == zeep.SLEEP_ESTIMATOR_VERSION
+                value.get("estimator_version")
+                == zeep.SLEEP_ESTIMATOR_VERSION
                 or (
                     str(value.get("estimator_version") or "").startswith(
                         "bcg-wellness-5state-v1."
@@ -1001,26 +1076,81 @@ def main() -> None:
                 )
             )
             if trusted_recent_estimate and value.get("state") in STAGES:
-                # During a live full replay, the newest BCG packets may still
-                # be in the service's 60-packet write buffer. Keep an already
-                # current live decision rather than replacing it without its
-                # evidence; a later replay can reconstruct it after flush.
+                # A current live decision can reach sessions.db before its
+                # buffered Raw BCG packets reach bcg.db. Preserve that already
+                # confirmed challenger; absence of the buffered copy is not
+                # evidence for reverting it to the preceding State.
                 path.commit(value["state"], parse_timestamp(row["timestamp"]))
                 new_values.append(value)
                 new_events.append((row["timestamp"], value))
-                changes[(str(value.get("state")), str(value.get("state")))] += 1
+                changes[(
+                    str(value.get("state")),
+                    str(value.get("state")),
+                )] += 1
                 skipped_without_raw += 1
                 preserved_current_without_raw += 1
                 continue
-            # This legacy comparison cannot reconstruct the epoch. Do not
-            # manufacture W or carry a Stage without Raw BCG; the canonical
-            # raw replay emits NO DATA and this apply path is disabled.
+            # Raw absence cannot confirm a new Stage. It also must not erase
+            # occupied Session time, so carry the last State (or initial W)
+            # with low confidence and keep it out of Personal Baseline.
+            now = parse_timestamp(row["timestamp"])
+            selected, transition = path.stabilize(None, now, False)
+            changed, progression = path.commit(selected, now)
+            probabilities = {
+                stage: 1.0 if stage == selected else 0.0
+                for stage in STAGES
+            }
+            updated = {
+                **value,
+                "state": selected,
+                "confirmed_state": selected,
+                "probabilities": probabilities,
+                "confirmed_probabilities": probabilities,
+                "confidence": "low",
+                "decision_kind": transition["decision_kind"],
+                "held_previous_state": bool(
+                    transition["held_previous_state"]
+                ),
+                "provisional": False,
+                "score_attribution_state": selected,
+                "score_eligible": True,
+                "excluded_from_score": False,
+                "excluded_from_personal_baseline": True,
+                "confirmation": transition,
+                "reason": (
+                    "Historical continuity · Raw BCG ไม่พร้อม "
+                    "จึงคง State ก่อนหน้าโดยไม่สร้าง State ใหม่"
+                ),
+                "progression": progression,
+                "state_changed": changed,
+                **zeep._sleep_decision_provenance(),
+            }
+            updates.append((
+                json.dumps(
+                    updated,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                row["id"],
+            ))
+            new_values.append(updated)
+            new_events.append((row["timestamp"], updated))
+            changes[(str(value.get("state")), selected)] += 1
             skipped_without_raw += 1
+            continuity_carried_without_raw += 1
             continue
         if reconstructed.get("bed_status") == "Get out of bed":
             # Bed exit is occupancy, never Stage W. Canonical replay emits
             # OFF BED; this legacy comparison deliberately omits the row.
+            path.observe_confirmed_off_bed(parse_timestamp(row["timestamp"]))
             continue
+        if path.off_bed_latched and not reconstructed.get(
+            "fresh_on_bed_vitals"
+        ):
+            skipped_without_raw += 1
+            continue
+        if reconstructed.get("fresh_on_bed_vitals"):
+            path.observe_fresh_on_bed_vitals()
         score_value = dict(value)
         score_metrics = dict(value.get("metrics") or {})
         old_hr = score_metrics.get("mean_hr")
@@ -1065,6 +1195,9 @@ def main() -> None:
             "rounds": reconstructed_rounds,
             "skipped_without_raw": skipped_without_raw,
             "preserved_current_without_raw": preserved_current_without_raw,
+            "continuity_carried_without_raw": (
+                continuity_carried_without_raw
+            ),
             "packets_available": len(packet_rows),
             "mean_hr_absolute_delta_bpm": (
                 round(sum(mean_hr_deltas) / len(mean_hr_deltas), 3) if mean_hr_deltas else None

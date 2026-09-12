@@ -10,10 +10,9 @@ be inspected or reversed without inventing historical Sensor evidence.
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import hashlib
 import json
-import math
 from pathlib import Path
 import sqlite3
 import statistics
@@ -41,9 +40,10 @@ from sleep_signal_features import (
     HR_SANITY_RANGE_BPM,
     RR_SANITY_RANGE_PER_MIN,
     debounced_bed_status_labels,
-    filter_vital_values,
     terminal_occupancy_timeline,
 )
+from zeep_pod.sessions.cadence import timeline_sample_interval
+from zeep_pod.sessions.report_projection import project_report_samples
 
 
 MAINTENANCE_TOOL_NAME = "rescore_session_reports.py"
@@ -123,34 +123,6 @@ def _stage_cadence(values: list[Dict[str, Any]], fallback: float) -> float:
     return float(statistics.median(intervals)) if intervals else fallback
 
 
-def _attribution_bucket(
-    value: Dict[str, Any],
-    event_time: datetime,
-    *,
-    session_start: datetime,
-    interval_s: float,
-) -> int:
-    """Map a right-closed decision interval onto its report bucket.
-
-    New derived events persist an explicit attribution start. Older events
-    expose only their interval-end timestamp, for which ``ceil(delta)-1``
-    preserves the intended ``(start, end]`` epoch instead of shifting it into
-    the following 30-second bucket.
-    """
-    attribution_start = value.get("attribution_start") or value.get(
-        "window_start"
-    )
-    if attribution_start:
-        try:
-            attributed = _timestamp(str(attribution_start))
-            delta_s = (attributed - session_start).total_seconds()
-            return max(0, int(math.floor(delta_s / interval_s)))
-        except (TypeError, ValueError):
-            pass
-    delta_s = max(0.0, (event_time - session_start).total_seconds())
-    return max(0, int(math.ceil(delta_s / interval_s) - 1))
-
-
 def _timeline_projection(connection: sqlite3.Connection) -> str:
     """Read both current and pre-PM/VOC Timeline schemas without migration."""
     columns = {
@@ -168,6 +140,159 @@ def _timeline_projection(connection: sqlite3.Connection) -> str:
         "voc_index" if "voc_index" in columns else "NULL AS voc_index",
     )
     return ",".join((*required, *optional))
+
+
+def _annotated_stage_events(
+    stage_rows: list[sqlite3.Row],
+    stage_values: list[Dict[str, Any]],
+    annotations: list[Dict[str, Any]],
+    *,
+    fallback_interval_s: float,
+    fallback_estimator: Any,
+) -> tuple[
+    list[Dict[str, Any]],
+    list[Dict[str, Any]],
+    int,
+    Any,
+    Dict[str, int],
+]:
+    """Apply annotations while preserving durable attribution intervals."""
+    events: list[Dict[str, Any]] = []
+    sequence: list[Dict[str, Any]] = []
+    annotated_rounds = 0
+    estimator_version = fallback_estimator
+    estimator_versions: Dict[str, int] = {}
+    for row, parsed_value in zip(stage_rows, stage_values):
+        value, annotation = apply_annotations(
+            parsed_value,
+            row["timestamp"],
+            annotations,
+            sample_interval_s=_positive_seconds(
+                parsed_value.get("sample_interval_s"),
+                fallback_interval_s,
+            ),
+        )
+        if annotation is not None:
+            annotated_rounds += 1
+        stage = value.get("state")
+        if stage not in STAGES:
+            continue
+        events.append({"timestamp": row["timestamp"], "value": value})
+        # A durable five-state event owns occupied time in the current
+        # continuity contract. Legacy provisional/exclusion flags remain in
+        # ``value`` for audit, but cannot reopen a scoring gap during rescore.
+        sequence.append({
+            "state": stage,
+            "metrics": value.get("metrics") or {},
+            "score_eligible": True,
+            "provisional": False,
+            "held_previous_state": bool(value.get("held_previous_state")),
+        })
+        estimator_version = value.get("estimator_version") or estimator_version
+        if value.get("estimator_version"):
+            version = str(value["estimator_version"])
+            estimator_versions[version] = estimator_versions.get(version, 0) + 1
+    return (
+        events,
+        sequence,
+        annotated_rounds,
+        estimator_version,
+        estimator_versions,
+    )
+
+
+def _sensor_samples(
+    timeline: list[sqlite3.Row],
+) -> tuple[list[Dict[str, Any]], Dict[str, int], Dict[str, int]]:
+    """Translate immutable Timeline rows without deriving Sleep decisions."""
+    canonical_labels = debounced_bed_status_labels(
+        [row["bed_status"] for row in timeline]
+    )
+    raw_counts: Dict[str, int] = {}
+    canonical_counts: Dict[str, int] = {}
+    samples: list[Dict[str, Any]] = []
+    for row, canonical_bed in zip(timeline, canonical_labels):
+        raw_bed = str(row["bed_status"] or "")
+        if raw_bed:
+            raw_counts[raw_bed] = raw_counts.get(raw_bed, 0) + 1
+        if canonical_bed:
+            canonical_counts[canonical_bed] = (
+                canonical_counts.get(canonical_bed, 0) + 1
+            )
+        samples.append({
+            "t": _timestamp(row["timestamp"]).timestamp(),
+            "temp": row["temperature"],
+            "hum": row["humidity"],
+            "co2": row["co2"],
+            "lux": row["lux"],
+            "dba": row["sound"],
+            "hr": row["heart_rate"],
+            "rr": row["respiration_rate"],
+            "bed": canonical_bed,
+            "pm2_5": row["pm2_5"],
+            "voc": row["voc_index"],
+        })
+    return samples, raw_counts, canonical_counts
+
+
+def _projected_night_summary(
+    samples: list[Dict[str, Any]],
+    *,
+    start: datetime,
+    interval_s: float,
+    score_counts: Dict[str, float],
+) -> Dict[str, Any]:
+    """Derive duration-aware onset, WASO and architecture from one stream."""
+    first_sleep_at: datetime | None = None
+    awakenings = 0
+    waso_s = 0.0
+    asleep = False
+    sleep_started = False
+    for sample in samples:
+        if sample.get("sleep_score_eligible") is False:
+            continue
+        stage = sample.get("sleep")
+        if stage not in STAGES:
+            continue
+        row_seconds = _positive_seconds(
+            sample.get("sample_interval_s"), interval_s
+        )
+        if stage in SLEEP_STAGES:
+            if first_sleep_at is None:
+                first_sleep_at = datetime.fromtimestamp(
+                    float(sample["t"]) - row_seconds,
+                    timezone.utc,
+                )
+            asleep = True
+            sleep_started = True
+        elif sleep_started:
+            waso_s += row_seconds
+            if asleep:
+                awakenings += 1
+                asleep = False
+
+    total_sleep = sum(score_counts[stage] for stage in SLEEP_STAGES)
+    total_scored = total_sleep + score_counts["wake"]
+    return {
+        "sleep_onset_proxy_s": (
+            round(max(0.0, (first_sleep_at - start).total_seconds()), 1)
+            if first_sleep_at else None
+        ),
+        "awakenings": awakenings,
+        "waso_proxy_s": round(waso_s, 1),
+        "estimated_sleep_s": round(total_sleep * interval_s, 1),
+        "sleep_efficiency": (
+            round(total_sleep / total_scored, 3) if total_scored else None
+        ),
+        "deep_ratio": (
+            round(score_counts["n3"] / total_sleep, 3)
+            if total_sleep else None
+        ),
+        "rem_ratio": (
+            round(score_counts["rem"] / total_sleep, 3)
+            if total_sleep else None
+        ),
+    }
 
 
 def _rebuild(
@@ -248,226 +373,70 @@ def _rebuild(
         "ORDER BY timestamp,id", (session_id,),
     ).fetchall()
     annotations = load_annotations(annotation_rows)
-    annotated_rounds = 0
-    counts = {stage: 0 for stage in STAGES}
-    score_counts = {stage: 0 for stage in STAGES}
-    sequence: list[Dict[str, Any]] = []
-    stage_by_bucket: Dict[int, Dict[str, Any]] = {}
-    estimator_version = old_final.get("sleep_estimator")
-    estimator_versions: Dict[str, int] = {}
-    first_sleep_at = None
-    awakenings = 0
-    waso_rounds = 0
-    asleep = False
-    sleep_started = False
-    for row, parsed_value in zip(stage_rows, stage_values):
-        value = parsed_value
-        value, annotation = apply_annotations(
-            value, row["timestamp"], annotations,
-            sample_interval_s=_positive_seconds(
-                value.get("sample_interval_s"), stage_sample_seconds,
-            ),
-        )
-        if annotation is not None:
-            annotated_rounds += 1
-        stage = value.get("state")
-        if stage not in counts:
-            continue
-        counts[stage] += 1
-        confirmation = value.get("confirmation")
-        confirmation = confirmation if isinstance(confirmation, dict) else {}
-        explicitly_excluded = bool(
-            value.get("excluded_from_score")
-            or value.get("sleep_excluded_from_score")
-            or confirmation.get("excluded_from_score")
-        )
-        explicit_score_eligible = value.get("score_eligible")
-        if explicit_score_eligible is None:
-            explicit_score_eligible = value.get("sleep_score_eligible")
-        if explicit_score_eligible is None:
-            explicit_score_eligible = confirmation.get(
-                "score_eligible", True
-            )
-        score_eligible = bool(
-            explicit_score_eligible
-            and not explicitly_excluded
-            and not value.get("provisional", False)
-        )
-        if score_eligible:
-            score_counts[stage] += 1
-        sequence.append({
-            "state": stage,
-            "metrics": value.get("metrics") or {},
-            "score_eligible": score_eligible,
-            "provisional": bool(value.get("provisional")),
-            "held_previous_state": bool(value.get("held_previous_state")),
-        })
-        estimator_version = value.get("estimator_version") or estimator_version
-        if value.get("estimator_version"):
-            version = str(value["estimator_version"])
-            estimator_versions[version] = estimator_versions.get(version, 0) + 1
-        when = _timestamp(row["timestamp"])
-        attribution_bucket = _attribution_bucket(
-            value,
-            when,
-            session_start=start,
-            interval_s=stage_sample_seconds,
-        )
-        attribution_start = value.get("attribution_start")
-        try:
-            attributed_when = (
-                _timestamp(str(attribution_start))
-                if attribution_start else when - timedelta(
-                    seconds=stage_sample_seconds
-                )
-            )
-        except (TypeError, ValueError):
-            attributed_when = when - timedelta(seconds=stage_sample_seconds)
-        if not score_eligible:
-            pass
-        elif stage in SLEEP_STAGES:
-            if first_sleep_at is None:
-                first_sleep_at = attributed_when
-            asleep = True
-            sleep_started = True
-        elif stage == "wake":
-            if sleep_started:
-                waso_rounds += 1
-            if asleep:
-                awakenings += 1
-                asleep = False
-        auxiliary = ((value.get("metrics") or {}).get("auxiliary_evidence") or {})
-        acoustic = auxiliary.get("acoustic") or {}
-        stage_by_bucket[attribution_bucket] = {
-            "sleep": stage,
-            "sleep_confidence": value.get("confidence"),
-            "acoustic_corroborated": bool(acoustic.get("corroborated")),
-            "sleep_decision_kind": value.get("decision_kind"),
-            "sleep_held_previous_state": bool(
-                value.get("held_previous_state")
-            ),
-            "sleep_provisional": bool(value.get("provisional")),
-            "sleep_data_status": (
-                "provisional_hold"
-                if value.get("held_previous_state")
-                and value.get("provisional")
-                else "continuity_hold"
-                if value.get("held_previous_state") else "live"
-            ),
-            "sleep_score_eligible": score_eligible,
-            "sleep_excluded_from_score": not score_eligible,
-        }
-
-    status_by_bucket: Dict[int, Dict[str, Any]] = {}
-    for row, value in zip(status_rows, status_values):
-        when = _timestamp(row["timestamp"])
-        state = str(value.get("state") or "no_data").strip().lower()
-        data_status = str(
-            value.get("data_status") or state or "no_data"
-        ).strip().lower()
-        bucket = _attribution_bucket(
-            value,
-            when,
-            session_start=start,
-            interval_s=stage_sample_seconds,
-        )
-        status_by_bucket[bucket] = {
-            # Operational status is not a sixth Sleep State. It deliberately
-            # overrides any stale Stage label joined to the same report epoch.
-            "sleep": None,
-            "sleep_confidence": value.get("confidence") or "unavailable",
-            "sleep_operational_state": state,
-            "sleep_operational_label": value.get("label"),
-            "sleep_decision_kind": (
-                value.get("decision_kind")
-                or "historical_operational_status"
-            ),
-            "sleep_held_previous_state": False,
-            "sleep_provisional": bool(value.get("provisional", False)),
-            "sleep_data_status": data_status,
-            "sleep_score_eligible": False,
-            "sleep_excluded_from_score": True,
-            "sleep_excluded_from_personal_baseline": True,
-            "sleep_status_reason": value.get("reason"),
-        }
-
     timeline = connection.execute(
         f"SELECT {_timeline_projection(connection)} FROM timeline "
         "WHERE session_id=? ORDER BY timestamp,id",
         (session_id,),
     ).fetchall()
-    canonical_bed_labels = debounced_bed_status_labels(
-        [row["bed_status"] for row in timeline])
-    raw_bed_status_counts: Dict[str, int] = {}
-    canonical_bed_status_counts: Dict[str, int] = {}
-    timeline_buckets: Dict[int, list[tuple[sqlite3.Row, str | None]]] = {}
-    for row, canonical_bed in zip(timeline, canonical_bed_labels):
-        when = _timestamp(row["timestamp"])
-        raw_bed = str(row["bed_status"] or "")
-        if raw_bed:
-            raw_bed_status_counts[raw_bed] = raw_bed_status_counts.get(raw_bed, 0) + 1
-        if canonical_bed:
-            canonical_bed_status_counts[canonical_bed] = (
-                canonical_bed_status_counts.get(canonical_bed, 0) + 1
-            )
-        bucket = int((when - start).total_seconds() // stage_sample_seconds)
-        timeline_buckets.setdefault(bucket, []).append((row, canonical_bed))
-
-    # A report sample must share the same cadence as the derived Sleep State.
-    # Aggregating the 10-second Timeline into each 30-second state epoch avoids
-    # overstating coverage by 3x during historical replay.
-    samples = []
-    numeric = {
-        "temp": "temperature", "hum": "humidity", "co2": "co2",
-        "lux": "lux", "dba": "sound", "hr": "heart_rate",
-        "rr": "respiration_rate", "pm2_5": "pm2_5", "voc": "voc_index",
+    raw_samples, raw_bed_status_counts, canonical_bed_status_counts = (
+        _sensor_samples(timeline)
+    )
+    if timeline:
+        sensor_sample_seconds = timeline_sample_interval(
+            [dict(row) for row in timeline],
+            sensor_sample_seconds,
+        )
+    (
+        stage_events,
+        sequence,
+        annotated_rounds,
+        estimator_version,
+        estimator_versions,
+    ) = _annotated_stage_events(
+        stage_rows,
+        stage_values,
+        annotations,
+        fallback_interval_s=stage_sample_seconds,
+        fallback_estimator=old_final.get("sleep_estimator"),
+    )
+    status_events = [
+        {"timestamp": row["timestamp"], "value": value}
+        for row, value in zip(status_rows, status_values)
+    ]
+    projection = project_report_samples(
+        raw_samples,
+        start_at=start,
+        end_at=start.timestamp() + duration_s,
+        cadence_segments=old_final.get("sample_cadence_segments") or [],
+        sensor_interval_s=sensor_sample_seconds,
+        decision_interval_s=stage_sample_seconds,
+        stage_events=stage_events,
+        status_events=status_events,
+        heart_rate_range=HR_SANITY_RANGE_BPM,
+        respiration_rate_range=RR_SANITY_RANGE_PER_MIN,
+    )
+    if not projection["grid_summary"]["classification_complete"]:
+        raise RuntimeError(
+            f"rescore continuity invariant failed: {session_id}"
+        )
+    samples = projection["report_samples"]
+    stage_sample_seconds = projection["report_interval_s"]
+    counts = {
+        stage: projection["sleep_state_counts"].get(stage, 0.0)
+        for stage in STAGES
     }
-    for bucket in sorted(timeline_buckets):
-        selected = timeline_buckets[bucket]
-        sample: Dict[str, Any] = {
-            "t": start.timestamp() + (bucket + 1) * stage_sample_seconds,
-            "_source_rows": len(selected),
-            "_paired_hr_rr_rows": sum(
-                bool(
-                    filter_vital_values(
-                        [row["heart_rate"]], HR_SANITY_RANGE_BPM
-                    )
-                    and filter_vital_values(
-                        [row["respiration_rate"]], RR_SANITY_RANGE_PER_MIN
-                    )
-                )
-                for row, _ in selected
-            ),
-            "bed": next(
-                (bed for _, bed in reversed(selected) if bed), None
-            ),
-            **stage_by_bucket.get(bucket, {}),
-        }
-        sample.update(status_by_bucket.get(bucket, {}))
-        for sample_key, source in numeric.items():
-            values = [
-                float(row[source]) for row, _ in selected
-                if isinstance(row[source], (int, float))
-                and math.isfinite(float(row[source]))
-            ]
-            sample[sample_key] = statistics.median(values) if values else None
-        samples.append(sample)
-
-    total_sleep = sum(score_counts[stage] for stage in SLEEP_STAGES)
-    total_scored = total_sleep + score_counts["wake"]
+    score_counts = {
+        stage: projection["sleep_score_state_counts"].get(stage, 0.0)
+        for stage in STAGES
+    }
+    total_scored = sum(score_counts.values())
     night = dict(old_final.get("night_summary") or {})
-    night.update({
-        "sleep_onset_proxy_s": (
-            round(max(0.0, (first_sleep_at - start).total_seconds()), 1)
-            if first_sleep_at else None
-        ),
-        "awakenings": awakenings,
-        "waso_proxy_s": round(waso_rounds * stage_sample_seconds, 1),
-        "estimated_sleep_s": round(total_sleep * stage_sample_seconds, 1),
-        "sleep_efficiency": round(total_sleep / total_scored, 3) if total_scored else None,
-        "deep_ratio": round(score_counts["n3"] / total_sleep, 3) if total_sleep else None,
-        "rem_ratio": round(score_counts["rem"] / total_sleep, 3) if total_sleep else None,
-    })
+    night.update(_projected_night_summary(
+        samples,
+        start=start,
+        interval_s=stage_sample_seconds,
+        score_counts=score_counts,
+    ))
     previous_quality = (old_final.get("night_summary") or {}).get(
         "sleep_quality"
     )
@@ -593,6 +562,8 @@ def _rebuild(
         "target_duration_s": target.get("seconds"),
         "sample_interval_s": stage_sample_seconds,
         "sensor_sample_interval_s": sensor_sample_seconds,
+        "sample_cadence_summary": projection["cadence_summary"],
+        "report_sample_grid": projection["grid_summary"],
         "bed_status_counts": canonical_bed_status_counts,
         "terminal_occupancy_timeline": terminal_occupancy,
         "night_summary": night,

@@ -12,6 +12,7 @@ from zeep_pod.sessions.lifecycle import (
     SessionCheckpointStore,
     bed_is_occupied,
     evaluate_vital_start_gate,
+    service_resume_event,
 )
 
 
@@ -51,6 +52,7 @@ class SessionCheckpointStoreTests(unittest.TestCase):
                 "awake_rr_reference": 17.8,
                 "sleep_onset_at": 1_060.0,
                 "last_valid_frame_t": 1_120.0,
+                "off_bed_latched": True,
                 "private_note": "must-not-be-persisted",
             },
         }
@@ -72,6 +74,17 @@ class SessionCheckpointStoreTests(unittest.TestCase):
             len(payload["sleep_context"]["awake_vital_pairs"]), 6
         )
         self.assertEqual(payload["record"]["target_duration_s"], 25_200)
+        self.assertIs(payload["sleep_context"]["off_bed_latched"], True)
+
+    def test_resume_continuity_is_scoreable_but_not_baseline_training(self) -> None:
+        event = service_resume_event(
+            "session-1", "2026-09-13T00:00:00+00:00"
+        )
+
+        value = event["value"]
+        self.assertTrue(value["score_eligible"])
+        self.assertFalse(value["excluded_from_score"])
+        self.assertTrue(value["excluded_from_personal_baseline"])
 
     def test_sleep_context_must_belong_to_the_same_session(self) -> None:
         store = SessionCheckpointStore(self.path, bed_start_seconds=20)

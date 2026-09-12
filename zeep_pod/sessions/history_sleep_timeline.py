@@ -1,8 +1,9 @@
 """Build the user-visible Sleep timeline from persisted decision events.
 
-The module deliberately does not read SQLite or Raw Sensor rows.  New
-Sessions persist both five-state decisions and operational WAIT/NO DATA/OFF
-BED decisions; callers provide those streams after applying annotations.
+The module deliberately does not read SQLite or Raw Sensor rows. New
+Recording intervals persist five-state decisions plus confirmed OFF BED;
+WAIT/NO DATA are accepted only as legacy evidence-quality metadata. Callers
+provide those streams after applying annotations.
 """
 
 from __future__ import annotations
@@ -11,9 +12,13 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sleep_system_policy import ZEEP_SLEEP_STATES
+from sleep_system_policy import (
+    ZEEP_OFF_BED_DATA_STATUSES,
+    ZEEP_SLEEP_STATES,
+)
 
 from .cadence import sample_interval_seconds
+from .report_projection import weighted_sleep_state_counts
 
 
 SLEEP_STATES = ("wake", "n1", "n2", "n3", "rem")
@@ -271,10 +276,15 @@ def history_sleep_timeline(
     sample_interval_s: float,
     fallback_estimator: str | None,
 ) -> tuple[list[dict[str, Any]], bool]:
-    """Merge authoritative Stage/status events and flag legacy fallback use."""
+    """Merge five-state decisions with authoritative OFF BED boundaries."""
     points_by_end = {_point_end(point): point for point in stage_points}
     for point in status_points:
-        points_by_end[_point_end(point)] = point
+        state = str(point.get("state") or "").strip().lower()
+        status = str(
+            _decision_metadata(point, "data_status") or ""
+        ).strip().lower()
+        if state == "off_bed" or status in ZEEP_OFF_BED_DATA_STATUSES:
+            points_by_end[_point_end(point)] = point
     decision_points = sorted(points_by_end.values(), key=_point_end)
     periods = compress_sleep_stage_points(
         decision_points,
@@ -282,7 +292,176 @@ def history_sleep_timeline(
         sample_interval_s=sample_interval_s,
         fallback_estimator=fallback_estimator,
     )
+    # WAIT/NO DATA remain evidence-quality metadata. They never erase an
+    # occupied five-state interval in the user-visible history.
     return periods, not status_points
+
+
+def history_sleep_state_counts(
+    samples: list[dict[str, Any]],
+    *,
+    sample_interval_s: float,
+) -> tuple[dict[str, float], dict[str, float]]:
+    """Return display and score counts from one projected history stream.
+
+    Mixed-cadence and partial-tail rows are expressed in units of the report
+    interval, matching the live finalizer.  Operational rows have no five-state
+    label and therefore remain outside both count maps.
+    """
+    return weighted_sleep_state_counts(
+        samples,
+        sample_interval_s=sample_interval_s,
+    )
+
+
+def fill_history_sleep_timeline_continuity(
+    periods: list[dict[str, Any]],
+    *,
+    session_start: Any,
+    classification_end: Any,
+    fallback_estimator: str | None = None,
+) -> list[dict[str, Any]]:
+    """Partition the full recording into five-state or OFF BED periods.
+
+    This is deliberately a small deterministic rule: before the first direct
+    decision use W; between decisions hold the preceding State; after a
+    confirmed OFF BED boundary remain OFF BED until a later five-state
+    decision proves that the user returned. Synthetic five-state periods can
+    score but never teach the Personal Baseline.
+    """
+    start = _parse_datetime(session_start)
+    end = _parse_datetime(classification_end)
+    if start is None or end is None or end <= start:
+        return periods
+
+    valid = []
+    for period in periods:
+        period_start = _parse_datetime(period.get("start_time"))
+        period_end = _parse_datetime(period.get("end_time"))
+        state = str(period.get("state") or "").strip().lower()
+        if (
+            period_start is None
+            or period_end is None
+            or period_end <= period_start
+            or state not in {*SLEEP_STATES, "off_bed"}
+        ):
+            continue
+        valid.append((period_start, period_end, state, period))
+    valid.sort(key=lambda item: (item[0], item[1]))
+
+    completed: list[dict[str, Any]] = []
+    cursor = start
+    held_state = "wake"
+    for period_start, period_end, state, source in valid:
+        if period_end <= cursor or period_start >= end:
+            continue
+        clipped_start = max(start, period_start)
+        clipped_end = min(end, period_end)
+        if clipped_start > cursor:
+            completed.append(_continuity_period(
+                held_state,
+                cursor,
+                clipped_start,
+                fallback_estimator=fallback_estimator,
+                initial=not completed,
+            ))
+        visible_start = max(cursor, clipped_start)
+        if clipped_end > visible_start:
+            item = dict(source)
+            item["start_time"] = visible_start.isoformat()
+            item["end_time"] = clipped_end.isoformat()
+            item["duration_s"] = round(
+                (clipped_end - visible_start).total_seconds(), 3
+            )
+            completed.append(item)
+            cursor = clipped_end
+            held_state = state
+    if cursor < end:
+        completed.append(_continuity_period(
+            held_state,
+            cursor,
+            end,
+            fallback_estimator=fallback_estimator,
+            initial=not completed,
+        ))
+    return completed
+
+
+def _continuity_period(
+    state: str,
+    start: datetime,
+    end: datetime,
+    *,
+    fallback_estimator: str | None,
+    initial: bool,
+) -> dict[str, Any]:
+    duration_s = round((end - start).total_seconds(), 3)
+    if state == "off_bed":
+        return {
+            "start_time": start.isoformat(),
+            "end_time": end.isoformat(),
+            "duration_s": duration_s,
+            "round_count": 0,
+            "sample_interval_s": None,
+            "state": "off_bed",
+            "label": (
+                "OFF · ไม่มีผู้ใช้งานบนเตียง"
+            ),
+            "sleep_stage": False,
+            "excluded_from_stage_statistics": True,
+            "excluded_from_score": True,
+            "excluded_from_personal_baseline": True,
+            "score_eligible": False,
+            "confidence": "operational",
+            "probabilities": {},
+            "metrics": {},
+            "reason": (
+                "คง OFF BED จนมีหลักฐานยืนยันว่ากลับขึ้นเตียง"
+            ),
+            "data_status": "off_bed_latched",
+            "decision_kind": "occupancy_hold",
+            "continuity_synthesized": True,
+        }
+
+    labels = {
+        "wake": "W · ตื่น",
+        "n1": "N1 · หลับตื้น / เคลิ้มหลับ",
+        "n2": "N2 · หลับตื้นต่อเนื่อง",
+        "n3": "N3 · หลับลึก",
+        "rem": "REM · หลับฝัน",
+    }
+    return {
+        "start_time": start.isoformat(),
+        "end_time": end.isoformat(),
+        "duration_s": duration_s,
+        "round_count": 0,
+        "sample_interval_s": None,
+        "state": state,
+        "label": labels[state],
+        "sleep_stage": True,
+        "excluded_from_stage_statistics": False,
+        "excluded_from_score": False,
+        "excluded_from_personal_baseline": True,
+        "score_eligible": True,
+        "confidence": "low",
+        "probabilities": {},
+        "metrics": {},
+        "reason": (
+            "เริ่ม Recording ที่ W ก่อนมีหลักฐานรอบแรก"
+            if initial else
+            "หลักฐานใหม่ยังไม่ยืนยัน · "
+            "คง State ก่อนหน้าเพื่อให้เวลาต่อเนื่อง"
+        ),
+        "data_status": (
+            "initial_awake_anchor" if initial else "continuity_hold"
+        ),
+        "decision_kind": (
+            "initial_awake_anchor" if initial else "continuity_hold"
+        ),
+        "held_previous_state": not initial,
+        "continuity_synthesized": True,
+        "estimator_version": fallback_estimator,
+    }
 
 
 def clip_history_sleep_timeline(

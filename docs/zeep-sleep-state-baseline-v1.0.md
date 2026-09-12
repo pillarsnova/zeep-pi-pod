@@ -2,22 +2,28 @@
 
 > **Purpose:** นิยาม input, baseline, transition policy, data quality และแผน PSG validation ของตัวประมาณสถานะการนอนใน Pod  
 > **Positioning:** Sleep Wellness · EEG-free exploratory telemetry · ไม่ใช่ผล PSG/การวินิจฉัย/ตัวสั่งอุปกรณ์  
-> **Status:** Wellness release candidate · deterministic replay and guarded derived-result promotion required · paired-PSG G2 validation open
-> **Version:** `zeep-sleep-state-baseline-v1.8-sep1-cutover` · **Estimator:** `bcg-audio-bed-5state-v1.24-gap-safe-continuity` · **Transition:** `zeep-semimarkov-30s-v1.15-restart-continuity` · **Updated:** 2026-09-05
+> **Status:** Baseline/evidence reference · complete occupied-epoch continuity amendment active · paired-PSG G2 validation open
+> **Version:** `zeep-sleep-state-baseline-v1.8-sep1-cutover` · **Estimator:** `bcg-audio-bed-5state-v1.29-complete-occupied-epochs` · **Transition:** `zeep-semimarkov-30s-v1.18-scoreable-continuity` · **Updated:** 2026-09-13
 > **Related:** [Current Sleep System](zeep-sleep-system-current.md) · [AI Sleep-State](ai-sleep-state-and-assistant.md) · [Evidence](sleep-wellness-evidence.md) · [Closed Loop](closed-loop-spec.md)
+
+> **Normative precedence:** เอกสารนี้อธิบาย Baseline และหลักฐานทางสรีรวิทยา
+> ส่วนข้อความ legacy ที่เคยให้ช่วง Recording เป็น `WAIT`, `NO DATA`, display-only
+> หรือไม่เข้าคะแนน ถูกแทนที่แล้ว กติกา runtime/report ที่มีอำนาจสูงสุดอยู่ใน
+> [Current Sleep System](zeep-sleep-system-current.md): ทุก occupied Recording epoch
+> ต้องมี W/N1/N2/N3/REM และเข้าคะแนน; confirmed `OFF BED` เป็นข้อยกเว้นเดียว
 
 ## TL;DR
 
 - ทุก session/cycle เริ่ม `Wake → N1 → N2`; จาก N2 ไป N3 หรือ REM และจาก N3 ไป REM ได้เมื่อหลักฐาน REM ต่อเนื่อง
 - N2/N3/REM ที่จะตื่นแบบสัญญาณไม่ชัดต้องย้อนผ่าน N2/N1; bed-exit ไป Wake ได้หลังผ่าน debounce 3 รอบ 10 วินาที ส่วน Raw packet burst เป็นข้อมูล Debug ไม่ใช่ตัว confirm โดยลำพัง
 - HR/RR trend, respiratory regularity จาก Raw BCG, Bed Status และ movement เป็นหลัก
-- ไม่มี Active Recording Session, ไม่ยืนยันผู้ใช้อยู่บนเตียง หรือรอบปัจจุบันไม่มี HR+RR สด = **ไม่ประเมิน Sleep Stage**; แสดง `WAIT/OFF`, probability ทั้ง 5 เป็นศูนย์ และไม่เขียน stage ลง Timeline ข้อยกเว้นด้านการแสดงผลคือ Session เดิมหลัง service/code restart สามารถคง State ที่ยืนยันและบันทึกไว้แล้วได้ชั่วคราวแบบ display-only โดยไม่เขียนข้อมูลซ้ำ
+- ก่อนเริ่ม Recording ใช้ `WAIT`; ระหว่าง Recording ถ้ายังไม่ยืนยัน `OFF BED` ระบบกำหนด W เป็น State แรกและคง State ก่อนหน้าเมื่อ HR/RR/BCG ขาด ไม่สด ก้ำกึ่ง หรือ service restart โดยช่วง carry ยังเข้าคะแนนแบบ low-confidence แต่ไม่ใช้เรียนรู้ Personal Baseline
 - SPH0645 สนับสนุน Wake ได้เฉพาะเสียงรบกวนที่ time-aligned กับ BCG amplitude shift หรือ bed motion; เสียงดังอย่างเดียวไม่มีผลต่อ state
 - Sensor สิ่งแวดล้อม 7 ปัจจัยอธิบาย disturbance และปรับ confidence เท่านั้น ไม่มี direct stage weight
 - Sensor frame ทุก 10 วินาที, Evidence epoch ทุก 30 วินาทีจาก rolling 60 วินาที และยืนยัน State 60/120 วินาทีตาม target; แนวโน้ม onset ใช้ context ได้ถึง 270 วินาที
 - 5 นาทีแรกสร้าง Session-relative Awake reference; N1 เริ่มได้เมื่อเตียงนิ่ง ไม่มี vital rise และ HR/RR แสดงการลดลงหรือคงอยู่ที่ plateau ที่ต่ำกว่าช่วงตั้งต้นอย่างสอดคล้องกัน เวลาเพียงอย่างเดียวสร้าง N1 ไม่ได้
 - พฤติกรรมย้อนหลังใช้เฉพาะ Session ก่อนหน้า ตั้งแต่ 1 ก.ย. 2569 แยกตามบัญชีและโหมด อย่างน้อย 3 Session และเป็น context/คำแนะนำเท่านั้น (`direct_stage_influence=false`); ห้ามข้อมูล Session ปัจจุบันหรืออนาคตย้อนมากำหนด State
-- หากหลักฐานสอง State ใกล้กัน ระบบเก็บ Evidence แต่ abstain ไม่เขียน W/N1/N2/N3/REM และ transition ที่ถูก block จะคง State เดิมโดยไม่แต่ง bridge label
+- หากหลักฐานสอง State ใกล้กัน ระบบไม่ให้ State ผู้ท้าชิง แต่คง State เดิม (หรือ W สำหรับ occupied epoch แรก) อย่างต่อเนื่องและเข้าคะแนน โดยเก็บความไม่แน่ใจเป็น Evidence/QA metadata แยก
 - `HR-CV` ในระบบเป็นความแปรปรวนของค่าเฉลี่ยต่อ analysis bucket 10 วินาที ไม่ใช่ RMSSD/SDNN; amplitude shift ของ BCG ไม่ใช่ EEG K-complex/spindle
 - G2 primary ontology คือ `W / N1 / N2 / N3 / REM`; 3-class collapse เป็น secondary analysis
 - transition guard เป็นกติกาของ ZEEP ไม่ใช่ AASM scoring rule; ต้องเทียบ PSG ก่อนยกระดับ claim
@@ -134,8 +140,8 @@ Session ที่เข้า baseline ต้องเริ่มตั้ง�
 ### 3.3 Live rolling context
 
 ระบบสร้าง feature bucket ทุก 10 วินาทีและใช้ล่าสุด 6 ชุด รวมเป้าหมาย 60 วินาที
-เพื่อสร้างหลักฐานทุก 30 วินาที ก่อนข้อมูลครบยังแสดง `WAIT/provisional` และไม่เขียน
-confirmed Sleep State ลง Timeline
+เพื่อสร้างหลักฐานทุก 30 วินาที ก่อนข้อมูลครบใน phase Recording จะคง State ก่อนหน้า
+หรือ W แบบ low-confidence; `WAIT` ใช้เฉพาะ phase ก่อน Recording
 
 หลังคำนวณหลักฐานจาก rolling 60 วินาที ระบบกรอง probability ด้วย EMA
 `alpha=0.20` เพื่อไม่ให้ bucket ใหม่เพียงชุดเดียวทำให้เปอร์เซ็นต์ทุก State กระโดด
@@ -250,24 +256,25 @@ confidence จาก high เป็น medium โดยไม่เปลี่�
 
 ## 6. Data-quality และ fallback
 
-- BCG ไม่มี frame ใหม่เกิน 30 วินาที: หยุดจัดประเภท, แสดง `WAIT`, `data_status=stale`, probability ทั้ง 5 เป็นศูนย์ ยกเว้น display-only grace ของ Session เดิมหลัง restart ตามเงื่อนไขด้านล่าง
+- BCG ไม่มี frame ใหม่เกิน 30 วินาที: หยุดยืนยัน State ผู้ท้าชิงและคง State ก่อนหน้า (หรือ W แรก) แบบ low-confidence/scoreable; Evidence probability คง missing/zero ตามจริงและไม่ใช้ epoch นี้เรียนรู้ Personal Baseline
 - HR นอกช่วง sanity 25–220 BPM, RR นอกช่วง 2–60 ครั้ง/นาที, NaN/Inf/
   ค่าที่แปลงเป็นตัวเลขไม่ได้: ตัดออกก่อนเข้า scorer; หากรอบปัจจุบันไม่มีทั้ง HR
-  และ RR ที่ใช้ได้ให้หยุดจัดประเภท, `data_status=invalid_or_missing_current_vitals`
+  และ RR ที่ใช้ได้ให้หยุดยืนยัน State ใหม่ พร้อมเก็บ
+  `data_status=invalid_or_missing_current_vitals` เป็น QA metadata แล้วคง State เดิม
 - Empty bed แสดง operational status `OFF`, `data_status=empty_bed`; ไม่ตีความเป็น
   Wake และไม่สร้าง state ที่หกใน ontology/รายงาน Sleep Stage
-- `last_valid_state` เก็บได้เฉพาะ Admin provenance และโดยทั่วไปห้ามแสดงเป็นผล
-  ปัจจุบัน ข้อยกเว้นเฉพาะ same-Session restart ต้องตรวจว่า saved frame ตรงกับ
-  durable `sleep_stage` ล่าสุด จึงแสดงได้ไม่เกิน 180 วินาทีด้วย confidence ต่ำ,
-  `evidence_active=false` และ `display_only_after_restart=true`; ห้าม persist,
-  ห้ามนับ Stage%/Baseline/Score และ confirmed Bed Exit ยกเลิก hold ทันที
+- same-Session restart ใช้ State จาก saved frame ได้ต่อเมื่อมันตรงกับ durable
+  `sleep_stage` ล่าสุด จากนั้นคง State นั้นแบบ `evidence_active=false`, confidence ต่ำ,
+  เข้าคะแนนและเขียน attribution ต่อเนื่อง แต่ไม่เข้า Personal Baseline; confirmed
+  Bed Exit มีอำนาจเปลี่ยนเป็น `OFF BED` ทันที
 - BCG valid bucket ต่ำกว่า 75%, environment coverage ต่ำกว่า 50% หรือ waveform
   clip เฉลี่ย ≥20%: confidence ต่ำ
 - Raw waveform น้อยกว่า 20 วินาที: ไม่ใช้ spectral regularity; คงผลเป็น provisional/low confidence
 - Raw BCG baseline drift ใช้ fitted start-to-end change เทียบ robust waveform span;
   ถ้าเกิน engineering threshold ให้ติด quality flag และลด confidence แต่ไม่ใช้สร้าง stage
 - amplitude shift ถูกใช้เป็น signal-stability/artifact proxy เท่านั้น ห้ามแสดงว่าเป็น K-complex หรือ sleep spindle
-- Bed Status ระบุลุกจากเตียงต่อเนื่องครบ 3 รอบ: commit `Wake` และ reset cycle
+- Bed Status ระบุลุกจากเตียงต่อเนื่องครบ 3 รอบ: latch `OFF BED` ซึ่งไม่ใช่ Wake
+  และไม่เข้าคะแนน จนมีหลักฐาน occupied return ที่ยืนยันได้
 - Historical replay ของ completed Session อนุญาต Raw exit หนึ่งครั้งเฉพาะรอบ
   สุดท้ายที่ติดกับการจบ Session เพื่อรักษาจังหวะลุกก่อนกดจบ
 - ผลทุกครั้งเก็บ version, probability, confidence, reason, progression,

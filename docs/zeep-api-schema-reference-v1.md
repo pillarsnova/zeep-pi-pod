@@ -603,28 +603,38 @@ Detail endpoint เผยแพร่บัญชีเวลาที่ผ่�
 |---|---|---|
 | `direct_confirmed_s` | `number >= 0` | เวลาที่ estimator ยืนยัน State จากหลักฐานของ epoch นั้นโดยตรง |
 | `continuity_carried_forward_s` | `number >= 0` | เวลาที่คง State ก่อนหน้าขณะ State ผู้ท้าชิงยังไม่ชัด |
-| `provisional_hold_s` | `number >= 0` | ส่วนย่อยของ carry 1–2 epoch แรก; แสดงได้แต่ไม่เข้าคะแนน |
+| `provisional_hold_s` | `number >= 0` | Legacy compatibility; รุ่นปัจจุบันไม่หักเวลา provisional และนับรวมใน carry ที่เข้าคะแนน |
 | `display_attributed_s` | `number >= 0` | เวลาที่ผูกกับ W/N1/N2/N3/REM สำหรับแสดง Timeline |
 | `score_eligible_s` | `number >= 0` | เวลาที่ Server อนุญาตให้ใช้คำนวณคะแนน |
-| `initial_wait_s` | `number >= 0` | WAIT ช่วงยืนยัน State แรก 60/120 วินาที |
-| `no_data_s` | `number >= 0` | หลักฐานชีพจร/การหายใจ/BCG ไม่พอ |
+| `initial_wait_s` | `number >= 0` | Legacy compatibility; รุ่นปัจจุบันเริ่ม occupied Recording ด้วย W ทันที |
+| `no_data_s` | `number >= 0` | Legacy compatibility/QA; รุ่นปัจจุบันคง State เดิมและเก็บการขาด HR/RR/BCG เป็น evidence-quality metadata |
 | `off_bed_s` | `number >= 0` | ยืนยันว่าไม่มีผู้ใช้งานบนเตียง |
-| `restart_display_hold_s` | `number >= 0` | State เดิมที่แสดงชั่วคราวหลัง service restart; ไม่เข้าคะแนน |
+| `restart_display_hold_s` | `number >= 0` | Legacy compatibility; รุ่นปัจจุบันคง State ล่าสุดหลัง service restart แบบ low-confidence และเข้าคะแนน แต่ไม่เข้า Personal Baseline |
 | `sensor_gap_s` | `number >= 0` | ช่องว่าง acquisition หรือเศษท้ายที่ไม่ครบ epoch |
 | `excluded_from_score_s` | `number >= 0` | เวลาบันทึกทั้งหมดที่ไม่มีสิทธิ์เข้าคะแนน |
 | `arithmetic_invariant` | `object` | `left_s`, `right_s`, `delta_s`, `holds` สำหรับตรวจว่ายอดเวลาครบ |
 
-`provisional_hold_s` เป็นส่วนย่อยของ `continuity_carried_forward_s` จึงห้าม
-นำมาบวกซ้ำในยอดเวลารวม สมการบัญชีหลักคือ:
+`provisional_hold_s`, `no_data_s`, `restart_display_hold_s` และ `sensor_gap_s`
+คงไว้เพื่ออ่านรายงานรุ่นเก่า/QA เท่านั้น ใน report รุ่นปัจจุบัน เวลาที่ occupied
+แต่หลักฐานก้ำกึ่ง ขาด ไม่สด หรืออยู่ระหว่าง rebuild หลัง restart เป็นส่วนย่อยของ
+`continuity_carried_forward_s` และเข้าคะแนน จึงห้ามนำ field compatibility เหล่านี้
+มาบวกซ้ำ สมการบัญชีหลักของรุ่นปัจจุบันคือ:
 
 ```text
-direct_confirmed_s + continuity_carried_forward_s + initial_wait_s +
-no_data_s + off_bed_s + restart_display_hold_s + sensor_gap_s = recording_s
+direct_confirmed_s + continuity_carried_forward_s + off_bed_s = recording_s
+score_eligible_s = recording_s - off_bed_s
 ```
 
 `report.sleep.actual_scored_s` เท่ากับ `classification_accounting.score_eligible_s`
 ใน report รุ่นปัจจุบัน ส่วน `report.stages[]` ส่งทั้งค่าที่ใช้แสดงและค่าที่ใช้
 คิดคะแนนแยกกัน:
+
+API ส่ง Coverage สองความหมายแยกกันทั้งใน `report.data_quality.coverage`
+และ `report.quality.data_coverage`: `state_attribution_pct` คือสัดส่วนเวลาที่มี
+W/N1/N2/N3/REM (รวม continuity carry) ส่วน `physiological_evidence_pct` คือ
+สัดส่วนเวลาที่มี HR/RR คู่จริงจาก BCG ที่ใช้ได้ โดย OFF BED, synthetic gap และ
+แถวที่ `bcg_analysis_valid=false` จะไม่ถูกนับเป็นหลักฐานสรีรวิทยา Client ต้องไม่
+ใช้ State coverage แทน Sensor evidence coverage
 
 | Field | Type | ใช้สำหรับ |
 |---|---|---|
@@ -635,9 +645,11 @@ no_data_s + off_bed_s + restart_display_hold_s + sensor_gap_s = recording_s
 | `pct_score_eligible_sleep` | `number 0..100` หรือ `null` | สัดส่วน N1/N2/N3/REM จากเวลาหลับที่มีสิทธิ์เข้าคะแนน |
 
 Client ต้องใช้ค่าชุด `score_eligible_*` เมื่อต้องอธิบายฐานของคะแนน และใช้
-`duration_s`/`pct_scored` เมื่อต้องแสดง Timeline เท่านั้น ห้ามอนุมานว่า
-provisional, WAIT, NO DATA หรือ OFF BED เข้าคะแนน และห้ามสร้าง bucket
-`Unclassified`
+`duration_s`/`pct_scored` เมื่อต้องแสดง Timeline เท่านั้น `WAIT` ใช้เฉพาะก่อน
+Recording, `NO DATA` เป็น QA/legacy label ไม่ใช่ State, และ `OFF BED` เป็นข้อยกเว้น
+เดียวที่ไม่เข้าคะแนน ห้ามสร้าง bucket `Unclassified`; provisional/missing/stale/
+restart carry ต้องยังแสดง State ก่อนหน้าและเข้าคะแนน แต่ต้องมี low-confidence และ
+`excluded_from_personal_baseline=true`
 
 `report.quality` เป็น allowlist ของ application fields เช่น
 `available`, `score`, `score_title`, `score_scope`, `validation_status`,
@@ -697,7 +709,7 @@ provisional, WAIT, NO DATA หรือ OFF BED เข้าคะแนน แ�
       "value": 76,
       "available": true,
       "level": "ดี",
-      "formula_version": "zeep-sleep-score-v1.0-20-30-30-15-5",
+      "formula_version": "zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage",
       "quality_model_version": "zeep-sleep-quality-v1",
       "validation_status": "preliminary_wellness_estimate",
       "clinical_validated": false,
@@ -714,7 +726,7 @@ provisional, WAIT, NO DATA หรือ OFF BED เข้าคะแนน แ�
         "title": "Sleep Score",
         "value": 76,
         "available": true,
-        "formula_version": "zeep-sleep-score-v1.0-20-30-30-15-5",
+        "formula_version": "zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage",
         "copied_without_recalculation": true
       },
       "status": {
@@ -836,7 +848,7 @@ provisional, WAIT, NO DATA หรือ OFF BED เข้าคะแนน แ�
     "versions": {
       "result_contract": "zeep.session-result.v1",
       "session_report": "report-v-test",
-      "score_formula": "zeep-sleep-score-v1.0-20-30-30-15-5",
+      "score_formula": "zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage",
       "score_quality_model": "zeep-sleep-quality-v1",
       "restore_summary": "zeep-restore-summary-v1.0"
     },
@@ -903,7 +915,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       "value": 74,
       "available": true,
       "level": "พักได้ดี",
-      "formula_version": "zeep-recovery-score-v2.0-targeted-25-35-30-10",
+      "formula_version": "zeep-recovery-score-v2.1-complete-rest-25-35-30-10",
       "quality_model_version": "zeep-recovery-quality-v2",
       "validation_status": "preliminary_wellness_estimate",
       "clinical_validated": false,
@@ -920,7 +932,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
         "title": "Recovery Score",
         "value": 74,
         "available": true,
-        "formula_version": "zeep-recovery-score-v2.0-targeted-25-35-30-10",
+        "formula_version": "zeep-recovery-score-v2.1-complete-rest-25-35-30-10",
         "copied_without_recalculation": true
       },
       "status": {
@@ -1041,7 +1053,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
     "versions": {
       "result_contract": "zeep.session-result.v1",
       "session_report": "report-v-test",
-      "score_formula": "zeep-recovery-score-v2.0-targeted-25-35-30-10",
+      "score_formula": "zeep-recovery-score-v2.1-complete-rest-25-35-30-10",
       "score_quality_model": "zeep-recovery-quality-v2",
       "restore_summary": "zeep-restore-summary-v1.0"
     },
@@ -1258,7 +1270,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
 |---|---|
 | Transport | `schema=zeep.api.response`, `api_version=1.0` |
 | Resource contract | `zeep.usage-session.v1` |
-| Score/summary | `zeep-sleep-score-v1.0-20-30-30-15-5`, `zeep-recovery-score-v2.0-targeted-25-35-30-10`, `zeep-restore-summary-v1.0` |
+| Score/summary | `zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage`, `zeep-recovery-score-v2.1-complete-rest-25-35-30-10`, `zeep-restore-summary-v1.0` |
 
 การเพิ่ม optional field ที่ไม่เปลี่ยนความหมายเดิมเป็น backward-compatible ได้
 แต่ client ต้อง ignore unknown fields และรองรับ optional/nullable field เสมอ

@@ -18,6 +18,11 @@ from typing import Any, Dict, Optional
 from zoneinfo import ZoneInfo
 
 from sleep_session_report import build_session_report, build_sleep_quality
+from sleep_system_policy import (
+    SLEEP_EVIDENCE_EPOCH_SECONDS,
+    ZEEP_OFF_BED_DATA_STATUSES,
+)
+from zeep_pod.sessions.report_projection import project_report_samples
 
 
 MAINTENANCE_TOOL_NAME = "trim_session.py"
@@ -61,6 +66,93 @@ def _load_json(value: Any) -> Dict[str, Any]:
         return {}
 
 
+def _event_mappings(rows: list[sqlite3.Row]) -> list[Dict[str, Any]]:
+    """Convert SQLite rows into the Mapping contract used by projection."""
+    return [
+        {"timestamp": row["timestamp"], "value": _load_json(row["value"])}
+        for row in rows
+    ]
+
+
+def _positive_seconds(value: Any, fallback: float) -> float:
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return fallback
+    return seconds if seconds > 0 else fallback
+
+
+def _night_summary_from_projection(
+    samples: list[Dict[str, Any]],
+    *,
+    started_epoch: float,
+    duration_s: float,
+    sample_interval_s: float,
+    score_counts: Dict[str, float],
+) -> Dict[str, Any]:
+    """Derive score inputs from the same complete stream as the report."""
+    onset_s = None
+    awakenings = 0
+    asleep = False
+    sleep_started = False
+    waso_s = 0.0
+    for sample in samples:
+        status = str(sample.get("sleep_data_status") or "").lower()
+        state = (
+            "off_bed"
+            if status in ZEEP_OFF_BED_DATA_STATUSES
+            else sample.get("sleep")
+            if sample.get("sleep_score_eligible") is not False
+            else None
+        )
+        interval_s = _positive_seconds(
+            sample.get("sample_interval_s"), sample_interval_s
+        )
+        if state in SLEEP_STAGES:
+            if onset_s is None:
+                onset_s = round(
+                    max(
+                        0.0,
+                        float(sample["t"])
+                        - interval_s
+                        - started_epoch,
+                    ),
+                    1,
+                )
+            asleep = True
+            sleep_started = True
+        elif state in {"wake", "off_bed"}:
+            if sleep_started:
+                waso_s += interval_s
+            if asleep:
+                awakenings += 1
+                asleep = False
+
+    total_sleep = sum(score_counts.get(stage, 0.0) for stage in SLEEP_STAGES)
+    total_scored = total_sleep + score_counts.get("wake", 0.0)
+    return {
+        "sleep_onset_proxy_s": onset_s,
+        "awakenings": awakenings,
+        "waso_proxy_s": round(waso_s, 1),
+        "estimated_sleep_s": round(
+            min(duration_s, total_sleep * sample_interval_s), 1
+        ),
+        "sleep_efficiency": (
+            round(total_sleep / total_scored, 3) if total_scored else None
+        ),
+        "deep_ratio": (
+            round(score_counts.get("n3", 0.0) / total_sleep, 3)
+            if total_sleep
+            else None
+        ),
+        "rem_ratio": (
+            round(score_counts.get("rem", 0.0) / total_sleep, 3)
+            if total_sleep
+            else None
+        ),
+    }
+
+
 def _snapshot(connection: sqlite3.Connection, session_id: str, cutoff: str) -> Dict[str, Any]:
     timeline_after = connection.execute(
         "SELECT COUNT(*) FROM timeline WHERE session_id=? AND timestamp>=?",
@@ -94,9 +186,11 @@ def _rebuild_final_summary(
     reason: str,
 ) -> Dict[str, Any]:
     session_id = session["session_id"]
-    sample_seconds = float(old_final.get("sample_interval_s") or LEGACY_SAMPLE_SECONDS)
-    if sample_seconds <= 0:
-        sample_seconds = LEGACY_SAMPLE_SECONDS
+    sensor_interval_s = _positive_seconds(
+        old_final.get("sensor_sample_interval_s")
+        or old_final.get("sample_interval_s"),
+        LEGACY_SAMPLE_SECONDS,
+    )
     timeline = connection.execute(
         "SELECT timestamp,temperature,humidity,co2,lux,sound,heart_rate,"
         "respiration_rate,bed_status FROM timeline WHERE session_id=? ORDER BY timestamp",
@@ -104,153 +198,90 @@ def _rebuild_final_summary(
     stage_rows = connection.execute(
         "SELECT timestamp,value FROM events WHERE session_id=? AND type='sleep_stage' "
         "ORDER BY timestamp", (session_id,)).fetchall()
+    status_rows = connection.execute(
+        "SELECT timestamp,value FROM events WHERE session_id=? "
+        "AND type='sleep_stage_status' ORDER BY timestamp",
+        (session_id,),
+    ).fetchall()
 
-    stage_points = []
-    counts = {stage: 0 for stage in STAGES}
-    score_counts = {stage: 0 for stage in STAGES}
+    stage_events = [
+        event
+        for event in _event_mappings(stage_rows)
+        if event["value"].get("state") in STAGES
+    ]
+    status_events = _event_mappings(status_rows)
     estimator_version = old_final.get("sleep_estimator")
-    for row in stage_rows:
-        value = _load_json(row["value"])
-        stage = value.get("state")
-        if stage not in counts:
-            continue
-        counts[stage] += 1
-        score_eligible = bool(
-            value.get("score_eligible", True)
-            and not value.get("provisional", False)
-        )
-        if score_eligible:
-            score_counts[stage] += 1
+    for event in stage_events:
+        value = event["value"]
         estimator_version = value.get("estimator_version") or estimator_version
-        stage_points.append(
-            (row["timestamp"], stage, value, score_eligible)
-        )
-
-    stage_by_bucket = {}
-    for timestamp, stage, value, score_eligible in stage_points:
-        bucket = int(_iso(timestamp).timestamp() // sample_seconds)
-        auxiliary = ((value.get("metrics") or {}).get("auxiliary_evidence") or {})
-        acoustic = auxiliary.get("acoustic") or {}
-        held = bool(value.get("held_previous_state"))
-        provisional = bool(value.get("provisional"))
-        stage_by_bucket[bucket] = {
-            "sleep": stage,
-            "sleep_confidence": value.get("confidence"),
-            "acoustic_corroborated": bool(acoustic.get("corroborated")),
-            "sleep_confirmation": value.get("confirmation") or {},
-            "sleep_decision_kind": value.get("decision_kind"),
-            "sleep_held_previous_state": held,
-            "sleep_provisional": provisional,
-            "sleep_pending_state": value.get("pending_state"),
-            "sleep_data_status": (
-                "provisional_hold"
-                if held and provisional
-                else "continuity_hold"
-                if held
-                else "live"
-            ),
-            "sleep_score_attribution_state": (
-                value.get("score_attribution_state") or stage
-            ),
-            "sleep_challenger_counted_as_new_state": bool(
-                value.get("challenger_counted_as_new_state")
-            ),
-            "sleep_score_eligible": score_eligible,
-            "sleep_excluded_from_score": not score_eligible,
-            "sleep_excluded_from_personal_baseline": bool(
-                value.get("excluded_from_personal_baseline", False)
-            ),
-        }
 
     samples = []
-    bed_counts: Dict[str, int] = {}
     for row in timeline:
         bed = row["bed_status"]
-        if bed:
-            bed_counts[bed] = bed_counts.get(bed, 0) + 1
-        bucket = int(_iso(row["timestamp"]).timestamp() // sample_seconds)
         samples.append({
             "t": _iso(row["timestamp"]).timestamp(),
             "temp": row["temperature"], "hum": row["humidity"],
             "co2": row["co2"], "lux": row["lux"], "dba": row["sound"],
             "hr": row["heart_rate"], "rr": row["respiration_rate"],
-            "bed": bed, **stage_by_bucket.get(bucket, {}),
+            "bed": bed,
         })
 
-    started = _iso(session["start_time"])
+    started = _iso(session["start_time"]).astimezone(timezone.utc)
     duration_s = max(0.0, (cutoff - started.astimezone(timezone.utc)).total_seconds())
-    first_sleep = next(
-        (
-            _iso(timestamp)
-            for timestamp, stage, _, score_eligible in stage_points
-            if score_eligible and stage in SLEEP_STAGES
-        ),
-        None,
+    cadence_segments = old_final.get("sample_cadence_segments") or []
+    projection = project_report_samples(
+        samples,
+        start_at=started.timestamp(),
+        end_at=cutoff.timestamp(),
+        cadence_segments=cadence_segments,
+        sensor_interval_s=sensor_interval_s,
+        decision_interval_s=SLEEP_EVIDENCE_EPOCH_SECONDS,
+        stage_events=stage_events,
+        status_events=status_events,
     )
-    onset_s = round(max(0.0, (first_sleep - started).total_seconds()), 1) if first_sleep else None
-    awakenings = 0
-    asleep = False
-    sleep_started = False
-    waso_rounds = 0
-    for _, stage, _, score_eligible in stage_points:
-        if not score_eligible:
-            continue
-        if stage in SLEEP_STAGES:
-            asleep = True
-            sleep_started = True
-        elif stage == "wake":
-            if sleep_started:
-                waso_rounds += 1
-            if asleep:
-                awakenings += 1
-                asleep = False
-    total_sleep = sum(score_counts[stage] for stage in SLEEP_STAGES)
-    total_scored = total_sleep + score_counts["wake"]
-    night_summary = {
-        "sleep_onset_proxy_s": onset_s,
-        "awakenings": awakenings,
-        "waso_proxy_s": round(waso_rounds * sample_seconds, 1),
-        "estimated_sleep_s": round(min(duration_s, total_sleep * sample_seconds), 1),
-        "sleep_efficiency": round(total_sleep / total_scored, 3) if total_scored else None,
-        "deep_ratio": (
-            round(score_counts["n3"] / total_sleep, 3)
-            if total_sleep else None
-        ),
-        "rem_ratio": (
-            round(score_counts["rem"] / total_sleep, 3)
-            if total_sleep else None
-        ),
+    if not projection["grid_summary"]["classification_complete"]:
+        raise RuntimeError(
+            "trim report continuity invariant failed: unattributed recording time"
+        )
+    projected_samples = projection["samples"]
+    report_samples = projection["report_samples"]
+    report_interval_s = projection["report_interval_s"]
+    counts = {
+        stage: projection["sleep_state_counts"].get(stage, 0.0)
+        for stage in STAGES
     }
+    score_counts = {
+        stage: projection["sleep_score_state_counts"].get(stage, 0.0)
+        for stage in STAGES
+    }
+    bed_counts = projection["bed_status_counts"]
+    night_summary = _night_summary_from_projection(
+        projected_samples,
+        started_epoch=started.timestamp(),
+        duration_s=duration_s,
+        sample_interval_s=sensor_interval_s,
+        score_counts=score_counts,
+    )
     rest_mode = old_final.get("rest_mode") or "auto"
     session_fields = set(session.keys())
     target_duration_s = old_final.get("target_duration_s")
     if target_duration_s is None and "target_duration_s" in session_fields:
         target_duration_s = session["target_duration_s"]
-    stage_sequence = [
-        {
-            "state": stage,
-            "metrics": value.get("metrics") or {},
-            "score_eligible": score_eligible,
-            "provisional": bool(value.get("provisional")),
-            "held_previous_state": bool(
-                value.get("held_previous_state")
-            ),
-        }
-        for _, stage, value, score_eligible in stage_points
-    ]
     sleep_quality = build_sleep_quality(
         duration_s, night_summary, counts, completed=True,
-        rest_mode=rest_mode, stage_sequence=stage_sequence,
-        sample_interval_s=sample_seconds,
+        rest_mode=rest_mode, stage_sequence=report_samples,
+        sensor_samples=report_samples,
+        sample_interval_s=report_interval_s,
         target_duration_s=target_duration_s,
         score_state_counts=score_counts,
     )
     night_summary["sleep_quality"] = sleep_quality
     night_summary["wellness_score"] = sleep_quality.get("score")
     report = build_session_report(
-        duration_s, samples, night_summary, counts, sleep_quality,
+        duration_s, report_samples, night_summary, counts, sleep_quality,
         rest_mode=rest_mode,
-        sample_interval_s=sample_seconds, estimator_version=estimator_version,
+        sample_interval_s=report_interval_s,
+        estimator_version=estimator_version,
         completed=True,
         timeline_schema_version=int(old_final.get("timeline_schema_version") or 3),
         target_duration_s=target_duration_s,
@@ -268,7 +299,11 @@ def _rebuild_final_summary(
         "sleep_estimator": estimator_version,
         "rest_mode": rest_mode,
         "target_duration_s": target_duration_s,
-        "sample_interval_s": sample_seconds,
+        "sample_interval_s": report_interval_s,
+        "sensor_sample_interval_s": sensor_interval_s,
+        "sample_cadence_segments": cadence_segments,
+        "sample_cadence_summary": projection["cadence_summary"],
+        "report_sample_grid": projection["grid_summary"],
         "counters": counters,
         "armed_at_utc": old_final.get("armed_at_utc"),
         "bed_start_s": old_final.get("bed_start_s"),
@@ -287,7 +322,8 @@ def _rebuild_final_summary(
         "score_counts": score_counts,
         "bed_counts": bed_counts,
         "timeline_rows": len(timeline),
-        "stage_rows": len(stage_points),
+        "stage_rows": len(stage_events),
+        "projected_rows": len(projected_samples),
     }
 
 

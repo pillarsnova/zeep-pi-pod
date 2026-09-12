@@ -3,13 +3,13 @@
 > **Purpose:** เอกสารหลักฉบับเดียวของ Sleep State, Historical Replay, Sleep Score และ Session Report ที่ใช้งานจริงใน ZEEP Pod  
 > **Positioning:** Sleep Wellness · EEG-free exploratory telemetry · ไม่ใช่ PSG/การวินิจฉัย/คำสั่งรักษา  
 > **Status:** Wellness release candidate · guarded derived-result replay/promotion · G2 paired-PSG validation open
-> **Updated:** 2026-09-11
+> **Updated:** 2026-09-13
 > **Code manifest:** [`pi5/sleep_system_policy.py`](../pi5/sleep_system_policy.py)  
 > **Related:** [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.0.md) · [ZEEP Restore Summary v1](zeep-restore-summary-v1.md) · [Historical Promotion Policy v2](sleep-history-promotion-policy-v2.md) · [v1.23 Wellness Replay Review](sleep-estimator-v123-wellness-longitudinal-report-2026-09-05.md) · [AI Sleep-State](ai-sleep-state-and-assistant.md)
 
 ## TL;DR
 
-- ระบบเก็บ Sensor ทุก 10 วินาที สรุป `sleep_stage_evidence` ทุก 30 วินาที และเปลี่ยน State เมื่อผู้ท้าชิงผ่าน Gate พร้อมยืนยัน 2 epoch/60 วินาที (N2 ใช้ 4 epoch/120 วินาที) `WAIT · กำลังยืนยัน` ใช้เฉพาะก่อนมี State แรกเท่านั้น; หลังมี State ที่ยืนยันแล้ว หลักฐานที่ยังก้ำกึ่ง/ถูก Gate ปฏิเสธจะคง State ก่อนหน้า โดย 1–2 epoch แรกติดป้าย `provisional` เพื่อแสดงความต่อเนื่องแต่ไม่เข้าคะแนน และผู้ท้าชิงยังไม่ได้รับเวลา State ใหม่หรือคะแนน
+- ระบบเก็บ Sensor ทุก 10 วินาที สรุป `sleep_stage_evidence` ทุก 30 วินาที และเปลี่ยน State เมื่อผู้ท้าชิงผ่าน Gate พร้อมยืนยัน 2 epoch/60 วินาที (N2 ใช้ 4 epoch/120 วินาที) เมื่อเริ่ม Recording ระบบยึด `W` เป็น State แรกทันที; ทุกช่วงที่ยังไม่ยืนยัน `OFF BED` ต้องมี W/N1/N2/N3/REM โดยผู้ท้าชิงที่ยังไม่ชัดจะคง State ก่อนหน้าและนับคะแนนให้ State เดิมจนกว่าจะยืนยัน State ใหม่สำเร็จ
 - Sleep-onset Guard คง W อย่างน้อย 5 นาทีแรก; หลังจากนั้น N1 ต้องมีเตียงนิ่ง ไม่มี vital rise และ HR/RR แสดงการลดลงหรือ plateau ที่ต่ำกว่าช่วงตั้งต้นอย่างสอดคล้องกัน เวลาเพียงอย่างเดียวสร้าง N1 ไม่ได้
 - หลักฐานทั้ง 5 State ถูกปรับให้อยู่บนงบ 0..1 เท่ากัน; หากผู้ชนะ <45% หรือห่างอันดับสอง <8% ระบบจะไม่เปิด State ใหม่ แต่คง State ที่ยืนยันก่อนหน้าอย่างต่อเนื่องจนกว่าผู้ท้าชิงจะผ่าน Gate; N3 ใช้เกณฑ์เดียวกันหลังผ่าน waveform/movement/CV/regularity/relative-drop gate
 - พฤติกรรมย้อนหลังเรียนรู้แยกตามบัญชีและ Rest Mode จากอย่างน้อย 3 Session ก่อนหน้า เช่น latency, ช่วงเวลา, ระยะเวลา และสิ่งแวดล้อมที่มักพบ; ใช้เป็น expectation/report/recommendation context เท่านั้น (`direct_stage_influence=false`) และใช้ข้อมูลอดีตแบบ forward-only ตั้งแต่ 1 ก.ย. 2569
@@ -22,7 +22,7 @@
 - N3 ต่ำกว่า 3% ไม่ได้คะแนน N3, 3–10% ได้ตามสัดส่วน, ตั้งแต่ 10% ได้เต็มและ **ไม่หักเมื่อเกิน 20%**
 - Raw/Timeline เดิมไม่ถูกแก้โดยการคำนวณรายงานใหม่; Historical Replay และ Rescore มี version/audit แยก
 - ช่วงจบ Session แยก `Wake` ของมนุษย์ออกจาก `ไม่มีผู้ใช้งานบนเตียง → ออกจาก ZEEP → จบ Session`; สองสถานะหลังเป็น Occupancy และไม่ปนเปอร์เซ็นต์ Sleep Stage
-- รายงานต้องปิดบัญชีเวลาทุก epoch: valid on-bed + HR/RR/BCG ที่ยังเปลี่ยน State ไม่สำเร็จให้อยู่ใน State ก่อนหน้า; `WAIT` สงวนไว้สำหรับการยืนยัน State แรก, `NO DATA` ใช้เมื่อหลักฐาน Sensor/HR/RR ขาดจริง และ `OFF BED` ใช้เมื่อยืนยันว่าไม่มีผู้ใช้งานบนเตียง ช่วง operational สองชนิดหลังไม่อยู่ใน Stage%, Score หรือ Baseline
+- รายงานต้องปิดบัญชีเวลาทุก epoch: Recording ที่ยังไม่ยืนยัน `OFF BED` ต้องอยู่ใน W/N1/N2/N3/REM และเข้าคะแนนทั้งหมด หลักฐานที่ก้ำกึ่ง ขาด ไม่สด หรือขาดช่วงจาก restart จะคง State ก่อนหน้าแบบ low-confidence โดยไม่แต่ง Evidence probability และไม่ใช้ epoch นั้นเรียนรู้ Personal Baseline; `WAIT` ใช้เฉพาะ `waiting_bed` ก่อน Recording, `NO DATA` เป็น evidence-quality/legacy label ไม่ใช่ State bucket และ confirmed `OFF BED` เป็น operational exception เพียงชนิดเดียวที่ไม่เข้า Stage%, Score หรือ Baseline
 - สิ่งแวดล้อมใช้ 5 ระดับ `วิกฤต / แย่ / พอใช้ / ดี / ยอดเยี่ยม`; **พอใช้ขึ้นไปผ่านขั้นต่ำ**, วิกฤต/แย่ต้องแก้ไข, ดี/ยอดเยี่ยมให้รักษาค่า และแสง/เสียงเปลี่ยนกรอบตาม Rest Mode
 - ข้อมูลก่อน `2026-09-01 00:00 Asia/Bangkok` ถูกตัดออกจาก Product history, Baseline, Replay และ Score รุ่นใหม่ แต่ Raw/Audit ยังเก็บไว้โดยไม่แก้ไข; หลัง cutover ระบบประเมินหลักฐานเป็นราย Epoch, ใช้ Tier เป็น Admin QA เท่านั้น และเขียน Derived result ได้เฉพาะรายการที่ไม่มี integrity blocker หลัง Product Owner ตรวจ allowlist โดย replay manifest และ immutable-Raw hash guard ต้องผ่าน
 
@@ -30,17 +30,17 @@
 
 | ชั้นระบบ | Version |
 |---|---|
-| Health pipeline contract | `zeep-sleep-health-pipeline-v1.11-continuity-carry-forward` |
-| Live estimator candidate | `bcg-audio-bed-5state-v1.28-continuity-carry-forward` |
-| Evidence definition | `zeep-sleep-state-evidence-v3.6-continuity-carry-forward` |
+| Health pipeline contract | `zeep-sleep-health-pipeline-v1.12-complete-occupied-epochs` |
+| Live estimator candidate | `bcg-audio-bed-5state-v1.29-complete-occupied-epochs` |
+| Evidence definition | `zeep-sleep-state-evidence-v3.7-complete-occupied-epochs` |
 | Baseline | `zeep-sleep-state-baseline-v1.8-sep1-cutover` |
-| Semi-Markov transition | `zeep-semimarkov-30s-v1.17-continuity-carry-forward` |
+| Semi-Markov transition | `zeep-semimarkov-30s-v1.18-scoreable-continuity` |
 | G2 ontology | `g2-aasm-5class-v1.0` |
-| Historical replay | `zeep-sleep-history-reclass-v27-continuity-carry-forward` |
-| Sleep / Recovery quality | `zeep-rest-quality-v8.5-continuity-score-eligibility` |
-| Sleep Score formula | `zeep-sleep-score-v1.0-20-30-30-15-5` |
-| Recovery Score formula | `zeep-recovery-score-v2.0-targeted-25-35-30-10` |
-| Session report | `zeep-session-report-v10.6-continuity-accounting` |
+| Historical replay | `zeep-sleep-history-reclass-v28-complete-occupied-epochs` |
+| Sleep / Recovery quality | `zeep-rest-quality-v8.6-state-evidence-coverage-split` |
+| Sleep Score formula | `zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage` |
+| Recovery Score formula | `zeep-recovery-score-v2.1-complete-rest-25-35-30-10` |
+| Session report | `zeep-session-report-v10.7-complete-occupied-epochs` |
 | Restore Summary | `zeep-restore-summary-v1.0` |
 | Restore action bands | `zeep-restore-action-bands-v1.0` |
 | Restore driver policy | `zeep-restore-drivers-v1.0` |
@@ -49,7 +49,6 @@
 | Environment context | `zeep-environment-context-v2.1-optional-acoustic-input` |
 | Environment Session aggregation | `zeep-environment-session-v1.0-sustained-decile` |
 | Terminal Wake boundary | `zeep-terminal-wake-boundary-v1.0` |
-| Classification gap display | `zeep-sleep-classification-gap-v1.6-continuity-carry-forward` |
 
 เวอร์ชันเหล่านี้ไม่ได้มีไว้แสดงอย่างเดียว: ทุก decision/final summary เก็บ version
 เพื่อให้รู้ว่าข้อมูลแต่ละคืนสร้างด้วยหลักการใด ข้อมูลเก่าจึงคง version เดิมตาม
@@ -72,12 +71,15 @@ Wake จากเตียงว่าง; Wake ต้องมาจากห�
 flowchart LR
     L["User Login / Occupancy"] --> V["Start gate: Bed 20 s + fresh HR/RR × 3 packets"]
     B["BCG + Bed Status"] --> V
-    V --> F["Feature bucket 10 s"]
+    V --> A["Start Recording · anchor W"]
+    A --> F["Feature bucket 10 s"]
     M["SPH0645"] --> C["Corroboration only"]
     E["Temp · RH · CO₂ · Lux · PM2.5 · VOC · Sound"] --> X["Context / confidence only"]
-    F --> H{"Active recording + occupied + current HR/RR?"}
-    H -->|"No"| O["NO DATA/OFF BED · probability=0 · do not persist stage"]
-    H -->|"Yes"| W["Rolling 6 buckets / 60 s"]
+    F --> H{"Confirmed OFF BED?"}
+    H -->|"Yes"| O["OFF BED · occupancy exception · no Stage/Score/Baseline"]
+    H -->|"No"| Q{"Current evidence complete and fresh?"}
+    Q -->|"No"| LC["Carry prior State · low confidence · score yes · baseline no"]
+    Q -->|"Yes"| W["Rolling 6 buckets / 60 s"]
     C --> W
     X --> W
     W --> S["Five-state scorer"]
@@ -88,9 +90,10 @@ flowchart LR
     G --> E30["Persist evidence every 30 s"]
     E30 --> C60["Confirm W/N1/N3/REM after 60 s; N2 after 120 s"]
     C60 --> K{"New State confirmed?"}
-    K -->|"No; prior State exists"| P0["Carry prior State · provisional first 1–2 epochs"]
+    K -->|"No"| P0["Carry prior State · score as prior · challenger gets no time"]
     K -->|"Yes"| D["Persist new confirmed State every 30 s"]
     P0 --> D
+    LC --> D
     D --> R["Finalize Session"]
     R --> TW["Terminal W boundary (0 s, excluded from score)"]
     TW --> OX["No user / exited ZEEP / END"]
@@ -166,37 +169,45 @@ accuracy ดู [AASM Scoring Manual](https://learn.aasm.org/AssetListing/The-AA
   จนหายไป โดยไม่ทำให้ State อื่นสลับไวขึ้น; strong Wake ยังต้องผ่าน 2 evidence epochs;
   Bed Exit และ Safety ตอบสนองใน pipeline แยกและไม่รอ Sleep State
 - เปอร์เซ็นต์สูงสุดบน Dashboard คือ **หลักฐานล่าสุด** จึงอาจต่างจาก `confirmed_state` ระหว่างช่วงรอยืนยัน โดย UI ต้องติดป้ายสองค่านี้แยกกัน
-- ก่อนผู้ท้าชิงครบ confirmation UI แสดง State ก่อนหน้า; 1–2 Evidence epochs แรกติดป้าย `provisional` หลังจากนั้นยังคง State เดิมได้โดยไม่ติดป้ายจนกว่าหลักฐานใหม่จะชัด ผู้ท้าชิงไม่ถูกนับเป็น State ใหม่ก่อนยืนยัน
+- ก่อนผู้ท้าชิงครบ confirmation UI แสดง State ก่อนหน้าและนับเวลา/คะแนนให้ State
+  เดิม ป้าย `provisional` หากยังส่งเพื่อ compatibility เป็น diagnostic metadata
+  เท่านั้นและไม่มีผลต่อ `score_eligible`; ผู้ท้าชิงไม่ถูกนับเป็น State ใหม่ก่อนยืนยัน
 - Timeline ของ Session บันทึก Sensor ทุก 10 วินาที, `sleep_stage_evidence` ทุก
-  30 วินาที และ State attribution ทุก valid on-bed 30 วินาทีหลังมี State แรก;
-  Gate มีหน้าที่อนุญาต **การเข้า State ใหม่** ไม่ได้ลบ State เดิม เมื่อ hard
-  acquisition/occupancy gate ไม่ผ่านจริงจึงบันทึก Derived status เป็น `NO DATA`
-  หรือ `OFF BED` ซึ่งไม่ใช่ Sleep Stage และไม่ถูกนับใน Score/Baseline
+  30 วินาที และ State attribution ทุก 30 วินาทีตั้งแต่เริ่ม Recording โดยเริ่มจาก W;
+  Gate มีหน้าที่อนุญาต **การเข้า State ใหม่** ไม่ได้ลบ State เดิม เมื่อหลักฐาน
+  acquisition ขาดหรือไม่สดขณะยังไม่ยืนยัน OFF BED ระบบคง State ก่อนหน้าแบบ
+  low-confidence ซึ่งเข้าคะแนนแต่ไม่เข้า Personal Baseline ส่วน confirmed OFF BED
+  เป็น occupancy exception ที่ไม่ใช่ Sleep Stage และไม่ถูกนับใน Score/Baseline
 - การเปิดใช้ 10 วินาทีเต็มรูปแบบระหว่าง Active Session ไม่แก้ Raw เดิม: checkpoint เก็บ `sample_cadence_segments` ว่าช่วงใดเป็น legacy 5 วินาที/ช่วงใดเป็น 10 วินาที และรายงานถ่วงน้ำหนักตามเวลาจริง จึงไม่ทำให้ TST, WASO, Stage ratio หรือค่าเฉลี่ย Sensor เพิ่ม/ลดเท่าตัวหลัง restart
 - Timestamp ของ Timeline ใช้เวลาที่เก็บ Session sample จริง ไม่ใช้ Sensor-frame timestamp ซ้ำ; ข้อมูล Sensor frame สำหรับ Sleep State ยังมี provenance ของรอบ 10 วินาทีแยกต่างหาก
-- ค่า HR/RR ที่ invalid ถูกคัดออกก่อน State Machine; ข้อมูลขาดจริงไม่ถูกแต่งเป็นค่าปกติและไม่ใช้ continuity carry-forward ส่วนการคง State ใช้ได้เฉพาะ epoch ที่ valid/on-bed แต่หลักฐานของ State ใหม่ยังไม่ชัด
+- ค่า HR/RR ที่ invalid ถูกคัดออกก่อนสร้าง Evidence และไม่ถูกแต่งเป็นค่าปกติ;
+  เมื่อยังไม่ยืนยัน OFF BED การขาดหลักฐานจะคงเฉพาะ **State attribution** ก่อนหน้า
+  แบบ low-confidence โดย probability ของ Evidence ยังคง missing/zero ตามจริง
+  และ epoch นั้นถูกกันออกจาก Personal Baseline
 
 #### สัญญา State continuity และลำดับอำนาจของ Gate
 
 | สถานการณ์ใน epoch 30 วินาที | ผลที่แสดง/บันทึก | นับ Stage/Score |
 |---|---|---|
-| ยังไม่มี State แรกและกำลังสะสมหลักฐาน | `WAIT · กำลังยืนยัน` สูงสุดตามเป้าหมาย 60/120 วินาที | ไม่ |
-| มี State เดิม; ผู้ท้าชิงกำลังยืนยัน epoch ที่ 1–2 | แสดง State เดิมพร้อม `provisional` | ยังไม่เข้าคะแนน; ไม่ให้ผู้ท้าชิง |
-| มี State เดิม; ความไม่แน่ใจต่อเนื่องหลัง provisional | คง State เดิมพร้อม carry provenance | นับให้ State เดิม; ไม่ให้ผู้ท้าชิง |
+| เริ่ม Recording และยังไม่มี State จากหลักฐาน | กำหนด `W` เป็น initial awake anchor | นับ W; ไม่ใช้ช่วงที่หลักฐานไม่ครบเรียนรู้ Personal Baseline |
+| มี State เดิม; ผู้ท้าชิงกำลังยืนยัน | แสดง State เดิมพร้อม pending/provisional metadata | นับให้ State เดิม; ไม่ให้ผู้ท้าชิง |
 | มี State เดิม; หลักฐานก้ำกึ่งหรือ transition ถูก Gate ปิด | คง State เดิมต่อเนื่องจนมีผู้ท้าชิงที่ผ่านครบ | นับให้ State เดิม |
-| HR/RR/BCG ขาดหรือไม่สด | `NO DATA` | ไม่ |
+| HR/RR/BCG ขาด ไม่สด หรือขาดช่วงจาก restart ขณะยังไม่ยืนยัน OFF BED | คง State เดิมแบบ low-confidence พร้อม data-quality provenance | นับให้ State เดิม; ไม่เข้า Personal Baseline |
 | ยืนยันไม่มีผู้ใช้งานบนเตียง | `OFF BED` | ไม่ |
 | ผู้ท้าชิงผ่าน physiology, transition, dwell และ confirmation | เปลี่ยนเป็น State ใหม่ | เริ่มนับ State ใหม่ ณ epoch ที่ยืนยัน |
 
-ดังนั้นระบบไม่มีค่าผลลัพธ์ `Unclassified`: ทุก epoch อยู่ในหนึ่งใน
-`W/N1/N2/N3/REM`, `WAIT` ช่วงตั้งต้น, `NO DATA` หรือ `OFF BED` เท่านั้น
+ดังนั้นระบบไม่มีค่าผลลัพธ์ `Unclassified`: ทุก epoch หลังเริ่ม Recording อยู่ใน
+`W/N1/N2/N3/REM` หรือ confirmed `OFF BED` เท่านั้น `WAIT` อยู่ได้เฉพาะ phase
+`waiting_bed` ก่อนสร้าง Recording ส่วน `NO DATA` เป็น evidence-quality หรือ
+legacy label ไม่ใช่ State bucket ของรุ่นปัจจุบัน
 ฟิลด์ `held_previous_state`, `continuity_hold_epochs`, `provisional`,
 `pending_state`, `score_attribution_state` และ
 `challenger_counted_as_new_state=false` ทำให้ Admin ตรวจสอบที่มาของเวลาได้
-รายงานแยก `display_attributed_s` ออกจาก `score_eligible_s`; เวลาที่ติด
-`provisional` แสดง continuity ได้แต่ต้องไม่รวมใน `score_eligible_s`
-เมื่อ hard acquisition/occupancy gate ไม่ผ่าน probability ทั้ง 5 เป็นศูนย์;
-continuity carry-forward ไม่สร้าง Evidence probability ปลอมให้ State เดิม
+`score_attribution_state` ต้องไม่เป็น null สำหรับทุก non-OFF-BED epoch และเวลา
+carry รวมทั้ง epoch ที่ติด `provisional` ต้องรวมใน `score_eligible_s`; หาก
+หลักฐานขาด ฟิลด์ confidence/data quality ต้องระบุ low/missing และ
+`excluded_from_personal_baseline=true` โดย continuity carry-forward ไม่สร้าง Evidence
+probability ปลอมให้ State เดิม
 
 ### 2.4 Session start gate
 
@@ -213,48 +224,41 @@ continuity carry-forward ไม่สร้าง Evidence probability ปลอ
 6. ถ้าผู้ใช้จบ/ออกก่อน gate ผ่าน ระบบปิดเฉพาะ Login/lease และไม่สร้าง
    zero-duration Session, Timeline, Report หรือ Personal Baseline
 7. หลังเริ่มบันทึกแล้ว หาก HR/RR/BCG ขาดชั่วคราวจะไม่จบ Session อัตโนมัติ;
-   Timeline เก็บ Sensor/coverage ตามจริง แต่ Sleep State เป็น `null`, หน้าจอแสดง
-   `NO DATA · หลักฐานไม่ครบ` และจะเริ่มประเมินใหม่เมื่อหลักฐานปัจจุบันครบ รายงานย้อนหลัง
-   ต้องสร้างช่วง `classification_gap` มาคั่นตามเวลาจริง ห้ามเว้นช่องจนดูเหมือนข้อมูลหาย
-   ระหว่าง NO DATA ระบบไม่แสดง State เดิมเป็นผลปัจจุบัน แต่เก็บ confirmed State,
-   Sleep onset, ลำดับวงจร และ Awake reference ไว้ภายใน Session เดิม เมื่อสัญญาณกลับมา
-   จะประเมินต่อจากบริบทเดิมและล้างเฉพาะ candidate/EMA ที่ยืนยันไม่ครบ ห้ามตีความ
-   ช่องว่างข้อมูลเป็น Wake หรือบังคับเริ่มวงจร W ใหม่
+   Timeline เก็บ Sensor/coverage ตามจริงและคง State attribution ก่อนหน้าแบบ
+   low-confidence ตราบที่ยังไม่ยืนยัน OFF BED หน้าจอแสดง State เดิมพร้อมป้าย
+   “หลักฐาน Sensor ไม่ครบ” แทนการสร้าง `null` หรือ `NO DATA` State เมื่อสัญญาณ
+   กลับมาระบบประเมินต่อจาก confirmed State, Sleep onset, ลำดับวงจร และ Awake
+   reference เดิม โดยล้างเฉพาะ candidate/EMA ที่ยืนยันไม่ครบ
 8. เมื่อ HR/RR/BCG สดและยืนยัน on-bed แต่ Evidence winner ยังไม่ผ่านเกณฑ์,
    Transition ถูกปิด หรือผู้ท้าชิงกำลังสะสม confirmation ระบบคง State ก่อนหน้า
-   แทนการสร้าง `null`/ช่องว่าง; ป้าย `provisional` ใช้เฉพาะ 1–2 epoch แรก
-   และช่วง provisional ไม่เข้าคะแนน แต่ carry-forward ดำเนินต่อได้จน State ใหม่
-   ผ่านครบ เงื่อนไขนี้ไม่ครอบคลุม NO DATA หรือ OFF BED
+   แทนการสร้าง `null`/ช่องว่าง; ป้าย `provisional` เป็น diagnostic metadata
+   เท่านั้น เวลาและคะแนนยังเป็นของ State เดิมจน State ใหม่ผ่านครบ
 9. ข้อยกเว้นเฉพาะ **Session เดิมที่ระบบกู้หลัง service/code restart**: ถ้า State
    ใน frame ก่อนปิดตรงกับ `sleep_stage` ล่าสุดที่บันทึกถาวร ระบบแสดง State เดิม
-   ชั่วคราวไม่เกิน 60 วินาที (2 Evidence epochs) พร้อม
-   `data_status=restored_confirmed_state` และ
-   `display_only_after_restart=true`; ค่านี้ไม่สร้าง Timeline sample, Evidence,
-   Stage%, Baseline หรือ Score ซ้ำ เมื่อได้ Evidence สดที่ยืนยันแล้วระบบยกเลิก hold
-   ทันที หากไม่มี State เดิมที่ยืนยัน ครั้งแรกยังแสดง `WAIT · กำลังยืนยันสถานะ`
-   ตามปกติ และ confirmed Bed Exit มีสิทธิ์แสดง `OFF`/ล้าง hold ทันที
-   รายงานย้อนหลังใช้ event `service_pause`/`service_resume` ระบุช่องว่างจากการ
-   Restart และแสดง State ที่ยืนยันก่อนหน้าเป็น `Operational hold` ด้วยหลักเดียวกัน
-   แต่ช่วงดังกล่าวยังไม่ใช่ Sleep Stage และไม่รวมใน Stage%, Score หรือ Baseline
-   ถ้าเหตุการณ์เก่าไม่มี marker ครบ ผู้ดูแลโครงการสามารถเพิ่ม event
-   `classification_gap_annotation` แบบ `display_only` พร้อม Audit ให้ Session นั้น
-   คงสถานะก่อนหน้าได้จนถึง Terminal boundary โดยต้องไม่แก้ Raw, decision เดิม
-   หรือคะแนนย้อนหลัง
+   และ carry ต่อแบบ low-confidence จน Evidence สดกลับมา โดยช่วง restart ที่ยังไม่
+   ยืนยัน OFF BED ถูกนับเป็น State เดิมใน Stage%/Score แต่ไม่เข้า Personal Baseline
+   หากยังไม่เคยมี State ที่บันทึกให้ใช้ W เป็น initial awake anchor และ confirmed
+   Bed Exit มีสิทธิ์แสดง `OFF`/ล้าง hold ทันที รายงานย้อนหลังใช้ event
+   `service_pause`/`service_resume` ระบุ provenance ของช่วง restart โดยไม่แต่ง
+   Evidence probability
+   รายงานย้อนหลังใช้ continuity projector เดียวกับ Live เพื่อเติมทุกช่วงที่ผู้ใช้
+   ยังอยู่บนเตียงด้วย State ก่อนหน้าแบบ low-confidence โดยไม่แก้ Raw หรือ decision
+   เดิม; การเปลี่ยน Derived report/คะแนนย้อนหลังต้องผ่าน replay/rescore audit ตามปกติ
 10. เมื่อยืนยันว่าไม่มีผู้ใช้งานบนเตียง หน้าจอแสดง `OFF` ซึ่งเป็นสถานะการครอบครอง
    ไม่ใช่ `Wake`; ระบบล้าง rolling physiology เมื่อจบ/เปลี่ยนเจ้าของ Session
 11. เมื่อ completed Session มี Bed Exit ที่ผ่าน debounce และไม่มี HR+RR ที่ valid
-   กลับมา รายงานจะปิดลำดับเป็น `W · ตื่น → ไม่มีผู้ใช้งานบนเตียง → ออกจาก ZEEP → จบ Session`
-   โดยเริ่มช่วงแรกจาก bucket แรกที่ HR/RR หายก่อน Exit; Missing HR/RR เพียงอย่างเดียว
-   ยังไม่เพียงพอ เพราะอาจเป็น Sensor fault
+    กลับมา รายงานจะคง State ก่อนหน้าจนถึงขอบเขต OFF BED แล้วปิดลำดับเป็น
+    `Sleep State สุดท้าย → W · ตื่น (0 วินาที) → ไม่มีผู้ใช้งานบนเตียง → ออกจาก ZEEP → จบ Session`;
+    Missing HR/RR เพียงอย่างเดียวไม่สร้าง Wake หรือ OFF BED เพราะอาจเป็น Sensor fault
 12. ถ้า confirmed Sleep State สุดท้ายยังเป็น N1/N2/N3/REM การกดจบโดย User/Admin
     หรือ Terminal Bed Exit จะสร้าง `terminal_wake_boundary` 1 จุดที่เวลา 0 วินาที
     เพื่อแสดงว่าลำดับการนอนจบที่ Wake ก่อน Exit/END จุดนี้เป็น Operational marker,
     ไม่ใช่ AASM/PSG epoch และไม่เพิ่ม Wake duration, WASO, สัดส่วน Stage, คะแนน
     หรือ Personal Baseline; หาก State สุดท้ายเป็น Wake อยู่แล้วจะไม่สร้างซ้ำ
-13. ช่องว่าง operational ตั้งแต่ 15 วินาทีขึ้นไปแสดงตามหลักฐานเป็น
-    `OFF BED · ไม่มีผู้ใช้งานบนเตียง` หรือ `NO DATA · ไม่มี HR/RR/BCG`;
-    `WAIT · กำลังยืนยันสถานะ` ใช้เฉพาะก่อนมี State แรก ข้อมูล Sensor อื่นในช่วงนั้น
-    ยังแสดงได้ แต่ operational interval ไม่ใช่ Sleep Stage และไม่ถูกเติมด้วย State ข้างเคียง
+13. confirmed `OFF BED · ไม่มีผู้ใช้งานบนเตียง` เป็น operational interval เพียง
+    ชนิดเดียวระหว่าง Recording ที่ไม่ใช่ Sleep Stage และไม่เข้าคะแนน ส่วนหลักฐาน
+    HR/RR/BCG ที่ขาด ไม่สด หรือขาดช่วงเป็น data-quality metadata ของ low-confidence
+    carry ไม่ใช่ช่องว่าง State; `WAIT · กำลังยืนยันสถานะ` ใช้ได้เฉพาะก่อน Recording
 
 ### 2.5 Baseline สามชั้นที่ต้องไม่ปนกัน
 
@@ -287,8 +291,11 @@ HR/RR ใกล้ที่สุด, State evidence, State ที่ยืน�
 Personal Physiology Baseline เริ่มจาก age/gender default แล้วจึงเรียนรู้เฉพาะ completed
 Session ต้องเริ่มตั้งแต่ 1 ก.ย. 2569, เป็น `quality_type=sleep`, ยาวมากกว่า 25 นาที,
 ตรวจพบการหลับอย่างน้อย 20 นาที, มี HR ที่ใช้ได้เพียงพอ และสะสมอย่างน้อย 3 Session
-(rolling สูงสุด 7 Session) การงีบ,
-สมาธิ, พักเฉย ๆ และ Session ที่ Sensor ไม่ครบไม่ถูกปนเข้า physiology baseline
+(rolling สูงสุด 7 Session) การงีบ สมาธิ และพักเฉย ๆ ไม่ถูกปนเข้า physiology
+baseline ภายใน Session ที่ผ่านเกณฑ์ ระบบเรียนรู้เฉพาะ epoch ที่มีหลักฐานเพียงพอ
+และ `excluded_from_personal_baseline=false`; low-confidence carry จากหลักฐานขาด/ไม่สด/
+restart ไม่ถูกใช้สอน Baseline แม้ epoch นั้นยังเข้าคะแนน และการขาด Sensor บางช่วง
+ไม่ทำให้ต้องทิ้ง Session ทั้งรายการ
 
 ### 2.6 Environment Context — ระดับที่ต้องแก้ไขและระดับที่คาดหวัง
 
@@ -377,9 +384,10 @@ stateDiagram-v2
 3. N3 ไป REM ได้เมื่อผ่าน normal dwell/hysteresis จึงไม่บังคับ N2 ที่รอยต่อนี้
 4. REM ไป Wake, N1 หรือ N2 ได้ตามหลักฐานที่ยืนยันแล้ว; REM ไป N3 โดยตรงยัง bridge ผ่าน N2
 5. Wake ที่ไม่ชัดจาก N2/N3 ยังย้อนผ่าน N1/N2; strong-Wake เปิด transition path แต่ยังยืนยัน 2 epoch ส่วน bed-exit ที่ผ่าน event guard จะแสดง `OFF` ใน occupancy pipeline ทันทีโดยไม่สร้าง Wake จากเตียงว่าง
-6. Replay แยก HR/RR/BCG ที่ขาดจริงเป็น `NO DATA`, แยก confirmed Bed Exit เป็น
-   `OFF BED` และคง State ก่อนหน้าสำหรับ valid on-bed epoch ที่ transition ยังไม่ผ่าน;
-   initial epoch ที่ยังไม่มี State ใช้ `WAIT` เท่านั้น Tier และคำเตือนเชิงสัดส่วนเป็น
+6. Replay กำหนด W เป็น State แรกของ Recording และคง State ก่อนหน้าแบบ
+   low-confidence สำหรับ epoch ที่ HR/RR/BCG ขาด ไม่สด หรือ transition ยังไม่ผ่าน;
+   epoch เหล่านี้เข้าคะแนนแต่ไม่เข้า Personal Baseline ส่วน confirmed Bed Exit เป็น
+   `OFF BED` และเป็นข้อยกเว้นเดียวที่ไม่เข้า Stage/Score Tier และคำเตือนเชิงสัดส่วนเป็น
    Admin QA ไม่ใช่ allowlist ส่วนการเขียนย้อนหลังผ่าน
    `promote_sleep_history.py` ต้องไม่มี per-Session integrity blocker, อยู่ใน
    reviewed allowlist และยืนยัน hash ว่า Timeline/Raw BCG ไม่เปลี่ยน
@@ -408,7 +416,7 @@ stateDiagram-v2
 physiology evidence ก่อนเสมอ การอนุญาต graph นี้ไม่ได้หมายความว่า BCG เทียบเท่า PSG
 ซึ่งยังต้องใช้ EEG/EOG/chin EMG จริง
 
-## 4. Sleep / Recovery Quality v8.5
+## 4. Sleep / Recovery Quality v8.6
 
 ### 4.1 สมการภาพรวม
 
@@ -433,21 +441,24 @@ Coverage ทั้ง Session ต่ำกว่า Tier ใด Tier หนึ�
 | หลับดีและต่อเนื่อง | 30 | Efficiency 20 + Wake continuity 10 − BCG disturbance proxy สูงสุด 5 |
 | โครงสร้าง N2/N3/REM | 30 | แสดงเฉพาะ Overnight: N2 10 + N3 12 + REM 8; เป็น Signal estimate ไม่ใช่การวัดการฟื้นฟูโดยตรง |
 | รอบการนอนที่ตรวจพบ | 15 | Overnight ใช้ NREM→REM proxy เทียบจำนวนรอบที่คาด |
-| ความครบของข้อมูล | 5 | `scored seconds / wall-clock duration` |
+| ความครบของข้อมูล | 5 | เวลาที่มี HR/RR คู่จริงและ BCG valid / wall-clock duration; continuity carry ไม่เพิ่มหลักฐาน |
 
-Nap & Refresh ใช้ Recovery Score v2: **เวลาพักตามเป้าหมาย 25 + การตอบสนอง
+Nap & Refresh ใช้ Recovery Score v2.1: **เวลาพักตามเป้าหมาย 25 + การตอบสนอง
 HR/RR 35 + ความต่อเนื่อง/ความนิ่ง 30 + สภาพแวดล้อมสนับสนุน 10** รวม 100
 คะแนน ไม่บังคับให้หลับและไม่บังคับ N1/N2/N3/REM; Coverage/Tier แสดงแยกเป็น
 QA/confidence และมีน้ำหนัก 0 คะแนน ส่วนความสดชื่นจริงต้องใช้แบบประเมินหลัง
 Session ประกอบ ห้ามอนุมานจาก Sensor เพียงอย่างเดียว
 
-คะแนนเวลา Nap ใช้ **เวลาพักที่มีหลักฐานว่าอยู่ใน ZEEP เทียบเป้าหมาย 30 หรือ
-90 นาทีที่บันทึกตั้งแต่เริ่ม Session**:
+คะแนนเวลา Nap ใช้ **เวลาที่มี State attribution และยังไม่ยืนยัน OFF BED เทียบ
+เป้าหมาย 30 หรือ 90 นาทีที่บันทึกตั้งแต่เริ่ม Session**:
 `Duration points = 25 × min(1, eligible rest seconds / selected target seconds)`
-โดย On bed, Moving, Weak breathing และ Snoring นับเป็นเวลาพัก ส่วน Get out of
-bed ไม่นับ หากข้อมูลเก่าไม่มี Bed Status จะใช้ HR/RR ที่จับคู่และผ่าน sanity
-range เป็น fallback เมื่อครบเป้าหมายได้เต็ม 25 และไม่หักคะแนนเพียงเพราะพักนาน
-กว่าเป้าหมาย ตราบใดที่ยังอยู่ในกรอบ protocol ของเป้าหมายที่เลือก
+ช่วง Continuity carry นับเป็นเวลาพักแบบ low-confidence แต่ไม่ถูกนับเป็นหลักฐาน
+HR/RR, Movement หรือ Environment ใหม่; Raw `Get out of bed` ชั่วคราวไม่หักเวลา
+มีเพียง confirmed OFF BED เท่านั้นที่ไม่นับ หากข้อมูลเก่าไม่มี State attribution
+จะใช้ On bed/Moving/Weak
+breathing/Snoring หรือ HR/RR คู่ที่ผ่าน sanity range เป็น fallback เมื่อครบเป้าหมาย
+ได้เต็ม 25 และไม่หักคะแนนเพียงเพราะพักนานกว่าเป้าหมาย ตราบใดที่ยังอยู่ในกรอบ
+protocol ของเป้าหมายที่เลือก
 
 คำอธิบายสองรูปแบบ แผนที่หลักฐาน และข้อห้ามในการเปรียบเทียบคะแนนอยู่ที่
 [`TWO_MODE_SCORE_EVIDENCE.md`](../research/evidence-library/TWO_MODE_SCORE_EVIDENCE.md)
@@ -456,8 +467,8 @@ range เป็น fallback เมื่อครบเป้าหมายไ�
 
 | Mode | Target ที่ใช้ใน Duration component |
 |---|---:|
-| Nap & Refresh · 30 นาที | 1,800 s ของเวลาพักที่มีหลักฐานว่าอยู่ใน ZEEP; ช่วงแนะนำ 25–35 นาที; extended ถึง 45 นาที |
-| Nap & Refresh · 90 นาที | 5,400 s ของเวลาพักที่มีหลักฐานว่าอยู่ใน ZEEP; ช่วงแนะนำ 75–105 นาที; extended ถึง 120 นาที |
+| Nap & Refresh · 30 นาที | 1,800 s ของ State-attributed rest ที่ไม่ใช่ confirmed OFF BED; ช่วงแนะนำ 25–35 นาที; extended ถึง 45 นาที |
+| Nap & Refresh · 90 นาที | 5,400 s ของ State-attributed rest ที่ไม่ใช่ confirmed OFF BED; ช่วงแนะนำ 75–105 นาที; extended ถึง 120 นาที |
 | Overnight/main sleep | 25200 s / 7 h |
 
 Session ใหม่ต้อง persist ทั้ง Rest Mode และเป้าหมาย Nap 30/90 นาทีตั้งแต่เริ่ม
@@ -466,7 +477,9 @@ Session ใหม่ต้อง persist ทั้ง Rest Mode และเป�
 แม้ Session ถูกยุติก่อน 5 ชั่วโมง และรายงานจะแสดง `protocol_status=too_short`
 แทนการแอบเปลี่ยนวัตถุประสงค์
 
-Nap ต่ำกว่า 10 นาทีไม่เผยแพร่ Recovery Score; เป้าหมาย 30 นาทีแบ่งเป็น
+Nap ที่มี **eligible rest ต่ำกว่า 10 นาที** ไม่เผยแพร่ Recovery Score แม้เวลา
+wall-clock ของ Session จะถึง 10 นาทีแล้ว; จึงไม่สามารถใช้ช่วง confirmed OFF BED
+เติมขั้นต่ำเพื่อออกคะแนนได้ เป้าหมาย 30 นาทีแบ่งเป็น
 `partial=10–<25`, `recommended=25–35`, `extended=>35–45` และ
 `out_of_protocol=>45` ซึ่งต้อง review และไม่เขียนคะแนนใหม่อัตโนมัติ เป้าหมาย
 90 นาทีใช้ `recommended=75–105` และ `extended` ถึง 120 นาที; Session เกิน
@@ -517,11 +530,21 @@ W/N1/N2/N3/REM ทั้งสองสายแสดง `score_title`, `qualit
 - Cycle นับเมื่อมี accumulated NREM ≥45 นาทีก่อนเข้า REM และไม่เพิ่มหลายรอบจาก REM flicker
 - Arousal proxy ไม่ใช่ EEG cortical arousal และ Cycle proxy ไม่ใช่ AASM cycle count
 
-## 5. Session Report v10.4
+## 5. Session Report v10.7
 
 เมื่อจบ Session ระบบสร้างและ persist รายงานจากข้อมูลชุดเดียวกับ Timeline:
 
 - W/N1/N2/N3/REM: จำนวนรอบ, เวลา, % ของ scored time และ % ของ TST
+- Classification accounting ปิดเวลา Recording ด้วยสมการ
+  `direct_confirmed_s + continuity_carried_forward_s + off_bed_s = recording_s`;
+  ทุก non-OFF-BED second อยู่ใน `score_eligible_s` ขณะที่ provisional เป็นเพียง
+  diagnostic subset และ low-confidence carry ไม่เข้า Personal Baseline
+- `state_attribution_coverage` แสดงว่าเวลาถูกใส่ State ครบเพียงใด ส่วน
+  `physiological_evidence_coverage` นับเฉพาะ HR/RR คู่จริงกับ BCG valid;
+  ห้ามนำ State ที่ carry ไปอ้างว่า Sensor evidence ครบ
+- หาก Service ขาดช่วงกลาง Session รายงานจะสร้าง report-only time grid
+  ให้ครบ wall clock และ carry State เท่านั้น โดยไม่คัดลอก HR/RR,
+  สิ่งแวดล้อม หรือ Raw BCG เข้าช่วงที่หาย
 - TST estimate, Wake, WASO proxy, sleep onset proxy, awakenings
 - คะแนนรวม, component points, Rest Mode, target และ version
 - ระดับความมั่นใจของคะแนน พร้อม coverage ของ Session และ HR/RR; coverage
@@ -543,7 +566,7 @@ health record เดิม การแก้ derived record จริงยั�
 |---|---|---|
 | `audit_sleep_history_shadow.py` | อ่าน Raw/Timeline แบบ read-only เพื่อทดสอบ deterministic replay, quality tier, transition และคะแนน; แยก Model State ออกจาก Annotation overlay ที่ใช้กับ Report | Raw BCG, Timeline, Report และ DB ทุกชนิด |
 | `reclassify_sleep_history.py` | Legacy event comparison; ใช้ scorer/policy เดียวกันและมี dry-run/guard | Raw BCG และ Timeline |
-| `promote_sleep_history.py` | Promote valid derived Epoch ของ reviewed Session หลังตรวจ per-Session blocker และ replay/code/input hash บน staging copy; ใช้ช่วงวันที่และ minimum duration ที่ตรึงมากับ reviewed artifact โดยไม่บังคับ cutoff 25 นาทีซ้ำ | Raw BCG, Timeline และช่วง initial WAIT/NO DATA/OFF BED |
+| `promote_sleep_history.py` | Promote valid derived Epoch ของ reviewed Session หลังตรวจ per-Session blocker และ replay/code/input hash บน staging copy; ใช้ช่วงวันที่และ minimum duration ที่ตรึงมากับ reviewed artifact โดยไม่บังคับ cutoff 25 นาทีซ้ำ | Raw BCG, Timeline และ confirmed OFF BED; WAIT/NO DATA รุ่นเก่าคง provenance เดิมและถูกแปลเป็น initial W/low-confidence carry เฉพาะใน Derived result รุ่นใหม่ |
 | `compare_sleep_history_replay.py` | เปรียบเทียบ replay manifest สองรุ่นเป็น owner-only JSON/Markdown | DB, Raw, Event และ Report ทุกชนิด |
 | `rescore_session_reports.py` | Derived `final_summary`, quality และ report | Raw BCG, Timeline, event ต้นฉบับ |
 | `trim_session.py` | ตัดข้อมูลตามคำสั่งผู้ดูแลพร้อม audit | ข้อมูลนอกช่วงที่สั่ง |
@@ -572,7 +595,7 @@ health record เดิม การแก้ derived record จริงยั�
 | Wake/N1/N2/N3/REM evidence | `pi5/sleep_stage_scoring.py` | Live/Replay consistency + baseline tests |
 | Live state + 10 s cadence | `pi5/app.py` | `test_sleep_baseline_policy.py` |
 | Shared scorer | `pi5/sleep_stage_scoring.py` | baseline/signal tests |
-| Adaptive baseline รายบุคคล | `pi5/personal.py` | หลัง cutover, Session >25 นาที, completed `quality_type=sleep`, detected sleep ≥20 นาที; ใช้ context-only; `test_personal_baseline_policy.py` |
+| Adaptive baseline รายบุคคล | `pi5/personal.py` | หลัง cutover, Session >25 นาที, completed `quality_type=sleep`, detected sleep ≥20 นาที; เรียนเฉพาะ epoch ที่ `excluded_from_personal_baseline=false` และกัน low-confidence carry ออก; ใช้ context-only; `test_personal_baseline_policy.py` |
 | Historical shadow replay | `pi5/audit_sleep_history_shadow.py` | `test_audit_sleep_history_shadow.py` |
 | Mode-aware score/report | `pi5/sleep_session_report.py` | `test_sleep_session_report.py` |
 | Derived report rescore | `pi5/rescore_session_reports.py` | dry-run + DB audit event |
@@ -592,8 +615,9 @@ health record เดิม การแก้ derived record จริงยั�
 - `sleep_system_policy.py` เป็น manifest เดียวของ version, hard gate, transition,
   Rest Mode, scoring และ eligibility ของ Personal Baseline
 - `personal.py` เรียนรู้เฉพาะรายงานที่ยืนยันว่า `quality_type=sleep`,
-  เริ่มหลัง cutover, ยาว >25 นาที, `sleep_detected=true` และมีเวลาหลับที่ตรวจพบอย่างน้อย 20 นาที จึงไม่ปน Session
-  สมาธิ/พักเฉย ๆ เข้ากับ physiology baseline
+  เริ่มหลัง cutover, ยาว >25 นาที, `sleep_detected=true` และมีเวลาหลับที่ตรวจพบ
+  อย่างน้อย 20 นาที จึงไม่ปน Session สมาธิ/พักเฉย ๆ เข้ากับ physiology baseline;
+  ภายใน Session ใช้เฉพาะ epoch ที่ baseline-eligible และไม่ใช้ low-confidence carry
 - `sleep_session_report.py` แยก Overnight Sleep Score ออกจาก Nap Recovery Score และไม่ใช้
   สภาพแวดล้อมย้อนหลังเพื่อเปลี่ยน Sleep State
 - `reclassify_sleep_history.py` เปลี่ยน derived stage เมื่อมีหลักฐานครบ;
@@ -619,7 +643,13 @@ systemctl is-active zeep-pod.service
 
 1. Admin เรียก `GET /api/admin/sleep/policy` แล้ว version ตรงตารางข้อ 1
 2. `/dashboard` และ `/sessions` ตอบ HTTP 200
-3. Session เขียน Sensor ทุก 10 วินาที, Evidence ทุก 30 วินาที และ confirmed decision ทุก 30 วินาทีหลังหลักฐานต่อเนื่องครบ 60 วินาทีสำหรับ W/N1/N3/REM หรือ 120 วินาทีสำหรับ N2; `final_summary` ต้องมี cadence/estimator/quality/report version และ Active Session ที่ข้ามรุ่นต้องมี cadence segment 5→10 วินาทีโดยเวลารวมไม่เปลี่ยนจากการ migrate
+3. Session เขียน Sensor ทุก 10 วินาที, Evidence ทุก 30 วินาที และ State attribution
+   ทุก 30 วินาทีตั้งแต่ initial W; ทุก non-OFF-BED epoch ต้องมี
+   `score_attribution_state` และ `score_eligible=true` โดย low-confidence carry มี
+   `excluded_from_personal_baseline=true` และ provisional ไม่ลด score seconds ผู้ท้าชิง
+   เปลี่ยน State หลังหลักฐานต่อเนื่องครบ 60 วินาทีสำหรับ W/N1/N3/REM หรือ 120
+   วินาทีสำหรับ N2; `final_summary` ต้องมี cadence/estimator/quality/report version
+   และ Active Session ที่ข้ามรุ่นต้องมี cadence segment 5→10 วินาทีโดยเวลารวมไม่เปลี่ยนจากการ migrate
 4. Historical Replay dry-run ต้องผ่าน transition, arousal proxy, smoothness และ sanity gates ก่อน apply
 5. ห้ามแก้คะแนนย้อนหลังโดยไม่มี audit และห้ามเปลี่ยน raw เพื่อให้ผลดูดีขึ้น
 
@@ -637,7 +667,11 @@ systemctl is-active zeep-pod.service
 
 คำสั่งต้องเริ่มด้วย dry-run และใช้ `--apply` หลังตรวจจำนวนรอบที่ได้รับผลเท่านั้น
 
-### 9.1 บันทึกการตรวจรับรุ่นก่อน cutover — เก็บเพื่อ Audit เท่านั้น
+### 9.1 บันทึกการตรวจรับรุ่นก่อนหน้า — เก็บเพื่อ Audit เท่านั้น
+
+รายการรุ่นเก่าในตารางนี้บันทึกข้อเท็จจริง ณ เวลาที่ตรวจรับและ **ไม่ใช่ policy
+ปัจจุบัน** โดยเฉพาะกฎ v1.14 และ v1.28 ที่ใช้ WAIT/NO DATA หรือหัก provisional
+ถูกแทนที่ด้วย complete occupied-epoch policy v1.29 แล้ว
 
 | รายการตรวจ | ผลตรวจจริง |
 |---|---|
@@ -680,11 +714,12 @@ systemctl is-active zeep-pod.service
 | Gated N2 progression release | Estimator v1.27 / Transition v1.16: เมื่ออยู่ N1 และ N2 gate ผ่าน ผู้ชนะจากหลักฐานสด 30 วินาทีสามารถเข้าตัวรับรองก่อน EMA ที่ยังค้าง N1; ยังต้องชนะ 4 epochs/120 วินาทีและห้าม HR/RR Fit ข้าม gate |
 | Continuity carry-forward release | Estimator v1.28 / Transition v1.17: WAIT ใช้ก่อน State แรกเท่านั้น; valid on-bed epoch ที่ challenger ยังไม่ผ่านคง State ก่อนหน้า, ติด provisional 1–2 epoch โดยยังไม่เข้าคะแนน, ไม่ให้เวลา State ใหม่แก่ challenger และคง NO DATA/OFF BED เป็น hard operational precedence |
 | Terminal Wake sequence | รายงานปิดลำดับเป็น `Sleep State สุดท้าย → W · ตื่น → Occupancy/END`; marker 0 s แยกจาก physiology และไม่เปลี่ยน Stage statistics/Score/Baseline |
-| Classification-gap visibility | ลำดับรายงานแสดงเฉพาะ initial WAIT และ operational NO DATA/OFF BED; ความไม่ชัดของ State ใหม่ไม่สร้างช่องว่าง แต่เก็บ carry metadata ให้ตรวจสอบได้ |
+| Complete occupied-epoch release | Estimator v1.29 / Evidence v3.7 / Transition v1.18: Recording เริ่มด้วย W; ทุก non-OFF-BED epoch คง W/N1/N2/N3/REM และเข้าคะแนน, provisional ไม่หักคะแนน, missing/stale/restart evidence เป็น low-confidence carry ที่ไม่เข้า Personal Baseline และ OFF BED เป็น operational exception เพียงชนิดเดียว |
 
-รายการในหัวข้อนี้เป็นหลักฐานทางวิศวกรรมของรุ่นก่อนวันที่ 1 ก.ย. 2569 ไม่ถูกใช้ใน
-Product history, Baseline, Replay หรือ Score รุ่นปัจจุบัน รายงานที่ผู้ใช้เห็นหลัง
-cutover ต้องเป็น `Sleep Score` หรือ `Recovery Score` ตามสัญญาสองโหมดเท่านั้น
+รายการที่อยู่ก่อน cutover เป็นหลักฐานทางวิศวกรรมเท่านั้นและไม่ถูกใช้ใน Product
+history, Baseline, Replay หรือ Score รุ่นปัจจุบัน ส่วนรายการหลัง cutover เก็บเป็น
+ลำดับ release/provenance โดยแถวที่ใหม่กว่ามีอำนาจเหนือกฎที่ถูก supersede รายงานที่
+ผู้ใช้เห็นต้องเป็น `Sleep Score` หรือ `Recovery Score` ตามสัญญาสองโหมดเท่านั้น
 
 ### 9.2 One-time cleanup contract
 

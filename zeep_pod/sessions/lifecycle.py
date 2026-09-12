@@ -48,6 +48,7 @@ CHECKPOINT_SLEEP_CONTEXT_FIELDS = frozenset(
         "awake_rr_reference",
         "sleep_onset_at",
         "last_valid_frame_t",
+        "off_bed_latched",
     }
 )
 RESTART_SAFE_PHASES = frozenset({"waiting_bed", "recording"})
@@ -201,6 +202,8 @@ class SessionCheckpointStore:
             value = safe.get(key)
             if value is not None:
                 safe[key] = float(value)
+        if "off_bed_latched" in safe:
+            safe["off_bed_latched"] = bool(safe["off_bed_latched"])
         return safe
 
 
@@ -232,8 +235,10 @@ def service_resume_event(
         "type": "service_resume",
         "value": {
             "reason": "server_restart",
-            "continuity": "hold_last_confirmed_state_for_display_only",
-            "excluded_from_score": True,
+            "continuity": "hold_last_confirmed_state_scoreable_low_confidence",
+            "score_eligible": True,
+            "excluded_from_score": False,
+            "excluded_from_personal_baseline": True,
         },
     }
 

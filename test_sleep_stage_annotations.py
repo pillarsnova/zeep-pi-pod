@@ -121,7 +121,20 @@ class SleepStageAnnotationTests(unittest.TestCase):
                 requested_target_minutes=30,
                 apply=True,
             )
-            self.assertEqual(result["sessions"][0]["counts"]["wake"], 6)
+            # The six annotations still overlay only the intended events, while
+            # the complete 420-second report grid carries initial W through the
+            # otherwise sparse historical interval instead of reopening a gap.
+            self.assertEqual(result["sessions"][0]["counts"]["wake"], 84)
+            self.assertEqual(
+                result["sessions"][0]["report"]["sleep"]["actual_scored_s"],
+                420,
+            )
+            self.assertEqual(
+                result["sessions"][0]["report"]["sleep"][
+                    "classification_accounting"
+                ]["no_data_s"],
+                0,
+            )
             self.assertEqual(result["sessions"][0]["annotated_rounds"], 6)
             connection = sqlite3.connect(data_dir / "sessions.db")
             after = connection.execute(
@@ -192,7 +205,7 @@ class SleepStageAnnotationTests(unittest.TestCase):
                 requested_target_minutes=30,
                 apply=True,
             )
-            self.assertEqual(result["sessions"][0]["rounds"], 4)
+            self.assertEqual(result["sessions"][0]["rounds"], 12)
             self.assertEqual(result["sessions"][0]["rest_mode"]["group"], "nap_recovery")
             self.assertEqual(result["sessions"][0]["rest_mode"]["score_title"], "Recovery Score")
             connection = sqlite3.connect(data_dir / "sessions.db")
@@ -200,7 +213,7 @@ class SleepStageAnnotationTests(unittest.TestCase):
                 "SELECT value FROM events WHERE type='final_summary'"
             ).fetchone()[0])
             connection.close()
-            self.assertEqual(final["sample_interval_s"], 30)
+            self.assertEqual(final["sample_interval_s"], 10)
             self.assertEqual(final["sensor_sample_interval_s"], 10)
             self.assertEqual(final["night_summary"]["estimated_sleep_s"], 120)
             self.assertEqual(

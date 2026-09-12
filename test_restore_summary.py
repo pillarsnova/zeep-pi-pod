@@ -288,7 +288,7 @@ class RestoreSummaryTests(unittest.TestCase):
         self.assertTrue(active["trend"]["available"])
         self.assertFalse(active["trend"]["whole_day_readiness_trend"])
 
-    def test_session_report_integrates_summary_and_nap_environment_role(self):
+    def test_session_report_separates_recovery_environment_from_admin_qa(self):
         samples = [
             {
                 "bed": "On bed",
@@ -329,10 +329,17 @@ class RestoreSummaryTests(unittest.TestCase):
             quality["score"],
         )
         environment = report["environment_assessment"]
-        self.assertFalse(environment["context_only"])
+        self.assertTrue(environment["context_only"])
         self.assertTrue(environment["sleep_stage_context_only"])
-        self.assertTrue(environment["contributes_to_primary_score"])
-        self.assertEqual(environment["max_score_points"], 10.0)
+        self.assertFalse(environment["contributes_to_primary_score"])
+        self.assertEqual(environment["max_score_points"], 0.0)
+        recovery_environment = quality["environment_support"]
+        self.assertTrue(recovery_environment["contributes_to_primary_score"])
+        self.assertEqual(recovery_environment["max_points"], 10.0)
+        self.assertTrue(all(
+            finding["contributes_to_primary_score"] is False
+            for finding in report["findings"]
+        ))
 
     def test_missing_nap_sensor_is_qa_not_a_score_penalty(self):
         samples = [
@@ -385,7 +392,7 @@ class RestoreSummaryTests(unittest.TestCase):
     def test_report_version_bump_preserves_previous_approved_pair(self):
         self.assertEqual(
             SESSION_REPORT_VERSION,
-            "zeep-session-report-v10.6-continuity-accounting",
+            "zeep-session-report-v10.7-complete-occupied-epochs",
         )
         self.assertIn(
             (SESSION_REPORT_VERSION, SLEEP_QUALITY_VERSION),

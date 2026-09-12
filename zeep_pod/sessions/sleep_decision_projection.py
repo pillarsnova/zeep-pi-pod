@@ -7,23 +7,32 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from .sleep_event_data import decision_interval, event_value, finite_number
+from sleep_system_policy import (
+    ZEEP_OFF_BED_DATA_STATUSES,
+    continuity_hold_contract,
+)
 
-SLEEP_STATES = frozenset({"wake", "n1", "n2", "n3", "rem"})
-DEFAULT_HEART_RATE_RANGE = (25.0, 220.0)
-DEFAULT_RESPIRATION_RATE_RANGE = (2.0, 60.0)
+from .sleep_event_data import decision_interval, event_value, finite_number
+from .sleep_occupancy import (
+    CONFIRMED_RETURN_PROVENANCE as _CONFIRMED_RETURN_PROVENANCE,
+    DEFAULT_HEART_RATE_RANGE,
+    DEFAULT_RESPIRATION_RATE_RANGE,
+    SLEEP_STATES,
+    confirmed_bed_exit_evidence as _confirmed_bed_exit_evidence,
+    sample_confirms_fresh_on_bed_return,
+    sample_confirms_off_bed,
+)
+
 INITIAL_CONFIRMATION_MAX_SECONDS = 120.0
 EVIDENCE_EPOCH_SECONDS = 30.0
 
-_OFF_BED_LABELS = frozenset(
-    {"get out of bed", "off bed", "off_bed", "empty bed"}
-)
-_VERSION_FIELDS = (
-    "sleep_estimator_version",
-    "sleep_evidence_version",
-    "sleep_baseline_version",
-    "sleep_transition_policy",
-)
+_PROVENANCE_FIELDS = {
+    "sleep_estimator_version": "estimator_version",
+    "sleep_evidence_version": "evidence_version",
+    "sleep_baseline_version": "baseline_version",
+    "sleep_transition_policy": "transition_policy_version",
+}
+_VERSION_FIELDS = tuple(_PROVENANCE_FIELDS)
 _SLEEP_PROJECTION_FIELDS = (
     "sleep",
     "sleep_confirmed_state",
@@ -44,6 +53,9 @@ _SLEEP_PROJECTION_FIELDS = (
     "sleep_confidence",
     "sleep_probability",
     "sleep_decision_kind",
+    "sleep_pending_state",
+    "sleep_occupancy_provenance",
+    "acoustic_corroborated",
 )
 
 
@@ -51,11 +63,10 @@ _SLEEP_PROJECTION_FIELDS = (
 class _ProjectionCursor:
     """State needed while filling gaps in timestamp order."""
 
-    first_projected: int | None
-    last_projected: int | None
-    first_sample_time: float
     previous_stage: str | None = None
     previous_versions: dict[str, Any] = field(default_factory=dict)
+    off_bed_latched: bool = False
+    occupied_return_provenance: str | None = None
 
 
 def apply_sleep_decisions_to_samples(
@@ -134,13 +145,28 @@ def _stage_updates(
 ) -> dict[str, Any]:
     """Build timeline fields for one confirmed or held Stage event."""
     confirmation = value.get("confirmation") or {}
+    metrics = value.get("metrics") or {}
+    auxiliary = (
+        metrics.get("auxiliary_evidence")
+        if isinstance(metrics, Mapping)
+        else {}
+    ) or {}
+    acoustic = (
+        auxiliary.get("acoustic")
+        if isinstance(auxiliary, Mapping)
+        else {}
+    ) or {}
     held = bool(value.get("held_previous_state"))
     provisional = bool(value.get("provisional"))
+    baseline_excluded = bool(
+        held
+        or provisional
+        or value.get("excluded_from_personal_baseline", False)
+    )
     return {
         "sleep": stage,
         "sleep_confirmed_state": stage,
-        "sleep_estimator_version": value.get("estimator_version"),
-        "sleep_evidence_version": value.get("evidence_version"),
+        **_event_provenance(value),
         "sleep_confidence": value.get("confidence"),
         "sleep_probability": (value.get("probabilities") or {}).get(stage),
         "sleep_confirmation": confirmation,
@@ -148,6 +174,10 @@ def _stage_updates(
             confirmation.get("pending_state") or value.get("pending_state")
         ),
         "sleep_decision_kind": value.get("decision_kind"),
+        "sleep_occupancy_provenance": "durable_stage_event",
+        "acoustic_corroborated": bool(
+            isinstance(acoustic, Mapping) and acoustic.get("corroborated")
+        ),
         "sleep_held_previous_state": held,
         "sleep_provisional": provisional,
         "sleep_pending_state": value.get("pending_state"),
@@ -164,13 +194,13 @@ def _stage_updates(
         "sleep_challenger_counted_as_new_state": bool(
             value.get("challenger_counted_as_new_state")
         ),
-        "sleep_score_eligible": bool(value.get("score_eligible", True)),
-        "sleep_excluded_from_score": bool(
-            value.get("excluded_from_score", False)
-        ),
-        "sleep_excluded_from_personal_baseline": bool(
-            value.get("excluded_from_personal_baseline", False)
-        ),
+        # Every durable five-state decision owns occupied Session time.  Old
+        # events may carry v1.28 provisional-exclusion flags; those flags are
+        # compatibility provenance, not authority to reopen a time gap under
+        # the complete occupied-epoch contract.
+        "sleep_score_eligible": True,
+        "sleep_excluded_from_score": False,
+        "sleep_excluded_from_personal_baseline": baseline_excluded,
         "_sleep_attribution_projected": True,
     }
 
@@ -181,7 +211,12 @@ def _apply_status_events(
     *,
     fallback_interval_s: float,
 ) -> None:
-    """Apply WAIT/NO DATA/OFF BED without inventing a Sleep Stage."""
+    """Apply only explicit occupancy boundaries over five-state continuity.
+
+    Historical WAIT/NO DATA rows are evidence-quality metadata. They no longer
+    erase an occupied Epoch; the gap filler below attributes that time to W or
+    the last confirmed State. Confirmed OFF BED remains authoritative.
+    """
     for event in events:
         value = event_value(event)
         interval = decision_interval(
@@ -194,7 +229,13 @@ def _apply_status_events(
         start_epoch, end_epoch = interval
         status = str(
             value.get("data_status") or value.get("status") or "no_data"
-        )
+        ).strip().lower()
+        if not _status_ends_occupancy(status, value):
+            continue
+        if status not in ZEEP_OFF_BED_DATA_STATUSES:
+            # Confirmed evidence and legacy durable state=off_bed are both
+            # authoritative even when they lack a modern canonical status.
+            status = "confirmed_off_bed"
         updates = _status_event_updates(status, value)
         for sample in samples:
             if _sample_owned_by_interval(sample, start_epoch, end_epoch):
@@ -208,48 +249,49 @@ def _fill_unattributed_samples(
     heart_rate_range: tuple[float, float],
     respiration_rate_range: tuple[float, float],
 ) -> None:
-    """Fill every leftover row with a bounded hold or explicit status."""
+    """Fill every leftover row with continuity or confirmed OFF BED."""
     ordered = sorted(
         range(len(samples)),
         key=lambda index: _sample_time(samples[index]),
     )
-    cursor = _projection_cursor(samples, ordered)
-    for position, index in enumerate(ordered):
+    cursor = _ProjectionCursor()
+    for index in ordered:
         sample = samples[index]
+        confirmed_off_bed = sample_confirms_off_bed(sample)
+        return_confirmed = sample_confirms_fresh_on_bed_return(
+            sample,
+            heart_rate_range=heart_rate_range,
+            respiration_rate_range=respiration_rate_range,
+        )
         projected = bool(sample.pop("_sleep_attribution_projected", False))
         if projected:
+            stage = sample.get("sleep")
+            if confirmed_off_bed and stage in SLEEP_STATES:
+                cursor.off_bed_latched = True
+                cursor.occupied_return_provenance = None
+                sample.update(_operational_updates(
+                    "empty_bed",
+                    provenance={
+                        **cursor.previous_versions,
+                        **_sample_provenance(sample),
+                    },
+                ))
+            elif cursor.off_bed_latched and stage in SLEEP_STATES:
+                # This stage exists only because _apply_stage_events projected
+                # a durable decision; cached/raw sample stages were reset. Live
+                # commits a stage only from valid occupied evidence, so the
+                # event is canonical return proof even when old Timeline rows
+                # lack bcg_analysis_valid.
+                cursor.off_bed_latched = False
             _remember_projected_state(cursor, sample)
             continue
         updates = _fallback_updates(
             sample,
-            position=position,
-            ordered=ordered,
-            samples=samples,
             cursor=cursor,
-            fallback_interval_s=fallback_interval_s,
-            heart_rate_range=heart_rate_range,
-            respiration_rate_range=respiration_rate_range,
+            return_confirmed=return_confirmed,
         )
         sample.update(updates)
-
-
-def _projection_cursor(
-    samples: Sequence[Mapping[str, Any]],
-    ordered: Sequence[int],
-) -> _ProjectionCursor:
-    """Locate the durable portion of the timeline before gap filling."""
-    positions = [
-        position
-        for position, index in enumerate(ordered)
-        if samples[index].get("_sleep_attribution_projected")
-    ]
-    return _ProjectionCursor(
-        first_projected=positions[0] if positions else None,
-        last_projected=positions[-1] if positions else None,
-        first_sample_time=(
-            _sample_time(samples[ordered[0]]) if ordered else math.inf
-        ),
-    )
+        _remember_projected_state(cursor, sample)
 
 
 def _remember_projected_state(
@@ -258,121 +300,103 @@ def _remember_projected_state(
 ) -> None:
     """Advance continuity only through an explicit Stage decision."""
     stage = sample.get("sleep")
+    provenance = _sample_provenance(sample)
     if stage in SLEEP_STATES:
         cursor.previous_stage = str(stage)
         cursor.previous_versions = {
-            key: sample.get(key) for key in _VERSION_FIELDS
+            **cursor.previous_versions,
+            **provenance,
         }
+        return_source = sample.get("sleep_occupancy_provenance")
+        cursor.occupied_return_provenance = (
+            str(return_source)
+            if return_source in _CONFIRMED_RETURN_PROVENANCE
+            else None
+        )
         return
+    if sample_confirms_off_bed(sample):
+        cursor.off_bed_latched = True
+        cursor.occupied_return_provenance = None
+        cursor.previous_versions = {
+            **cursor.previous_versions,
+            **provenance,
+        }
     cursor.previous_stage = None
-    cursor.previous_versions = {}
 
 
 def _fallback_updates(
     sample: Mapping[str, Any],
     *,
-    position: int,
-    ordered: Sequence[int],
-    samples: Sequence[Mapping[str, Any]],
     cursor: _ProjectionCursor,
-    fallback_interval_s: float,
-    heart_rate_range: tuple[float, float],
-    respiration_rate_range: tuple[float, float],
+    return_confirmed: bool,
 ) -> dict[str, Any]:
-    """Choose a safe attribution for one row lacking a durable decision."""
-    off_bed = _is_off_bed(sample)
-    paired_vitals = _paired_vitals(
-        sample,
-        heart_rate_range=heart_rate_range,
-        respiration_rate_range=respiration_rate_range,
-    )
-    bcg_valid = sample.get("bcg_analysis_valid") is True
-    if (
-        cursor.previous_stage in SLEEP_STATES
-        and paired_vitals
-        and bcg_valid
-        and not off_bed
-        and _within_partial_tail(
-            position,
-            ordered=ordered,
-            samples=samples,
-            cursor=cursor,
-            fallback_interval_s=fallback_interval_s,
+    """Give every non-OFF-BED Session row a scoreable five-state label."""
+    if sample_confirms_off_bed(sample):
+        cursor.off_bed_latched = True
+        cursor.occupied_return_provenance = None
+        return _operational_updates(
+            "empty_bed", provenance=cursor.previous_versions
         )
-    ):
-        return _tail_hold_updates(cursor)
-    if off_bed:
-        return _operational_updates("empty_bed")
-    if not paired_vitals:
-        return _operational_updates("invalid_or_missing_current_vitals")
-    if not bcg_valid:
-        return _operational_updates("invalid_current_bcg")
-    if cursor.first_projected is None or position < cursor.first_projected:
-        return _initial_status_updates(sample, cursor=cursor)
-    return _operational_updates("missing_durable_sleep_decision")
+    if cursor.off_bed_latched and not return_confirmed:
+        return _operational_updates(
+            "empty_bed", provenance=cursor.previous_versions
+        )
+    if return_confirmed:
+        cursor.off_bed_latched = False
+        cursor.occupied_return_provenance = (
+            "fresh_same_packet_hr_rr_bcg"
+        )
+    return _carry_updates(cursor)
 
 
-def _within_partial_tail(
-    position: int,
-    *,
-    ordered: Sequence[int],
-    samples: Sequence[Mapping[str, Any]],
-    cursor: _ProjectionCursor,
-    fallback_interval_s: float,
-) -> bool:
-    """Allow display continuity only in the unfinished acquisition tail."""
-    if cursor.last_projected is None or position <= cursor.last_projected:
-        return False
-    tail_start = _sample_time(samples[ordered[cursor.last_projected]])
-    current_time = _sample_time(samples[ordered[position]])
-    limit = max(EVIDENCE_EPOCH_SECONDS, float(fallback_interval_s))
-    return current_time - tail_start <= limit + 0.001
-
-
-def _initial_status_updates(
-    sample: Mapping[str, Any],
-    *,
-    cursor: _ProjectionCursor,
-) -> dict[str, Any]:
-    """Bound the initial WAIT label to at most 120 wall-clock seconds."""
-    interval = max(0.1, float(sample.get("sample_interval_s") or 10.0))
-    elapsed = _sample_time(sample) - cursor.first_sample_time + interval
-    status = (
-        "confirming_initial_state"
-        if elapsed <= INITIAL_CONFIRMATION_MAX_SECONDS
-        else "initial_confirmation_timeout"
+def _carry_updates(cursor: _ProjectionCursor) -> dict[str, Any]:
+    """Carry the last State, or anchor initial occupied time at Wake."""
+    confirmation = continuity_hold_contract(
+        cursor.previous_stage,
+        decision="projected_occupied_gap_hold",
     )
-    return _operational_updates(status)
-
-
-def _tail_hold_updates(cursor: _ProjectionCursor) -> dict[str, Any]:
-    """Keep the prior State visible while excluding the partial epoch."""
-    stage = cursor.previous_stage
+    stage = str(confirmation["confirmed_state"])
     return {
         "sleep": stage,
         "sleep_confirmed_state": stage,
         "sleep_evidence_candidate": None,
-        "sleep_confirmation": {
-            "decision": "partial_epoch_continuity_hold",
-            "decision_kind": "continuity_hold",
-            "held_previous_state": True,
-            "provisional": True,
-            "score_eligible": False,
-            "excluded_from_score": True,
-        },
-        "sleep_provisional": True,
-        "sleep_held_previous_state": True,
-        "sleep_data_status": "provisional_hold",
+        "sleep_confirmation": confirmation,
+        "sleep_provisional": False,
+        "sleep_held_previous_state": bool(
+            confirmation["held_previous_state"]
+        ),
+        "sleep_data_status": str(confirmation["data_status"]),
         "sleep_score_attribution_state": stage,
         "sleep_challenger_counted_as_new_state": False,
-        "sleep_score_eligible": False,
-        "sleep_excluded_from_score": True,
+        "sleep_score_eligible": True,
+        "sleep_excluded_from_score": False,
         "sleep_excluded_from_personal_baseline": True,
         "sleep_confidence": "low",
         "sleep_probability": None,
-        "sleep_decision_kind": "continuity_hold",
+        "sleep_decision_kind": confirmation["decision_kind"],
+        "sleep_occupancy_provenance": (
+            cursor.occupied_return_provenance
+        ),
+        "acoustic_corroborated": False,
         **cursor.previous_versions,
     }
+
+
+def _status_ends_occupancy(
+    status: str,
+    value: Mapping[str, Any],
+) -> bool:
+    """Return whether a durable status explicitly proves no occupant."""
+    state = str(value.get("state") or "").strip().lower()
+    explicit_status = value.get("data_status") or value.get("status")
+    return bool(
+        status.strip().lower() in ZEEP_OFF_BED_DATA_STATUSES
+        # Older canonical status events stored only state=off_bed. Accept that
+        # durable representation, but never let an explicitly contradictory
+        # data-quality status manufacture a latch.
+        or (state == "off_bed" and explicit_status is None)
+        or _confirmed_bed_exit_evidence(value)
+    )
 
 
 def _status_event_updates(
@@ -393,17 +417,20 @@ def _status_event_updates(
         "sleep_score_eligible": False,
         "sleep_excluded_from_score": True,
         "sleep_excluded_from_personal_baseline": True,
-        "sleep_estimator_version": value.get("estimator_version"),
-        "sleep_evidence_version": value.get("evidence_version"),
-        "sleep_baseline_version": value.get("baseline_version"),
-        "sleep_transition_policy": value.get("transition_policy_version"),
+        **_event_provenance(value),
+        "sleep_occupancy_provenance": "canonical_off_bed_status",
+        "acoustic_corroborated": False,
         "sleep_confidence": value.get("confidence") or "low",
         "sleep_probability": None,
         "_sleep_attribution_projected": True,
     }
 
 
-def _operational_updates(data_status: str) -> dict[str, Any]:
+def _operational_updates(
+    data_status: str,
+    *,
+    provenance: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """Build fields for an inferred non-scoring operational status."""
     return {
         "sleep": None,
@@ -421,6 +448,9 @@ def _operational_updates(data_status: str) -> dict[str, Any]:
         "sleep_confidence": "low",
         "sleep_probability": None,
         "sleep_decision_kind": "operational_status",
+        "sleep_occupancy_provenance": "confirmed_off_bed_continuity",
+        "acoustic_corroborated": False,
+        **dict(provenance or {}),
     }
 
 
@@ -442,24 +472,19 @@ def _sample_time(sample: Mapping[str, Any]) -> float:
     return float(value) if finite_number(value) else math.inf
 
 
-def _is_off_bed(sample: Mapping[str, Any]) -> bool:
-    return str(sample.get("bed") or "").strip().lower() in _OFF_BED_LABELS
+def _event_provenance(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Translate all durable decision-version fields to Timeline names."""
+    return {
+        timeline_field: value.get(event_field)
+        for timeline_field, event_field in _PROVENANCE_FIELDS.items()
+        if value.get(event_field) is not None
+    }
 
 
-def _paired_vitals(
-    sample: Mapping[str, Any],
-    *,
-    heart_rate_range: tuple[float, float],
-    respiration_rate_range: tuple[float, float],
-) -> bool:
-    """Require a physiologically plausible paired HR/RR observation."""
-    heart_rate = sample.get("hr")
-    respiration_rate = sample.get("rr")
-    return bool(
-        finite_number(heart_rate)
-        and heart_rate_range[0] <= float(heart_rate) <= heart_rate_range[1]
-        and finite_number(respiration_rate)
-        and respiration_rate_range[0]
-        <= float(respiration_rate)
-        <= respiration_rate_range[1]
-    )
+def _sample_provenance(sample: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep known provenance while extending a durable decision or status."""
+    return {
+        field: sample.get(field)
+        for field in _VERSION_FIELDS
+        if sample.get(field) is not None
+    }

@@ -212,7 +212,7 @@ def _environment_drivers(
             "affects_source_score": affects_source_score,
             "relationship": (
                 "recovery_score_component_and_session_context"
-                if group == "nap_recovery"
+                if group == "nap_recovery" and affects_source_score
                 else "session_context_only"
             ),
             "causal_claim": False,
@@ -250,7 +250,10 @@ def _merge_drivers(
     # A concrete environmental issue is more useful than repeating the generic
     # Environment component. Keep the point-bearing generic component only when
     # there is no metric-level issue to show.
-    if environment_attention:
+    if any(
+        item.get("affects_source_score")
+        for item in environment_attention
+    ):
         component_attention = [
             item for item in component_attention if item["key"] != "environment_support"
         ]

@@ -80,7 +80,13 @@ ZEEP ไม่คัดลอกสูตร น้ำหนัก หรือ 
 
 Environment ไม่ได้สร้าง W/N1/N2/N3/REM แม้ใน Nap แต่ถูกนำมาคิดเป็น
 องค์ประกอบแบบจำกัดของ Recovery Score เพราะคำถามของโหมดคือคุณภาพของ
-“โอกาสพักใน ZEEP” ไม่ใช่การตรวจ Sleep Stage
+“โอกาสพักใน ZEEP” ไม่ใช่การตรวจ Sleep Stage โดยคะแนนส่วนนี้ใช้เฉพาะค่าที่
+วัดระหว่าง State-attributed rest และตัด confirmed OFF BED/Sensor gap ออก;
+ค่าทั้ง Session ยังคงแสดงแยกใน Admin QA
+
+Recovery Score เผยแพร่เมื่อมี eligible rest อย่างน้อย 10 นาทีและมี HR/RR คู่จริง
+อย่างน้อย 6 จุด ช่วง State continuity carry นับเป็นเวลาพัก แต่ไม่สร้างหลักฐาน
+HR/RR, Movement หรือ Environment เพิ่มขึ้นเอง
 
 ## 4. Five-driver taxonomy
 
@@ -167,7 +173,7 @@ Coverage/Tier เป็นบริบท QA สำหรับ Admin ไม่�
     "type": "sleep_score",
     "title": "Sleep Score",
     "value": 76,
-    "formula_version": "zeep-sleep-score-v1.0-20-30-30-15-5"
+    "formula_version": "zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage"
   },
   "status": {
     "key": "sleep_restore_good",
@@ -198,14 +204,14 @@ Historical `auto/unknown_legacy` ต้องส่ง `unresolved_score` แล
 
 | ชั้น | Version |
 |---|---|
-| Session report | `zeep-session-report-v10.6-continuity-accounting` |
+| Session report | `zeep-session-report-v10.7-complete-occupied-epochs` |
 | Restore Summary | `zeep-restore-summary-v1.0` |
 | Action bands | `zeep-restore-action-bands-v1.0` |
 | Driver policy | `zeep-restore-drivers-v1.0` |
 | Baseline comparison | `zeep-restore-personal-baseline-v1.0` |
 | Recommendation | `zeep-restore-recommendation-v1.0` |
-| Sleep Score formula | `zeep-sleep-score-v1.0-20-30-30-15-5` |
-| Recovery Score formula | `zeep-recovery-score-v2.0-targeted-25-35-30-10` |
+| Sleep Score formula | `zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage` |
+| Recovery Score formula | `zeep-recovery-score-v2.1-complete-rest-25-35-30-10` |
 
 การเพิ่ม Summary ทำให้ Session Report เปลี่ยน version แต่ไม่เปลี่ยนสูตร
 หรือคะแนนเดิม จึงคงคู่ Report/Quality รุ่นก่อนหน้าไว้ใน approved history

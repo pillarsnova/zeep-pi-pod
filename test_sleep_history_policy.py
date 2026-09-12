@@ -110,7 +110,7 @@ class SleepHistoryPolicyTests(unittest.TestCase):
             "n2",
         )
 
-    def test_replay_exposes_every_empty_epoch_as_no_data(self):
+    def test_replay_attributes_empty_recording_epochs_to_initial_wake(self):
         replay = replay_session(
             [],
             0.0,
@@ -120,10 +120,28 @@ class SleepHistoryPolicyTests(unittest.TestCase):
         )
 
         self.assertEqual(replay["evaluation_epoch_count"], 3)
-        self.assertEqual(replay["confirmed_count"], 0)
-        self.assertEqual(replay["operational_status_counts"], {"no_data": 3})
+        self.assertEqual(replay["confirmed_count"], 3)
+        self.assertEqual(replay["operational_status_counts"], {})
+        self.assertEqual(
+            [row["state"] for row in replay["state_rows"]],
+            ["wake", "wake", "wake"],
+        )
+        self.assertEqual(
+            replay["state_rows"][0]["decision"],
+            "initial_awake_anchor",
+        )
+        self.assertTrue(all(
+            row["score_eligible"] for row in replay["state_rows"]
+        ))
+        self.assertTrue(all(
+            row["excluded_from_personal_baseline"]
+            for row in replay["state_rows"]
+        ))
+        accounting = replay["classification_accounting"]
+        self.assertEqual(accounting["occupied_in_pod_state_gap_s"], 0.0)
+        self.assertTrue(accounting["occupied_state_invariant"]["holds"])
 
-    def test_current_epoch_requires_bed_hr_rr_and_raw_bcg(self):
+    def test_incomplete_epoch_carries_state_without_fabricating_evidence(self):
         replay = replay_session(
             self.packets_for_minute(missing_waveform_bucket=4),
             0.0,
@@ -133,11 +151,19 @@ class SleepHistoryPolicyTests(unittest.TestCase):
         )
 
         self.assertEqual(replay["evaluation_epoch_count"], 2)
-        self.assertEqual(replay["status_rows"][-1]["state"], "no_data")
+        self.assertEqual(replay["status_rows"], [])
+        held = replay["state_rows"][-1]
+        self.assertEqual(held["state"], "wake")
         self.assertEqual(
-            replay["status_rows"][-1]["data_status"],
-            "incomplete_current_epoch_evidence",
+            held["decision"],
+            "incomplete_current_epoch_evidence_hold",
         )
+        self.assertEqual(
+            held["confirmation"]["data_status"], "continuity_hold"
+        )
+        self.assertTrue(held["score_eligible"])
+        self.assertFalse(held["excluded_from_score"])
+        self.assertTrue(held["excluded_from_personal_baseline"])
         self.assertFalse(any(
             row["t"] == 60.0 for row in replay["evidence_rows"]
         ))

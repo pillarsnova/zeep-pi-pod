@@ -1,5 +1,4 @@
 import base64
-import json
 import math
 import sqlite3
 import struct
@@ -17,8 +16,6 @@ from sleep_signal_features import (
     filter_vital_values,
     linear_slope_per_minute,
     movement_window_metrics,
-    sleep_classification_gap_controls,
-    sleep_classification_gap_timeline,
     sleep_movement_evidence,
     summary_features,
     terminal_occupancy_timeline,
@@ -191,12 +188,10 @@ class SignalFeatureTests(unittest.TestCase):
         )
         self.assertEqual(
             [period["state"] for period in periods],
-            ["no_user_on_bed", "exited_zeep"],
+            ["exited_zeep"],
         )
-        self.assertEqual(periods[0]["start_time"], "1970-01-01T00:01:40+00:00")
-        self.assertEqual(periods[0]["end_time"], "1970-01-01T00:01:50+00:00")
-        self.assertEqual(periods[1]["start_time"], "1970-01-01T00:01:50+00:00")
-        self.assertEqual(periods[1]["end_time"], "1970-01-01T00:02:20+00:00")
+        self.assertEqual(periods[0]["start_time"], "1970-01-01T00:01:50+00:00")
+        self.assertEqual(periods[0]["end_time"], "1970-01-01T00:02:20+00:00")
         self.assertTrue(all(not period["sleep_stage"] for period in periods))
 
     def test_missing_vitals_without_confirmed_exit_is_not_occupancy_truth(self):
@@ -285,198 +280,6 @@ class SignalFeatureTests(unittest.TestCase):
             [{"state": None}, {"state": "off_bed"}],
             session_end=120,
         ))
-
-    def test_report_exposes_off_bed_gap_without_creating_sleep_stage(self):
-        periods = [
-            {"state": "n2", "start_time": 100, "end_time": 110},
-            {"state": "n1", "start_time": 150, "end_time": 160},
-        ]
-        samples = [
-            {"t": t, "hr": None, "rr": None, "bed": "Get out of bed"}
-            for t in (110, 120, 130, 140)
-        ]
-        gaps = sleep_classification_gap_timeline(
-            periods,
-            samples,
-            session_start=100,
-            classification_end=160,
-            sensor_sample_interval_s=10,
-        )
-        self.assertEqual(len(gaps), 1)
-        self.assertEqual(gaps[0]["state"], "off_bed")
-        self.assertEqual(gaps[0]["duration_s"], 40.0)
-        self.assertEqual(gaps[0]["decision_kind"], "classification_gap")
-        self.assertEqual(gaps[0]["coverage"]["off_bed_rows"], 4)
-        self.assertFalse(gaps[0]["sleep_stage"])
-        self.assertTrue(gaps[0]["excluded_from_score"])
-
-    def test_report_labels_vital_or_sensor_gap_instead_of_hiding_time(self):
-        periods = [{"state": "wake", "start_time": 120, "end_time": 130}]
-        missing_vitals = sleep_classification_gap_timeline(
-            periods,
-            [
-                {"t": 100, "hr": None, "rr": None, "bed": "On bed"},
-                {"t": 110, "hr": None, "rr": None, "bed": "Moving"},
-            ],
-            session_start=100,
-            classification_end=130,
-            sensor_sample_interval_s=10,
-        )
-        self.assertEqual(missing_vitals[0]["state"], "no_data")
-        self.assertEqual(
-            missing_vitals[0]["label"],
-            "NO DATA · ไม่มี HR/RR ที่ใช้ได้",
-        )
-        self.assertEqual(
-            missing_vitals[0]["data_status"], "missing_current_vitals")
-
-        sensor_gap = sleep_classification_gap_timeline(
-            periods,
-            [],
-            session_start=90,
-            classification_end=130,
-            sensor_sample_interval_s=10,
-        )
-        self.assertEqual(sensor_gap[0]["state"], "sensor_gap")
-        self.assertEqual(
-            sensor_gap[0]["label"], "NO DATA · ไม่มีข้อมูล Sensor")
-        self.assertEqual(sensor_gap[0]["coverage"]["sensor_rows"], 0)
-
-    def test_wait_label_is_reserved_for_initial_confirmation(self):
-        periods = [{"state": "wake", "start_time": 120, "end_time": 130}]
-        initial = sleep_classification_gap_timeline(
-            periods,
-            [
-                {"t": 100, "hr": 70, "rr": 16, "bed": "On bed"},
-                {"t": 110, "hr": 69, "rr": 15, "bed": "On bed"},
-            ],
-            session_start=100,
-            classification_end=130,
-            sensor_sample_interval_s=10,
-        )
-        self.assertEqual(
-            initial[0]["label"], "WAIT · กำลังยืนยันสถานะ")
-        self.assertEqual(
-            initial[0]["data_status"], "confirming_initial_state")
-
-        later = sleep_classification_gap_timeline(
-            [
-                {"state": "wake", "start_time": 100, "end_time": 120},
-                {"state": "n1", "start_time": 150, "end_time": 170},
-            ],
-            [
-                {"t": 120, "hr": 65, "rr": 15, "bed": "On bed"},
-                {"t": 130, "hr": 64, "rr": 14, "bed": "On bed"},
-                {"t": 140, "hr": 64, "rr": 14, "bed": "On bed"},
-            ],
-            session_start=100,
-            classification_end=170,
-            sensor_sample_interval_s=10,
-        )
-        self.assertEqual(
-            later[0]["label"], "NO DATA · หลักฐานยังไม่ครบ")
-        self.assertEqual(
-            later[0]["data_status"], "no_data_unconfirmed_evidence")
-
-    def test_initial_wait_is_capped_at_two_minutes(self):
-        samples = [
-            {"t": float(second), "hr": 70, "rr": 16, "bed": "On bed"}
-            for second in range(10, 3610, 10)
-        ]
-        gaps = sleep_classification_gap_timeline(
-            [],
-            samples,
-            session_start=0,
-            classification_end=3600,
-            sensor_sample_interval_s=10,
-        )
-
-        self.assertEqual(len(gaps), 2)
-        self.assertEqual(gaps[0]["duration_s"], 120.0)
-        self.assertEqual(gaps[0]["data_status"], "confirming_initial_state")
-        self.assertEqual(gaps[1]["duration_s"], 3480.0)
-        self.assertEqual(gaps[1]["data_status"], "initial_confirmation_timeout")
-        self.assertNotIn("WAIT", gaps[1]["label"])
-
-    def test_report_does_not_add_noise_for_short_decision_gap(self):
-        gaps = sleep_classification_gap_timeline(
-            [
-                {"state": "n2", "start_time": 100, "end_time": 120},
-                {"state": "n3", "start_time": 130, "end_time": 150},
-            ],
-            [],
-            session_start=100,
-            classification_end=150,
-            sensor_sample_interval_s=10,
-        )
-        self.assertEqual(gaps, [])
-
-    def test_report_holds_previous_stage_across_service_restart_for_display(self):
-        gaps = sleep_classification_gap_timeline(
-            [
-                {"state": "n2", "start_time": 100, "end_time": 120},
-                {"state": "n1", "start_time": 160, "end_time": 180},
-            ],
-            [],
-            session_start=100,
-            classification_end=180,
-            sensor_sample_interval_s=10,
-            service_pause_times=[121],
-            service_resume_times=[158],
-        )
-        self.assertEqual(len(gaps), 1)
-        self.assertEqual(gaps[0]["state"], "restart_hold")
-        self.assertEqual(gaps[0]["held_state"], "n2")
-        self.assertTrue(gaps[0]["held_previous_state"])
-        self.assertEqual(
-            gaps[0]["data_status"], "service_restart_hold")
-        self.assertFalse(gaps[0]["sleep_stage"])
-        self.assertTrue(gaps[0]["excluded_from_score"])
-
-    def test_report_keeps_first_wait_even_if_restart_marker_exists(self):
-        gaps = sleep_classification_gap_timeline(
-            [{"state": "wake", "start_time": 140, "end_time": 160}],
-            [],
-            session_start=100,
-            classification_end=160,
-            sensor_sample_interval_s=10,
-            service_pause_times=[110],
-            service_resume_times=[130],
-        )
-        self.assertEqual(len(gaps), 1)
-        self.assertEqual(gaps[0]["state"], "sensor_gap")
-        self.assertFalse(gaps[0]["held_previous_state"])
-
-    def test_operational_annotation_holds_later_gaps_with_audit(self):
-        controls = sleep_classification_gap_controls([{
-            "type": "classification_gap_annotation",
-            "timestamp": "2026-09-05T00:00:00+00:00",
-            "value": json.dumps({
-                "policy": "hold_previous_confirmed_state",
-                "scope": "after_initial_wait",
-                "display_only": True,
-            }),
-        }])
-        gaps = sleep_classification_gap_timeline(
-            [
-                {"state": "wake", "start_time": 130, "end_time": 150},
-                {"state": "n1", "start_time": 180, "end_time": 200},
-            ],
-            [],
-            session_start=100,
-            classification_end=230,
-            sensor_sample_interval_s=10,
-            **controls,
-        )
-        self.assertEqual([gap["state"] for gap in gaps], [
-            "sensor_gap", "restart_hold", "restart_hold",
-        ])
-        self.assertEqual(gaps[1]["held_state"], "wake")
-        self.assertEqual(gaps[2]["held_state"], "n1")
-        self.assertEqual(
-            gaps[1]["operational_hold_source"],
-            "session_operational_annotation",
-        )
 
     def test_tiny_bcg_shift_is_not_arousal_proxy_evidence(self):
         proxy = arousal_proxy_evidence({

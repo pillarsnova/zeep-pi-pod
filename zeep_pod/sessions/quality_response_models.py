@@ -220,10 +220,34 @@ class PublicContinuity(ContractModel):
 class PublicQualityDataCoverage(ContractModel):
     ratio: float | None = Field(default=None, ge=0, le=1)
     pct: float | None = Field(default=None, ge=0, le=100)
+    physiological_evidence_ratio: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+    )
+    physiological_evidence_pct: float | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+    )
+    state_attribution_ratio: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+    )
+    state_attribution_pct: float | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+    )
+    recording_ratio: float | None = Field(default=None, ge=0, le=1)
+    recording_pct: float | None = Field(default=None, ge=0, le=100)
+    paired_hr_rr_pct: float | None = Field(default=None, ge=0, le=100)
     points: float | None = Field(default=None, ge=0)
     max_points: float | None = Field(default=None, ge=0)
     score_component: bool | None = None
     environment_pct: float | None = Field(default=None, ge=0, le=100)
+    basis: str | None = None
 
 
 class PublicComponentPoints(ContractModel):
@@ -256,6 +280,17 @@ class PublicScoreConfidence(ContractModel):
     level: str | None = None
     label: str | None = None
     session_coverage_pct: float | None = Field(default=None, ge=0, le=100)
+    timeline_coverage_pct: float | None = Field(default=None, ge=0, le=100)
+    state_attribution_coverage_pct: float | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+    )
+    physiological_evidence_coverage_pct: float | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+    )
     paired_hr_rr_coverage_pct: float | None = Field(default=None, ge=0, le=100)
     coverage_is_admin_qa_context: bool | None = None
     coverage_can_hide_score: bool | None = None

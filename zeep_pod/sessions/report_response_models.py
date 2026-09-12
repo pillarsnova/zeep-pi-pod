@@ -1,6 +1,6 @@
 """Strict nested response contracts for public Session reports.
 
-Historical reports evolved between v10.3 and v10.6, so every field is
+Historical reports evolved between v10.3 and v10.7, so every field is
 optional.  When a section is present, however, undocumented nested keys are
 rejected.  This keeps legacy summaries readable without turning their JSON
 objects into an unbounded public API surface.
@@ -275,6 +275,12 @@ class PublicReportCoverage(ContractModel):
     recording_pct: float | None = Field(default=None, ge=0, le=100)
     bcg_pct: float | None = Field(default=None, ge=0, le=100)
     sleep_stage_pct: float | None = Field(default=None, ge=0, le=100)
+    state_attribution_pct: float | None = Field(default=None, ge=0, le=100)
+    physiological_evidence_pct: float | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+    )
     environment_pct: float | None = Field(default=None, ge=0, le=100)
 
 

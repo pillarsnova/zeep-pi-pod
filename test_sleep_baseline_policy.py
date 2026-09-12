@@ -271,8 +271,14 @@ class SleepClassificationGateTests(unittest.TestCase):
         self.set_session(active=True, recording=True)
         self.add_frame(hr=None, rr=None, bcg_valid=False)
         result = zeep.estimate_sleep_state()
-        self.assert_inactive(result, "no_data")
-        self.assertEqual(result["data_status"], "invalid_or_missing_current_vitals")
+        self.assertEqual(result["state"], "n3")
+        self.assertTrue(result["classification_active"])
+        self.assertTrue(result["score_eligible"])
+        self.assertTrue(result["excluded_from_personal_baseline"])
+        self.assertEqual(
+            result["current_data_status"],
+            "invalid_or_missing_current_vitals",
+        )
 
     def test_one_invalid_frame_blocks_the_entire_current_epoch(self):
         self.set_session(active=True, recording=True)
@@ -284,9 +290,11 @@ class SleepClassificationGateTests(unittest.TestCase):
 
         result = zeep.estimate_sleep_state()
 
-        self.assert_inactive(result, "no_data")
+        self.assertEqual(result["state"], "n3")
+        self.assertTrue(result["score_eligible"])
+        self.assertTrue(result["excluded_from_personal_baseline"])
         self.assertEqual(
-            result["data_status"],
+            result["current_data_status"],
             "incomplete_current_evidence_epoch",
         )
 
@@ -307,6 +315,50 @@ class SleepClassificationGateTests(unittest.TestCase):
         self.assertEqual(result["data_status"], "empty_bed")
         self.assertIsNone(zeep._restart_sleep_hold_result("gate-test"))
 
+    def test_off_bed_stays_latched_until_fresh_on_bed_vitals(self):
+        self.set_session(active=True, recording=True)
+        now = time.time()
+        clock = {"next_evidence_s": 20.0}
+
+        exited = zeep._sleep_value_between_evidence_epochs(
+            {
+                "t": now,
+                "bcg_valid": False,
+                "status": 1,
+                "confirmed_status": 1,
+                "bed_exit_evidence": {"confirmed": True},
+            },
+            "gate-test",
+            clock,
+        )
+        missing = zeep._sleep_value_between_evidence_epochs(
+            {
+                "t": now + 10.0,
+                "bcg_valid": False,
+                "status": None,
+                "confirmed_status": None,
+                "bed_exit_evidence": {"confirmed": False},
+            },
+            "gate-test",
+            clock,
+        )
+        returned = zeep._sleep_value_between_evidence_epochs(
+            {
+                "t": now + 20.0,
+                "bcg_valid": True,
+                "status": 0,
+                "confirmed_status": 0,
+                "bed_exit_evidence": {"confirmed": False},
+            },
+            "gate-test",
+            clock,
+        )
+
+        self.assertEqual(exited["state"], "off_bed")
+        self.assertEqual(missing["state"], "off_bed")
+        self.assertEqual(returned["state"], "wake")
+        self.assertTrue(returned["score_eligible"])
+
     def test_restart_reuses_last_confirmed_stage_while_vitals_reconnect(self):
         self.set_session(active=True, recording=True)
         hold = zeep._install_restart_sleep_hold(
@@ -326,13 +378,15 @@ class SleepClassificationGateTests(unittest.TestCase):
         self.assertTrue(result["classification_active"])
         self.assertFalse(result["evidence_active"])
         self.assertTrue(result["held_previous_state"])
-        self.assertTrue(result["display_only_after_restart"])
-        self.assertEqual(result["data_status"], "restored_confirmed_state")
+        self.assertFalse(result.get("display_only_after_restart", False))
+        self.assertTrue(result["score_eligible"])
+        self.assertTrue(result["excluded_from_personal_baseline"])
+        self.assertEqual(result["data_status"], "continuity_hold")
         self.assertEqual(
             result["current_data_status"], "invalid_or_missing_current_vitals"
         )
 
-    def test_first_session_without_confirmed_stage_still_waits(self):
+    def test_first_session_without_evidence_anchors_wake(self):
         self.set_session(active=True, recording=True)
         with zeep.sleep_path_lock:
             zeep._reset_sleep_stage_path("gate-test")
@@ -340,8 +394,12 @@ class SleepClassificationGateTests(unittest.TestCase):
 
         result = zeep.estimate_sleep_state()
 
-        self.assert_inactive(result, "no_data")
-        self.assertEqual(result["data_status"], "invalid_or_missing_current_vitals")
+        self.assertEqual(result["state"], "wake")
+        self.assertEqual(result["confirmed_state"], "wake")
+        self.assertTrue(result["classification_active"])
+        self.assertTrue(result["score_eligible"])
+        self.assertTrue(result["excluded_from_personal_baseline"])
+        self.assertEqual(result["data_status"], "initial_awake_anchor")
 
     def test_fresh_confirmed_epoch_releases_restart_display_hold(self):
         self.set_session(active=True, recording=True)
@@ -367,8 +425,9 @@ class SleepClassificationGateTests(unittest.TestCase):
         self.assertTrue(result["classification_active"])
         self.assertFalse(result["evidence_active"])
         self.assertTrue(result["held_previous_state"])
-        self.assertTrue(result["provisional"])
-        self.assertFalse(result["score_eligible"])
+        self.assertFalse(result["provisional"])
+        self.assertTrue(result["score_eligible"])
+        self.assertTrue(result["excluded_from_personal_baseline"])
         self.assertNotEqual(result["data_status"], "confirming_initial_state")
 
     def test_six_fresh_frames_after_gap_release_window_rebuild(self):
@@ -421,12 +480,13 @@ class SleepClassificationGateTests(unittest.TestCase):
         result = zeep.estimate_sleep_state()
 
         self.assertEqual(
-            result["data_status"], "incomplete_current_evidence_epoch"
+            result["current_data_status"],
+            "incomplete_current_evidence_epoch",
         )
         with zeep.sleep_path_lock:
             self.assertIsNone(zeep._sleep_stage_path["candidate"])
             self.assertEqual(zeep._sleep_stage_path["candidate_ticks"], 0)
-            self.assertEqual(zeep._sleep_stage_path["continuity_hold_ticks"], 0)
+            self.assertEqual(zeep._sleep_stage_path["continuity_hold_ticks"], 2)
             self.assertIsNone(zeep._sleep_stage_path["probability_ema"])
 
     def test_invalid_boundary_resets_initial_confirmation_progress(self):
@@ -476,9 +536,76 @@ class SleepClassificationGateTests(unittest.TestCase):
 
         self.assertEqual(result["state"], "n3")
         self.assertTrue(result["held_previous_state"])
-        self.assertTrue(result["provisional"])
-        self.assertFalse(result["score_eligible"])
+        self.assertFalse(result["provisional"])
+        self.assertTrue(result["score_eligible"])
+        self.assertTrue(result["excluded_from_personal_baseline"])
         self.assertNotEqual(result["data_status"], "collecting_evidence_epoch")
+
+    def test_first_frame_before_epoch_boundary_anchors_wake(self):
+        self.set_session(active=True, recording=True)
+        with zeep.sleep_path_lock:
+            zeep._reset_sleep_stage_path("gate-test")
+            zeep._sleep_stage_path["last_evidence_result"] = None
+
+        result = zeep._sleep_value_between_evidence_epochs(
+            {
+                "t": time.time(),
+                "bcg_valid": True,
+                "status": 0,
+                "confirmed_status": 0,
+                "bed_exit_evidence": {"confirmed": False},
+            },
+            "gate-test",
+            {
+                "next_evidence_s": 20.0,
+                "evidence_due": False,
+                "sensor_tick_count": 1,
+                "frame_in_epoch": 1,
+                "sensor_frames_per_epoch": 3,
+                "frames_remaining": 2,
+            },
+        )
+
+        self.assertEqual(result["state"], "wake")
+        self.assertEqual(result["confirmed_state"], "wake")
+        self.assertEqual(result["data_status"], "initial_awake_anchor")
+        self.assertTrue(result["classification_active"])
+        self.assertTrue(result["score_eligible"])
+        self.assertFalse(result["provisional"])
+        self.assertTrue(result["excluded_from_personal_baseline"])
+
+    def test_two_missing_vital_frames_keep_durable_n3(self):
+        self.set_session(active=True, recording=True)
+        with zeep.sleep_path_lock:
+            zeep._sleep_stage_path["last_evidence_result"] = {
+                "state": "n3",
+                "confirmed_state": "n3",
+                "classification_active": True,
+                "score_eligible": True,
+            }
+        clock = {
+            "next_evidence_s": 20.0,
+            "evidence_due": False,
+            "sensor_tick_count": 1,
+            "frame_in_epoch": 1,
+            "sensor_frames_per_epoch": 3,
+            "frames_remaining": 2,
+        }
+        for offset in (0.0, 10.0, 20.0):
+            result = zeep._sleep_value_between_evidence_epochs(
+                {
+                    "t": time.time() + offset,
+                    "bcg_valid": False,
+                    "status": 0,
+                    "confirmed_status": 0,
+                    "bed_exit_evidence": {"confirmed": False},
+                },
+                "gate-test",
+                clock,
+            )
+            self.assertEqual(result["state"], "n3")
+            self.assertTrue(result["score_eligible"])
+            self.assertTrue(result["excluded_from_personal_baseline"])
 
     def test_startup_vital_drop_is_held_at_wake_not_n1(self):
         self.set_session(active=True, recording=True)
@@ -550,7 +677,7 @@ class SleepTransitionPolicyTests(unittest.TestCase):
     def test_new_cycle_must_publish_wake_first(self):
         self.assert_allowed({"wake"}, {"n1", "n2", "n3", "rem"})
 
-    def test_initial_wait_ends_after_two_wake_evidence_epochs(self):
+    def test_initial_epoch_anchors_wake_immediately(self):
         first_stage, first = zeep._stabilize_sleep_stage(
             "wake", now=30.0
         )
@@ -559,9 +686,11 @@ class SleepTransitionPolicyTests(unittest.TestCase):
         )
 
         self.assertEqual(first_stage, "wake")
-        self.assertIsNone(first["confirmed_state"])
-        self.assertEqual(first["decision_kind"], "initial_confirmation_wait")
-        self.assertEqual(first["confirmation_seconds"], 60.0)
+        self.assertEqual(first["confirmed_state"], "wake")
+        self.assertEqual(first["decision_kind"], "confirmed_state")
+        self.assertEqual(first["decision"], "initial_awake_anchor")
+        self.assertEqual(first["confirmation_seconds"], 0.0)
+        self.assertTrue(first["score_eligible"])
         self.assertEqual(second_stage, "wake")
         self.assertEqual(second["confirmed_state"], "wake")
         self.assertTrue(second["confirmation_complete"])
@@ -628,7 +757,9 @@ class SleepTransitionPolicyTests(unittest.TestCase):
         self.assertEqual(stage, "wake")
         self.assertTrue(meta["held"])
         self.assertTrue(meta["held_previous_state"])
-        self.assertTrue(meta["provisional"])
+        self.assertFalse(meta["provisional"])
+        self.assertTrue(meta["score_eligible"])
+        self.assertTrue(meta["excluded_from_personal_baseline"])
         self.assertEqual(meta["score_attribution_state"], "wake")
         self.assertFalse(meta["challenger_counted_as_new_state"])
         stage, meta = zeep._stabilize_sleep_stage("n1", now=60.0)
@@ -648,7 +779,7 @@ class SleepTransitionPolicyTests(unittest.TestCase):
                 self.assertEqual(meta["score_attribution_state"], "n1")
                 self.assertFalse(meta["challenger_counted_as_new_state"])
 
-    def test_ambiguous_evidence_keeps_previous_state_beyond_provisional_window(self):
+    def test_ambiguous_evidence_keeps_scoreable_previous_state(self):
         with zeep.sleep_path_lock:
             zeep._apply_stage_to_path("n2", now=0.0)
 
@@ -663,11 +794,11 @@ class SleepTransitionPolicyTests(unittest.TestCase):
 
         self.assertEqual(
             [row["provisional"] for row in metadata_rows],
-            [True, True, False, False],
+            [False, False, False, False],
         )
         self.assertEqual(
             [row["score_eligible"] for row in metadata_rows],
-            [False, False, True, True],
+            [True, True, True, True],
         )
         for row in metadata_rows:
             self.assertEqual(row["confirmed_state"], "n2")
@@ -676,16 +807,18 @@ class SleepTransitionPolicyTests(unittest.TestCase):
             self.assertFalse(row["challenger_counted_as_new_state"])
             self.assertNotIn("unclassified", row)
 
-    def test_initial_uncertainty_has_no_fabricated_previous_state(self):
+    def test_initial_uncertainty_uses_conscious_wake_anchor(self):
         contract = zeep.continuity_hold_contract(
             None,
             decision="ambiguous_evidence_hold",
         )
 
         self.assertFalse(contract["held_previous_state"])
-        self.assertIsNone(contract["confirmed_state"])
-        self.assertEqual(contract["data_status"], "confirming_initial_state")
-        self.assertEqual(contract["decision_kind"], "initial_confirmation_wait")
+        self.assertEqual(contract["confirmed_state"], "wake")
+        self.assertEqual(contract["data_status"], "initial_awake_anchor")
+        self.assertEqual(contract["decision_kind"], "confirmed_state")
+        self.assertTrue(contract["score_eligible"])
+        self.assertTrue(contract["excluded_from_personal_baseline"])
         self.assertNotIn("unclassified", contract)
 
 

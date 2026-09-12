@@ -1,114 +1,139 @@
-"""Regression coverage for the bounded live initial WAIT contract."""
+"""Regression coverage for the no-gap initial Recording contract."""
 
 from __future__ import annotations
 
 import copy
 import time
 import unittest
+from unittest.mock import patch
 
+from testing_support import configure_app_test_environment
+
+configure_app_test_environment()
 import app
-from zeep_pod.sessions.sleep_runtime_evidence import (
-    INITIAL_WAIT_HARD_CAP_SECONDS,
-    enforce_initial_wait_hard_cap,
-    sleep_status_event,
-)
 
 
-def waiting_result() -> dict[str, object]:
-    return {
-        "state": "no_data",
-        "confirmed_state": None,
-        "classification_active": False,
-        "data_status": "confirming_initial_state",
-        "score_eligible": False,
-        "provisional": True,
-    }
+class InitialRecordingContinuityTests(unittest.TestCase):
+    def setUp(self) -> None:
+        with app.state_lock:
+            self.original_session = copy.deepcopy(app.state["session"])
+        with app.sleep_path_lock:
+            self.original_path = copy.deepcopy(app._sleep_stage_path)
+        with app.analysis_frame_lock:
+            self.original_frame = copy.deepcopy(app._analysis_frame)
+        self.original_cache = copy.deepcopy(app._sleep_cache)
+        with app.session_lock:
+            self.original_active = app._active_session
 
+    def tearDown(self) -> None:
+        with app.sleep_path_lock:
+            app._sleep_stage_path.clear()
+            app._sleep_stage_path.update(self.original_path)
+        with app.state_lock:
+            app.state["session"] = self.original_session
+        with app.analysis_frame_lock:
+            app._analysis_frame = self.original_frame
+        app._sleep_cache.clear()
+        app._sleep_cache.update(self.original_cache)
+        with app.session_lock:
+            app._active_session = self.original_active
 
-class InitialWaitHardCapTests(unittest.TestCase):
-    def test_wait_remains_available_before_120_seconds(self) -> None:
-        result = enforce_initial_wait_hard_cap(
-            waiting_result(),
-            elapsed_seconds=119.9,
-            maximum_seconds=INITIAL_WAIT_HARD_CAP_SECONDS,
-            sleep_states=("wake", "n1", "n2", "n3", "rem"),
+    def evaluate(self, *, recording: bool, elapsed_s: float) -> dict:
+        now = time.time()
+        with app.state_lock:
+            app.state["session"].update({
+                "active": True,
+                "recording": recording,
+                "session_id": "initial-continuity",
+                "started_at": now - elapsed_s,
+            })
+        with app.sleep_path_lock:
+            app._reset_sleep_stage_path("initial-continuity")
+        return app._sleep_value_between_evidence_epochs(
+            {
+                "t": now,
+                "bcg_valid": True,
+                "status": 0,
+                "confirmed_status": 0,
+                "bed_exit_evidence": {"confirmed": False},
+            },
+            "initial-continuity",
+            {"next_evidence_s": 20.0},
         )
-        self.assertEqual(result["data_status"], "confirming_initial_state")
 
-    def test_wait_becomes_unscored_no_data_at_120_seconds(self) -> None:
-        result = enforce_initial_wait_hard_cap(
-            waiting_result(),
-            elapsed_seconds=120.0,
-            maximum_seconds=INITIAL_WAIT_HARD_CAP_SECONDS,
-            sleep_states=("wake", "n1", "n2", "n3", "rem"),
+    def test_recording_starts_with_scoreable_wake(self) -> None:
+        result = self.evaluate(recording=True, elapsed_s=1.0)
+
+        self.assertEqual(result["state"], "wake")
+        self.assertEqual(result["confirmed_state"], "wake")
+        self.assertEqual(result["data_status"], "initial_awake_anchor")
+        self.assertTrue(result["classification_active"])
+        self.assertTrue(result["score_eligible"])
+        self.assertFalse(result["provisional"])
+
+    def test_elapsed_wall_clock_cannot_create_wait_or_no_data(self) -> None:
+        result = self.evaluate(recording=True, elapsed_s=3_600.0)
+
+        self.assertEqual(result["state"], "wake")
+        self.assertNotIn(
+            result["data_status"],
+            {"confirming_initial_state", "initial_confirmation_timeout"},
         )
+        self.assertTrue(result["score_eligible"])
+
+    def test_waiting_for_vitals_exists_only_before_recording(self) -> None:
+        result = self.evaluate(recording=False, elapsed_s=3_600.0)
+
         self.assertEqual(result["state"], "no_data")
-        self.assertEqual(result["data_status"], "initial_confirmation_timeout")
+        self.assertEqual(result["data_status"], "waiting_for_vitals")
         self.assertFalse(result["classification_active"])
         self.assertFalse(result["score_eligible"])
 
-        event = sleep_status_event(
-            result,
-            session_id="wait-cap",
-            epoch_s=1_000.0,
-            evidence_epoch_s=30.0,
-            provenance={},
-        )
-        self.assertEqual(event["value"]["state"], "no_data")
-        self.assertNotIn("WAIT", event["value"]["label"])
-
-    def test_confirmed_state_is_never_replaced_by_timeout(self) -> None:
-        confirmed = {
-            "state": "n2",
-            "confirmed_state": "n2",
-            "classification_active": True,
-            "data_status": "live",
-            "score_eligible": True,
-        }
-        result = enforce_initial_wait_hard_cap(
-            confirmed,
-            elapsed_seconds=900.0,
-            maximum_seconds=INITIAL_WAIT_HARD_CAP_SECONDS,
-            sleep_states=("wake", "n1", "n2", "n3", "rem"),
-        )
-        self.assertEqual(result, confirmed)
-
-    def test_between_epoch_path_uses_recording_wall_clock(self) -> None:
-        now = time.time()
+    def test_live_cache_starts_recording_at_scoreable_wake(self) -> None:
         with app.state_lock:
-            original_session = copy.deepcopy(app.state["session"])
             app.state["session"].update({
                 "active": True,
                 "recording": True,
-                "session_id": "wait-cap",
-                "started_at": now - 121.0,
+                "session_id": "cache-start",
             })
-        with app.sleep_path_lock:
-            original_path = copy.deepcopy(app._sleep_stage_path)
-            app._reset_sleep_stage_path("wait-cap")
-        try:
-            result = app._sleep_value_between_evidence_epochs(
+        with app.analysis_frame_lock:
+            app._analysis_frame = None
+        app._sleep_cache.update({
+            "t": 0.0,
+            "value": None,
+            "session_id": "cache-start",
+            "sequence": None,
+        })
+
+        result = app.sleep_state_cached()
+
+        self.assertEqual(result["state"], "wake")
+        self.assertEqual(result["data_status"], "initial_awake_anchor")
+        self.assertTrue(result["classification_active"])
+        self.assertTrue(result["score_eligible"])
+
+    def test_data_gap_status_cannot_be_persisted_during_recording(self) -> None:
+        with app.state_lock:
+            app.state["session"].update({
+                "active": True,
+                "recording": True,
+                "session_id": "status-guard",
+            })
+        with app.session_lock:
+            app._active_session = {
+                "phase": "recording",
+                "record": {"session_id": "status-guard"},
+            }
+        with patch.object(app.database, "enqueue") as enqueue:
+            app._persist_sleep_stage_status(
                 {
-                    "t": now,
-                    "bcg_valid": True,
-                    "status": 0,
-                    "confirmed_status": 0,
-                    "bed_exit_evidence": {"confirmed": False},
+                    "state": "no_data",
+                    "data_status": "waiting_for_sensor_frame",
                 },
-                "wait-cap",
-                {"next_evidence_s": 20.0},
+                epoch_s=time.time(),
             )
-            self.assertEqual(
-                result["data_status"],
-                "initial_confirmation_timeout",
-            )
-            self.assertFalse(result["score_eligible"])
-        finally:
-            with app.sleep_path_lock:
-                app._sleep_stage_path.clear()
-                app._sleep_stage_path.update(original_path)
-            with app.state_lock:
-                app.state["session"] = original_session
+
+        enqueue.assert_not_called()
 
 
 if __name__ == "__main__":

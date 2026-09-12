@@ -9,58 +9,6 @@ from typing import Any
 
 from sleep_system_policy import assess_environment_values
 
-INITIAL_WAIT_HARD_CAP_SECONDS = 120.0
-INITIAL_WAIT_STATUSES = frozenset({
-    "collecting_evidence_epoch",
-    "confirming_initial_state",
-    "initial_confirmation_wait",
-})
-
-
-def enforce_initial_wait_hard_cap(
-    sleep_result: Mapping[str, Any],
-    *,
-    elapsed_seconds: float | None,
-    maximum_seconds: float,
-    sleep_states: Sequence[str],
-) -> dict[str, Any]:
-    """Turn an overlong initial WAIT into explicit, unscored NO DATA."""
-    value = dict(sleep_result)
-    if elapsed_seconds is None or elapsed_seconds < maximum_seconds:
-        return value
-    confirmed = value.get("confirmed_state") or (
-        value.get("state") if value.get("classification_active") else None
-    )
-    if confirmed in sleep_states:
-        return value
-    if str(value.get("data_status") or "") not in INITIAL_WAIT_STATUSES:
-        return value
-    confirmation = dict(value.get("confirmation") or {})
-    confirmation.update({
-        "initial_wait_timed_out": True,
-        "initial_wait_max_seconds": maximum_seconds,
-    })
-    value.update({
-        "state": "no_data",
-        "confirmed_state": None,
-        "classification_active": False,
-        "probabilities": {state: 0.0 for state in sleep_states},
-        "confidence": "low",
-        "provisional": False,
-        "score_eligible": False,
-        "excluded_from_score": True,
-        "excluded_from_personal_baseline": True,
-        "data_status": "initial_confirmation_timeout",
-        "reason": (
-            "ครบเวลายืนยันสถานะเริ่มต้น 120 วินาทีแล้ว · "
-            "แสดง NO DATA จนกว่าจะยืนยัน State แรกได้"
-        ),
-        "initial_wait_elapsed_s": round(max(0.0, elapsed_seconds), 1),
-        "initial_wait_max_s": maximum_seconds,
-        "confirmation": confirmation,
-    })
-    return value
-
 
 def baseline_interval_proximity(
     value: float,
@@ -278,7 +226,12 @@ def sleep_status_event(
     provenance: Mapping[str, str],
     created_at: datetime | None = None,
 ) -> dict[str, Any]:
-    """Build one canonical WAIT, NO DATA or OFF BED derived event."""
+    """Build an operational event for OFF BED or legacy replay metadata.
+
+    During live Recording, callers persist only confirmed OFF BED here.
+    WAIT is a pre-recording display state and missing evidence is carried as a
+    low-confidence W/N1/N2/N3/REM decision by the continuity projector.
+    """
     data_status = str(sleep_result.get("data_status") or "no_data")
     state, label = _operational_state(data_status)
     attribution_end = datetime.fromtimestamp(epoch_s, timezone.utc)
@@ -314,7 +267,7 @@ def sleep_status_event(
 
 
 def _operational_state(data_status: str) -> tuple[str, str]:
-    """Map estimator status to the three operational display classes."""
+    """Map pre-recording, OFF BED and legacy statuses for compatibility."""
     if data_status in {
         "collecting_evidence_epoch",
         "confirming_initial_state",

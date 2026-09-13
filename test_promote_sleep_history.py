@@ -7,6 +7,7 @@ from promote_sleep_history import (
     rebuild_affected_baselines,
     report_stage_seconds,
     reviewed_mode_group,
+    reviewed_rescore_parameters,
     session_is_in_reviewed_cohort,
     validate_promotion_reconciliation,
 )
@@ -83,6 +84,42 @@ class PromoteSleepHistoryCohortTests(unittest.TestCase):
                     reviewed_mode_group({"previous_mode": {"group": group}}),
                     group,
                 )
+
+    def test_rescore_reuses_exact_reviewed_mode_target(self):
+        for group, seconds, expected_minutes in (
+            ("nap_recovery", 1_800, 30),
+            ("nap_recovery", 5_400, 90),
+            ("sleep", 25_200, 420),
+        ):
+            with self.subTest(group=group, seconds=seconds):
+                item = {
+                    "previous_mode": {"group": group},
+                    "mode": {
+                        "group": group,
+                        "target": {"valid": True, "seconds": seconds},
+                    },
+                }
+
+                self.assertEqual(
+                    reviewed_rescore_parameters(item),
+                    (group, expected_minutes),
+                )
+
+    def test_rescore_rejects_missing_or_fractional_reviewed_target(self):
+        for target in (
+            None,
+            {"valid": False, "seconds": 1_800},
+            {"valid": True, "seconds": None},
+            {"valid": True, "seconds": 1_801},
+        ):
+            with self.subTest(target=target):
+                item = {
+                    "previous_mode": {"group": "nap_recovery"},
+                    "mode": {"group": "nap_recovery", "target": target},
+                }
+
+                with self.assertRaisesRegex(RuntimeError, "duration target"):
+                    reviewed_rescore_parameters(item)
 
     def test_promoted_stage_persists_its_thirty_second_attribution(self):
         events = _event_values({

@@ -291,6 +291,39 @@ def reviewed_mode_group(item: dict[str, Any]) -> str:
     return group if group in {"sleep", "nap_recovery"} else "unresolved"
 
 
+def reviewed_rescore_parameters(
+    item: dict[str, Any],
+) -> tuple[str, int]:
+    """Return the exact reviewed Mode and duration target for rebuilding.
+
+    A Recovery target is part of the reviewed score contract. Passing only the
+    broad ``nap_recovery`` group loses whether the Session targeted 30 or 90
+    minutes. Legacy rows may not persist that target elsewhere, so ``rescore``
+    then correctly withholds the result as ambiguous. Promotion must instead
+    reuse the target pinned in its signed replay artifact.
+    """
+    group = reviewed_mode_group(item)
+    if group not in {"sleep", "nap_recovery"}:
+        raise RuntimeError("reviewed Session has unresolved rest mode")
+    mode = item.get("mode")
+    target = mode.get("target") if isinstance(mode, dict) else None
+    seconds = target.get("seconds") if isinstance(target, dict) else None
+    if (
+        not isinstance(target, dict)
+        or target.get("valid") is not True
+        or isinstance(seconds, bool)
+        or not isinstance(seconds, (int, float))
+        or not math.isfinite(float(seconds))
+        or float(seconds) <= 0
+    ):
+        raise RuntimeError("reviewed Session has no valid duration target")
+    minutes = float(seconds) / 60.0
+    rounded_minutes = round(minutes)
+    if not math.isclose(minutes, rounded_minutes, abs_tol=1e-9):
+        raise RuntimeError("reviewed duration target is not an integral minute")
+    return group, int(rounded_minutes)
+
+
 def cohort_minimum_duration_seconds(artifact: dict[str, Any]) -> float:
     """Return the reviewed cohort duration floor pinned in the artifact.
 
@@ -875,10 +908,12 @@ def main() -> int:
                 # mode; never abort unrelated Sessions in the same batch.
                 mode_unresolved_sessions.append(session_id)
                 continue
+            reviewed_mode, target_minutes = reviewed_rescore_parameters(item)
             one_result = rescore(
                 staging_dir,
                 [session_id],
                 requested_mode=reviewed_mode,
+                requested_target_minutes=target_minutes,
                 apply=True,
                 # The signed replay artifact already records the explicit
                 # Mode/target review. Persist an unavailable result for an
@@ -886,7 +921,27 @@ def main() -> int:
                 # stale legacy score. This does not make the score releasable.
                 allow_reviewed_protocol_withhold=True,
             )
-            report_sessions.extend(one_result.get("sessions") or [])
+            rebuilt_sessions = one_result.get("sessions") or []
+            if (
+                len(rebuilt_sessions) != 1
+                or rebuilt_sessions[0].get("status") != "rescored"
+                or not isinstance(rebuilt_sessions[0].get("report"), dict)
+            ):
+                status = (
+                    rebuilt_sessions[0].get("status")
+                    if len(rebuilt_sessions) == 1
+                    else "invalid_result_count"
+                )
+                reason = (
+                    rebuilt_sessions[0].get("reason")
+                    if len(rebuilt_sessions) == 1
+                    else None
+                )
+                raise RuntimeError(
+                    "reviewed Session report rebuild did not rescore: "
+                    f"{session_id} status={status} reason={reason}"
+                )
+            report_sessions.extend(rebuilt_sessions)
         report_result = {
             "applied": True,
             "sessions": report_sessions,

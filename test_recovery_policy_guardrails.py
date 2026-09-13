@@ -348,6 +348,32 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
             connection.close()
             self.assertEqual(final["night_summary"]["sleep_quality"], original)
 
+    def test_reviewed_target_rebuilds_legacy_session_without_stored_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            data_dir = Path(temporary)
+            self._database(data_dir, duration_s=30 * 60)
+
+            result = rescore(
+                data_dir,
+                ["nap-1"],
+                requested_mode="nap_recovery",
+                requested_target_minutes=30,
+                apply=False,
+                allow_reviewed_protocol_withhold=True,
+            )
+
+            item = result["sessions"][0]
+            self.assertEqual(item["status"], "rescored")
+            self.assertEqual(
+                item["quality"]["rest_mode"]["target"]["seconds"],
+                30 * 60,
+            )
+            self.assertTrue(
+                item["report"]["sleep"]["classification_accounting"][
+                    "arithmetic_invariant"
+                ]["holds"]
+            )
+
     def test_canonical_session_intent_overrides_stale_final_summary(self):
         with tempfile.TemporaryDirectory() as temporary:
             data_dir = Path(temporary)

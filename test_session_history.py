@@ -294,6 +294,52 @@ class SessionAvailabilityTests(unittest.TestCase):
         self.assertEqual(owned["target_duration_s"], 1800)
         self.assertIsNone(forbidden)
 
+    def test_canonical_session_metadata_wins_over_stale_final_summary(self) -> None:
+        account = "corrected@example.test"
+        self.insert_session(
+            "corrected-session",
+            account,
+            "2026-09-05T05:00:00+00:00",
+            with_timeline=True,
+        )
+        connection = sqlite3.connect(self.data_dir / "sessions.db")
+        connection.execute(
+            "UPDATE sessions SET rest_mode=?,target_duration_s=? "
+            "WHERE session_id=?",
+            ("nap_recovery", 5400, "corrected-session"),
+        )
+        connection.execute(
+            "INSERT INTO events(session_id,timestamp,type,value) "
+            "VALUES (?,?,?,?)",
+            (
+                "corrected-session",
+                "2026-09-05T05:30:00+00:00",
+                "final_summary",
+                json.dumps({
+                    "rest_mode": "sleep",
+                    "target_duration_s": 1800,
+                }),
+            ),
+        )
+        connection.commit()
+        connection.close()
+        service = SessionHistoryService(
+            self.database,
+            history_start_utc="2026-09-01T00:00:00+00:00",
+            report_version="report-v1",
+            release_quality=lambda _summary, quality: quality or {},
+            health_reference=lambda _profile: {},
+        )
+
+        result = service.session_by_id(
+            "corrected-session",
+            {account: {"email": account}},
+            account_key=account,
+        )
+
+        self.assertEqual(result["rest_mode"], "nap_recovery")
+        self.assertEqual(result["target_duration_s"], 5400)
+
     def test_history_keeps_approved_prior_report_and_drops_unknown_version(
         self,
     ) -> None:

@@ -4,6 +4,7 @@ This module wires FastAPI, lifecycle threads and hardware adapters together.
 Pure sensor/calibration/recommendation rules live in dedicated modules so they
 can be reviewed and tested without starting GPIO, serial or MQTT resources.
 """
+
 import asyncio
 import json
 import math
@@ -24,8 +25,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 import serial
+
 try:
     import paho.mqtt.client as mqtt
+
     MQTT_AVAILABLE = True
 except Exception:
     mqtt = None
@@ -91,6 +94,7 @@ from zeep_pod.identity.profile_fields import (
 )
 from zeep_pod.identity.zeep_account import authenticate_password, identity_from_auth_data
 from zeep_pod.hardware.audio import AudioPlayer, default_music_state
+from zeep_pod.hardware.controlhub1 import ControlHub1MQTT, configure_controlhub1
 from zeep_pod.hardware.gpio import GPIOManager
 from zeep_pod.safety_faults import SafetyThresholds, evaluate_safety_faults
 from zeep_pod.hardware.sensorhub1 import (
@@ -129,6 +133,7 @@ from zeep_pod.sessions.history_quality import (
     released_historical_quality as _released_historical_quality,
 )
 from zeep_pod.sessions import history_detail_support as history_support
+from zeep_pod.sessions import respiratory_evidence as rr_evidence
 from zeep_pod.sessions.history_sleep_timeline import (
     clip_history_sleep_timeline as _clip_history_sleep_timeline,  # noqa: F401
     compress_sleep_stage_points as _compress_sleep_stage_points,  # noqa: F401
@@ -360,10 +365,18 @@ BCG_VITAL_HOLD_SECONDS = float(os.getenv("BCG_VITAL_HOLD_SECONDS", "15"))
 # confirmed label visible briefly while the serial readers rebuild a fresh
 # 30/60-second evidence window.  This bridge is display-only and can never be
 # persisted as a new Sleep State decision.
-RESTART_SLEEP_STATE_HOLD_SECONDS = min(60.0, max(30.0, float(os.getenv(
-    "RESTART_SLEEP_STATE_HOLD_SECONDS",
-    str(SLEEP_RESTART_STATE_HOLD_SECONDS_DEFAULT),
-))))
+RESTART_SLEEP_STATE_HOLD_SECONDS = min(
+    60.0,
+    max(
+        30.0,
+        float(
+            os.getenv(
+                "RESTART_SLEEP_STATE_HOLD_SECONDS",
+                str(SLEEP_RESTART_STATE_HOLD_SECONDS_DEFAULT),
+            )
+        ),
+    ),
+)
 SAFETY_REQUIRE_CO2 = os.getenv("SAFETY_REQUIRE_CO2", "1") == "1"
 SAFETY_CO2_WARN_PPM = float(os.getenv("SAFETY_CO2_WARN_PPM", "1000"))
 SAFETY_CO2_FAIR_MAX_PPM = float(os.getenv("SAFETY_CO2_FAIR_MAX_PPM", "1150"))
@@ -377,9 +390,7 @@ _SAFETY_MAX_TEMP = os.getenv("SAFETY_MAX_TEMP_C", "").strip()
 SAFETY_TEMP_WARN_MIN_C = float(os.getenv("SAFETY_TEMP_WARN_MIN_C", "17"))
 SAFETY_TEMP_WARN_MAX_C = float(os.getenv("SAFETY_TEMP_WARN_MAX_C", "28"))
 SAFETY_TEMP_CRITICAL_MIN_C = float(os.getenv("SAFETY_TEMP_CRITICAL_MIN_C", "13"))
-SAFETY_TEMP_CRITICAL_MAX_C = float(
-    _SAFETY_MAX_TEMP or os.getenv("SAFETY_TEMP_CRITICAL_MAX_C", "32")
-)
+SAFETY_TEMP_CRITICAL_MAX_C = float(_SAFETY_MAX_TEMP or os.getenv("SAFETY_TEMP_CRITICAL_MAX_C", "32"))
 SAFETY_MAX_TEMP_C = SAFETY_TEMP_CRITICAL_MAX_C
 SAFETY_ARMED_DEFAULT = os.getenv("SAFETY_ARMED_DEFAULT", "0") == "1"
 
@@ -394,33 +405,30 @@ SLEEP_WINDOW_SECONDS = float(os.getenv("SLEEP_WINDOW_SECONDS", "60"))
 if SLEEP_SAMPLE_SECONDS <= 0 or SLEEP_WINDOW_SECONDS <= 0:
     raise RuntimeError("Sleep cadence and rolling window must be positive")
 if not math.isclose(SLEEP_SAMPLE_SECONDS, SLEEP_SENSOR_SAMPLE_SECONDS):
-    raise RuntimeError(
-        "stable-30s-epoch requires 10-second sensor samples; "
-        f"received {SLEEP_SAMPLE_SECONDS:g} seconds"
-    )
+    raise RuntimeError(f"stable-30s-epoch requires 10-second sensor samples; received {SLEEP_SAMPLE_SECONDS:g} seconds")
 # LSM-800-T bed exit is a high-impact occupancy/safety result, so it must
 # survive a temporal confirmation guard. Three 10-second buckets confirm an
 # exit. Raw packet bursts are retained for Admin diagnostics but cannot create
 # a Wake epoch because field data contained false exit pulses up to seven frames.
 BED_EXIT_CONFIRM_BUCKETS = max(3, int(os.getenv("BED_EXIT_CONFIRM_BUCKETS", "3")))
 BED_EXIT_RAW_MIN_FRAMES = max(3, int(os.getenv("BED_EXIT_RAW_MIN_FRAMES", "5")))
-BED_EXIT_RAW_MIN_RATIO = min(
-    1.0, max(0.6, float(os.getenv("BED_EXIT_RAW_MIN_RATIO", "0.8"))))
-BED_EXIT_RAW_CONFIRMATION_ENABLED = (
-    os.getenv("BED_EXIT_RAW_CONFIRMATION_ENABLED", "false").strip().lower()
-    in {"1", "true", "yes", "on"}
-)
+BED_EXIT_RAW_MIN_RATIO = min(1.0, max(0.6, float(os.getenv("BED_EXIT_RAW_MIN_RATIO", "0.8"))))
+BED_EXIT_RAW_CONFIRMATION_ENABLED = os.getenv("BED_EXIT_RAW_CONFIRMATION_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
 # Target context for one evidence estimate. Sensor frames arrive every 10 s,
 # become one evidence epoch every 30 s, and require two matching evidence
 # epochs before a W/N1/N2/N3/REM state is confirmed. Until then the API exposes
 # the evidence candidate but deliberately returns no confirmed stage.
-SLEEP_MIN_FRAMES = max(1, int(os.getenv(
-    "SLEEP_MIN_FRAMES",
-    str(math.ceil(SLEEP_WINDOW_SECONDS / SLEEP_SAMPLE_SECONDS)),
-)))
+SLEEP_MIN_FRAMES = max(
+    1,
+    int(
+        os.getenv(
+            "SLEEP_MIN_FRAMES",
+            str(math.ceil(SLEEP_WINDOW_SECONDS / SLEEP_SAMPLE_SECONDS)),
+        )
+    ),
+)
 # Fraction of "Moving" frames in the window at/above which we call Wake.
-SLEEP_MOVE_WAKE_RATIO = float(os.getenv(
-    "SLEEP_MOVE_WAKE_RATIO", str(SLEEP_DEFAULT_MOVE_WAKE_RATIO)))
+SLEEP_MOVE_WAKE_RATIO = float(os.getenv("SLEEP_MOVE_WAKE_RATIO", str(SLEEP_DEFAULT_MOVE_WAKE_RATIO)))
 # Legacy/personal calibration thresholds for the coefficient of variation of
 # fixed-cadence HR summaries. This is explicitly NOT RMSSD/SDNN or ECG HRV. v1.8
 # keeps it as a weak proxy and does not introduce a beat detector.
@@ -428,31 +436,22 @@ SLEEP_HR_CV_REM = float(os.getenv("SLEEP_HR_CV_REM", str(SLEEP_DEFAULT_HR_CV_REM
 # NREM depth proxy (NOT AASM N1/N2/N3 — those are EEG-defined and PSG-only).
 # The five output labels now map one-to-one to the amended five-class G2
 # validation ontology, but remain exploratory until paired-PSG validation.
-SLEEP_HR_CV_DEEP = float(os.getenv(
-    "SLEEP_HR_CV_DEEP", str(SLEEP_DEFAULT_HR_CV_DEEP)))
-SLEEP_MOVE_DEEP_RATIO = float(os.getenv(
-    "SLEEP_MOVE_DEEP_RATIO", str(SLEEP_DEFAULT_MOVE_DEEP_RATIO)))
+SLEEP_HR_CV_DEEP = float(os.getenv("SLEEP_HR_CV_DEEP", str(SLEEP_DEFAULT_HR_CV_DEEP)))
+SLEEP_MOVE_DEEP_RATIO = float(os.getenv("SLEEP_MOVE_DEEP_RATIO", str(SLEEP_DEFAULT_MOVE_DEEP_RATIO)))
 # Baseline fit keeps 10% of the score budget for movement/variability/timing.
 # RR is raised slightly from 0.35 to 0.40 after the Pod produced excessive N3
 # while measured RR remained closer to its N2 range. These are versioned ZEEP
 # engineering weights, not AASM scoring coefficients.
-SLEEP_BASELINE_HR_WEIGHT = float(os.getenv(
-    "SLEEP_BASELINE_HR_WEIGHT", str(SLEEP_DEFAULT_BASELINE_HR_WEIGHT)))
-SLEEP_BASELINE_RR_WEIGHT = float(os.getenv(
-    "SLEEP_BASELINE_RR_WEIGHT", str(SLEEP_DEFAULT_BASELINE_RR_WEIGHT)))
-SLEEP_N3_RR_CONFLICT_PENALTY = float(os.getenv(
-    "SLEEP_N3_RR_CONFLICT_PENALTY", str(SLEEP_DEFAULT_N3_RR_CONFLICT_PENALTY)))
-SLEEP_N2_RR_CONFLICT_SUPPORT = float(os.getenv(
-    "SLEEP_N2_RR_CONFLICT_SUPPORT", str(SLEEP_DEFAULT_N2_RR_CONFLICT_SUPPORT)))
+SLEEP_BASELINE_HR_WEIGHT = float(os.getenv("SLEEP_BASELINE_HR_WEIGHT", str(SLEEP_DEFAULT_BASELINE_HR_WEIGHT)))
+SLEEP_BASELINE_RR_WEIGHT = float(os.getenv("SLEEP_BASELINE_RR_WEIGHT", str(SLEEP_DEFAULT_BASELINE_RR_WEIGHT)))
+SLEEP_N3_RR_CONFLICT_PENALTY = float(os.getenv("SLEEP_N3_RR_CONFLICT_PENALTY", str(SLEEP_DEFAULT_N3_RR_CONFLICT_PENALTY)))
+SLEEP_N2_RR_CONFLICT_SUPPORT = float(os.getenv("SLEEP_N2_RR_CONFLICT_SUPPORT", str(SLEEP_DEFAULT_N2_RR_CONFLICT_SUPPORT)))
 # A microphone event can support Wake only when the same rolling window also
 # contains BCG amplitude change or bed motion.  Continuous background sound,
 # air quality and comfort telemetry never create a stage by themselves.
-SLEEP_ACOUSTIC_DISTURBANCE_DBA = float(
-    os.getenv("SLEEP_ACOUSTIC_DISTURBANCE_DBA", str(SLEEP_DEFAULT_ACOUSTIC_DISTURBANCE_DBA)))
-SLEEP_ACOUSTIC_MIN_COVERAGE = float(
-    os.getenv("SLEEP_ACOUSTIC_MIN_COVERAGE", str(SLEEP_DEFAULT_ACOUSTIC_MIN_COVERAGE)))
-SLEEP_ACOUSTIC_WAKE_SUPPORT_MAX = float(
-    os.getenv("SLEEP_ACOUSTIC_WAKE_SUPPORT_MAX", str(SLEEP_DEFAULT_ACOUSTIC_WAKE_SUPPORT_MAX)))
+SLEEP_ACOUSTIC_DISTURBANCE_DBA = float(os.getenv("SLEEP_ACOUSTIC_DISTURBANCE_DBA", str(SLEEP_DEFAULT_ACOUSTIC_DISTURBANCE_DBA)))
+SLEEP_ACOUSTIC_MIN_COVERAGE = float(os.getenv("SLEEP_ACOUSTIC_MIN_COVERAGE", str(SLEEP_DEFAULT_ACOUSTIC_MIN_COVERAGE)))
+SLEEP_ACOUSTIC_WAKE_SUPPORT_MAX = float(os.getenv("SLEEP_ACOUSTIC_WAKE_SUPPORT_MAX", str(SLEEP_DEFAULT_ACOUSTIC_WAKE_SUPPORT_MAX)))
 if SLEEP_BASELINE_HR_WEIGHT < 0 or SLEEP_BASELINE_RR_WEIGHT < 0:
     raise RuntimeError("Sleep baseline weights must not be negative")
 if SLEEP_BASELINE_HR_WEIGHT + SLEEP_BASELINE_RR_WEIGHT <= 0:
@@ -498,8 +497,7 @@ MAX_VOLUME = 100  # mpv >100 is digital gain (distortion); keep sleep-safe ceili
 # Old tablet pages once advanced a queue in the browser as well as on the Pi.
 # After an explicit Stop, reject those legacy automatic play requests briefly;
 # a current page marks real touch actions and can start again immediately.
-MUSIC_STOP_GUARD_SECONDS = max(
-    0.5, float(os.getenv("MUSIC_STOP_GUARD_SECONDS", "4.0")))
+MUSIC_STOP_GUARD_SECONDS = max(0.5, float(os.getenv("MUSIC_STOP_GUARD_SECONDS", "4.0")))
 # User-facing temperatures describe the preferred Pod setting. The aircon IR
 # command is intentionally biased colder because the current installation's
 # measured room response runs warmer than its setpoint. Keep this conversion
@@ -550,7 +548,7 @@ DEFAULT_LABELS = {
 }
 EDITABLE_LABELS = {"aroma1", "aroma2", "aroma3", "aroma4"}
 SESSION_SAMPLE_SECONDS = float(os.getenv("SESSION_SAMPLE_SECONDS", "10"))
-SESSION_TIMELINE_SCHEMA_VERSION = 4
+SESSION_TIMELINE_SCHEMA_VERSION = 5
 if SESSION_SAMPLE_SECONDS <= 0:
     raise RuntimeError("Session sample cadence must be positive")
 _sleep_quality_summary = partial(build_sleep_quality, sample_interval_s=SESSION_SAMPLE_SECONDS)
@@ -566,13 +564,14 @@ def _sample_interval_seconds(
 ) -> float:
     """Compatibility facade for the extracted Session cadence module."""
     return _sample_interval_seconds_impl(value, fallback)
+
+
 # เริ่มนับ/บันทึกจริงเมื่อผู้ใช้นอนบนเตียงต่อเนื่องครบตามนี้ (ลุกก่อนครบ = รีเซ็ต)
 BED_START_SECONDS = float(os.getenv("BED_START_SECONDS", "20"))
 # A Session row/timeline must not start from bed status alone. Require fresh,
 # sane HR and RR in consecutive *new* BCG packets after Login/restart. Values
 # held for display while the module reacquires a signal never pass this gate.
-SESSION_VITAL_START_PACKETS = max(
-    1, int(os.getenv("SESSION_VITAL_START_PACKETS", "3")))
+SESSION_VITAL_START_PACKETS = max(1, int(os.getenv("SESSION_VITAL_START_PACKETS", "3")))
 GENDERS = ("male", "female", "other", "unspecified")
 POD_ID = pod_id_from_env()
 OCCUPANCY_LEASE_SECONDS = max(15, int(os.getenv("OCCUPANCY_LEASE_SECONDS", "45")))
@@ -588,33 +587,24 @@ ESP32_BAUD = int(os.getenv("ESP32_BAUD", "115200"))
 MQTT_HOST = os.getenv("MQTT_HOST", "127.0.0.1")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_KEEPALIVE = int(os.getenv("MQTT_KEEPALIVE", "30"))
-SENSORHUB2_TELEMETRY_TOPIC = os.getenv(
-    "SENSORHUB2_TELEMETRY_TOPIC", "zeep/pod1/sensorhub2/telemetry")
-SENSORHUB2_STATUS_TOPIC = os.getenv(
-    "SENSORHUB2_STATUS_TOPIC", "zeep/pod1/sensorhub2/status")
+SENSORHUB2_TELEMETRY_TOPIC = os.getenv("SENSORHUB2_TELEMETRY_TOPIC", "zeep/pod1/sensorhub2/telemetry")
+SENSORHUB2_STATUS_TOPIC = os.getenv("SENSORHUB2_STATUS_TOPIC", "zeep/pod1/sensorhub2/status")
 SENSORHUB2_STALE_SECONDS = float(os.getenv("SENSORHUB2_STALE_SECONDS", "15"))
 
 # Control Hub 1 receives plain-text air-conditioner commands and publishes
 # retained status plus a non-retained command event after sending IR.
-CONTROLHUB1_COMMAND_TOPIC = os.getenv(
-    "CONTROLHUB1_COMMAND_TOPIC", "zeep/pod1/controlhub1/command")
-CONTROLHUB1_STATUS_TOPIC = os.getenv(
-    "CONTROLHUB1_STATUS_TOPIC", "zeep/pod1/controlhub1/status")
-CONTROLHUB1_EVENT_TOPIC = os.getenv(
-    "CONTROLHUB1_EVENT_TOPIC", "zeep/pod1/controlhub1/event")
+CONTROLHUB1_COMMAND_TOPIC = os.getenv("CONTROLHUB1_COMMAND_TOPIC", "zeep/pod1/controlhub1/command")
+CONTROLHUB1_STATUS_TOPIC = os.getenv("CONTROLHUB1_STATUS_TOPIC", "zeep/pod1/controlhub1/status")
+CONTROLHUB1_EVENT_TOPIC = os.getenv("CONTROLHUB1_EVENT_TOPIC", "zeep/pod1/controlhub1/event")
 CONTROLHUB1_STALE_SECONDS = float(os.getenv("CONTROLHUB1_STALE_SECONDS", "70"))
-CONTROLHUB1_ACK_TIMEOUT_SECONDS = float(
-    os.getenv("CONTROLHUB1_ACK_TIMEOUT_SECONDS", "3"))
+CONTROLHUB1_ACK_TIMEOUT_SECONDS = float(os.getenv("CONTROLHUB1_ACK_TIMEOUT_SECONDS", "3"))
 # Air-conditioner IR receivers commonly ignore frames that arrive while the
 # previous command is still being processed. Keep every Control Hub 1 command
 # in one serialized queue and enforce a guard interval between IR frames.
 # Power ON needs a longer settle period before applying the default setpoint.
-CONTROLHUB1_MIN_IR_GAP_SECONDS = float(
-    os.getenv("CONTROLHUB1_MIN_IR_GAP_SECONDS", "1.2"))
-CONTROLHUB1_POWER_ON_SETTLE_SECONDS = float(
-    os.getenv("CONTROLHUB1_POWER_ON_SETTLE_SECONDS", "2.0"))
-CONTROLHUB1_FAN_WAKE_SETTLE_SECONDS = float(
-    os.getenv("CONTROLHUB1_FAN_WAKE_SETTLE_SECONDS", "0.25"))
+CONTROLHUB1_MIN_IR_GAP_SECONDS = float(os.getenv("CONTROLHUB1_MIN_IR_GAP_SECONDS", "1.2"))
+CONTROLHUB1_POWER_ON_SETTLE_SECONDS = float(os.getenv("CONTROLHUB1_POWER_ON_SETTLE_SECONDS", "2.0"))
+CONTROLHUB1_FAN_WAKE_SETTLE_SECONDS = float(os.getenv("CONTROLHUB1_FAN_WAKE_SETTLE_SECONDS", "0.25"))
 if CONTROLHUB1_MIN_IR_GAP_SECONDS < 0:
     raise RuntimeError("CONTROLHUB1_MIN_IR_GAP_SECONDS must not be negative")
 if CONTROLHUB1_POWER_ON_SETTLE_SECONDS < 0:
@@ -625,15 +615,11 @@ if CONTROLHUB1_FAN_WAKE_SETTLE_SECONDS < 0:
 # Control Hub 2 drives the four servos that press the bed remote.  It uses the
 # same Pi-local broker as Control Hub 1, but separate topics and state so an
 # air-conditioner command can never be interpreted as a bed command.
-CONTROLHUB2_COMMAND_TOPIC = os.getenv(
-    "CONTROLHUB2_COMMAND_TOPIC", "zeep/pod1/controlhub2/bed/command")
-CONTROLHUB2_STATUS_TOPIC = os.getenv(
-    "CONTROLHUB2_STATUS_TOPIC", "zeep/pod1/controlhub2/bed/status")
-CONTROLHUB2_EVENT_TOPIC = os.getenv(
-    "CONTROLHUB2_EVENT_TOPIC", "zeep/pod1/controlhub2/bed/event")
+CONTROLHUB2_COMMAND_TOPIC = os.getenv("CONTROLHUB2_COMMAND_TOPIC", "zeep/pod1/controlhub2/bed/command")
+CONTROLHUB2_STATUS_TOPIC = os.getenv("CONTROLHUB2_STATUS_TOPIC", "zeep/pod1/controlhub2/bed/status")
+CONTROLHUB2_EVENT_TOPIC = os.getenv("CONTROLHUB2_EVENT_TOPIC", "zeep/pod1/controlhub2/bed/event")
 CONTROLHUB2_STALE_SECONDS = float(os.getenv("CONTROLHUB2_STALE_SECONDS", "70"))
-CONTROLHUB2_ACK_TIMEOUT_SECONDS = float(
-    os.getenv("CONTROLHUB2_ACK_TIMEOUT_SECONDS", "3"))
+CONTROLHUB2_ACK_TIMEOUT_SECONDS = float(os.getenv("CONTROLHUB2_ACK_TIMEOUT_SECONDS", "3"))
 # Every user bed movement is a bounded one-shot action. The Pi publishes an
 # explicit BED STOP after this window even if a browser disconnects, so a held
 # direction cannot continue indefinitely. Safety Supervisor can still stop it
@@ -704,8 +690,7 @@ def _persist_calibration(data: Dict[str, Any]) -> None:
     persist_calibration(CALIBRATION_PATH, data)
 
 
-def update_sensor_bias(metric: str, bias: float, *, operator: str,
-                       reference_value: Optional[float] = None) -> Dict[str, Any]:
+def update_sensor_bias(metric: str, bias: float, *, operator: str, reference_value: Optional[float] = None) -> Dict[str, Any]:
     """Validate, persist and activate one Admin calibration adjustment."""
     global HUMIDITY_RH_BIAS, HUMIDITY_BIAS_SOURCE
     spec = SENSOR_CALIBRATION_SPECS.get(metric)
@@ -741,16 +726,19 @@ def update_sensor_bias(metric: str, bias: float, *, operator: str,
             HUMIDITY_RH_BIAS = rounded
             HUMIDITY_BIAS_SOURCE = "calibration.json"
     with state_lock:
-        environment_calibration = state["system"].setdefault(
-            "environment_calibration", {})
+        environment_calibration = state["system"].setdefault("environment_calibration", {})
         environment_calibration["biases"] = dict(SENSOR_BIASES)
         environment_calibration["sources"] = dict(SENSOR_BIAS_SOURCES)
         environment_calibration["humidity_rh_bias"] = HUMIDITY_RH_BIAS
         environment_calibration["humidity_bias_source"] = HUMIDITY_BIAS_SOURCE
     return {
-        "metric": metric, "bias": rounded, "source": "calibration.json",
-        "updated_at": changed_at, "reference_value": reference,
+        "metric": metric,
+        "bias": rounded,
+        "source": "calibration.json",
+        "updated_at": changed_at,
+        "reference_value": reference,
     }
+
 
 # Operational sleep-comfort target used by Monitor recommendations. This is
 # separate from validation against the 30–130 dBA reference-meter envelope.
@@ -956,28 +944,42 @@ state: Dict[str, Any] = {
     },
     "music": default_music_state(),
     "safety": {
-        "armed": SAFETY_ARMED_DEFAULT, "ready": False, "level": "initializing",
-        "latched": False, "faults": [], "last_check": None,
-        "last_transition": None, "last_action": None,
-        "automatic_actions": ["stop_music", "accessories_off", "star_light_off",
-                              "red_light_off", "door_drive_off", "led_on"],
-        "door_auto_open": False, "ventilation_control_available": False,
+        "armed": SAFETY_ARMED_DEFAULT,
+        "ready": False,
+        "level": "initializing",
+        "latched": False,
+        "faults": [],
+        "last_check": None,
+        "last_transition": None,
+        "last_action": None,
+        "automatic_actions": [
+            "stop_music",
+            "accessories_off",
+            "star_light_off",
+            "red_light_off",
+            "door_drive_off",
+            "led_on",
+        ],
+        "door_auto_open": False,
+        "ventilation_control_available": False,
         "threshold_basis": {
             "version": SAFETY_THRESHOLD_BASIS_VERSION,
             "approved": SAFETY_THRESHOLD_BASIS_APPROVED,
             "scope": "zeep_internal_operating_policy",
             "document": "docs/zeep-atmosphere-operating-basis-v1.0.md",
         },
-        "thresholds": {"esp32_stale_s": ESP32_STALE_SECONDS,
-                       "co2_warn_ppm": SAFETY_CO2_WARN_PPM,
-                       "co2_fair_max_ppm": SAFETY_CO2_FAIR_MAX_PPM,
-                       "co2_critical_ppm": SAFETY_CO2_CRITICAL_PPM,
-                       "temperature_warn_min_c": SAFETY_TEMP_WARN_MIN_C,
-                       "temperature_warn_max_c": SAFETY_TEMP_WARN_MAX_C,
-                       "temperature_critical_min_c": SAFETY_TEMP_CRITICAL_MIN_C,
-                       "temperature_critical_max_c": SAFETY_TEMP_CRITICAL_MAX_C,
-                       # Legacy response field retained for older clients.
-                       "max_temperature_c": SAFETY_MAX_TEMP_C},
+        "thresholds": {
+            "esp32_stale_s": ESP32_STALE_SECONDS,
+            "co2_warn_ppm": SAFETY_CO2_WARN_PPM,
+            "co2_fair_max_ppm": SAFETY_CO2_FAIR_MAX_PPM,
+            "co2_critical_ppm": SAFETY_CO2_CRITICAL_PPM,
+            "temperature_warn_min_c": SAFETY_TEMP_WARN_MIN_C,
+            "temperature_warn_max_c": SAFETY_TEMP_WARN_MAX_C,
+            "temperature_critical_min_c": SAFETY_TEMP_CRITICAL_MIN_C,
+            "temperature_critical_max_c": SAFETY_TEMP_CRITICAL_MAX_C,
+            # Legacy response field retained for older clients.
+            "max_temperature_c": SAFETY_MAX_TEMP_C,
+        },
     },
     "session": {
         "active": False,
@@ -987,7 +989,7 @@ state: Dict[str, Any] = {
         # ชื่อที่โชว์บนหน้าจอ (displayName ของบัญชี ZEEP) เปลี่ยนได้โดยไม่ทำให้
         # Profile/Baseline/History แตกเป็นผู้ใช้คนใหม่ เพราะข้อมูลผูกกับ email.
         "display_name": None,
-        "auth_source": None,     # "zeep" = login ด้วยบัญชีจริง · "local" = โหมดออฟไลน์
+        "auth_source": None,  # "zeep" = login ด้วยบัญชีจริง · "local" = โหมดออฟไลน์
         "gender": None,
         "age": None,
         "age_group": None,
@@ -1193,18 +1195,31 @@ def apply_safety_profile(trigger: str) -> Dict[str, Any]:
     results: Dict[str, Any] = {}
     with _safety_action_lock:
         try:
-            player.stop(); results["stop_music"] = True
+            player.stop()
+            results["stop_music"] = True
         except Exception as exc:
             results.update({"stop_music": False, "music_error": str(exc)})
-        for name in ("aroma1", "aroma2", "aroma3", "aroma4", "steam", "star_light",
-                     "red_light_face", "red_light_body", "red_light_leg",
-                     "door_open", "door_close"):
+        for name in (
+            "aroma1",
+            "aroma2",
+            "aroma3",
+            "aroma4",
+            "steam",
+            "star_light",
+            "red_light_face",
+            "red_light_body",
+            "red_light_leg",
+            "door_open",
+            "door_close",
+        ):
             try:
-                gpio.set(name, False); results[name] = False
+                gpio.set(name, False)
+                results[name] = False
             except Exception as exc:
                 results[f"{name}_error"] = str(exc)
         try:
-            gpio.set("led", True); results["led"] = True
+            gpio.set("led", True)
+            results["led"] = True
         except Exception as exc:
             results["led_error"] = str(exc)
         # Bed movement is remote and must receive an explicit stop when the
@@ -1214,6 +1229,17 @@ def apply_safety_profile(trigger: str) -> Dict[str, Any]:
         with state_lock:
             state["safety"]["latched"] = True
             state["safety"]["last_action"] = action
+        try:
+            _refresh_active_session_safety_checkpoint(latched=True)
+        except Exception as exc:
+            # The live latch remains fail-safe even if durable storage is
+            # unavailable. Surface the persistence failure for Admin review.
+            log_event(
+                "safety",
+                "checkpoint_refresh_failed",
+                operation="safe_profile",
+                error=str(exc),
+            )
         log_event("safety", "safe_profile_applied", trigger=trigger, results=results)
         return action
 
@@ -1232,20 +1258,31 @@ def safety_supervisor():
             trigger = ",".join(f["code"] for f in faults if f["severity"] == "critical")
             apply_safety_profile(trigger or "critical_fault")
             latched = True
-        level = ("emergency" if latched else "not_ready" if not ready
-                 else "degraded" if faults else "armed" if armed else "monitor")
+        level = "emergency" if latched else "not_ready" if not ready else "degraded" if faults else "armed" if armed else "monitor"
         transition = time.time() if level != previous_level else None
         with state_lock:
-            state["safety"].update({"ready": ready, "level": level,
-                                    "faults": faults, "last_check": time.time()})
+            state["safety"].update(
+                {
+                    "ready": ready,
+                    "level": level,
+                    "faults": faults,
+                    "last_check": time.time(),
+                }
+            )
             if transition is not None:
                 state["safety"]["last_transition"] = transition
         if level != previous_level:
-            log_event("safety", "state", level=level, armed=armed,
-                      faults=[f["code"] for f in faults])
+            log_event(
+                "safety",
+                "state",
+                level=level,
+                armed=armed,
+                faults=[f["code"] for f in faults],
+            )
             previous_level = level
         _systemd_notify(f"WATCHDOG=1\nSTATUS=Safety Supervisor: {level}")
         time.sleep(1)
+
 
 # ---------- profile & session store (on-device only) ----------
 profile_lock = threading.Lock()
@@ -1259,15 +1296,25 @@ analysis_frame_lock = threading.Lock()
 # {"record": {...}, "samples": [...], "counters": {...}, "last_sample": float}
 _active_session: Optional[Dict[str, Any]] = None
 _sleep_stage_path = {
-    "session_id": None, "seen": [], "last": None, "stage_since": None,
-    "candidate": None, "candidate_ticks": 0, "cycle_has_n1": False,
+    "session_id": None,
+    "seen": [],
+    "last": None,
+    "stage_since": None,
+    "candidate": None,
+    "candidate_ticks": 0,
+    "cycle_has_n1": False,
     "continuity_hold_ticks": 0,
-    "sensor_tick_count": 0, "last_evidence_epoch_s": None,
-    "last_evidence_result": None, "awake_vital_pairs": [],
-    "awake_hr_reference": None, "awake_rr_reference": None,
-    "sleep_onset_at": None, "last_valid_frame_t": None,
+    "sensor_tick_count": 0,
+    "last_evidence_epoch_s": None,
+    "last_evidence_result": None,
+    "awake_vital_pairs": [],
+    "awake_hr_reference": None,
+    "awake_rr_reference": None,
+    "sleep_onset_at": None,
+    "last_valid_frame_t": None,
     "off_bed_latched": False,
-        "restart_hold_result": None, "restart_hold_until_epoch_s": None,
+    "restart_hold_result": None,
+    "restart_hold_until_epoch_s": None,
 }
 _analysis_frame: Optional[Dict[str, Any]] = None
 LAST_SENSOR_FRAME_VERSION = 1
@@ -1289,9 +1336,7 @@ ACTIVE_SESSION_CHECKPOINT_VERSION = SESSION_CHECKPOINT_VERSION
 
 def _active_session_checkpoint_payload(active: Dict[str, Any]) -> Dict[str, Any]:
     """Compatibility facade for the extracted Session checkpoint store."""
-    return session_checkpoint_store.build_payload(
-        _active_with_sleep_context(active)
-    )
+    return session_checkpoint_store.build_payload(_active_with_sleep_context(active))
 
 
 def _save_active_session_checkpoint(active: Dict[str, Any]) -> Dict[str, Any]:
@@ -1305,6 +1350,58 @@ def _load_active_session_checkpoint() -> Optional[Dict[str, Any]]:
 
 def _clear_active_session_checkpoint() -> None:
     session_checkpoint_store.clear()
+
+
+def _current_safety_checkpoint_context() -> Dict[str, bool]:
+    """Return only Safety conditions that are safe to carry across restart."""
+    with state_lock:
+        safety = state["safety"]
+        return {key: True for key in ("armed", "latched") if bool(safety.get(key))}
+
+
+def _restore_safety_checkpoint_context(
+    checkpoint: Dict[str, Any],
+) -> Dict[str, bool]:
+    """Restore optional Safety booleans from a validated v1 checkpoint."""
+    saved = checkpoint.get("safety_context")
+    if not isinstance(saved, dict):
+        return _current_safety_checkpoint_context()
+    with state_lock:
+        for key in ("armed", "latched"):
+            # Persisted state may only increase protection. A legacy false
+            # value is ignored so disarm remains process-local.
+            if saved.get(key) is True:
+                state["safety"][key] = True
+        return {key: True for key in ("armed", "latched") if bool(state["safety"].get(key))}
+
+
+def _refresh_active_session_safety_checkpoint(
+    *,
+    armed: Optional[bool] = None,
+    latched: Optional[bool] = None,
+) -> bool:
+    """Atomically refresh Safety continuity for an active Session."""
+    with session_lock:
+        active = _active_session
+        if active is None:
+            return False
+        previous = active.get("safety_context")
+        safety_context = dict(previous or {})
+        for key, value in (("armed", armed), ("latched", latched)):
+            if value is True:
+                safety_context[key] = True
+            elif value is False:
+                safety_context.pop(key, None)
+        active["safety_context"] = safety_context
+        try:
+            _save_active_session_checkpoint(active)
+        except Exception:
+            if previous is None:
+                active.pop("safety_context", None)
+            else:
+                active["safety_context"] = previous
+            raise
+    return True
 
 
 def _persist_last_sensor_frame(frame: Optional[Dict[str, Any]]) -> bool:
@@ -1360,12 +1457,28 @@ def _timeline_restart_frame() -> Optional[Dict[str, Any]]:
         samples = list((active or {}).get("samples") or [])
     if not session_id or not samples:
         return None
-    sample = next((
-        item for item in reversed(samples)
-        if any(item.get(key) is not None for key in (
-            "temp", "hum", "co2", "pm2_5", "voc", "lux", "dba", "hr", "rr", "bed",
-        ))
-    ), None)
+    sample = next(
+        (
+            item
+            for item in reversed(samples)
+            if any(
+                item.get(key) is not None
+                for key in (
+                    "temp",
+                    "hum",
+                    "co2",
+                    "pm2_5",
+                    "voc",
+                    "lux",
+                    "dba",
+                    "hr",
+                    "rr",
+                    "bed",
+                )
+            )
+        ),
+        None,
+    )
     if sample is None:
         return None
     epoch_s = float(sample.get("t") or 0)
@@ -1399,22 +1512,26 @@ def _timeline_restart_frame() -> Optional[Dict[str, Any]]:
         "sgp40": values["voc_index"] is not None,
     }
     models = {
-        "sht3x_dis": "SHT3x-DIS", "opt3001": "OPT3001",
+        "sht3x_dis": "SHT3x-DIS",
+        "opt3001": "OPT3001",
         "sph0645": ENVIRONMENT_DEVICE_SPECS["sph0645"]["model"],
-        "mhz19c": "MH-Z19C", "pms7003": "PMS7003", "sgp40": "SGP40",
+        "mhz19c": "MH-Z19C",
+        "pms7003": "PMS7003",
+        "sgp40": "SGP40",
     }
     devices = {
         key: {
-            "model": models[key], "status": "stale" if available else "offline",
-            "source": "session_timeline", "source_label": "Session Timeline · SQLite",
+            "model": models[key],
+            "status": "stale" if available else "offline",
+            "source": "session_timeline",
+            "source_label": "Session Timeline · SQLite",
             "data_age_s": round(max(0.0, time.time() - epoch_s), 1),
             "invalid_values": {},
         }
         for key, available in availability.items()
     }
     bed_text = sample.get("bed")
-    status_code = next(
-        (code for code, text in STATUS_TEXT.items() if text == bed_text), None)
+    status_code = next((code for code, text in STATUS_TEXT.items() if text == bed_text), None)
     environment = {
         **values,
         "temperature": values["temperature_c"],
@@ -1429,8 +1546,10 @@ def _timeline_restart_frame() -> Optional[Dict[str, Any]]:
         "status": "stale" if any(availability.values()) else "offline",
         "sources": {
             "timeline": {
-                "label": "Session Timeline · SQLite", "live": False,
-                "age_s": round(max(0.0, time.time() - epoch_s), 1), "has_history": True,
+                "label": "Session Timeline · SQLite",
+                "live": False,
+                "age_s": round(max(0.0, time.time() - epoch_s), 1),
+                "has_history": True,
             },
         },
     }
@@ -1472,49 +1591,54 @@ def _restore_latest_sensor_frame() -> bool:
         session_recording = bool(state["session"].get("recording"))
     frame = max(candidates, key=lambda item: float(item.get("epoch_s") or 0))
     original_session_id = frame.get("session_id")
-    same_session = bool(
-        current_session_id and original_session_id == current_session_id)
+    same_session = bool(current_session_id and original_session_id == current_session_id)
     restored = json.loads(json.dumps(frame))
     environment = restored.get("environment") or {}
     for device in (environment.get("devices") or {}).values():
         if device.get("status") not in {"offline", "fault", "invalid", "no_data"}:
             device["status"] = "stale"
-        device["data_age_s"] = round(
-            max(0.0, time.time() - float(restored["epoch_s"])), 1)
+        device["data_age_s"] = round(max(0.0, time.time() - float(restored["epoch_s"])), 1)
     environment["live_count"] = 0
     environment["status"] = (
-        "stale" if any(
-            value is not None for key, value in environment.items()
-            if key in {
-                "temperature_c", "humidity_rh", "lux", "sound_dba_est",
-                "co2_ppm", "pm2_5_ug_m3", "voc_index",
+        "stale"
+        if any(
+            value is not None
+            for key, value in environment.items()
+            if key
+            in {
+                "temperature_c",
+                "humidity_rh",
+                "lux",
+                "sound_dba_est",
+                "co2_ppm",
+                "pm2_5_ug_m3",
+                "voc_index",
             }
-        ) else "offline"
+        )
+        else "offline"
     )
     bcg = dict(restored.get("bcg") or {}) if same_session else {}
-    bcg.update({
-        "analysis_valid": False,
-        "analysis_stale": True,
-        "analysis_source_connected": False,
-        "restored_after_restart": True,
-    })
+    bcg.update(
+        {
+            "analysis_valid": False,
+            "analysis_stale": True,
+            "analysis_source_connected": False,
+            "restored_after_restart": True,
+        }
+    )
     # The Timeline row can be a few seconds newer than the analysis frame, but
     # it deliberately contains no current Sleep label.  Environment/BCG may
     # use that freshest row; the restart bridge must come from the separately
     # persisted analysis frame that actually carried the confirmed decision.
-    sleep_source_frame = (
-        cached
-        if isinstance(cached, dict)
-        and cached.get("session_id") == current_session_id
-        else frame
-    )
+    sleep_source_frame = cached if isinstance(cached, dict) and cached.get("session_id") == current_session_id else frame
     held_sleep = (
         _install_restart_sleep_hold(
             dict(sleep_source_frame.get("sleep") or {}),
             session_id=current_session_id,
             source_epoch_s=float(sleep_source_frame["epoch_s"]),
         )
-        if same_session else None
+        if same_session
+        else None
     )
     with sleep_path_lock:
         restored_off_bed = bool(_sleep_stage_path.get("off_bed_latched"))
@@ -1527,16 +1651,8 @@ def _restore_latest_sensor_frame() -> bool:
         "evidence_active": False,
         "probabilities": {key: 0.0 for key in ZEEP_SLEEP_STATES},
         "confidence": "low",
-        "data_status": (
-            "empty_bed"
-            if restored_off_bed
-            else "restored_waiting_live_frame"
-        ),
-        "reason": (
-            "สถานะล่าสุดยืนยัน OFF BED · รอหลักฐานว่ากลับขึ้นเตียง"
-            if restored_off_bed
-            else "แสดงค่าล่าสุดก่อน Restart · รอ Sensor frame สด"
-        ),
+        "data_status": ("empty_bed" if restored_off_bed else "restored_waiting_live_frame"),
+        "reason": ("สถานะล่าสุดยืนยัน OFF BED · รอหลักฐานว่ากลับขึ้นเตียง" if restored_off_bed else "แสดงค่าล่าสุดก่อน Restart · รอ Sensor frame สด"),
         "score_eligible": False,
         "excluded_from_score": True,
         "excluded_from_personal_baseline": True,
@@ -1546,38 +1662,46 @@ def _restore_latest_sensor_frame() -> bool:
             None,
             decision="restart_initial_awake_anchor",
         )
-        restart_fallback.update({
-            "state": "wake",
-            "confirmed_state": "wake",
-            "classification_active": True,
-            "provisional": False,
-            "data_status": confirmation["data_status"],
-            "reason": "Session กำลังบันทึก · เริ่มความต่อเนื่องที่ W",
-            "score_eligible": True,
-            "excluded_from_score": False,
-            "confirmation": confirmation,
-            "score_attribution_state": "wake",
-        })
-    restored.update({
-        "source": "restored_after_restart",
-        "restored_source": frame.get("source") or "unknown",
-        "restored_after_restart": True,
-        "restored_at_utc": datetime.now(timezone.utc).isoformat(),
-        "saved_at_utc": saved_at_utc,
-        "session_id": current_session_id,
-        "environment": environment,
-        "bcg": bcg,
-        "sleep": held_sleep or restart_fallback,
-    })
+        restart_fallback.update(
+            {
+                "state": "wake",
+                "confirmed_state": "wake",
+                "classification_active": True,
+                "provisional": False,
+                "data_status": confirmation["data_status"],
+                "reason": "Session กำลังบันทึก · เริ่มความต่อเนื่องที่ W",
+                "score_eligible": True,
+                "excluded_from_score": False,
+                "confirmation": confirmation,
+                "score_attribution_state": "wake",
+            }
+        )
+    restored.update(
+        {
+            "source": "restored_after_restart",
+            "restored_source": frame.get("source") or "unknown",
+            "restored_after_restart": True,
+            "restored_at_utc": datetime.now(timezone.utc).isoformat(),
+            "saved_at_utc": saved_at_utc,
+            "session_id": current_session_id,
+            "environment": environment,
+            "bcg": bcg,
+            "sleep": held_sleep or restart_fallback,
+        }
+    )
     with analysis_frame_lock:
         _analysis_frame = restored
-    _sleep_cache.update({
-        "t": time.monotonic(),
-        "value": json.loads(json.dumps(held_sleep or restart_fallback)),
-        "session_id": current_session_id, "sequence": None,
-    })
+    _sleep_cache.update(
+        {
+            "t": time.monotonic(),
+            "value": json.loads(json.dumps(held_sleep or restart_fallback)),
+            "session_id": current_session_id,
+            "sequence": None,
+        }
+    )
     log_event(
-        "sensor_frame", "restored_after_restart",
+        "sensor_frame",
+        "restored_after_restart",
         source=restored["restored_source"],
         data_age_s=round(max(0.0, time.time() - float(restored["epoch_s"])), 1),
         same_session=same_session,
@@ -1586,20 +1710,33 @@ def _restore_latest_sensor_frame() -> bool:
     )
     return True
 
+
 def _reset_sleep_stage_path(session_id: Optional[str]) -> None:
     """Reset the per-session semi-Markov memory; caller holds sleep_path_lock."""
-    _sleep_stage_path.update({
-        "session_id": session_id, "seen": [], "last": None,
-        "stage_since": None, "candidate": None, "candidate_ticks": 0,
-        "cycle_has_n1": False, "continuity_hold_ticks": 0,
-        "probability_ema": None,
-        "sensor_tick_count": 0, "last_evidence_epoch_s": None,
-        "last_evidence_result": None, "awake_vital_pairs": [],
-        "awake_hr_reference": None, "awake_rr_reference": None,
-        "sleep_onset_at": None, "last_valid_frame_t": None,
-        "off_bed_latched": False,
-    "restart_hold_result": None, "restart_hold_until_epoch_s": None,
-    })
+    _sleep_stage_path.update(
+        {
+            "session_id": session_id,
+            "seen": [],
+            "last": None,
+            "stage_since": None,
+            "candidate": None,
+            "candidate_ticks": 0,
+            "cycle_has_n1": False,
+            "continuity_hold_ticks": 0,
+            "probability_ema": None,
+            "sensor_tick_count": 0,
+            "last_evidence_epoch_s": None,
+            "last_evidence_result": None,
+            "awake_vital_pairs": [],
+            "awake_hr_reference": None,
+            "awake_rr_reference": None,
+            "sleep_onset_at": None,
+            "last_valid_frame_t": None,
+            "off_bed_latched": False,
+            "restart_hold_result": None,
+            "restart_hold_until_epoch_s": None,
+        }
+    )
 
 
 def _clear_restart_sleep_hold_locked() -> None:
@@ -1626,14 +1763,7 @@ def _install_restart_sleep_hold(
     source_stage = source_sleep.get("confirmed_state") or source_sleep.get("state")
     with sleep_path_lock:
         durable_stage = _sleep_stage_path.get("last")
-        if not (
-            session_id
-            and _sleep_stage_path.get("session_id") == session_id
-            and source_sleep.get("classification_active") is True
-            and source_stage in ZEEP_SLEEP_STATES
-            and source_stage == durable_stage
-            and not _sleep_stage_path.get("off_bed_latched")
-        ):
+        if not (session_id and _sleep_stage_path.get("session_id") == session_id and source_sleep.get("classification_active") is True and source_stage in ZEEP_SLEEP_STATES and source_stage == durable_stage and not _sleep_stage_path.get("off_bed_latched")):
             _clear_restart_sleep_hold_locked()
             return None
         held = json.loads(json.dumps(source_sleep))
@@ -1641,36 +1771,29 @@ def _install_restart_sleep_hold(
             durable_stage,
             decision="restart_continuity_hold",
         )
-        held.update({
-            "state": durable_stage,
-            "confirmed_state": durable_stage,
-            "classification_active": True,
-            "evidence_active": False,
-            "confidence": "low",
-            "provisional": False,
-            "data_status": "restored_confirmed_state",
-            "reason": (
-                "ยึดสถานะยืนยันล่าสุดก่อน Restart · "
-                "กำลังสร้างหลักฐานสดรอบใหม่"
-            ),
-            "held_previous_state": bool(
-                confirmation["held_previous_state"]
-            ),
-            "score_attribution_state": confirmation[
-                "score_attribution_state"
-            ],
-            "challenger_counted_as_new_state": False,
-            "score_eligible": bool(confirmation["score_eligible"]),
-            "excluded_from_score": bool(
-                confirmation["excluded_from_score"]
-            ),
-            "excluded_from_personal_baseline": True,
-            "confirmation": confirmation,
-            "display_only_after_restart": False,
-            "restored_after_restart": True,
-            "restored_source_epoch_s": source_epoch_s,
-            "restart_hold_max_s": RESTART_SLEEP_STATE_HOLD_SECONDS,
-        })
+        held.update(
+            {
+                "state": durable_stage,
+                "confirmed_state": durable_stage,
+                "classification_active": True,
+                "evidence_active": False,
+                "confidence": "low",
+                "provisional": False,
+                "data_status": "restored_confirmed_state",
+                "reason": ("ยึดสถานะยืนยันล่าสุดก่อน Restart · กำลังสร้างหลักฐานสดรอบใหม่"),
+                "held_previous_state": bool(confirmation["held_previous_state"]),
+                "score_attribution_state": confirmation["score_attribution_state"],
+                "challenger_counted_as_new_state": False,
+                "score_eligible": bool(confirmation["score_eligible"]),
+                "excluded_from_score": bool(confirmation["excluded_from_score"]),
+                "excluded_from_personal_baseline": True,
+                "confirmation": confirmation,
+                "display_only_after_restart": False,
+                "restored_after_restart": True,
+                "restored_source_epoch_s": source_epoch_s,
+                "restart_hold_max_s": RESTART_SLEEP_STATE_HOLD_SECONDS,
+            }
+        )
         # A code restart begins a new confirmation window.  Preserve the
         # durable State itself, but never inherit a pending challenger or the
         # score-eligibility age of a pre-restart continuity hold.
@@ -1679,9 +1802,7 @@ def _install_restart_sleep_hold(
         _sleep_stage_path["continuity_hold_ticks"] = 0
         _sleep_stage_path["probability_ema"] = None
         _sleep_stage_path["restart_hold_result"] = json.loads(json.dumps(held))
-        _sleep_stage_path["restart_hold_until_epoch_s"] = (
-            time.time() + RESTART_SLEEP_STATE_HOLD_SECONDS
-        )
+        _sleep_stage_path["restart_hold_until_epoch_s"] = time.time() + RESTART_SLEEP_STATE_HOLD_SECONDS
         _sleep_stage_path["last_evidence_result"] = json.loads(json.dumps(held))
         return held
 
@@ -1691,21 +1812,12 @@ def _restart_sleep_hold_result(session_id: Optional[str]) -> Optional[Dict[str, 
     with sleep_path_lock:
         held = _sleep_stage_path.get("restart_hold_result")
         expires = _sleep_stage_path.get("restart_hold_until_epoch_s")
-        valid = bool(
-            session_id
-            and _sleep_stage_path.get("session_id") == session_id
-            and isinstance(held, dict)
-            and held.get("state") == _sleep_stage_path.get("last")
-            and isinstance(expires, (int, float))
-            and time.time() <= float(expires)
-        )
+        valid = bool(session_id and _sleep_stage_path.get("session_id") == session_id and isinstance(held, dict) and held.get("state") == _sleep_stage_path.get("last") and isinstance(expires, (int, float)) and time.time() <= float(expires))
         if not valid:
             _clear_restart_sleep_hold_locked()
             return None
         value = json.loads(json.dumps(held))
-        value["restart_hold_remaining_s"] = max(
-            0, round(float(expires) - time.time())
-        )
+        value["restart_hold_remaining_s"] = max(0, round(float(expires) - time.time()))
         return value
 
 
@@ -1739,7 +1851,10 @@ def _active_with_sleep_context(active: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _update_sleep_session_context(
-    frames: List[Dict[str, Any]], *, now: float, session_started: Optional[float],
+    frames: List[Dict[str, Any]],
+    *,
+    now: float,
+    session_started: Optional[float],
 ) -> Dict[str, Any]:
     """Maintain prior-only awake references across transient evidence gaps.
 
@@ -1758,21 +1873,11 @@ def _update_sleep_session_context(
     reference survive while the same Session remains active. Session-owner
     changes and confirmed Bed Exit continue to use their dedicated paths.
     """
-    valid = [
-        frame for frame in frames
-        if frame.get("bcg_valid")
-        and isinstance(frame.get("hr"), (int, float))
-        and isinstance(frame.get("rr"), (int, float))
-        and isinstance(frame.get("t"), (int, float))
-    ]
+    valid = [frame for frame in frames if frame.get("bcg_valid") and isinstance(frame.get("hr"), (int, float)) and isinstance(frame.get("rr"), (int, float)) and isinstance(frame.get("t"), (int, float))]
     with sleep_path_lock:
         latest_t = float(valid[-1]["t"]) if valid else None
         previous_t = _sleep_stage_path.get("last_valid_frame_t")
-        gap_detected = bool(
-            latest_t is not None
-            and isinstance(previous_t, (int, float))
-            and latest_t - float(previous_t) >= SLEEP_CONTEXT_RESET_GAP_SECONDS
-        )
+        gap_detected = bool(latest_t is not None and isinstance(previous_t, (int, float)) and latest_t - float(previous_t) >= SLEEP_CONTEXT_RESET_GAP_SECONDS)
         if gap_detected:
             # Do not turn a telemetry/processing gap into Wake.  Clear only
             # evidence that was still waiting for confirmation; continuity
@@ -1799,28 +1904,19 @@ def _update_sleep_session_context(
         references = sorted(references, key=lambda item: item[0])[-720:]
         _sleep_stage_path["awake_vital_pairs"] = references
         if len(references) >= 6:
-            _sleep_stage_path["awake_hr_reference"] = _upper_quartile(
-                [item[1] for item in references]
-            )
-            _sleep_stage_path["awake_rr_reference"] = _upper_quartile(
-                [item[2] for item in references]
-            )
+            _sleep_stage_path["awake_hr_reference"] = _upper_quartile([item[1] for item in references])
+            _sleep_stage_path["awake_rr_reference"] = _upper_quartile([item[2] for item in references])
         return {
             "awake_hr_reference": _sleep_stage_path.get("awake_hr_reference"),
             "awake_rr_reference": _sleep_stage_path.get("awake_rr_reference"),
             "awake_reference_pairs": len(references),
             "sleep_onset_established": sleep_onset_at is not None,
-            "sleep_elapsed_min": (
-                max(0.0, (now - float(sleep_onset_at)) / 60.0)
-                if isinstance(sleep_onset_at, (int, float)) else 0.0
-            ),
+            "sleep_elapsed_min": (max(0.0, (now - float(sleep_onset_at)) / 60.0) if isinstance(sleep_onset_at, (int, float)) else 0.0),
             # ``gap_reset`` is retained for response compatibility.  It now
             # truthfully reports that no full context reset was performed.
             "gap_reset": False,
             "gap_detected": gap_detected,
-            "context_preserved_after_gap": bool(
-                gap_detected and _sleep_stage_path.get("last") is not None
-            ),
+            "context_preserved_after_gap": bool(gap_detected and _sleep_stage_path.get("last") is not None),
         }
 
 
@@ -1834,9 +1930,7 @@ def _advance_sleep_evidence_clock(session_id: Optional[str]) -> Dict[str, Any]:
     with sleep_path_lock:
         if _sleep_stage_path.get("session_id") != session_id:
             _reset_sleep_stage_path(session_id)
-        _sleep_stage_path["sensor_tick_count"] = int(
-            _sleep_stage_path.get("sensor_tick_count") or 0
-        ) + 1
+        _sleep_stage_path["sensor_tick_count"] = int(_sleep_stage_path.get("sensor_tick_count") or 0) + 1
         tick_count = int(_sleep_stage_path["sensor_tick_count"])
         frame_in_epoch = ((tick_count - 1) % SLEEP_SENSOR_FRAMES_PER_EPOCH) + 1
         due = frame_in_epoch == SLEEP_SENSOR_FRAMES_PER_EPOCH
@@ -1904,11 +1998,7 @@ def _latch_confirmed_bed_exit(
     if changed:
         with session_lock:
             active = _active_session
-        if (
-            active is not None
-            and active.get("phase") == "recording"
-            and active["record"].get("session_id") == session_id
-        ):
+        if active is not None and active.get("phase") == "recording" and active["record"].get("session_id") == session_id:
             try:
                 _save_active_session_checkpoint(active)
             except Exception as exc:
@@ -1982,33 +2072,33 @@ def _persist_sleep_stage_evidence(
     with state_lock:
         session_id = state["session"].get("session_id")
     with session_lock:
-        persist = bool(
-            _active_session
-            and _active_session.get("phase") == "recording"
-            and _active_session["record"].get("session_id") == session_id
-        )
+        persist = bool(_active_session and _active_session.get("phase") == "recording" and _active_session["record"].get("session_id") == session_id)
     if not persist:
         return
-    database.enqueue("sessions", "event", {
-        "session_id": session_id,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "type": "sleep_stage_evidence",
-        "value": {
-            "candidate": candidate,
-            "probabilities": probabilities,
-            "confidence": confidence,
-            "reason": reason,
-            "metrics": metrics or {},
-            **_sleep_decision_provenance(),
-            "window_start": window_start,
-            "window_end": window_end,
-            "sample_count": sample_count,
-            "sensor_sample_interval_s": SLEEP_SAMPLE_SECONDS,
-            "evidence_epoch_s": SLEEP_EVIDENCE_EPOCH_SECONDS,
-            "confirmation": confirmation or {},
-            "decision_kind": "physiological_evidence",
+    database.enqueue(
+        "sessions",
+        "event",
+        {
+            "session_id": session_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "type": "sleep_stage_evidence",
+            "value": {
+                "candidate": candidate,
+                "probabilities": probabilities,
+                "confidence": confidence,
+                "reason": reason,
+                "metrics": metrics or {},
+                **_sleep_decision_provenance(),
+                "window_start": window_start,
+                "window_end": window_end,
+                "sample_count": sample_count,
+                "sensor_sample_interval_s": SLEEP_SAMPLE_SECONDS,
+                "evidence_epoch_s": SLEEP_EVIDENCE_EPOCH_SECONDS,
+                "confirmation": confirmation or {},
+                "decision_kind": "physiological_evidence",
+            },
         },
-    })
+    )
 
 
 def _persist_sleep_stage_status(
@@ -2021,17 +2111,10 @@ def _persist_sleep_stage_status(
         session_id = state["session"].get("session_id")
         state_recording = bool(state["session"].get("recording"))
     data_status = str(sleep_result.get("data_status") or "").lower()
-    off_bed = bool(
-        sleep_result.get("state") == "off_bed"
-        or data_status in ZEEP_OFF_BED_DATA_STATUSES - {"no_session"}
-    )
+    off_bed = bool(sleep_result.get("state") == "off_bed" or data_status in ZEEP_OFF_BED_DATA_STATUSES - {"no_session"})
     with session_lock:
         active = _active_session
-        recording = bool(
-            state_recording and off_bed and active
-            and active.get("phase") == "recording"
-            and active["record"].get("session_id") == session_id
-        )
+        recording = bool(state_recording and off_bed and active and active.get("phase") == "recording" and active["record"].get("session_id") == session_id)
     if not recording:
         return
     database.enqueue(
@@ -2047,13 +2130,18 @@ def _persist_sleep_stage_status(
     )
 
 
-def _commit_sleep_stage(stage: str, probabilities: Dict[str, float], reason: str,
-                        *, confidence: Optional[str] = None,
-                        metrics: Optional[Dict[str, Any]] = None,
-                        window_start: Optional[str] = None,
-                        window_end: Optional[str] = None,
-                        sample_count: Optional[int] = None,
-                        confirmation: Optional[Dict[str, Any]] = None) -> list:
+def _commit_sleep_stage(
+    stage: str,
+    probabilities: Dict[str, float],
+    reason: str,
+    *,
+    confidence: Optional[str] = None,
+    metrics: Optional[Dict[str, Any]] = None,
+    window_start: Optional[str] = None,
+    window_end: Optional[str] = None,
+    sample_count: Optional[int] = None,
+    confirmation: Optional[Dict[str, Any]] = None,
+) -> list:
     with state_lock:
         session_id = state["session"].get("session_id")
     with sleep_path_lock:
@@ -2070,68 +2158,57 @@ def _commit_sleep_stage(stage: str, probabilities: Dict[str, float], reason: str
     # its challenger remains only in Evidence/confirmation metadata.
     with session_lock:
         active_for_checkpoint = _active_session
-        persist_decision = bool(
-            active_for_checkpoint
-            and active_for_checkpoint.get("phase") == "recording"
-            and active_for_checkpoint["record"].get("session_id") == session_id
-        )
+        persist_decision = bool(active_for_checkpoint and active_for_checkpoint.get("phase") == "recording" and active_for_checkpoint["record"].get("session_id") == session_id)
     if persist_decision:
-        database.enqueue("sessions", "event", {
-            "session_id": session_id, "timestamp": datetime.now(timezone.utc).isoformat(),
-            "type": "sleep_stage", "value": {
-                "state": stage, "probabilities": probabilities,
-                "confidence": confidence, "reason": reason, "progression": seen,
-                "metrics": metrics or {}, **_sleep_decision_provenance(),
-                "window_start": window_start, "window_end": window_end,
-                "attribution_start": (
-                    datetime.fromtimestamp(
-                        datetime.fromisoformat(window_end).timestamp()
-                        - SLEEP_EVIDENCE_EPOCH_SECONDS,
-                        timezone.utc,
-                    ).isoformat()
-                    if window_end else None
-                ),
-                "attribution_end": window_end,
-                "sample_count": sample_count,
-                "sensor_sample_interval_s": SLEEP_SAMPLE_SECONDS,
-                "sample_interval_s": SLEEP_EVIDENCE_EPOCH_SECONDS,
-                "confirmation_seconds": float((confirmation or {}).get(
-                    "confirmation_seconds",
-                    SLEEP_STAGE_CONFIRMATION_SECONDS.get(
-                        stage, SLEEP_CONFIRMATION_SECONDS),
-                )),
-                "confirmation": confirmation or {},
-                "decision_kind": (
-                    (confirmation or {}).get("decision_kind")
-                    or "confirmed_state"
-                ),
-                "held_previous_state": bool(
-                    (confirmation or {}).get("held_previous_state")
-                ),
-                "provisional": bool(
-                    (confirmation or {}).get("provisional")
-                ),
-                "pending_state": (confirmation or {}).get("pending_state"),
-                "score_attribution_state": stage,
-                "challenger_counted_as_new_state": bool(
-                    (confirmation or {}).get(
-                        "challenger_counted_as_new_state"
-                    )
-                ),
-                "score_eligible": bool(
-                    (confirmation or {}).get("score_eligible", True)
-                ),
-                "excluded_from_score": bool(
-                    (confirmation or {}).get("excluded_from_score", False)
-                ),
-                "excluded_from_personal_baseline": bool(
-                    (confirmation or {}).get(
-                        "excluded_from_personal_baseline", False
-                    )
-                ),
-                "state_changed": changed,
+        database.enqueue(
+            "sessions",
+            "event",
+            {
+                "session_id": session_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "type": "sleep_stage",
+                "value": {
+                    "state": stage,
+                    "probabilities": probabilities,
+                    "confidence": confidence,
+                    "reason": reason,
+                    "progression": seen,
+                    "metrics": metrics or {},
+                    **_sleep_decision_provenance(),
+                    "window_start": window_start,
+                    "window_end": window_end,
+                    "attribution_start": (
+                        datetime.fromtimestamp(
+                            datetime.fromisoformat(window_end).timestamp() - SLEEP_EVIDENCE_EPOCH_SECONDS,
+                            timezone.utc,
+                        ).isoformat()
+                        if window_end
+                        else None
+                    ),
+                    "attribution_end": window_end,
+                    "sample_count": sample_count,
+                    "sensor_sample_interval_s": SLEEP_SAMPLE_SECONDS,
+                    "sample_interval_s": SLEEP_EVIDENCE_EPOCH_SECONDS,
+                    "confirmation_seconds": float(
+                        (confirmation or {}).get(
+                            "confirmation_seconds",
+                            SLEEP_STAGE_CONFIRMATION_SECONDS.get(stage, SLEEP_CONFIRMATION_SECONDS),
+                        )
+                    ),
+                    "confirmation": confirmation or {},
+                    "decision_kind": ((confirmation or {}).get("decision_kind") or "confirmed_state"),
+                    "held_previous_state": bool((confirmation or {}).get("held_previous_state")),
+                    "provisional": bool((confirmation or {}).get("provisional")),
+                    "pending_state": (confirmation or {}).get("pending_state"),
+                    "score_attribution_state": stage,
+                    "challenger_counted_as_new_state": bool((confirmation or {}).get("challenger_counted_as_new_state")),
+                    "score_eligible": bool((confirmation or {}).get("score_eligible", True)),
+                    "excluded_from_score": bool((confirmation or {}).get("excluded_from_score", False)),
+                    "excluded_from_personal_baseline": bool((confirmation or {}).get("excluded_from_personal_baseline", False)),
+                    "state_changed": changed,
+                },
             },
-        })
+        )
         if changed:
             try:
                 _save_active_session_checkpoint(active_for_checkpoint)
@@ -2167,8 +2244,7 @@ def _transition_fallback_state(blocked: str, previous: Optional[str]) -> str:
     )
 
 
-def _stabilize_sleep_stage(candidate: str, *, now: float,
-                           strong_wake: bool = False) -> tuple[str, Dict[str, Any]]:
+def _stabilize_sleep_stage(candidate: str, *, now: float, strong_wake: bool = False) -> tuple[str, Dict[str, Any]]:
     """Resolve adjacency, dwell and repeated evidence under the path lock."""
     allowed, previous = _transition_allowed(candidate, strong_wake=strong_wake)
     target = candidate if allowed else _transition_fallback_state(candidate, previous)
@@ -2192,8 +2268,7 @@ def _stabilize_sleep_stage(candidate: str, *, now: float,
 
 def _physiological_baseline_fit(hr_fit: float, rr_fit: float) -> float:
     """Combine HR/RR proximity using the versioned ZEEP scoring weights."""
-    return (SLEEP_BASELINE_HR_WEIGHT * hr_fit
-            + SLEEP_BASELINE_RR_WEIGHT * rr_fit)
+    return SLEEP_BASELINE_HR_WEIGHT * hr_fit + SLEEP_BASELINE_RR_WEIGHT * rr_fit
 
 
 def _rr_n3_conflict_adjustment(rr_stage_fits: Dict[str, float]) -> Dict[str, float]:
@@ -2204,8 +2279,7 @@ def _rr_n3_conflict_adjustment(rr_stage_fits: Dict[str, float]) -> Dict[str, flo
     baseline score; it cannot create a stage and does not replace RR
     variability, movement, transition order or future PSG validation.
     """
-    conflict = max(0.0, float(rr_stage_fits.get("n2", 0.0))
-                   - float(rr_stage_fits.get("n3", 0.0)))
+    conflict = max(0.0, float(rr_stage_fits.get("n2", 0.0)) - float(rr_stage_fits.get("n3", 0.0)))
     return {
         "conflict": conflict,
         "n3_penalty": conflict * SLEEP_N3_RR_CONFLICT_PENALTY,
@@ -2214,7 +2288,8 @@ def _rr_n3_conflict_adjustment(rr_stage_fits: Dict[str, float]) -> Dict[str, flo
 
 
 def _sleep_environment_context(
-    environment: Dict[str, Any], rest_mode: Any = "sleep",
+    environment: Dict[str, Any],
+    rest_mode: Any = "sleep",
 ) -> Dict[str, Any]:
     """Bind runtime policy versions to the pure environment assessment."""
     return _build_sleep_environment_context(
@@ -2254,12 +2329,16 @@ def note_session_activity(kind: str, value: Any = None):
             if _active_session.get("phase") == "recording":
                 session_id = _active_session["record"]["session_id"]
     if session_id:
-        database.enqueue("sessions", "event", {
-            "session_id": session_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "type": kind,
-            "value": value,
-        })
+        database.enqueue(
+            "sessions",
+            "event",
+            {
+                "session_id": session_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "type": kind,
+                "value": value,
+            },
+        )
 
 
 class ZeepApiOffline(Exception):
@@ -2270,11 +2349,17 @@ class ZeepApiOffline(Exception):
     """
 
 
-def _zeep_request(method: str, path: str, *, json_body: Optional[dict] = None,
-                  token: Optional[str] = None,
-                  api_key: Optional[str] = None,
-                  files: Optional[dict] = None, data: Optional[dict] = None,
-                  timeout: Optional[float] = None) -> Dict[str, Any]:
+def _zeep_request(
+    method: str,
+    path: str,
+    *,
+    json_body: Optional[dict] = None,
+    token: Optional[str] = None,
+    api_key: Optional[str] = None,
+    files: Optional[dict] = None,
+    data: Optional[dict] = None,
+    timeout: Optional[float] = None,
+) -> Dict[str, Any]:
     """เรียก ZEEP API แล้วคืน envelope `{status, statusCode, message, data}`.
 
     ทีม backend ห่อทุก response เป็น envelope นี้ และบาง endpoint ส่ง
@@ -2290,9 +2375,15 @@ def _zeep_request(method: str, path: str, *, json_body: Optional[dict] = None,
     if api_key:
         headers["x-api-key"] = api_key
     try:
-        response = httpx.request(method, f"{ZEEP_API_BASE_URL}{path}", json=json_body,
-                                 files=files, data=data, headers=headers,
-                                 timeout=ZEEP_API_TIMEOUT if timeout is None else timeout)
+        response = httpx.request(
+            method,
+            f"{ZEEP_API_BASE_URL}{path}",
+            json=json_body,
+            files=files,
+            data=data,
+            headers=headers,
+            timeout=ZEEP_API_TIMEOUT if timeout is None else timeout,
+        )
     except httpx.HTTPError as exc:
         raise ZeepApiOffline(f"{type(exc).__name__}: {exc}") from exc
     try:
@@ -2360,10 +2451,7 @@ def _migrate_profiles_to_email_keys() -> Dict[str, str]:
             profile["account_key"] = new_key
             if new_key != old_key:
                 mapping[old_key] = new_key
-                aliases = {
-                    str(value).strip().casefold()
-                    for value in (profile.get("legacy_account_keys") or []) if value
-                }
+                aliases = {str(value).strip().casefold() for value in (profile.get("legacy_account_keys") or []) if value}
                 aliases.add(old_key)
                 profile["legacy_account_keys"] = sorted(aliases)
                 changed = True
@@ -2382,13 +2470,14 @@ def _migrate_profiles_to_email_keys() -> Dict[str, str]:
             new_last = str(profile.get("last_session_utc") or "")
             newer, older = (profile, existing) if new_last >= old_last else (existing, profile)
             combined = {**older, **newer}
-            combined["sessions"] = int(existing.get("sessions", 0)) + int(
-                profile.get("sessions", 0)
-            )
+            combined["sessions"] = int(existing.get("sessions", 0)) + int(profile.get("sessions", 0))
             created = [
-                value for value in (
-                    existing.get("created_at_utc"), profile.get("created_at_utc")
-                ) if value
+                value
+                for value in (
+                    existing.get("created_at_utc"),
+                    profile.get("created_at_utc"),
+                )
+                if value
             ]
             if created:
                 combined["created_at_utc"] = min(created)
@@ -2437,8 +2526,7 @@ def _rewrite_sessions(records: list):
 
 
 def _series_stats(values):
-    vals = [v for v in values
-            if isinstance(v, (int, float)) and not isinstance(v, bool)]
+    vals = [v for v in values if isinstance(v, (int, float)) and not isinstance(v, bool)]
     if not vals:
         return None
     return {
@@ -2467,12 +2555,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
         for index in range(1, len(context_frames)):
             before = context_frames[index - 1].get("t")
             after = context_frames[index].get("t")
-            if (
-                isinstance(before, (int, float))
-                and isinstance(after, (int, float))
-                and float(after) - float(before)
-                >= SLEEP_CONTEXT_RESET_GAP_SECONDS
-            ):
+            if isinstance(before, (int, float)) and isinstance(after, (int, float)) and float(after) - float(before) >= SLEEP_CONTEXT_RESET_GAP_SECONDS:
                 latest_gap_index = index
         if latest_gap_index >= 0:
             context_frames = context_frames[latest_gap_index:]
@@ -2496,8 +2579,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
     personal_meta = {"source": "age_gender_default", "status": "no_session"}
     proposed_personal_baseline = None
     if _account_key:
-        proposed_personal_baseline, personal_meta = baselines.personalize_baseline(
-            _account_key, baseline)
+        proposed_personal_baseline, personal_meta = baselines.personalize_baseline(_account_key, baseline)
         personal_meta = {
             **personal_meta,
             "direct_stage_influence": PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED,
@@ -2505,19 +2587,16 @@ def estimate_sleep_state() -> Dict[str, Any]:
         }
     personal_behaviour = (
         baselines.behaviour_context(_account_key, rest_mode)
-        if _account_key else {
-            "status": "no_session", "sessions_used": 0,
+        if _account_key
+        else {
+            "status": "no_session",
+            "sessions_used": 0,
             "direct_stage_influence": False,
         }
     )
-    personal_thresholds = (
-        baselines.thresholds_for(_account_key)
-        if _account_key and PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED else None
-    )
-    cv_deep_threshold = float((personal_thresholds or {}).get(
-        "cv_deep", SLEEP_HR_CV_DEEP))
-    cv_rem_threshold = float((personal_thresholds or {}).get(
-        "cv_rem", SLEEP_HR_CV_REM))
+    personal_thresholds = baselines.thresholds_for(_account_key) if _account_key and PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED else None
+    cv_deep_threshold = float((personal_thresholds or {}).get("cv_deep", SLEEP_HR_CV_DEEP))
+    cv_rem_threshold = float((personal_thresholds or {}).get("cv_rem", SLEEP_HR_CV_REM))
     with sleep_path_lock:
         if session_active and _sleep_stage_path.get("session_id") != active_session_id:
             _reset_sleep_stage_path(active_session_id)
@@ -2558,18 +2637,29 @@ def estimate_sleep_state() -> Dict[str, Any]:
             "g2_ontology_version": SLEEP_G2_ONTOLOGY_VERSION,
             "g2_ontology": ["W", "N1", "N2", "N3", "REM"],
             "g2_psg_crosswalk": {
-                "wake": "W", "n1": "N1", "n2": "N2",
-                "n3": "N3", "rem": "REM",
+                "wake": "W",
+                "n1": "N1",
+                "n2": "N2",
+                "n3": "N3",
+                "rem": "REM",
             },
             "primary_inputs": [
-                "bed_status", "movement", "heart_rate", "respiration_rate",
-                "heart_rate_summary_cv", "respiration_rate_cv",
-                "hr_rr_trend", "bcg_respiratory_regularity",
-                "bcg_fast_amplitude_stability", "elapsed_time",
-                "transition_path", "age_gender_baseline",
+                "bed_status",
+                "movement",
+                "heart_rate",
+                "respiration_rate",
+                "heart_rate_summary_cv",
+                "respiration_rate_cv",
+                "hr_rr_trend",
+                "bcg_respiratory_regularity",
+                "bcg_fast_amplitude_stability",
+                "elapsed_time",
+                "transition_path",
+                "age_gender_baseline",
             ],
             "corroborating_inputs": [
-                "sph0645_acoustic_disturbance", "bed_status_weak_breathing",
+                "sph0645_acoustic_disturbance",
+                "bed_status_weak_breathing",
                 "bed_status_snoring",
             ],
             "scoring_weights": {
@@ -2579,13 +2669,16 @@ def estimate_sleep_state() -> Dict[str, Any]:
                 "n2_rr_conflict_support": SLEEP_N2_RR_CONFLICT_SUPPORT,
             },
             "context_inputs": [
-                "temperature", "humidity", "co2", "light", "sound",
-                "pm2_5", "voc_index",
+                "temperature",
+                "humidity",
+                "co2",
+                "light",
+                "sound",
+                "pm2_5",
+                "voc_index",
             ],
             "environment_direct_stage_influence": False,
-            "personal_history_direct_stage_influence": (
-                PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED
-            ),
+            "personal_history_direct_stage_influence": (PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED),
             "acoustic_requires_bcg_or_motion_corroboration": True,
             "intended_use": "exploratory_wellness_telemetry",
             "actuator_trigger": False,
@@ -2602,6 +2695,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
         "data_status": "warming",
         "reason": "กำลังสะสมข้อมูล HR/RR และการเคลื่อนไหว",
     }
+
     def suspend_classification(
         reason: str,
         data_status: str,
@@ -2609,12 +2703,17 @@ def estimate_sleep_state() -> Dict[str, Any]:
         display_state: str = "no_data",
     ) -> Dict[str, Any]:
         """Return an operational status only outside occupied recording."""
-        if session_active and session_recording and data_status not in {
-            "empty_bed",
-            "confirmed_off_bed",
-            "no_session",
-            "waiting_for_vitals",
-        }:
+        if (
+            session_active
+            and session_recording
+            and data_status
+            not in {
+                "empty_bed",
+                "confirmed_off_bed",
+                "no_session",
+                "waiting_for_vitals",
+            }
+        ):
             return carry_occupied_epoch(reason, data_status=data_status)
         with sleep_path_lock:
             if _sleep_stage_path.get("session_id") == active_session_id:
@@ -2622,24 +2721,24 @@ def estimate_sleep_state() -> Dict[str, Any]:
                 _sleep_stage_path["candidate_ticks"] = 0
                 _sleep_stage_path["continuity_hold_ticks"] = 0
                 _sleep_stage_path["probability_ema"] = None
-        result.update({
-            "state": display_state,
-            "probabilities": {
-                key: 0.0 for key in ("wake", "n1", "n2", "n3", "rem")
-            },
-            "classification_active": False,
-            "evidence_active": False,
-            "confirmed_state": None,
-            "confidence": "low",
-            "provisional": False,
-            "data_status": data_status,
-            "reason": reason,
-            "last_valid_state": previous_valid_stage if had_previous_stage else None,
-            "held_previous_state": False,
-            "score_eligible": False,
-            "excluded_from_score": True,
-            "excluded_from_personal_baseline": True,
-        })
+        result.update(
+            {
+                "state": display_state,
+                "probabilities": {key: 0.0 for key in ("wake", "n1", "n2", "n3", "rem")},
+                "classification_active": False,
+                "evidence_active": False,
+                "confirmed_state": None,
+                "confidence": "low",
+                "provisional": False,
+                "data_status": data_status,
+                "reason": reason,
+                "last_valid_state": previous_valid_stage if had_previous_stage else None,
+                "held_previous_state": False,
+                "score_eligible": False,
+                "excluded_from_score": True,
+                "excluded_from_personal_baseline": True,
+            }
+        )
         return result
 
     def carry_occupied_epoch(
@@ -2649,16 +2748,8 @@ def estimate_sleep_state() -> Dict[str, Any]:
         current_epoch: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """Assign every occupied Epoch to W or the last confirmed State."""
-        epoch_frames = list(
-            current_epoch
-            if current_epoch is not None
-            else frames[-SLEEP_SENSOR_FRAMES_PER_EPOCH:]
-        )
-        frame_times = [
-            float(frame["t"])
-            for frame in epoch_frames
-            if isinstance(frame.get("t"), (int, float))
-        ]
+        epoch_frames = list(current_epoch if current_epoch is not None else frames[-SLEEP_SENSOR_FRAMES_PER_EPOCH:])
+        frame_times = [float(frame["t"]) for frame in epoch_frames if isinstance(frame.get("t"), (int, float))]
         epoch_end_s = max(frame_times) if frame_times else now
         with sleep_path_lock:
             if _sleep_stage_path.get("session_id") != active_session_id:
@@ -2668,11 +2759,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
             _sleep_stage_path["candidate"] = None
             _sleep_stage_path["candidate_ticks"] = 0
             _sleep_stage_path["probability_ema"] = None
-            hold_epochs = (
-                int(_sleep_stage_path.get("continuity_hold_ticks") or 0) + 1
-                if previous is not None
-                else 1
-            )
+            hold_epochs = int(_sleep_stage_path.get("continuity_hold_ticks") or 0) + 1 if previous is not None else 1
             _sleep_stage_path["continuity_hold_ticks"] = hold_epochs
 
         confirmation = continuity_hold_contract(
@@ -2680,18 +2767,17 @@ def estimate_sleep_state() -> Dict[str, Any]:
             decision="occupied_evidence_gap_hold",
             hold_epochs=hold_epochs,
         )
-        confirmation.update({
-            "candidate_epochs": 0,
-            "required_epochs": 0,
-            "confirmation_seconds": 0.0,
-            "confirmation_complete": True,
-            "evidence_data_status": data_status,
-        })
+        confirmation.update(
+            {
+                "candidate_epochs": 0,
+                "required_epochs": 0,
+                "confirmation_seconds": 0.0,
+                "confirmation_complete": True,
+                "evidence_data_status": data_status,
+            }
+        )
         stage = str(confirmation["confirmed_state"])
-        display_probabilities = {
-            name: 1.0 if name == stage else 0.0
-            for name in ZEEP_SLEEP_STATES
-        }
+        display_probabilities = {name: 1.0 if name == stage else 0.0 for name in ZEEP_SLEEP_STATES}
         current_hrs = filter_vital_values(
             [frame.get("hr") for frame in epoch_frames],
             HR_SANITY_RANGE_BPM,
@@ -2700,83 +2786,65 @@ def estimate_sleep_state() -> Dict[str, Any]:
             [frame.get("rr") for frame in epoch_frames],
             RR_SANITY_RANGE_PER_MIN,
         )
-        mean_epoch_hr = (
-            sum(current_hrs) / len(current_hrs) if current_hrs else None
-        )
-        mean_epoch_rr = (
-            sum(current_rrs) / len(current_rrs) if current_rrs else None
-        )
+        mean_epoch_hr = sum(current_hrs) / len(current_hrs) if current_hrs else None
+        mean_epoch_rr = sum(current_rrs) / len(current_rrs) if current_rrs else None
         window_start = datetime.fromtimestamp(
             epoch_end_s - SLEEP_EVIDENCE_EPOCH_SECONDS,
             timezone.utc,
         ).isoformat()
-        window_end = datetime.fromtimestamp(
-            epoch_end_s, timezone.utc
-        ).isoformat()
+        window_end = datetime.fromtimestamp(epoch_end_s, timezone.utc).isoformat()
         latest_frame = epoch_frames[-1] if epoch_frames else {}
         decision_metrics = {
-            "mean_hr": (
-                round(mean_epoch_hr, 1) if mean_epoch_hr is not None else None
-            ),
-            "mean_rr": (
-                round(mean_epoch_rr, 1) if mean_epoch_rr is not None else None
-            ),
+            "mean_hr": (round(mean_epoch_hr, 1) if mean_epoch_hr is not None else None),
+            "mean_rr": (round(mean_epoch_rr, 1) if mean_epoch_rr is not None else None),
             "bed_status": STATUS_TEXT.get(
-                latest_frame.get(
-                    "confirmed_status", latest_frame.get("status")
-                ),
+                latest_frame.get("confirmed_status", latest_frame.get("status")),
                 "Unknown",
             ),
             "evidence_data_status": data_status,
             "continuity_carry": True,
         }
-        result.update({
-            "state": stage,
-            "confirmed_state": stage,
-            "classification_active": True,
-            "evidence_active": False,
-            "probabilities": display_probabilities,
-            "evidence_probabilities": {
-                stage: 0.0 for stage in ZEEP_SLEEP_STATES
-            },
-            "confirmed_probabilities": display_probabilities,
-            "confidence": "low",
-            "provisional": False,
-            "held_previous_state": bool(
-                confirmation["held_previous_state"]
-            ),
-            "continuity_hold_epochs": int(
-                confirmation["continuity_hold_epochs"]
-            ),
-            "score_attribution_state": stage,
-            "challenger_counted_as_new_state": False,
-            "score_eligible": True,
-            "excluded_from_score": False,
-            "excluded_from_personal_baseline": True,
-            "data_status": confirmation["data_status"],
-            "current_data_status": data_status,
-            "current_data_reason": reason,
-            "reason": reason,
-            "mean_hr": decision_metrics["mean_hr"],
-            "mean_rr": decision_metrics["mean_rr"],
-            "confirmation": confirmation,
-            "evidence": {
-                "candidate": None,
-                "probabilities": {
-                    stage: 0.0 for stage in ZEEP_SLEEP_STATES
-                },
+        result.update(
+            {
+                "state": stage,
+                "confirmed_state": stage,
+                "classification_active": True,
+                "evidence_active": False,
+                "probabilities": display_probabilities,
+                "evidence_probabilities": {stage: 0.0 for stage in ZEEP_SLEEP_STATES},
+                "confirmed_probabilities": display_probabilities,
                 "confidence": "low",
-                "epoch_seconds": SLEEP_EVIDENCE_EPOCH_SECONDS,
-                "sensor_frames": SLEEP_SENSOR_FRAMES_PER_EPOCH,
-                "window_seconds": SLEEP_WINDOW_SECONDS,
-                "window_start": window_start,
-                "window_end": window_end,
-                "status": data_status,
-            },
-            "transition_policy": confirmation,
-            "previous_state": previous,
-            "display_probability_basis": "previous_confirmed_state",
-        })
+                "provisional": False,
+                "held_previous_state": bool(confirmation["held_previous_state"]),
+                "continuity_hold_epochs": int(confirmation["continuity_hold_epochs"]),
+                "score_attribution_state": stage,
+                "challenger_counted_as_new_state": False,
+                "score_eligible": True,
+                "excluded_from_score": False,
+                "excluded_from_personal_baseline": True,
+                "data_status": confirmation["data_status"],
+                "current_data_status": data_status,
+                "current_data_reason": reason,
+                "reason": reason,
+                "mean_hr": decision_metrics["mean_hr"],
+                "mean_rr": decision_metrics["mean_rr"],
+                "confirmation": confirmation,
+                "evidence": {
+                    "candidate": None,
+                    "probabilities": {stage: 0.0 for stage in ZEEP_SLEEP_STATES},
+                    "confidence": "low",
+                    "epoch_seconds": SLEEP_EVIDENCE_EPOCH_SECONDS,
+                    "sensor_frames": SLEEP_SENSOR_FRAMES_PER_EPOCH,
+                    "window_seconds": SLEEP_WINDOW_SECONDS,
+                    "window_start": window_start,
+                    "window_end": window_end,
+                    "status": data_status,
+                },
+                "transition_policy": confirmation,
+                "previous_state": previous,
+                "display_probability_basis": "previous_confirmed_state",
+            }
+        )
         result["stage_progression"] = _commit_sleep_stage(
             stage,
             display_probabilities,
@@ -2806,23 +2874,11 @@ def estimate_sleep_state() -> Dict[str, Any]:
         (frame.get("bcg_latest_t") or 0 for frame in frames),
         default=0,
     )
-    latest_hr = filter_vital_values(
-        [latest_frame.get("hr")], HR_SANITY_RANGE_BPM
-    )
-    latest_rr = filter_vital_values(
-        [latest_frame.get("rr")], RR_SANITY_RANGE_PER_MIN
-    )
-    fresh_on_bed_vitals = bool(
-        latest_bcg_t
-        and now - latest_bcg_t <= max(15, SLEEP_SAMPLE_SECONDS * 3)
-        and latest_frame.get("bcg_valid")
-        and latest_hr
-        and latest_rr
-    )
+    latest_hr = filter_vital_values([latest_frame.get("hr")], HR_SANITY_RANGE_BPM)
+    latest_rr = filter_vital_values([latest_frame.get("rr")], RR_SANITY_RANGE_PER_MIN)
+    fresh_on_bed_vitals = bool(latest_bcg_t and now - latest_bcg_t <= max(15, SLEEP_SAMPLE_SECONDS * 3) and latest_frame.get("bcg_valid") and latest_hr and latest_rr)
     if _off_bed_remains_latched(
-        status_code=latest_frame.get(
-            "confirmed_status", latest_frame.get("status")
-        ),
+        status_code=latest_frame.get("confirmed_status", latest_frame.get("status")),
         current_vitals_valid=fresh_on_bed_vitals,
     ):
         return suspend_classification(
@@ -2834,11 +2890,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
         return suspend_classification("ยังไม่มีรอบข้อมูล BCG ใหม่", "no_frame")
     if not latest_bcg_t or now - latest_bcg_t > max(15, SLEEP_SAMPLE_SECONDS * 3):
         return suspend_classification("BCG ขาดข้อมูลใหม่ · ไม่ประเมิน Sleep State", "stale")
-    statuses = [
-        f.get("confirmed_status", f.get("status"))
-        for f in frames
-        if f.get("confirmed_status", f.get("status")) is not None
-    ]
+    statuses = [f.get("confirmed_status", f.get("status")) for f in frames if f.get("confirmed_status", f.get("status")) is not None]
     if not statuses:
         return suspend_classification(
             "ไม่มี Bed Status ในรอบล่าสุด · ไม่ประเมิน Sleep State",
@@ -2871,7 +2923,8 @@ def estimate_sleep_state() -> Dict[str, Any]:
     missing_ratio = 1.0 - len(valid_bcg) / len(frames)
     clip_values = [f["clip_ratio"] for f in frames if isinstance(f.get("clip_ratio"), (int, float))]
     result["signal_quality"] = {
-        "valid_buckets": len(valid_bcg), "total_buckets": len(frames),
+        "valid_buckets": len(valid_bcg),
+        "total_buckets": len(frames),
         "valid_percent": round((1 - missing_ratio) * 100, 1),
         "invalid_hr_buckets": len([value for value in raw_hrs if value is not None]) - len(hrs),
         "invalid_rr_buckets": len([value for value in raw_rrs if value is not None]) - len(rrs),
@@ -2886,66 +2939,27 @@ def estimate_sleep_state() -> Dict[str, Any]:
         times = [frame.get("t") for frame in sequence]
         if not all(isinstance(value, (int, float)) for value in times):
             return False
-        return all(
-            0.0 < float(after) - float(before)
-            <= SLEEP_SAMPLE_SECONDS * 1.8
-            for before, after in zip(times, times[1:])
-        )
+        return all(0.0 < float(after) - float(before) <= SLEEP_SAMPLE_SECONDS * 1.8 for before, after in zip(times, times[1:]))
 
-    with sleep_path_lock:
-        prior_valid_frame_t = _sleep_stage_path.get("last_valid_frame_t")
-    current_window_gap_detected = bool(
-        current_epoch
-        and isinstance(prior_valid_frame_t, (int, float))
-        and float(current_epoch[-1].get("t") or 0.0)
-        - float(prior_valid_frame_t) >= SLEEP_CONTEXT_RESET_GAP_SECONDS
-    )
     current_epoch_complete = bool(
         len(current_epoch) == SLEEP_SENSOR_FRAMES_PER_EPOCH
         and frames_are_contiguous(current_epoch)
-        and all(
-            frame.get("bcg_valid")
-            and filter_vital_values(
-                [frame.get("hr")], HR_SANITY_RANGE_BPM
-            )
-            and filter_vital_values(
-                [frame.get("rr")], RR_SANITY_RANGE_PER_MIN
-            )
-            and frame.get(
-                "confirmed_status", frame.get("status")
-            ) in ON_BED_CODES
-            for frame in current_epoch
-        )
+        and all(frame.get("bcg_valid") and filter_vital_values([frame.get("hr")], HR_SANITY_RANGE_BPM) and filter_vital_values([frame.get("rr")], RR_SANITY_RANGE_PER_MIN) and frame.get("confirmed_status", frame.get("status")) in ON_BED_CODES for frame in current_epoch)
     )
     paired_window_coverage = 1.0 - missing_ratio
-    rolling_window_contiguous = bool(
-        len(frames) >= SLEEP_MIN_FRAMES and frames_are_contiguous(frames)
-    )
+    rolling_window_contiguous = bool(len(frames) >= SLEEP_MIN_FRAMES and frames_are_contiguous(frames))
     if not current_epoch_complete:
         # A canonical 30-second decision requires all three current 10-second
         # frames to carry occupied-bed + valid HR + valid RR + valid BCG.  A
         # good older half of the rolling 60-second window must not hide a bad
         # current epoch or create evidence the historical replay will reject.
         return suspend_classification(
-            (
-                "Evidence epoch 30 วินาทีปัจจุบันมี Bed/HR/RR/BCG ไม่ครบ "
-                "· ไม่สร้าง Sleep State"
-            ),
+            ("Evidence epoch 30 วินาทีปัจจุบันมี Bed/HR/RR/BCG ไม่ครบ · ไม่สร้าง Sleep State"),
             "incomplete_current_evidence_epoch",
         )
-    if (
-        had_previous_stage
-        and (
-            len(frames) < SLEEP_MIN_FRAMES
-            or paired_window_coverage < SLEEP_MIN_PAIRED_VITAL_COVERAGE
-            or not rolling_window_contiguous
-        )
-    ):
+    if had_previous_stage and (len(frames) < SLEEP_MIN_FRAMES or paired_window_coverage < SLEEP_MIN_PAIRED_VITAL_COVERAGE or not rolling_window_contiguous):
         return carry_occupied_epoch(
-            (
-                "ยึด State ที่ยืนยันก่อนหน้าไว้ชั่วคราว · "
-                "กำลังสร้างหน้าต่าง HR/RR + BCG สด 60 วินาทีใหม่"
-            ),
+            ("ยึด State ที่ยืนยันก่อนหน้าไว้ชั่วคราว · กำลังสร้างหน้าต่าง HR/RR + BCG สด 60 วินาทีใหม่"),
             data_status="rebuilding_confirmation_window",
             current_epoch=current_epoch,
         )
@@ -2962,14 +2976,13 @@ def estimate_sleep_state() -> Dict[str, Any]:
     mean_hr = sum(hrs) / len(hrs)
     mean_rr = sum(rrs) / len(rrs)
     session_context = _update_sleep_session_context(
-        context_frames, now=now, session_started=session_started,
+        context_frames,
+        now=now,
+        session_started=session_started,
     )
     with sleep_path_lock:
         previous_valid_stage = _sleep_stage_path.get("last")
-    current_stage_for_scoring = (
-        previous_valid_stage if previous_valid_stage in ZEEP_SLEEP_STATES
-        else "wake"
-    )
+    current_stage_for_scoring = previous_valid_stage if previous_valid_stage in ZEEP_SLEEP_STATES else "wake"
     summary_signal = summary_features(hrs, rrs, SLEEP_SAMPLE_SECONDS)
     long_valid_bcg = [frame for frame in context_frames if frame.get("bcg_valid")]
     long_summary_signal = summary_features(
@@ -2979,28 +2992,21 @@ def estimate_sleep_state() -> Dict[str, Any]:
     )
     hr_cv = float(summary_signal.get("hr_cv") or 0.0)
     rr_cv = float(summary_signal.get("rr_cv") or 0.0)
-    raw_window = [sample for frame in valid_bcg
-                  for sample in (frame.get("bcg_samples") or [])]
+    raw_window = [sample for frame in valid_bcg for sample in (frame.get("bcg_samples") or [])]
     waveform_signal = waveform_features(raw_window)
-    expected_waveform_samples = max(
-        1.0, BCG_SAMPLE_RATE_HZ * SLEEP_WINDOW_SECONDS
-    )
+    expected_waveform_samples = max(1.0, BCG_SAMPLE_RATE_HZ * SLEEP_WINDOW_SECONDS)
     waveform_coverage = min(1.0, len(raw_window) / expected_waveform_samples)
-    waveform_signal["waveform_sample_coverage"] = round(
-        waveform_coverage, 4
-    )
-    waveform_signal["minimum_waveform_sample_coverage"] = (
-        SLEEP_MIN_WAVEFORM_COVERAGE
-    )
+    waveform_signal["waveform_sample_coverage"] = round(waveform_coverage, 4)
+    waveform_signal["minimum_waveform_sample_coverage"] = SLEEP_MIN_WAVEFORM_COVERAGE
     if waveform_coverage < SLEEP_MIN_WAVEFORM_COVERAGE:
         waveform_signal["waveform_available"] = False
-        waveform_signal["waveform_rejection_reason"] = (
-            "insufficient_sample_coverage"
-        )
-    result["signal_quality"].update({
-        "bcg_baseline_drift_ratio": waveform_signal.get("bcg_baseline_drift_ratio"),
-        "bcg_baseline_drift_flag": waveform_signal.get("bcg_baseline_drift_flag", False),
-    })
+        waveform_signal["waveform_rejection_reason"] = "insufficient_sample_coverage"
+    result["signal_quality"].update(
+        {
+            "bcg_baseline_drift_ratio": waveform_signal.get("bcg_baseline_drift_ratio"),
+            "bcg_baseline_drift_flag": waveform_signal.get("bcg_baseline_drift_flag", False),
+        }
+    )
     elapsed_min = max(0.0, (now - session_started) / 60) if session_started else 0.0
 
     def avg_field(name: str):
@@ -3008,16 +3014,20 @@ def estimate_sleep_state() -> Dict[str, Any]:
         return round(sum(values) / len(values), 1) if values else None
 
     environment = {
-        "temperature_c": avg_field("temperature"), "humidity_rh": avg_field("humidity"),
-        "co2_ppm": avg_field("co2"), "lux": avg_field("lux"),
-        "sound_dba": avg_field("sound_dba"), "pm2_5_ug_m3": avg_field("pm2_5"),
+        "temperature_c": avg_field("temperature"),
+        "humidity_rh": avg_field("humidity"),
+        "co2_ppm": avg_field("co2"),
+        "lux": avg_field("lux"),
+        "sound_dba": avg_field("sound_dba"),
+        "pm2_5_ug_m3": avg_field("pm2_5"),
         "voc_index": avg_field("voc"),
         "coverage_percent": round(sum(1 for f in frames if f.get("esp_fresh")) / len(frames) * 100, 1),
     }
-    latest_sensor_status = next((f.get("sensor_status") for f in reversed(frames)
-                                 if isinstance(f.get("sensor_status"), dict)), {})
-    environment["unavailable_sensors"] = [k for k, available in latest_sensor_status.items()
-                                             if available is False]
+    latest_sensor_status = next(
+        (f.get("sensor_status") for f in reversed(frames) if isinstance(f.get("sensor_status"), dict)),
+        {},
+    )
+    environment["unavailable_sensors"] = [k for k, available in latest_sensor_status.items() if available is False]
     comfort_flags = []
     if environment["temperature_c"] is not None and environment["temperature_c"] > 27:
         comfort_flags.append("อุณหภูมิค่อนข้างสูง")
@@ -3035,8 +3045,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
     environment_context = _sleep_environment_context(environment, rest_mode)
     environment["zeep_context"] = environment_context
     result["environment"] = environment
-    auxiliary_evidence = _sleep_auxiliary_evidence(
-        frames, statuses, move_ratio, waveform_signal)
+    auxiliary_evidence = _sleep_auxiliary_evidence(frames, statuses, move_ratio, waveform_signal)
     result["auxiliary_evidence"] = auxiliary_evidence
 
     base_scores: Dict[str, float] = {}
@@ -3051,11 +3060,12 @@ def estimate_sleep_state() -> Dict[str, Any]:
         hr_stage_fits[name] = hr_fit
         rr_stage_fits[name] = rr_fit
         baseline_proximity[name] = {
-            "hr": hr_distance, "rr": rr_distance,
+            "hr": hr_distance,
+            "rr": rr_distance,
             "weighted_percent": round(
-                physiological_fit
-                / (SLEEP_BASELINE_HR_WEIGHT + SLEEP_BASELINE_RR_WEIGHT)
-                * 100.0, 1),
+                physiological_fit / (SLEEP_BASELINE_HR_WEIGHT + SLEEP_BASELINE_RR_WEIGHT) * 100.0,
+                1,
+            ),
         }
     scoring_metrics = {
         "mean_hr": mean_hr,
@@ -3072,8 +3082,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
         "bed_status": STATUS_TEXT.get(statuses[-1], "Unknown"),
         "max_moving_run_frames": movement_window["max_moving_run_frames"],
         "movement_burst_count": movement_window["movement_burst_count"],
-        "corroborated_acoustic_wake_support": auxiliary_evidence[
-            "corroborated_acoustic_wake_support"],
+        "corroborated_acoustic_wake_support": auxiliary_evidence["corroborated_acoustic_wake_support"],
         **summary_signal,
         **waveform_signal,
         "hr_slope_bpm_per_min": long_summary_signal.get("hr_slope_bpm_per_min"),
@@ -3107,12 +3116,10 @@ def estimate_sleep_state() -> Dict[str, Any]:
         "n2_support": sleep_evidence["n3_rr_conflict"] * SLEEP_N2_RR_CONFLICT_SUPPORT,
     }
 
-    eligible_states = {
-        stage: sleep_evidence[f"{stage}_gate"]
-        for stage in ZEEP_SLEEP_STATES
-    }
+    eligible_states = {stage: sleep_evidence[f"{stage}_gate"] for stage in ZEEP_SLEEP_STATES}
     stage_evidence_probabilities = softmax_stage_evidence(
-        scores, temperature=SLEEP_SCORE_SOFTMAX_TEMPERATURE,
+        scores,
+        temperature=SLEEP_SCORE_SOFTMAX_TEMPERATURE,
         eligible_states=eligible_states,
     )
     raw_probabilities, fit_fusion = fuse_hr_rr_fit_with_stage_probabilities(
@@ -3125,16 +3132,11 @@ def estimate_sleep_state() -> Dict[str, Any]:
     )
     sleep_evidence["hr_rr_fit_fusion"] = fit_fusion
     instant_candidate = max(raw_probabilities, key=raw_probabilities.get)
-    accepted_instant_candidate, evidence_quality = (
-        evidence_candidate_with_abstention(
-            raw_probabilities,
-            minimum_winner=SLEEP_EVIDENCE_MIN_WINNER,
-            minimum_margin=SLEEP_EVIDENCE_MIN_MARGIN,
-            gated_stage_thresholds=(
-                {"n3": (SLEEP_N3_GATED_MIN_WINNER, SLEEP_N3_GATED_MIN_MARGIN)}
-                if sleep_evidence["n3_gate"] else None
-            ),
-        )
+    accepted_instant_candidate, evidence_quality = evidence_candidate_with_abstention(
+        raw_probabilities,
+        minimum_winner=SLEEP_EVIDENCE_MIN_WINNER,
+        minimum_margin=SLEEP_EVIDENCE_MIN_MARGIN,
+        gated_stage_thresholds=({"n3": (SLEEP_N3_GATED_MIN_WINNER, SLEEP_N3_GATED_MIN_MARGIN)} if sleep_evidence["n3_gate"] else None),
     )
     with sleep_path_lock:
         smoothed_probabilities = smooth_stage_probabilities(
@@ -3161,38 +3163,32 @@ def estimate_sleep_state() -> Dict[str, Any]:
             probability_current_stage,
             switch_margin=SLEEP_PROBABILITY_SWITCH_MARGIN,
             n3_gate=bool(sleep_evidence["n3_gate"]),
-            sleep_onset_gate_passed=bool(
-                sleep_evidence["sleep_onset_gate"]["passed"]
-                or sleep_evidence["sleep_onset_established"]
-            ),
+            sleep_onset_gate_passed=bool(sleep_evidence["sleep_onset_gate"]["passed"] or sleep_evidence["sleep_onset_established"]),
             eligible_states=eligible_states,
         )
         probability_transition["evidence_quality"] = evidence_quality
     # A position change or blanket adjustment is sleep-compatible movement.
     # Only the shared, physiology-corroborated movement rule may bypass the
     # normal N2/N3/REM -> N1 -> Wake progression.
-    strong_wake = bool(
-        instant_candidate == "wake"
-        and sleep_evidence["movement"]["strong_wake"]
-    )
+    strong_wake = bool(instant_candidate == "wake" and sleep_evidence["movement"]["strong_wake"])
     decision_candidate = "wake" if strong_wake else evidence_candidate
     # The Session starts only after a conscious Login plus occupied-bed and
     # fresh HR/RR gates. The first complete occupied 30-second Epoch anchors W
     # immediately; only a transition away from W needs 60/120-second evidence.
     if probability_current_stage is None and decision_candidate != "wake":
         decision_candidate = "wake"
-        probability_transition.update({
-            "candidate_source": "initial_awake_anchor",
-            "initial_awake_anchor": True,
-            "initial_evidence_candidate": evidence_candidate,
-        })
+        probability_transition.update(
+            {
+                "candidate_source": "initial_awake_anchor",
+                "initial_awake_anchor": True,
+                "initial_evidence_candidate": evidence_candidate,
+            }
+        )
     if decision_candidate is None:
         with sleep_path_lock:
             _sleep_stage_path["candidate"] = None
             _sleep_stage_path["candidate_ticks"] = 0
-            hold_ticks = int(
-                _sleep_stage_path.get("continuity_hold_ticks") or 0
-            ) + 1
+            hold_ticks = int(_sleep_stage_path.get("continuity_hold_ticks") or 0) + 1
             _sleep_stage_path["continuity_hold_ticks"] = hold_ticks
         selected = None
         transition_meta = {
@@ -3201,22 +3197,22 @@ def estimate_sleep_state() -> Dict[str, Any]:
             "confirmation_complete": False,
             "policy": ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
         }
-        transition_meta.update(continuity_hold_contract(
-            probability_current_stage,
-            decision="ambiguous_evidence_hold",
-            hold_epochs=hold_ticks,
-        ))
+        transition_meta.update(
+            continuity_hold_contract(
+                probability_current_stage,
+                decision="ambiguous_evidence_hold",
+                hold_epochs=hold_ticks,
+            )
+        )
     else:
-        selected, transition_meta = _stabilize_sleep_stage(
-            decision_candidate, now=now, strong_wake=strong_wake)
+        selected, transition_meta = _stabilize_sleep_stage(decision_candidate, now=now, strong_wake=strong_wake)
 
     # Evidence probabilities deliberately remain independent from the
     # confirmed state. A pending challenger can therefore be inspected without
     # rewriting the probability distribution to make the held state win.
     probabilities = {k: round(v, 4) for k, v in smoothed_probabilities.items()}
     rounding_delta = round(1.0 - sum(probabilities.values()), 4)
-    probabilities[instant_candidate] = round(
-        probabilities[instant_candidate] + rounding_delta, 4)
+    probabilities[instant_candidate] = round(probabilities[instant_candidate] + rounding_delta, 4)
     confirmed_state = transition_meta.get("confirmed_state")
     if confirmed_state not in ZEEP_SLEEP_STATES:
         confirmed_state = None
@@ -3226,11 +3222,10 @@ def estimate_sleep_state() -> Dict[str, Any]:
             confirmed_state,
             winner_margin=SLEEP_DISPLAY_WINNER_MARGIN,
         )
-        if confirmed_state else {key: 0.0 for key in ZEEP_SLEEP_STATES}
+        if confirmed_state
+        else {key: 0.0 for key in ZEEP_SLEEP_STATES}
     )
-    confirmed_probabilities = {
-        key: round(value, 4) for key, value in confirmed_probabilities.items()
-    }
+    confirmed_probabilities = {key: round(value, 4) for key, value in confirmed_probabilities.items()}
     previous_state = transition_meta.get("previous_state")
     transition_guard = None
     if transition_meta.get("bridge_state") or transition_meta.get("held"):
@@ -3240,10 +3235,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
         source = transition_meta.get("raw_candidate") or decision_candidate
         target = bridge or selected or previous_state
         if source and target:
-            transition_guard = (
-                f"{str(source).upper()} → {str(target).upper()} ตามลำดับธรรมชาติ; "
-                f"ยืนยัน {pending}/{required} รอบ"
-            )
+            transition_guard = f"{str(source).upper()} → {str(target).upper()} ตามลำดับธรรมชาติ; ยืนยัน {pending}/{required} รอบ"
     top = probabilities[instant_candidate]
     confidence = "high" if top >= 0.72 else "medium" if top >= 0.48 else "low"
     if transition_guard:
@@ -3252,26 +3244,17 @@ def estimate_sleep_state() -> Dict[str, Any]:
         confidence = "low"
     if decision_candidate is None:
         confidence = "low"
-    held_previous_state = bool(
-        transition_meta.get("held_previous_state")
-    )
-    provisional = bool(
-        confirmed_state is None or transition_meta.get("provisional")
-    )
-    if provisional or transition_meta.get("state_source") == (
-        "initial_awake_anchor"
-    ):
+    held_previous_state = bool(transition_meta.get("held_previous_state"))
+    provisional = bool(confirmed_state is None or transition_meta.get("provisional"))
+    if provisional or transition_meta.get("state_source") == ("initial_awake_anchor"):
         confidence = "low"
-    if (missing_ratio > 0.25 or environment["coverage_percent"] < 50
-            or environment_context["coverage_percent"] < 50):
+    if missing_ratio > 0.25 or environment["coverage_percent"] < 50 or environment_context["coverage_percent"] < 50:
         confidence = "low"
     if clip_values and sum(clip_values) / len(clip_values) >= 0.20:
         confidence = "low"
     if waveform_signal.get("bcg_baseline_drift_flag"):
         confidence = "low"
-    if (isinstance(environment_context.get("disruption_index"), (int, float))
-            and environment_context["disruption_index"] >= 0.5
-            and confidence == "high"):
+    if isinstance(environment_context.get("disruption_index"), (int, float)) and environment_context["disruption_index"] >= 0.5 and confidence == "high":
         # Air/light/comfort can make the physiology less representative of an
         # undisturbed sleep window, but cannot select another stage.
         confidence = "medium"
@@ -3284,7 +3267,11 @@ def estimate_sleep_state() -> Dict[str, Any]:
         hr_weight=SLEEP_BASELINE_HR_WEIGHT,
         rr_weight=SLEEP_BASELINE_RR_WEIGHT,
     )
-    reason_bits = [f"HR เฉลี่ย {mean_hr:.1f}", f"RR เฉลี่ย {mean_rr:.1f}", f"movement {move_ratio*100:.0f}%"]
+    reason_bits = [
+        f"HR เฉลี่ย {mean_hr:.1f}",
+        f"RR เฉลี่ย {mean_rr:.1f}",
+        f"movement {move_ratio * 100:.0f}%",
+    ]
     movement_category = sleep_evidence["movement"]["category"]
     if movement_category == "position_change_or_blanket_adjustment_candidate":
         reason_bits.append("ขยับสั้นขณะอยู่บนเตียง · ไม่ถือเป็น Wake โดยลำพัง")
@@ -3293,211 +3280,170 @@ def estimate_sleep_state() -> Dict[str, Any]:
     elif movement_category == "wake_compatible_motion":
         reason_bits.append("การขยับต่อเนื่องสอดคล้องกับ HR/RR และ BCG")
     if rr_stage_guard["conflict"] >= 0.05:
-        reason_bits.append(
-            f"RR ใกล้ N2 มากกว่า N3 {rr_stage_guard['conflict']*100:.0f}%")
+        reason_bits.append(f"RR ใกล้ N2 มากกว่า N3 {rr_stage_guard['conflict'] * 100:.0f}%")
     if transition_guard:
         reason_bits.append(transition_guard)
     if decision_candidate is None:
-        reason_bits.append(
-            "หลักฐานยังใกล้กันเกินไป · คง State ที่ยืนยันก่อนหน้า"
-        )
+        reason_bits.append("หลักฐานยังใกล้กันเกินไป · คง State ที่ยืนยันก่อนหน้า")
     if transition_meta.get("decision") == "blocked_transition_hold":
-        reason_bits.append(
-            "State ผู้ท้าชิงยังไม่ผ่าน Transition Gate · คง State ก่อนหน้า"
-        )
+        reason_bits.append("State ผู้ท้าชิงยังไม่ผ่าน Transition Gate · คง State ก่อนหน้า")
     if probability_transition.get("sleep_onset_guard_held"):
         onset = sleep_evidence["sleep_onset_gate"]
         if not onset["observation_complete"]:
-            reason_bits.append(
-                "คง W ระหว่างเก็บ Awake baseline 5 นาทีแรก"
-            )
+            reason_bits.append("คง W ระหว่างเก็บ Awake baseline 5 นาทีแรก")
         elif not onset["quiet_bed"]:
             reason_bits.append("คง W เพราะยังมีการเคลื่อนไหวบนเตียง")
         else:
-            reason_bits.append(
-                "คง W เพราะ HR/RR ยังไม่ลดลงต่อเนื่องพอสำหรับ Sleep onset"
-            )
+            reason_bits.append("คง W เพราะ HR/RR ยังไม่ลดลงต่อเนื่องพอสำหรับ Sleep onset")
     if environment_context["sleep_support_score"] is not None:
-        reason_bits.append(
-            f"environment context {environment_context['sleep_support_score']}/100")
+        reason_bits.append(f"environment context {environment_context['sleep_support_score']}/100")
     if auxiliary_evidence["acoustic"]["bcg_or_motion_corroborated"]:
         reason_bits.append("เสียงรบกวนสอดคล้องกับ BCG/การเคลื่อนไหว")
     if auxiliary_evidence["bed_status"]["weak_breathing_frames"]:
         reason_bits.append("Bed Status พบ weak-breathing context")
     if auxiliary_evidence["bed_status"]["snoring_frames"]:
         reason_bits.append("Bed Status พบ snoring context")
-    if decision_candidate == "wake": reason_bits.append("หลักฐานใกล้ Awake baseline เด่นที่สุด")
-    elif decision_candidate == "n1": reason_bits.append("หลักฐานกำลังลดจาก Awake baseline และอยู่ในช่วงเปลี่ยนผ่าน")
-    elif decision_candidate == "n2": reason_bits.append("หลักฐาน HR/RR และ BCG คงที่ต่อเนื่อง")
-    elif decision_candidate == "n3": reason_bits.append("หลักฐาน HR/RR ต่ำ การหายใจสม่ำเสมอ และ N3 gate ผ่าน")
-    elif decision_candidate == "rem": reason_bits.append("RR แปรปรวนบนเตียงที่นิ่งและ REM gate ผ่าน")
+    if decision_candidate == "wake":
+        reason_bits.append("หลักฐานใกล้ Awake baseline เด่นที่สุด")
+    elif decision_candidate == "n1":
+        reason_bits.append("หลักฐานกำลังลดจาก Awake baseline และอยู่ในช่วงเปลี่ยนผ่าน")
+    elif decision_candidate == "n2":
+        reason_bits.append("หลักฐาน HR/RR และ BCG คงที่ต่อเนื่อง")
+    elif decision_candidate == "n3":
+        reason_bits.append("หลักฐาน HR/RR ต่ำ การหายใจสม่ำเสมอ และ N3 gate ผ่าน")
+    elif decision_candidate == "rem":
+        reason_bits.append("RR แปรปรวนบนเตียงที่นิ่งและ REM gate ผ่าน")
     if environment["lux"] is not None:
         reason_bits.append(f"แสงเฉลี่ย {environment['lux']:.0f} lux")
     if environment["sound_dba"] is not None:
         reason_bits.append(f"เสียงเฉลี่ย {environment['sound_dba']:.1f} dBA")
-    result.update({
-        "state": confirmed_state or "no_data",
-        "confirmed_state": confirmed_state,
-        "probabilities": probabilities,
-        "evidence_probabilities": probabilities,
-        "confirmed_probabilities": confirmed_probabilities,
-        "confidence": confidence,
-        "classification_active": confirmed_state is not None,
-        "evidence_active": True,
-        "raw_probabilities": {k: round(v, 4) for k, v in raw_probabilities.items()},
-        "pre_fusion_probabilities": {
-            k: round(v, 4)
-            for k, v in stage_evidence_probabilities.items()
-        },
-        "smoothed_probabilities": {
-            k: round(v, 4) for k, v in smoothed_probabilities.items()
-        },
-        "instant_candidate": instant_candidate,
-        "raw_candidate": decision_candidate,
-        "probability_winner": instant_candidate,
-        "winner_percent": round(probabilities[instant_candidate] * 100, 1),
-        "evidence_quality": evidence_quality,
-        "provisional": provisional,
-        "held_previous_state": held_previous_state,
-        "continuity_hold_epochs": int(
-            transition_meta.get("continuity_hold_epochs") or 0
-        ),
-        "score_attribution_state": (
-            transition_meta.get("score_attribution_state")
-            or confirmed_state
-        ),
-        "challenger_counted_as_new_state": bool(
-            transition_meta.get("challenger_counted_as_new_state")
-        ),
-        "score_eligible": bool(
-            confirmed_state is not None
-            and transition_meta.get("score_eligible", True)
-        ),
-        "excluded_from_score": bool(
-            confirmed_state is None
-            or transition_meta.get("excluded_from_score", False)
-        ),
-        "data_status": (
-            transition_meta.get("data_status")
-            if transition_meta.get("held") or confirmed_state is None
-            else "live"
-        ),
-        "reason": " · ".join(reason_bits), "mean_hr": round(mean_hr, 1), "mean_rr": round(mean_rr, 1),
-        "hr_cv": round(hr_cv, 4), "rr_cv": round(rr_cv, 4), "elapsed_min": round(elapsed_min, 1),
-        "baseline_proximity": baseline_proximity,
-        "baseline_fit_summary": baseline_fit_summary,
-        "scoring_weights": {
-            "hr_baseline": SLEEP_BASELINE_HR_WEIGHT,
-            "rr_baseline": SLEEP_BASELINE_RR_WEIGHT,
-            "hr_rr_fit_fusion": SLEEP_HR_RR_FIT_FUSION_WEIGHT,
-            "hr_rr_fit_fusion_when_confirmed_agrees": (
-                SLEEP_HR_RR_FIT_FUSION_AGREEMENT_WEIGHT
-            ),
-        },
-        "probability_filter": {
-            "method": "ema_after_60s_rolling_features",
-            "alpha": SLEEP_PROBABILITY_EMA_ALPHA,
-            "candidate_switch_margin": SLEEP_PROBABILITY_SWITCH_MARGIN,
-            "candidate_source": "ema_with_gated_n3_current_evidence_override",
-            "ema_role": "default_candidate_stability_and_display",
-            "display_winner_margin": SLEEP_DISPLAY_WINNER_MARGIN,
-            **probability_transition,
-        },
-        "rr_stage_guard": {k: round(v, 4) for k, v in rr_stage_guard.items()},
-        "signal_features": {**summary_signal, **waveform_signal},
-        "long_context_features": {
-            **long_summary_signal,
-            "window_seconds": SLEEP_LONG_CONTEXT_SECONDS,
-            "valid_frames": len(long_valid_bcg),
-        },
-        "sleep_evidence": sleep_evidence,
-        "timing_priors": {
-            "rem_gate": sleep_evidence["rem_gate"],
-            "rem_time_support": sleep_evidence["rem_time_support"],
-            "sleep_onset_gate": sleep_evidence["sleep_onset_gate"],
-        },
-        "evidence": {
-            "candidate": decision_candidate,
-            "probabilities": probabilities,
-            "confidence": confidence,
-            "epoch_seconds": SLEEP_EVIDENCE_EPOCH_SECONDS,
-            "sensor_frames": SLEEP_SENSOR_FRAMES_PER_EPOCH,
-            "window_seconds": SLEEP_WINDOW_SECONDS,
-        },
-        "confirmation": {
+    result.update(
+        {
+            "state": confirmed_state or "no_data",
             "confirmed_state": confirmed_state,
-            "pending_state": (
-                transition_meta.get("pending_state")
-                if transition_meta.get("held") else None
-            ),
-            "candidate_epochs": transition_meta.get("candidate_epochs", 0),
-            "required_epochs": transition_meta.get(
-                "required_epochs", SLEEP_CONFIRM_EPOCHS),
-            "required_seconds": float(
-                transition_meta.get("confirmation_seconds")
-                or SLEEP_CONFIRMATION_SECONDS
-            ),
-            "complete": bool(transition_meta.get("confirmation_complete")),
-            "decision": transition_meta.get("decision"),
-            "decision_kind": transition_meta.get("decision_kind"),
-            "held_previous_state": held_previous_state,
-            "continuity_hold_epochs": int(
-                transition_meta.get("continuity_hold_epochs") or 0
-            ),
+            "probabilities": probabilities,
+            "evidence_probabilities": probabilities,
+            "confirmed_probabilities": confirmed_probabilities,
+            "confidence": confidence,
+            "classification_active": confirmed_state is not None,
+            "evidence_active": True,
+            "raw_probabilities": {k: round(v, 4) for k, v in raw_probabilities.items()},
+            "pre_fusion_probabilities": {k: round(v, 4) for k, v in stage_evidence_probabilities.items()},
+            "smoothed_probabilities": {k: round(v, 4) for k, v in smoothed_probabilities.items()},
+            "instant_candidate": instant_candidate,
+            "raw_candidate": decision_candidate,
+            "probability_winner": instant_candidate,
+            "winner_percent": round(probabilities[instant_candidate] * 100, 1),
+            "evidence_quality": evidence_quality,
             "provisional": provisional,
-            "provisional_hold_max_epochs": SLEEP_PROVISIONAL_HOLD_EPOCHS,
-            "challenger_counted_as_new_state": bool(
-                transition_meta.get("challenger_counted_as_new_state")
-            ),
-            "score_eligible": bool(
-                confirmed_state is not None
-                and transition_meta.get("score_eligible", True)
-            ),
-            "excluded_from_score": bool(
-                confirmed_state is None
-                or transition_meta.get("excluded_from_score", False)
-            ),
-            "excluded_from_personal_baseline": bool(
-                transition_meta.get(
-                    "excluded_from_personal_baseline", False
-                )
-            ),
-        },
-    })
+            "held_previous_state": held_previous_state,
+            "continuity_hold_epochs": int(transition_meta.get("continuity_hold_epochs") or 0),
+            "score_attribution_state": (transition_meta.get("score_attribution_state") or confirmed_state),
+            "challenger_counted_as_new_state": bool(transition_meta.get("challenger_counted_as_new_state")),
+            "score_eligible": bool(confirmed_state is not None and transition_meta.get("score_eligible", True)),
+            "excluded_from_score": bool(confirmed_state is None or transition_meta.get("excluded_from_score", False)),
+            "data_status": (transition_meta.get("data_status") if transition_meta.get("held") or confirmed_state is None else "live"),
+            "reason": " · ".join(reason_bits),
+            "mean_hr": round(mean_hr, 1),
+            "mean_rr": round(mean_rr, 1),
+            "hr_cv": round(hr_cv, 4),
+            "rr_cv": round(rr_cv, 4),
+            "elapsed_min": round(elapsed_min, 1),
+            "baseline_proximity": baseline_proximity,
+            "baseline_fit_summary": baseline_fit_summary,
+            "scoring_weights": {
+                "hr_baseline": SLEEP_BASELINE_HR_WEIGHT,
+                "rr_baseline": SLEEP_BASELINE_RR_WEIGHT,
+                "hr_rr_fit_fusion": SLEEP_HR_RR_FIT_FUSION_WEIGHT,
+                "hr_rr_fit_fusion_when_confirmed_agrees": (SLEEP_HR_RR_FIT_FUSION_AGREEMENT_WEIGHT),
+            },
+            "probability_filter": {
+                "method": "ema_after_60s_rolling_features",
+                "alpha": SLEEP_PROBABILITY_EMA_ALPHA,
+                "candidate_switch_margin": SLEEP_PROBABILITY_SWITCH_MARGIN,
+                "candidate_source": "ema_with_gated_n3_current_evidence_override",
+                "ema_role": "default_candidate_stability_and_display",
+                "display_winner_margin": SLEEP_DISPLAY_WINNER_MARGIN,
+                **probability_transition,
+            },
+            "rr_stage_guard": {k: round(v, 4) for k, v in rr_stage_guard.items()},
+            "signal_features": {**summary_signal, **waveform_signal},
+            "long_context_features": {
+                **long_summary_signal,
+                "window_seconds": SLEEP_LONG_CONTEXT_SECONDS,
+                "valid_frames": len(long_valid_bcg),
+            },
+            "sleep_evidence": sleep_evidence,
+            "timing_priors": {
+                "rem_gate": sleep_evidence["rem_gate"],
+                "rem_time_support": sleep_evidence["rem_time_support"],
+                "sleep_onset_gate": sleep_evidence["sleep_onset_gate"],
+            },
+            "evidence": {
+                "candidate": decision_candidate,
+                "probabilities": probabilities,
+                "confidence": confidence,
+                "epoch_seconds": SLEEP_EVIDENCE_EPOCH_SECONDS,
+                "sensor_frames": SLEEP_SENSOR_FRAMES_PER_EPOCH,
+                "window_seconds": SLEEP_WINDOW_SECONDS,
+            },
+            "confirmation": {
+                "confirmed_state": confirmed_state,
+                "pending_state": (transition_meta.get("pending_state") if transition_meta.get("held") else None),
+                "candidate_epochs": transition_meta.get("candidate_epochs", 0),
+                "required_epochs": transition_meta.get("required_epochs", SLEEP_CONFIRM_EPOCHS),
+                "required_seconds": float(transition_meta.get("confirmation_seconds") or SLEEP_CONFIRMATION_SECONDS),
+                "complete": bool(transition_meta.get("confirmation_complete")),
+                "decision": transition_meta.get("decision"),
+                "decision_kind": transition_meta.get("decision_kind"),
+                "held_previous_state": held_previous_state,
+                "continuity_hold_epochs": int(transition_meta.get("continuity_hold_epochs") or 0),
+                "provisional": provisional,
+                "provisional_hold_max_epochs": SLEEP_PROVISIONAL_HOLD_EPOCHS,
+                "challenger_counted_as_new_state": bool(transition_meta.get("challenger_counted_as_new_state")),
+                "score_eligible": bool(confirmed_state is not None and transition_meta.get("score_eligible", True)),
+                "excluded_from_score": bool(confirmed_state is None or transition_meta.get("excluded_from_score", False)),
+                "excluded_from_personal_baseline": bool(transition_meta.get("excluded_from_personal_baseline", False)),
+            },
+        }
+    )
     result["transition_guard"] = transition_guard
     result["transition_policy"] = transition_meta
     result["previous_state"] = previous_state
-    decision_metrics = {"mean_hr": round(mean_hr, 1), "mean_rr": round(mean_rr, 1),
-                 "hr_cv": round(hr_cv, 4), "rr_cv": round(rr_cv, 4),
-                 "movement_ratio": round(move_ratio, 3),
-                 "max_moving_run_frames": movement_window["max_moving_run_frames"],
-                 "movement_burst_count": movement_window["movement_burst_count"],
-                 "rr_n2_fit": round(rr_stage_fits["n2"], 4),
-                 "rr_n3_fit": round(rr_stage_fits["n3"], 4),
-                 "rr_n3_conflict": round(rr_stage_guard["conflict"], 4),
-                 "rr_n3_penalty": round(rr_stage_guard["n3_penalty"], 4),
-                 "awake_hr_reference": session_context["awake_hr_reference"],
-                 "awake_rr_reference": session_context["awake_rr_reference"],
-                 "sleep_onset_established": session_context[
-                     "sleep_onset_established"
-                 ],
-                 **summary_signal,
-                 **waveform_signal,
-                 "arousal_proxy": arousal_proxy,
-                 "auxiliary_evidence": auxiliary_evidence,
-                 "corroborated_acoustic_wake_support": auxiliary_evidence[
-                     "corroborated_acoustic_wake_support"],
-                 "sleep_evidence": sleep_evidence,
-                 "bed_status": STATUS_TEXT.get(statuses[-1], "Unknown"),
-                 "environment_support_score": environment_context["sleep_support_score"],
-                 "environment_coverage_percent": environment_context["coverage_percent"]}
-    window_start = datetime.fromtimestamp(
-        frames[0]["t"] - SLEEP_SAMPLE_SECONDS, timezone.utc).isoformat()
+    decision_metrics = {
+        "mean_hr": round(mean_hr, 1),
+        "mean_rr": round(mean_rr, 1),
+        "hr_cv": round(hr_cv, 4),
+        "rr_cv": round(rr_cv, 4),
+        "movement_ratio": round(move_ratio, 3),
+        "max_moving_run_frames": movement_window["max_moving_run_frames"],
+        "movement_burst_count": movement_window["movement_burst_count"],
+        "rr_n2_fit": round(rr_stage_fits["n2"], 4),
+        "rr_n3_fit": round(rr_stage_fits["n3"], 4),
+        "rr_n3_conflict": round(rr_stage_guard["conflict"], 4),
+        "rr_n3_penalty": round(rr_stage_guard["n3_penalty"], 4),
+        "awake_hr_reference": session_context["awake_hr_reference"],
+        "awake_rr_reference": session_context["awake_rr_reference"],
+        "sleep_onset_established": session_context["sleep_onset_established"],
+        **summary_signal,
+        **waveform_signal,
+        "arousal_proxy": arousal_proxy,
+        "auxiliary_evidence": auxiliary_evidence,
+        "corroborated_acoustic_wake_support": auxiliary_evidence["corroborated_acoustic_wake_support"],
+        "sleep_evidence": sleep_evidence,
+        "bed_status": STATUS_TEXT.get(statuses[-1], "Unknown"),
+        "environment_support_score": environment_context["sleep_support_score"],
+        "environment_coverage_percent": environment_context["coverage_percent"],
+    }
+    window_start = datetime.fromtimestamp(frames[0]["t"] - SLEEP_SAMPLE_SECONDS, timezone.utc).isoformat()
     window_end = datetime.fromtimestamp(frames[-1]["t"], timezone.utc).isoformat()
     result["evidence"]["window_start"] = window_start
     result["evidence"]["window_end"] = window_end
     _persist_sleep_stage_evidence(
-        decision_candidate, probabilities, result["reason"], confidence=confidence,
+        decision_candidate,
+        probabilities,
+        result["reason"],
+        confidence=confidence,
         metrics=decision_metrics,
         window_start=window_start,
         window_end=window_end,
@@ -3506,13 +3452,16 @@ def estimate_sleep_state() -> Dict[str, Any]:
     )
     if confirmed_state:
         result["stage_progression"] = _commit_sleep_stage(
-            confirmed_state, confirmed_probabilities, result["reason"],
+            confirmed_state,
+            confirmed_probabilities,
+            result["reason"],
             confidence=confidence,
             metrics=decision_metrics,
             confirmation=result["confirmation"],
             window_start=window_start,
             window_end=window_end,
-            sample_count=len(frames))
+            sample_count=len(frames),
+        )
     else:
         with sleep_path_lock:
             result["stage_progression"] = list(_sleep_stage_path["seen"])
@@ -3526,7 +3475,9 @@ _health_cache = {"t": 0.0, "value": {}}
 
 
 def _reset_live_sleep_inference(
-    session_id: Optional[str], *, recording: bool = False,
+    session_id: Optional[str],
+    *,
+    recording: bool = False,
 ) -> None:
     """Drop rolling physiology when occupant ownership changes.
 
@@ -3540,21 +3491,29 @@ def _reset_live_sleep_inference(
         _reset_sleep_stage_path(session_id)
     with analysis_frame_lock:
         _analysis_frame = None
-    initial = sensor_frame_wait_value(
-        recording=recording, sleep_states=tuple(ZEEP_SLEEP_STATES),
-        estimator_version=SLEEP_ESTIMATOR_VERSION,
-        evidence_version=SLEEP_EVIDENCE_VERSION,
-    ) if recording else None
-    _sleep_cache.update({
-        "t": time.monotonic() if initial else 0.0, "value": initial,
-        "session_id": session_id, "sequence": None,
-    })
+    initial = (
+        sensor_frame_wait_value(
+            recording=recording,
+            sleep_states=tuple(ZEEP_SLEEP_STATES),
+            estimator_version=SLEEP_ESTIMATOR_VERSION,
+            evidence_version=SLEEP_EVIDENCE_VERSION,
+        )
+        if recording
+        else None
+    )
+    _sleep_cache.update(
+        {
+            "t": time.monotonic() if initial else 0.0,
+            "value": initial,
+            "session_id": session_id,
+            "sequence": None,
+        }
+    )
 
 
 def analysis_frame_cached() -> Optional[Dict[str, Any]]:
     with analysis_frame_lock:
-        return (json.loads(json.dumps(_analysis_frame))
-                if _analysis_frame is not None else None)
+        return json.loads(json.dumps(_analysis_frame)) if _analysis_frame is not None else None
 
 
 def sleep_state_cached() -> Dict[str, Any]:
@@ -3563,32 +3522,19 @@ def sleep_state_cached() -> Dict[str, Any]:
         session_id = state["session"].get("session_id")
         recording = bool(state["session"].get("recording"))
     frame = analysis_frame_cached()
-    if (
-        frame is not None
-        and not frame.get("restored_after_restart")
-        and frame.get("session_id") == session_id
-        and (
-            not recording
-            or (frame.get("sleep") or {}).get("state")
-            in {*ZEEP_SLEEP_STATES, "off_bed"}
-        )
-    ):
+    if frame is not None and not frame.get("restored_after_restart") and frame.get("session_id") == session_id and (not recording or (frame.get("sleep") or {}).get("state") in {*ZEEP_SLEEP_STATES, "off_bed"}):
         value = dict(frame["sleep"])
         age_s = max(0.0, time.time() - float(frame["epoch_s"]))
         value["next_update_s"] = max(0, round(SLEEP_SAMPLE_SECONDS - age_s))
         return value
     cached = _sleep_cache["value"]
     refresh_s = SLEEP_SAMPLE_SECONDS
-    if (
-        cached is None
-        or session_id != _sleep_cache["session_id"]
-        or recording
-        and cached.get("state") not in {*ZEEP_SLEEP_STATES, "off_bed"}
-    ):
+    if cached is None or session_id != _sleep_cache["session_id"] or recording and cached.get("state") not in {*ZEEP_SLEEP_STATES, "off_bed"}:
         # REST/WebSocket reads must never manufacture an evidence epoch. Only
         # the sensor sampler may advance the 10s -> 30s -> 60s pipeline.
         _sleep_cache["value"] = sensor_frame_wait_value(
-            recording=recording, sleep_states=tuple(ZEEP_SLEEP_STATES),
+            recording=recording,
+            sleep_states=tuple(ZEEP_SLEEP_STATES),
             estimator_version=SLEEP_ESTIMATOR_VERSION,
             evidence_version=SLEEP_EVIDENCE_VERSION,
         )
@@ -3624,12 +3570,13 @@ def system_health_cached() -> Dict[str, Any]:
                 break
     except Exception:
         pass
+
     def command_text(args):
         try:
-            return subprocess.run(args, capture_output=True, text=True, timeout=1,
-                                  check=False).stdout.strip() or None
+            return subprocess.run(args, capture_output=True, text=True, timeout=1, check=False).stdout.strip() or None
         except Exception:
             return None
+
     ssid = command_text(["iwgetid", "-r"])
     ip_text = command_text(["hostname", "-I"])
     ip_address = ip_text.split()[0] if ip_text else None
@@ -3645,7 +3592,8 @@ def system_health_cached() -> Dict[str, Any]:
         pass
     value = {
         "cpu_count": cpu_count,
-        "load_1m": round(load1, 2), "load_5m": round(load5, 2),
+        "load_1m": round(load1, 2),
+        "load_5m": round(load5, 2),
         "load_15m": round(load15, 2),
         "load_percent": round(min(999, load1 / cpu_count * 100), 1),
         "cpu_temp_c": cpu_temp,
@@ -3655,8 +3603,10 @@ def system_health_cached() -> Dict[str, Any]:
         "disk_percent": round(disk.used / disk.total * 100, 1),
         "disk_free_gb": round(disk.free / 1024 / 1024 / 1024, 1),
         "host_uptime_s": host_uptime,
-        "wifi_interface": "wlan0", "wifi_ssid": ssid,
-        "wifi_dbm": wifi_dbm, "wifi_connected": bool(ssid and wifi_dbm is not None),
+        "wifi_interface": "wlan0",
+        "wifi_ssid": ssid,
+        "wifi_dbm": wifi_dbm,
+        "wifi_connected": bool(ssid and wifi_dbm is not None),
         "ip_address": ip_address,
     }
     _health_cache.update({"t": now, "value": value})
@@ -3684,9 +3634,7 @@ def snapshot() -> Dict[str, Any]:
     hub2 = result["sensor"].get("sensorhub2") or {}
     hub2_last = hub2.get("last_update")
     hub2["data_age_s"] = round(max(0.0, now - hub2_last), 1) if isinstance(hub2_last, (int, float)) else None
-    if hub2.get("connected") and (
-        hub2_last is None or now - hub2_last > SENSORHUB2_STALE_SECONDS
-    ):
+    if hub2.get("connected") and (hub2_last is None or now - hub2_last > SENSORHUB2_STALE_SECONDS):
         hub2["connected"] = False
         hub2["stale"] = True
     hub2["fallback_active"] = bool(not hub2.get("connected") and hub2_last is not None)
@@ -3694,13 +3642,8 @@ def snapshot() -> Dict[str, Any]:
         hub2["fallback_reason"] = "stale" if hub2.get("stale") else "mqtt_disconnected"
     aircon = result.get("aircon") or {}
     aircon_last = aircon.get("last_update")
-    aircon["data_age_s"] = (
-        round(max(0.0, now - aircon_last), 1)
-        if isinstance(aircon_last, (int, float)) else None
-    )
-    if aircon.get("connected") and (
-        aircon_last is None or now - aircon_last > CONTROLHUB1_STALE_SECONDS
-    ):
+    aircon["data_age_s"] = round(max(0.0, now - aircon_last), 1) if isinstance(aircon_last, (int, float)) else None
+    if aircon.get("connected") and (aircon_last is None or now - aircon_last > CONTROLHUB1_STALE_SECONDS):
         aircon["connected"] = False
         aircon["stale"] = True
     # ESP32 reports the actual temperature sent over IR. Publish the matching
@@ -3712,40 +3655,22 @@ def snapshot() -> Dict[str, Any]:
     commanded_temperature = aircon.get("temperature_c")
     if isinstance(commanded_temperature, (int, float)) and not isinstance(commanded_temperature, bool):
         desired_temperature = int(commanded_temperature) - AIRCON_TEMPERATURE_BIAS_C
-        aircon["desired_temperature_c"] = (
-            desired_temperature
-            if AIRCON_DESIRED_TEMP_MIN_C <= desired_temperature <= AIRCON_DESIRED_TEMP_MAX_C
-            else None
-        )
+        aircon["desired_temperature_c"] = desired_temperature if AIRCON_DESIRED_TEMP_MIN_C <= desired_temperature <= AIRCON_DESIRED_TEMP_MAX_C else None
     else:
         aircon["desired_temperature_c"] = None
     result["aircon"] = aircon
     bed_control = result.get("bed_control") or {}
     bed_control_last = bed_control.get("last_update")
-    bed_control["data_age_s"] = (
-        round(max(0.0, now - bed_control_last), 1)
-        if isinstance(bed_control_last, (int, float)) else None
-    )
-    if bed_control.get("connected") and (
-        bed_control_last is None
-        or now - bed_control_last > CONTROLHUB2_STALE_SECONDS
-    ):
+    bed_control["data_age_s"] = round(max(0.0, now - bed_control_last), 1) if isinstance(bed_control_last, (int, float)) else None
+    if bed_control.get("connected") and (bed_control_last is None or now - bed_control_last > CONTROLHUB2_STALE_SECONDS):
         bed_control["connected"] = False
         bed_control["stale"] = True
     result["bed_control"] = bed_control
     live_environment = build_environment_snapshot(esp32, hub2, now)
     analysis_frame = analysis_frame_cached()
     frame_available = bool(analysis_frame)
-    frame_age_s = (
-        max(0.0, now - float(analysis_frame.get("epoch_s") or 0))
-        if analysis_frame else None
-    )
-    frame_fresh = bool(
-        analysis_frame
-        and not analysis_frame.get("restored_after_restart")
-        and frame_age_s is not None
-        and frame_age_s <= max(15.0, SLEEP_SAMPLE_SECONDS * 3)
-    )
+    frame_age_s = max(0.0, now - float(analysis_frame.get("epoch_s") or 0)) if analysis_frame else None
+    frame_fresh = bool(analysis_frame and not analysis_frame.get("restored_after_restart") and frame_age_s is not None and frame_age_s <= max(15.0, SLEEP_SAMPLE_SECONDS * 3))
     if frame_available:
         environment_view = json.loads(json.dumps(analysis_frame["environment"]))
         if not frame_fresh:
@@ -3761,9 +3686,16 @@ def snapshot() -> Dict[str, Any]:
         # connectivity context, but publish values only at a Sensor-frame tick.
         environment_view = json.loads(json.dumps(live_environment))
         for key in (
-            "temperature_c", "humidity_rh", "lux", "sound_dba_est",
-            "co2_ppm", "pm1_0_ug_m3", "pm2_5_ug_m3", "pm10_ug_m3",
-            "voc_index", "sgp40_raw",
+            "temperature_c",
+            "humidity_rh",
+            "lux",
+            "sound_dba_est",
+            "co2_ppm",
+            "pm1_0_ug_m3",
+            "pm2_5_ug_m3",
+            "pm10_ug_m3",
+            "voc_index",
+            "sgp40_raw",
         ):
             environment_view[key] = None
         for device in (environment_view.get("devices") or {}).values():
@@ -3799,31 +3731,41 @@ def snapshot() -> Dict[str, Any]:
             bcg["analysis_stale"] = True
             bcg["fallback_active"] = True
             bcg["fallback_reason"] = "sensor_frame_stale"
-        frame_metadata = {
-            key: analysis_frame[key]
-            for key in ("sequence", "timestamp", "epoch_s", "refresh_s", "source")
-        }
-        frame_metadata.update({
-            "data_age_s": round(frame_age_s, 1),
-            "stale": not frame_fresh,
-            "restored_after_restart": bool(
-                analysis_frame.get("restored_after_restart")),
-            "restored_source": analysis_frame.get("restored_source"),
-        })
+        frame_metadata = {key: analysis_frame[key] for key in ("sequence", "timestamp", "epoch_s", "refresh_s", "source")}
+        frame_metadata.update(
+            {
+                "data_age_s": round(frame_age_s, 1),
+                "stale": not frame_fresh,
+                "restored_after_restart": bool(analysis_frame.get("restored_after_restart")),
+                "restored_source": analysis_frame.get("restored_source"),
+            }
+        )
     else:
         for key in (
-            "status_code", "status_text", "raw_status_code", "raw_status_text",
-            "heart_rate_bpm", "respiration_rate", "analysis_epoch_s",
+            "status_code",
+            "status_text",
+            "raw_status_code",
+            "raw_status_text",
+            "heart_rate_bpm",
+            "respiration_rate",
+            "analysis_epoch_s",
         ):
             bcg[key] = None
         bcg["analysis_valid"] = False
         frame_metadata = {
-            "sequence": None, "timestamp": None, "epoch_s": None,
-            "refresh_s": SLEEP_SAMPLE_SECONDS, "source": "waiting_sensor_tick",
-            "data_age_s": None, "stale": False,
+            "sequence": None,
+            "timestamp": None,
+            "epoch_s": None,
+            "refresh_s": SLEEP_SAMPLE_SECONDS,
+            "source": "waiting_sensor_tick",
+            "data_age_s": None,
+            "stale": False,
         }
     frame_metadata["contains"] = [
-        "environment", "heart_rate", "respiration_rate", "bed_status",
+        "environment",
+        "heart_rate",
+        "respiration_rate",
+        "bed_status",
     ]
     # ``analysis_frame`` remains as a compatibility alias for existing clients.
     # New clients should use ``sensor_frame``: only Sleep Evidence/State has a
@@ -3832,8 +3774,7 @@ def snapshot() -> Dict[str, Any]:
     result["analysis_frame"] = dict(frame_metadata)
     # Internal telemetry (pre-G2): displayed on this lab dashboard only,
     # logged with its version — never a control input.
-    result["sleep"] = (dict(analysis_frame["sleep"])
-                       if frame_fresh else sleep_state_cached())
+    result["sleep"] = dict(analysis_frame["sleep"]) if frame_fresh else sleep_state_cached()
     # Smart Response remains observation-only. It consumes the same canonical
     # canonical environmental frame shown by every page, never sleep stage.
     result["smart_response"] = build_smart_response(result, now)
@@ -3847,7 +3788,10 @@ def snapshot_for(principal: Principal) -> Dict[str, Any]:
     result = snapshot()
     result["features"] = {"session_report_share": report_shares.enabled}
     if principal.is_admin:
-        result["auth"] = {"principal": principal.public_dict(), "session_store": auth_sessions.health()}
+        result["auth"] = {
+            "principal": principal.public_dict(),
+            "session_store": auth_sessions.health(),
+        }
         return result
 
     # Consumer pages need health values and device state, never infrastructure
@@ -3857,8 +3801,15 @@ def snapshot_for(principal: Principal) -> Dict[str, Any]:
     result["system"] = {
         key: system.get(key)
         for key in (
-            "uptime_s", "gpio_available", "gpio_error", "max_volume", "player",
-            "session_sample_s", "bed_start_s", "pod_id", "occupancy",
+            "uptime_s",
+            "gpio_available",
+            "gpio_error",
+            "max_volume",
+            "player",
+            "session_sample_s",
+            "bed_start_s",
+            "pod_id",
+            "occupancy",
         )
     }
     # Full PCM and firmware telemetry is available only in Admin inspector.
@@ -3872,8 +3823,7 @@ def snapshot_for(principal: Principal) -> Dict[str, Any]:
     return result
 
 
-def build_environment_snapshot(esp32: Dict[str, Any], hub2: Dict[str, Any],
-                               now: Optional[float] = None) -> Dict[str, Any]:
+def build_environment_snapshot(esp32: Dict[str, Any], hub2: Dict[str, Any], now: Optional[float] = None) -> Dict[str, Any]:
     """Compatibility facade over the pure two-hub Sensor runtime."""
     return compose_environment_snapshot(
         esp32,
@@ -3892,8 +3842,7 @@ def build_environment_snapshot(esp32: Dict[str, Any], hub2: Dict[str, Any],
 SMART_RESPONSE_POLICY_VERSION = "shadow-env-v1.0"
 
 
-def build_smart_response(snap: Dict[str, Any],
-                         now: Optional[float] = None) -> Dict[str, Any]:
+def build_smart_response(snap: Dict[str, Any], now: Optional[float] = None) -> Dict[str, Any]:
     """Compatibility facade over the side-effect-free Shadow evaluator."""
     policy = SmartResponsePolicy(
         version=SMART_RESPONSE_POLICY_VERSION,
@@ -3950,7 +3899,8 @@ def hold_last_valid_sound(current: Dict[str, Any], previous: Dict[str, Any]) -> 
 def esp32_reader():
     """Run the modular Sensor Hub 1 USB adapter."""
     store = SensorHub1StateStore(
-        sensor_state=state["sensor"], state_lock=state_lock,
+        sensor_state=state["sensor"],
+        state_lock=state_lock,
         sound_history=sound_level_history,
         sound_history_lock=sound_history_lock,
     )
@@ -3978,16 +3928,17 @@ def sensorhub2_mqtt_reader():
 
     def on_connect(client, _userdata, _flags, reason_code, _properties=None):
         if reason_code == 0:
-            client.subscribe([
-                (SENSORHUB2_TELEMETRY_TOPIC, 0),
-                (SENSORHUB2_STATUS_TOPIC, 0),
-            ])
+            client.subscribe(
+                [
+                    (SENSORHUB2_TELEMETRY_TOPIC, 0),
+                    (SENSORHUB2_STATUS_TOPIC, 0),
+                ]
+            )
             log_event("sensorhub2", "mqtt_connected", host=MQTT_HOST, port=MQTT_PORT)
         else:
             log_event("sensorhub2", "mqtt_connect_failed", reason=str(reason_code))
 
-    def on_disconnect(_client, _userdata, _disconnect_flags, reason_code,
-                      _properties=None):
+    def on_disconnect(_client, _userdata, _disconnect_flags, reason_code, _properties=None):
         with state_lock:
             hub = dict(state["sensor"].get("sensorhub2") or {})
             hub["connected"] = False
@@ -4019,8 +3970,12 @@ def sensorhub2_mqtt_reader():
                         previous["connected"] = False
                     state["sensor"]["sensorhub2"] = previous
         except Exception as exc:
-            log_event("sensorhub2", "invalid_mqtt_payload", topic=message.topic,
-                      error=str(exc))
+            log_event(
+                "sensorhub2",
+                "invalid_mqtt_payload",
+                topic=message.topic,
+                error=str(exc),
+            )
 
     while True:
         try:
@@ -4044,271 +3999,22 @@ def sensorhub2_mqtt_reader():
             time.sleep(5)
 
 
-class ControlHub1MQTT:
-    """MQTT command/ack bridge for the ESP32-S3 air-conditioner IR hub.
-
-    This uses a separate client from Sensor Hub 2 so a control regression cannot
-    replace or interrupt the proven telemetry reader. Commands are serialized
-    because the current ESP32 event schema has no unique command_id.
-    """
-
-    def __init__(self):
-        self._client = None
-        self._client_lock = threading.Lock()
-        self._command_lock = threading.Lock()
-        self._ack_condition = threading.Condition()
-        self._ack_seq = 0
-        self._last_ack = None
-        # Monotonic time of the latest ESP acknowledgement for a command that
-        # emits IR. Access is protected by _command_lock.
-        self._last_ir_ack_monotonic = None
-
-    def _set_client(self, client):
-        with self._client_lock:
-            self._client = client
-
-    def _get_client(self):
-        with self._client_lock:
-            return self._client
-
-    def _on_connect(self, client, _userdata, _flags, reason_code,
-                    _properties=None):
-        if reason_code == 0:
-            self._set_client(client)
-            client.subscribe([
-                (CONTROLHUB1_STATUS_TOPIC, 0),
-                (CONTROLHUB1_EVENT_TOPIC, 0),
-            ])
-            with state_lock:
-                state["aircon"]["mqtt_connected"] = True
-                state["aircon"].pop("mqtt_error", None)
-            log_event("controlhub1", "mqtt_connected", host=MQTT_HOST,
-                      port=MQTT_PORT)
-        else:
-            log_event("controlhub1", "mqtt_connect_failed",
-                      reason=str(reason_code))
-
-    def _on_disconnect(self, client, _userdata, _disconnect_flags, reason_code,
-                       _properties=None):
-        with self._client_lock:
-            if self._client is client:
-                self._client = None
-        with state_lock:
-            aircon = dict(state.get("aircon") or {})
-            aircon["connected"] = False
-            aircon["mqtt_connected"] = False
-            aircon["error"] = f"MQTT disconnected: {reason_code}"
-            aircon["command_pending"] = False
-            aircon["pending_command"] = None
-            state["aircon"] = aircon
-        with self._ack_condition:
-            self._ack_condition.notify_all()
-        log_event("controlhub1", "mqtt_disconnected", reason=str(reason_code))
-
-    def _on_message(self, _client, _userdata, message):
-        try:
-            obj = json.loads(message.payload.decode("utf-8"))
-            if not isinstance(obj, dict):
-                raise ValueError("payload is not a JSON object")
-            now = time.time()
-            with state_lock:
-                aircon = dict(state.get("aircon") or {})
-                if message.topic == CONTROLHUB1_STATUS_TOPIC:
-                    aircon.update(obj)
-                    aircon["connected"] = obj.get("online") is not False
-                    aircon["transport"] = "mqtt"
-                    aircon["status_last_update"] = now
-                else:
-                    aircon["connected"] = True
-                    aircon["last_event"] = obj
-                    aircon["last_command"] = obj.get("command")
-                    aircon["last_command_ok"] = bool(obj.get("ok"))
-                    aircon["event_last_update"] = now
-                    if obj.get("tx_count") is not None:
-                        aircon["tx_count"] = obj.get("tx_count")
-                aircon["last_update"] = now
-                aircon["stale"] = False
-                aircon["mqtt_connected"] = True
-                aircon.pop("error", None)
-                state["aircon"] = aircon
-
-            if message.topic == CONTROLHUB1_EVENT_TOPIC:
-                with self._ack_condition:
-                    self._ack_seq += 1
-                    self._last_ack = (dict(obj), now)
-                    self._ack_condition.notify_all()
-        except Exception as exc:
-            log_event("controlhub1", "invalid_mqtt_payload",
-                      topic=message.topic, error=str(exc))
-
-    def run(self):
-        if not MQTT_AVAILABLE:
-            with state_lock:
-                state["aircon"]["error"] = "paho-mqtt is not installed"
-            log_event("controlhub1", "mqtt_library_missing",
-                      install="paho-mqtt")
-            return
-
-        while True:
-            try:
-                client = mqtt.Client(
-                    mqtt.CallbackAPIVersion.VERSION2,
-                    client_id=f"zeep-pi5-controlhub1-{socket.gethostname()}",
-                )
-                client.on_connect = self._on_connect
-                client.on_disconnect = self._on_disconnect
-                client.on_message = self._on_message
-                client.reconnect_delay_set(min_delay=1, max_delay=30)
-                client.connect(MQTT_HOST, MQTT_PORT, MQTT_KEEPALIVE)
-                client.loop_forever(retry_first_connection=True)
-            except Exception as exc:
-                self._set_client(None)
-                with state_lock:
-                    aircon = dict(state.get("aircon") or {})
-                    aircon["connected"] = False
-                    aircon["mqtt_connected"] = False
-                    aircon["error"] = str(exc)
-                    state["aircon"] = aircon
-                log_event("controlhub1", "mqtt_error", error=str(exc))
-                time.sleep(5)
-
-    @staticmethod
-    def _emits_ir(command: str) -> bool:
-        """STATUS reads state only; every other current command emits IR."""
-        return command != "status"
-
-    def _wait_for_ir_guard(self, command: str,
-                           minimum_gap_seconds: Optional[float]) -> float:
-        if not self._emits_ir(command) or self._last_ir_ack_monotonic is None:
-            return 0.0
-        required_gap = max(
-            CONTROLHUB1_MIN_IR_GAP_SECONDS,
-            float(minimum_gap_seconds or 0.0),
-        )
-        elapsed = time.monotonic() - self._last_ir_ack_monotonic
-        wait_seconds = max(0.0, required_gap - elapsed)
-        if wait_seconds > 0:
-            log_event(
-                "controlhub1",
-                "ir_guard_wait",
-                command=command,
-                wait_seconds=round(wait_seconds, 3),
-                required_gap_seconds=required_gap,
-            )
-            time.sleep(wait_seconds)
-        return wait_seconds
-
-    def _publish_and_wait_locked(
-        self,
-        command: str,
-        minimum_gap_seconds: Optional[float] = None,
-    ) -> Dict[str, Any]:
-        """Publish one command while the caller owns _command_lock."""
-        self._wait_for_ir_guard(command, minimum_gap_seconds)
-        now = time.time()
-        with state_lock:
-            aircon = dict(state.get("aircon") or {})
-            last_update = aircon.get("last_update")
-            fresh = isinstance(last_update, (int, float)) and (
-                now - last_update <= CONTROLHUB1_STALE_SECONDS)
-            online = bool(aircon.get("connected") and fresh)
-        client = self._get_client()
-        if client is None or not client.is_connected() or not online:
-            raise HTTPException(503, "Control Hub 1 ไม่เชื่อมต่อ")
-
-        with self._ack_condition:
-            initial_ack_seq = self._ack_seq
-
-        with state_lock:
-            state["aircon"]["command_pending"] = True
-            state["aircon"]["pending_command"] = command
-            state["aircon"].pop("last_command_error", None)
-
-        # retain=False is mandatory: an old command must never replay when
-        # the ESP32 reconnects. QoS 0 matches the current firmware; changing
-        # to QoS 1 could duplicate a toggle-style IR command.
-        info = client.publish(
-            CONTROLHUB1_COMMAND_TOPIC, command, qos=0, retain=False)
-        if info.rc != mqtt.MQTT_ERR_SUCCESS:
-            raise HTTPException(503, f"MQTT publish failed: {info.rc}")
-
-        log_event("controlhub1", "command_published", command=command)
-        deadline = time.monotonic() + CONTROLHUB1_ACK_TIMEOUT_SECONDS
-        acknowledgement = None
-        with self._ack_condition:
-            while time.monotonic() < deadline:
-                if self._ack_seq > initial_ack_seq and self._last_ack:
-                    candidate, received_at = self._last_ack
-                    if (received_at >= now and
-                            candidate.get("command") == command):
-                        acknowledgement = dict(candidate)
-                        break
-                remaining = deadline - time.monotonic()
-                if remaining > 0:
-                    self._ack_condition.wait(remaining)
-
-        if acknowledgement is None:
-            with state_lock:
-                state["aircon"]["last_command_error"] = "ack_timeout"
-            log_event("controlhub1", "command_ack_timeout", command=command)
-            raise HTTPException(
-                504,
-                "ส่ง MQTT แล้ว แต่ไม่ได้รับคำยืนยันจาก Control Hub 1",
-            )
-        if acknowledgement.get("ok") is not True:
-            detail = acknowledgement.get("detail") or "command rejected"
-            log_event("controlhub1", "command_rejected", command=command,
-                      detail=detail)
-            raise HTTPException(502, f"Control Hub 1 ปฏิเสธคำสั่ง: {detail}")
-
-        if self._emits_ir(command):
-            self._last_ir_ack_monotonic = time.monotonic()
-        # The current ESP event confirms that its IR send routine ran. There
-        # is no feedback wire from the air conditioner, so this must never be
-        # presented as proof that the appliance changed state.
-        log_event(
-            "controlhub1",
-            "command_acknowledged",
-            command=command,
-            tx_count=acknowledgement.get("tx_count"),
-            acknowledgement_scope="esp_ir_transmit_only",
-        )
-        return acknowledgement
-
-    def publish_sequence_and_wait(
-        self,
-        commands: List[str],
-        minimum_gaps_before: Optional[List[float]] = None,
-    ) -> List[Dict[str, Any]]:
-        """Run an atomic IR sequence so another request cannot interleave."""
-        if not commands:
-            return []
-        if minimum_gaps_before is not None and (
-                len(minimum_gaps_before) != len(commands)):
-            raise ValueError("minimum_gaps_before must match commands")
-        if not self._command_lock.acquire(blocking=False):
-            raise HTTPException(429, "Air Con command already in progress")
-        try:
-            acknowledgements = []
-            for index, command in enumerate(commands):
-                minimum_gap = (
-                    minimum_gaps_before[index]
-                    if minimum_gaps_before is not None else None
-                )
-                acknowledgements.append(
-                    self._publish_and_wait_locked(command, minimum_gap)
-                )
-            return acknowledgements
-        finally:
-            with state_lock:
-                state["aircon"]["command_pending"] = False
-                state["aircon"]["pending_command"] = None
-            self._command_lock.release()
-
-    def publish_and_wait(self, command: str) -> Dict[str, Any]:
-        return self.publish_sequence_and_wait([command])[0]
-
-
+configure_controlhub1(
+    mqtt_module=mqtt,
+    mqtt_available=MQTT_AVAILABLE,
+    mqtt_host=MQTT_HOST,
+    mqtt_port=MQTT_PORT,
+    mqtt_keepalive=MQTT_KEEPALIVE,
+    command_topic=CONTROLHUB1_COMMAND_TOPIC,
+    status_topic=CONTROLHUB1_STATUS_TOPIC,
+    event_topic=CONTROLHUB1_EVENT_TOPIC,
+    stale_seconds=CONTROLHUB1_STALE_SECONDS,
+    ack_timeout_seconds=CONTROLHUB1_ACK_TIMEOUT_SECONDS,
+    min_ir_gap_seconds=CONTROLHUB1_MIN_IR_GAP_SECONDS,
+    shared_state=state,
+    shared_state_lock=state_lock,
+    event_logger=log_event,
+)
 controlhub1_mqtt = ControlHub1MQTT()
 
 
@@ -4331,42 +4037,41 @@ class ControlHub2BedMQTT:
         with self._client_lock:
             return self._client
 
-    def _on_connect(self, client, _userdata, _flags, reason_code,
-                    _properties=None):
+    def _on_connect(self, client, _userdata, _flags, reason_code, _properties=None):
         if reason_code == 0:
             self._set_client(client)
-            client.subscribe([
-                (CONTROLHUB2_STATUS_TOPIC, 0),
-                (CONTROLHUB2_EVENT_TOPIC, 0),
-            ])
+            client.subscribe(
+                [
+                    (CONTROLHUB2_STATUS_TOPIC, 0),
+                    (CONTROLHUB2_EVENT_TOPIC, 0),
+                ]
+            )
             with state_lock:
                 state["bed_control"]["mqtt_connected"] = True
                 state["bed_control"].pop("mqtt_error", None)
-            log_event("controlhub2_bed", "mqtt_connected", host=MQTT_HOST,
-                      port=MQTT_PORT)
+            log_event("controlhub2_bed", "mqtt_connected", host=MQTT_HOST, port=MQTT_PORT)
         else:
-            log_event("controlhub2_bed", "mqtt_connect_failed",
-                      reason=str(reason_code))
+            log_event("controlhub2_bed", "mqtt_connect_failed", reason=str(reason_code))
 
-    def _on_disconnect(self, client, _userdata, _disconnect_flags,
-                       reason_code, _properties=None):
+    def _on_disconnect(self, client, _userdata, _disconnect_flags, reason_code, _properties=None):
         with self._client_lock:
             if self._client is client:
                 self._client = None
         with state_lock:
             bed = dict(state.get("bed_control") or {})
-            bed.update({
-                "connected": False,
-                "mqtt_connected": False,
-                "error": f"MQTT disconnected: {reason_code}",
-                "command_pending": False,
-                "pending_command": None,
-            })
+            bed.update(
+                {
+                    "connected": False,
+                    "mqtt_connected": False,
+                    "error": f"MQTT disconnected: {reason_code}",
+                    "command_pending": False,
+                    "pending_command": None,
+                }
+            )
             state["bed_control"] = bed
         with self._ack_condition:
             self._ack_condition.notify_all()
-        log_event("controlhub2_bed", "mqtt_disconnected",
-                  reason=str(reason_code))
+        log_event("controlhub2_bed", "mqtt_disconnected", reason=str(reason_code))
 
     def _on_message(self, _client, _userdata, message):
         try:
@@ -4405,15 +4110,18 @@ class ControlHub2BedMQTT:
                     self._last_ack = (dict(obj), now)
                     self._ack_condition.notify_all()
         except Exception as exc:
-            log_event("controlhub2_bed", "invalid_mqtt_payload",
-                      topic=message.topic, error=str(exc))
+            log_event(
+                "controlhub2_bed",
+                "invalid_mqtt_payload",
+                topic=message.topic,
+                error=str(exc),
+            )
 
     def run(self):
         if not MQTT_AVAILABLE:
             with state_lock:
                 state["bed_control"]["error"] = "paho-mqtt is not installed"
-            log_event("controlhub2_bed", "mqtt_library_missing",
-                      install="paho-mqtt")
+            log_event("controlhub2_bed", "mqtt_library_missing", install="paho-mqtt")
             return
 
         while True:
@@ -4432,8 +4140,7 @@ class ControlHub2BedMQTT:
                 self._set_client(None)
                 with state_lock:
                     bed = dict(state.get("bed_control") or {})
-                    bed.update({"connected": False, "mqtt_connected": False,
-                                "error": str(exc)})
+                    bed.update({"connected": False, "mqtt_connected": False, "error": str(exc)})
                     state["bed_control"] = bed
                 log_event("controlhub2_bed", "mqtt_error", error=str(exc))
                 time.sleep(5)
@@ -4442,8 +4149,7 @@ class ControlHub2BedMQTT:
         client = self._get_client()
         if client is None or not client.is_connected():
             raise HTTPException(503, "Control Hub 2 Bed ไม่เชื่อมต่อ")
-        info = client.publish(
-            CONTROLHUB2_COMMAND_TOPIC, command, qos=0, retain=False)
+        info = client.publish(CONTROLHUB2_COMMAND_TOPIC, command, qos=0, retain=False)
         if info.rc != mqtt.MQTT_ERR_SUCCESS:
             raise HTTPException(503, f"MQTT publish failed: {info.rc}")
 
@@ -4457,9 +4163,7 @@ class ControlHub2BedMQTT:
             log_event("controlhub2_bed", "stop_failed", reason=reason, error=str(exc))
             return False
 
-    def publish_and_wait(
-        self, requested_command: str, toggle_repeat: bool = False
-    ) -> Tuple[Dict[str, Any], str]:
+    def publish_and_wait(self, requested_command: str, toggle_repeat: bool = False) -> Tuple[Dict[str, Any], str]:
         if not self._command_lock.acquire(blocking=False):
             raise HTTPException(429, "Bed command already in progress")
         try:
@@ -4468,18 +4172,19 @@ class ControlHub2BedMQTT:
                 bed = dict(state.get("bed_control") or {})
                 active_command = bed.get("active_command")
                 last_update = bed.get("last_update")
-                fresh = isinstance(last_update, (int, float)) and (
-                    now - last_update <= CONTROLHUB2_STALE_SECONDS)
+                fresh = isinstance(last_update, (int, float)) and (now - last_update <= CONTROLHUB2_STALE_SECONDS)
                 online = bool(bed.get("connected") and fresh)
             if not online:
                 raise HTTPException(503, "Control Hub 2 Bed ไม่เชื่อมต่อ")
 
             directional_commands = {
-                "head_up", "head_down", "foot_up", "foot_down",
+                "head_up",
+                "head_down",
+                "foot_up",
+                "foot_down",
             }
             command = requested_command
-            if (toggle_repeat and requested_command in directional_commands
-                    and active_command == requested_command):
+            if toggle_repeat and requested_command in directional_commands and active_command == requested_command:
                 command = "bed_stop"
 
             # Resolve the toggle while holding the per-device command lock, so
@@ -4497,16 +4202,19 @@ class ControlHub2BedMQTT:
                 state["bed_control"].pop("last_command_error", None)
 
             self._publish(command)
-            log_event("controlhub2_bed", "command_published",
-                      requested_command=requested_command, command=command)
+            log_event(
+                "controlhub2_bed",
+                "command_published",
+                requested_command=requested_command,
+                command=command,
+            )
             deadline = time.monotonic() + CONTROLHUB2_ACK_TIMEOUT_SECONDS
             acknowledgement = None
             with self._ack_condition:
                 while time.monotonic() < deadline:
                     if self._ack_seq > initial_ack_seq and self._last_ack:
                         candidate, received_at = self._last_ack
-                        if (received_at >= now and
-                                candidate.get("command") == command):
+                        if received_at >= now and candidate.get("command") == command:
                             acknowledgement = dict(candidate)
                             break
                     remaining = deadline - time.monotonic()
@@ -4522,11 +4230,13 @@ class ControlHub2BedMQTT:
                 )
             if acknowledgement.get("ok") is not True:
                 detail = acknowledgement.get("detail") or "command rejected"
-                raise HTTPException(
-                    502, f"Control Hub 2 Bed ปฏิเสธคำสั่ง: {detail}")
-            log_event("controlhub2_bed", "command_acknowledged",
-                      command=command,
-                      command_count=acknowledgement.get("command_count"))
+                raise HTTPException(502, f"Control Hub 2 Bed ปฏิเสธคำสั่ง: {detail}")
+            log_event(
+                "controlhub2_bed",
+                "command_acknowledged",
+                command=command,
+                command_count=acknowledgement.get("command_count"),
+            )
             return acknowledgement, command
         finally:
             with state_lock:
@@ -4570,9 +4280,7 @@ def _schedule_bed_auto_stop(source_command: str) -> None:
         with _bed_motion_timer_lock:
             if generation != _bed_motion_generation:
                 return
-        published = controlhub2_bed_mqtt.publish_stop_best_effort(
-            reason=f"auto_{BED_MOVE_SECONDS:g}s:{source_command}"
-        )
+        published = controlhub2_bed_mqtt.publish_stop_best_effort(reason=f"auto_{BED_MOVE_SECONDS:g}s:{source_command}")
         with _bed_motion_timer_lock:
             still_latest = generation == _bed_motion_generation
         if still_latest:
@@ -4643,14 +4351,8 @@ def bcg_reader():
                     status_code = parsed["status_code"]
                     hr_value = parsed["heart_rate_bpm"]
                     rr_value = parsed["respiration_rate"]
-                    hr_current_valid = bool(
-                        hr_value is not None
-                        and HR_SANITY_RANGE_BPM[0] <= hr_value <= HR_SANITY_RANGE_BPM[1]
-                    )
-                    rr_current_valid = bool(
-                        rr_value is not None
-                        and RR_SANITY_RANGE_PER_MIN[0] <= rr_value <= RR_SANITY_RANGE_PER_MIN[1]
-                    )
+                    hr_current_valid = bool(hr_value is not None and HR_SANITY_RANGE_BPM[0] <= hr_value <= HR_SANITY_RANGE_BPM[1])
+                    rr_current_valid = bool(rr_value is not None and RR_SANITY_RANGE_PER_MIN[0] <= rr_value <= RR_SANITY_RANGE_PER_MIN[1])
                     # Persist raw packet to SQLite (epoch-batched, queue-based)
                     bcg_storage.add_packet(
                         frame,
@@ -4660,58 +4362,64 @@ def bcg_reader():
                         respiration_rate=rr_value,
                     )
                     with history_lock:
-                        bcg_history.append({
-                            "t": time.time(),
-                            "status": status_code,
-                            "hr": hr_value,
-                            "rr": rr_value,
-                            "samples": samples,
-                        })
-                        bcg_raw_history.append({
-                            "t": time.time(),
-                            "packet_id": parsed["sensor_packet_id"],
-                            "status_code": status_code,
-                            "heart_rate": hr_value,
-                            "respiration_raw": parsed["respiration_raw"],
-                            "respiration_rate": rr_value,
-                            "samples": samples,
-                            "raw_hex": frame.hex(" "),
-                        })
+                        bcg_history.append(
+                            {
+                                "t": time.time(),
+                                "status": status_code,
+                                "hr": hr_value,
+                                "rr": rr_value,
+                                "samples": samples,
+                            }
+                        )
+                        bcg_raw_history.append(
+                            {
+                                "t": time.time(),
+                                "packet_id": parsed["sensor_packet_id"],
+                                "status_code": status_code,
+                                "heart_rate": hr_value,
+                                "respiration_raw": parsed["respiration_raw"],
+                                "respiration_rate": rr_value,
+                                "samples": samples,
+                                "raw_hex": frame.hex(" "),
+                            }
+                        )
                     packet_time = time.time()
                     with state_lock:
                         bcg = state["sensor"]["bcg"]
-                        current_vitals_valid = bool(
-                            status_code in ON_BED_CODES
-                            and hr_current_valid
-                            and rr_current_valid
-                        )
+                        current_vitals_valid = bool(status_code in ON_BED_CODES and hr_current_valid and rr_current_valid)
                         previous_streak = int(bcg.get("vital_valid_streak") or 0)
-                        bcg.update({
-                            "connected": True,
-                            "samples": samples,
-                            "sensor_packet_id": parsed["sensor_packet_id"],
-                            "status_code": status_code,
-                            "status_text": STATUS_TEXT.get(status_code, "Unknown"),
-                            "respiration_raw": parsed["respiration_raw"],
-                            "heart_rate_current_valid": hr_current_valid,
-                            "respiration_current_valid": rr_current_valid,
-                            "vital_valid_streak": (
-                                previous_streak + 1 if current_vitals_valid else 0
-                            ),
-                            "vital_valid_since": (
-                                bcg.get("vital_valid_since")
-                                if current_vitals_valid and previous_streak > 0
-                                else packet_time if current_vitals_valid else None
-                            ),
-                            "last_update": packet_time,
-                            "packets": int(bcg.get("packets", 0)) + 1,
-                        })
+                        bcg.update(
+                            {
+                                "connected": True,
+                                "samples": samples,
+                                "sensor_packet_id": parsed["sensor_packet_id"],
+                                "status_code": status_code,
+                                "status_text": STATUS_TEXT.get(status_code, "Unknown"),
+                                "respiration_raw": parsed["respiration_raw"],
+                                "heart_rate_current_valid": hr_current_valid,
+                                "respiration_current_valid": rr_current_valid,
+                                "vital_valid_streak": (previous_streak + 1 if current_vitals_valid else 0),
+                                "vital_valid_since": (bcg.get("vital_valid_since") if current_vitals_valid and previous_streak > 0 else packet_time if current_vitals_valid else None),
+                                "last_update": packet_time,
+                                "packets": int(bcg.get("packets", 0)) + 1,
+                            }
+                        )
                         # Raw zeros remain stored as None in bcg.db. The live
                         # interface alone gets a short hold to avoid flicker
                         # between valid packets while the user is still on bed.
                         for field, last_field, held_field, value in (
-                            ("heart_rate_bpm", "heart_rate_last_valid", "heart_rate_held", hr_value),
-                            ("respiration_rate", "respiration_last_valid", "respiration_held", rr_value),
+                            (
+                                "heart_rate_bpm",
+                                "heart_rate_last_valid",
+                                "heart_rate_held",
+                                hr_value,
+                            ),
+                            (
+                                "respiration_rate",
+                                "respiration_last_valid",
+                                "respiration_held",
+                                rr_value,
+                            ),
                         ):
                             if value is not None:
                                 bcg[field] = value
@@ -4719,11 +4427,7 @@ def bcg_reader():
                                 bcg[held_field] = False
                             else:
                                 last_valid = bcg.get(last_field)
-                                can_hold = (
-                                    status_code in ON_BED_CODES
-                                    and isinstance(last_valid, (int, float))
-                                    and packet_time - last_valid <= BCG_VITAL_HOLD_SECONDS
-                                )
+                                can_hold = status_code in ON_BED_CODES and isinstance(last_valid, (int, float)) and packet_time - last_valid <= BCG_VITAL_HOLD_SECONDS
                                 if not can_hold:
                                     bcg[field] = None
                                 bcg[held_field] = bool(can_hold)
@@ -4766,10 +4470,8 @@ def sensor_frame_sampler():
         # otherwise pair an old/invalid heart rate with a different breath.
         paired_vitals = []
         for bcg_frame in bcg_frames:
-            hr_values = filter_vital_values(
-                [bcg_frame.get("hr")], HR_SANITY_RANGE_BPM)
-            rr_values = filter_vital_values(
-                [bcg_frame.get("rr")], RR_SANITY_RANGE_PER_MIN)
+            hr_values = filter_vital_values([bcg_frame.get("hr")], HR_SANITY_RANGE_BPM)
+            rr_values = filter_vital_values([bcg_frame.get("rr")], RR_SANITY_RANGE_PER_MIN)
             if hr_values and rr_values:
                 paired_vitals.append((hr_values[0], rr_values[0]))
         valid_hr = [pair[0] for pair in paired_vitals]
@@ -4785,15 +4487,9 @@ def sensor_frame_sampler():
         # previous implementation supplied only one previous bucket, making a
         # three-bucket confirmation mathematically impossible in the live path.
         with history_lock:
-            previous_features = list(sleep_feature_history)[
-                -max(0, BED_EXIT_CONFIRM_BUCKETS - 1):
-            ]
+            previous_features = list(sleep_feature_history)[-max(0, BED_EXIT_CONFIRM_BUCKETS - 1) :]
         previous_feature = previous_features[-1] if previous_features else None
-        recent_raw_statuses = [
-            previous.get("status")
-            for previous in previous_features
-            if previous.get("status") is not None
-        ]
+        recent_raw_statuses = [previous.get("status") for previous in previous_features if previous.get("status") is not None]
         if bucket_status is not None:
             recent_raw_statuses.append(bucket_status)
         bed_exit_evidence = bed_exit_window_evidence(
@@ -4807,38 +4503,26 @@ def sensor_frame_sampler():
         )
         confirmed_status = bucket_status
         if bucket_status == 1 and not bed_exit_evidence["confirmed"]:
-            previous_confirmed = (
-                previous_feature.get("confirmed_status", previous_feature.get("status"))
-                if previous_feature is not None else None
-            )
+            previous_confirmed = previous_feature.get("confirmed_status", previous_feature.get("status")) if previous_feature is not None else None
             # A transient code must not manufacture a bed exit. During an
             # active stream, hold the last canonical on-bed status for this
             # analysis decision; startup with no history defaults to On bed.
-            confirmed_status = (
-                previous_confirmed if previous_confirmed in ON_BED_CODES else 0)
+            confirmed_status = previous_confirmed if previous_confirmed in ON_BED_CODES else 0
         environment = build_environment_snapshot(e, h2, bucket_end)
         sound_summary = sound_window_summary(bucket_start, bucket_end)
-        sph0645_status = ((environment.get("devices") or {}).get("sph0645") or {}).get("status")
         with state_lock:
             state["system"]["sound_analysis"] = {
                 **sound_summary,
                 "window_start": datetime.fromtimestamp(bucket_start, timezone.utc).isoformat(),
                 "window_end": datetime.fromtimestamp(bucket_end, timezone.utc).isoformat(),
             }
-        device_status = {
-            key: device.get("status") == "live"
-            for key, device in (environment.get("devices") or {}).items()
-        }
+        device_status = {key: device.get("status") == "live" for key, device in (environment.get("devices") or {}).items()}
         esp_fresh = any(device_status.values())
-        paired_packet_coverage = (
-            len(paired_vitals) / len(bcg_frames) if bcg_frames else 0.0
-        )
-        bcg_bucket_valid = bool(
-            len(bcg_frames) >= SLEEP_BUCKET_MIN_BCG_PACKETS
-            and paired_packet_coverage >= SLEEP_MIN_PAIRED_VITAL_COVERAGE
-        )
+        paired_packet_coverage = len(paired_vitals) / len(bcg_frames) if bcg_frames else 0.0
+        bcg_bucket_valid = bool(len(bcg_frames) >= SLEEP_BUCKET_MIN_BCG_PACKETS and paired_packet_coverage >= SLEEP_MIN_PAIRED_VITAL_COVERAGE)
         feature = {
-            "t": bucket_end, "bucket_start": bucket_start,
+            "t": bucket_end,
+            "bucket_start": bucket_start,
             "status": bucket_status,
             "confirmed_status": confirmed_status,
             "bed_exit_evidence": bed_exit_evidence,
@@ -4850,7 +4534,8 @@ def sensor_frame_sampler():
             "rr": round(sum(valid_rr) / len(valid_rr), 2) if valid_rr else None,
             "invalid_hr_count": len([value for value in raw_hr if value is not None]) - len(valid_hr),
             "invalid_rr_count": len([value for value in raw_rr if value is not None]) - len(valid_rr),
-            "packet_count": b.get("packets"), "bcg_frames": len(bcg_frames),
+            "packet_count": b.get("packets"),
+            "bcg_frames": len(bcg_frames),
             "bcg_latest_t": bcg_frames[-1]["t"] if bcg_frames else None,
             "clip_ratio": round(clip_ratio, 4) if clip_ratio is not None else None,
             # HR/RR/status are device summary bytes and remain usable even when
@@ -4869,10 +4554,7 @@ def sensor_frame_sampler():
             "sound_dba": environment.get("sound_dba_est") if device_status.get("sph0645") else None,
             # Analytical audio evidence must use samples captured inside this
             # exact bucket, never a held display value from an older packet.
-            "sound_leq_dba": (
-                sound_summary.get("leq_dba")
-                if device_status.get("sph0645") else None
-            ),
+            "sound_leq_dba": (sound_summary.get("leq_dba") if device_status.get("sph0645") else None),
             "sound_sample_count": int(sound_summary.get("sample_count") or 0),
             "sound_window_status": sound_summary.get("status"),
             "sound_span_db": sound_summary.get("span_db"),
@@ -4898,10 +4580,7 @@ def _sleep_value_between_evidence_epochs(
         session_active = bool(state["session"].get("active"))
         session_recording = bool(state["session"].get("recording"))
     status_code = feature.get("confirmed_status", feature.get("status"))
-    exit_confirmed = bool(
-        status_code == 1
-        and (feature.get("bed_exit_evidence") or {}).get("confirmed")
-    )
+    exit_confirmed = bool(status_code == 1 and (feature.get("bed_exit_evidence") or {}).get("confirmed"))
     current_vitals_valid = bool(feature.get("bcg_valid"))
     newly_latched_off_bed = False
     if exit_confirmed:
@@ -4920,19 +4599,14 @@ def _sleep_value_between_evidence_epochs(
     cached = _last_sleep_evidence_result()
     with sleep_path_lock:
         previous_stage = _sleep_stage_path.get("last")
-        continuity_hold_epochs = int(
-            _sleep_stage_path.get("continuity_hold_ticks") or 0
-        )
+        continuity_hold_epochs = int(_sleep_stage_path.get("continuity_hold_ticks") or 0)
     issue = current_frame_issue(
         session_active=session_active,
         session_recording=session_recording,
         exit_confirmed=exit_confirmed,
         current_vitals_valid=current_vitals_valid,
     )
-    if issue is not None and not (
-        restart_hold is not None
-        and issue.data_status == "invalid_or_missing_current_vitals"
-    ):
+    if issue is not None and not (restart_hold is not None and issue.data_status == "invalid_or_missing_current_vitals"):
         with sleep_path_lock:
             _sleep_stage_path["candidate"] = None
             _sleep_stage_path["candidate_ticks"] = 0
@@ -4954,11 +4628,13 @@ def _sleep_value_between_evidence_epochs(
         estimator_version=SLEEP_ESTIMATOR_VERSION,
         evidence_version=SLEEP_EVIDENCE_VERSION,
     )
-    value.update({
-        "sensor_frame_clock": clock,
-        "evidence_epoch_due": False,
-        "next_evidence_s": clock["next_evidence_s"],
-    })
+    value.update(
+        {
+            "sensor_frame_clock": clock,
+            "evidence_epoch_due": False,
+            "next_evidence_s": clock["next_evidence_s"],
+        }
+    )
     if newly_latched_off_bed:
         # Bed-exit confirmation may arrive between 30-second evidence ticks.
         # Persist it immediately so a fast End/Restart cannot lose occupancy.
@@ -4966,8 +4642,7 @@ def _sleep_value_between_evidence_epochs(
     return value
 
 
-def _publish_sensor_frame(feature: Dict[str, Any], environment: Dict[str, Any],
-                          bcg_state: Dict[str, Any]) -> None:
+def _publish_sensor_frame(feature: Dict[str, Any], environment: Dict[str, Any], bcg_state: Dict[str, Any]) -> None:
     """Publish the 10-second Sensor frame, then advance Sleep-only evidence."""
     global _analysis_frame
     epoch_s = float(feature["t"])
@@ -4976,21 +4651,18 @@ def _publish_sensor_frame(feature: Dict[str, Any], environment: Dict[str, Any],
     clock = _advance_sleep_evidence_clock(session_id)
     if clock["evidence_due"]:
         sleep_value = estimate_sleep_state()
-        sleep_value.update({
-            "sensor_frame_clock": clock,
-            "evidence_epoch_due": True,
-            "next_evidence_s": SLEEP_EVIDENCE_EPOCH_SECONDS,
-        })
-        if (
-            sleep_value.get("classification_active") is not True
-            or sleep_value.get("display_only_after_restart") is True
-            or sleep_value.get("state") not in ZEEP_SLEEP_STATES
-        ):
+        sleep_value.update(
+            {
+                "sensor_frame_clock": clock,
+                "evidence_epoch_due": True,
+                "next_evidence_s": SLEEP_EVIDENCE_EPOCH_SECONDS,
+            }
+        )
+        if sleep_value.get("classification_active") is not True or sleep_value.get("display_only_after_restart") is True or sleep_value.get("state") not in ZEEP_SLEEP_STATES:
             _persist_sleep_stage_status(sleep_value, epoch_s=epoch_s)
         _remember_sleep_evidence(sleep_value, epoch_s)
     else:
-        sleep_value = _sleep_value_between_evidence_epochs(
-            feature, session_id, clock)
+        sleep_value = _sleep_value_between_evidence_epochs(feature, session_id, clock)
     status_code = feature.get("confirmed_status", feature.get("status"))
     raw_status_code = feature.get("status")
     bcg = {
@@ -4998,21 +4670,15 @@ def _publish_sensor_frame(feature: Dict[str, Any], environment: Dict[str, Any],
         "status_code": status_code,
         "status_text": STATUS_TEXT.get(status_code, "Unknown") if status_code is not None else None,
         "raw_status_code": raw_status_code,
-        "raw_status_text": (
-            STATUS_TEXT.get(raw_status_code, "Unknown")
-            if raw_status_code is not None else None
-        ),
+        "raw_status_text": (STATUS_TEXT.get(raw_status_code, "Unknown") if raw_status_code is not None else None),
         "bed_exit_evidence": dict(feature.get("bed_exit_evidence") or {}),
         "heart_rate_bpm": feature.get("hr"),
         "respiration_rate": feature.get("rr"),
         "bcg_frames": feature.get("bcg_frames", 0),
         "analysis_valid": bool(feature.get("bcg_valid")),
-        "analysis_data_age_s": (
-            round(max(0.0, epoch_s - feature["bcg_latest_t"]), 1)
-            if isinstance(feature.get("bcg_latest_t"), (int, float)) else None
-        ),
-        # Connection/fallback values are refreshed by snapshot(); these fields
-        # describe the source used for this exact analysis frame.
+        **rr_evidence.live_sensor_frame_fields(feature),
+        "analysis_data_age_s": (round(max(0.0, epoch_s - feature["bcg_latest_t"]), 1) if isinstance(feature.get("bcg_latest_t"), (int, float)) else None),
+        # snapshot() refreshes fallbacks; these fields describe this exact frame.
         "analysis_source_connected": bool(bcg_state.get("connected")),
     }
     frame = {
@@ -5030,14 +4696,17 @@ def _publish_sensor_frame(feature: Dict[str, Any], environment: Dict[str, Any],
     }
     with analysis_frame_lock:
         _analysis_frame = frame
-        _sleep_cache.update({
-            "t": time.monotonic(), "value": sleep_value,
-            "session_id": session_id, "sequence": frame["sequence"],
-        })
+        _sleep_cache.update(
+            {
+                "t": time.monotonic(),
+                "value": sleep_value,
+                "session_id": session_id,
+                "sequence": frame["sequence"],
+            }
+        )
 
 
-def _publish_analysis_frame(feature: Dict[str, Any], environment: Dict[str, Any],
-                            bcg_state: Dict[str, Any]) -> None:
+def _publish_analysis_frame(feature: Dict[str, Any], environment: Dict[str, Any], bcg_state: Dict[str, Any]) -> None:
     """Backward-compatible internal alias; new code uses Sensor terminology."""
     _publish_sensor_frame(feature, environment, bcg_state)
 
@@ -5048,10 +4717,7 @@ def take_session_sample() -> Dict[str, Any]:
     e = snap["sensor"].get("environment") or {}
     b = snap["sensor"]["bcg"] or {}
     sleep = snap.get("sleep") or {}
-    sleep_recordable = bool(
-        sleep.get("classification_active")
-        and not sleep.get("display_only_after_restart")
-    )
+    sleep_recordable = bool(sleep.get("classification_active") and not sleep.get("display_only_after_restart"))
     sleep_metrics = sleep.get("metrics") or {}
     auxiliary = sleep_metrics.get("auxiliary_evidence") or {}
     acoustic = auxiliary.get("acoustic") or {}
@@ -5059,15 +4725,17 @@ def take_session_sample() -> Dict[str, Any]:
     live = lambda key: (devices.get(key) or {}).get("status") == "live"
     b_ok = bool(b.get("connected"))
     waveform = sleep.get("signal_features") or {}
-    sample_arousal_proxy = arousal_proxy_evidence({
-        "bcg_amplitude_shift_ratio": waveform.get("bcg_amplitude_shift_ratio"),
-        "movement_ratio": sleep.get("movement_ratio"),
-        "bed_status": b.get("status_text") if b_ok else None,
-    }, SLEEP_MOVE_WAKE_RATIO)
+    sample_arousal_proxy = arousal_proxy_evidence(
+        {
+            "bcg_amplitude_shift_ratio": waveform.get("bcg_amplitude_shift_ratio"),
+            "movement_ratio": sleep.get("movement_ratio"),
+            "bed_status": b.get("status_text") if b_ok else None,
+        },
+        SLEEP_MOVE_WAKE_RATIO,
+    )
     return {
-        # Timeline time is the acquisition time, not the latest 10-second
-        # analysis-frame boundary. Reusing a frame timestamp could create two
-        # apparent rows at the same instant during a cadence migration.
+        # Use acquisition time; frame boundaries can duplicate timestamps during
+        # a cadence migration.
         "t": round(time.time(), 1),
         "analysis_epoch_s": (snap.get("analysis_frame") or {}).get("epoch_s"),
         "temp": e.get("temperature_c") if live("sht3x_dis") else None,
@@ -5081,54 +4749,39 @@ def take_session_sample() -> Dict[str, Any]:
         "rr": b.get("respiration_rate") if b_ok else None,
         "bed": b.get("status_text") if b_ok else None,
         "bed_exit_evidence": dict(b.get("bed_exit_evidence") or {}),
-        # Derived acquisition integrity used only to decide whether an unfinished
-        # (<30 s) tail may display the previous confirmed State provisionally.
-        # It is not written into the immutable Sensor Timeline table.
+        # Acquisition integrity permits a provisional State on a <30 s tail;
+        # this field is not written to the immutable Sensor Timeline.
         "bcg_analysis_valid": bool(b_ok and b.get("analysis_valid")),
-        # Operational statuses such as no_data/off_bed are not Sleep Stages and
-        # must not enter stage counts, architecture percentages or baselines.
-        "sleep": sleep.get("state") if sleep_recordable else None,
-        "sleep_confirmed_state": (
-            sleep.get("confirmed_state")
-            if sleep_recordable else None
+        **rr_evidence.live_session_sample_fields(
+            b,
+            snap.get("sensor_frame") or {},
+            minimum_packets=SLEEP_BUCKET_MIN_BCG_PACKETS,
+            minimum_coverage=SLEEP_MIN_PAIRED_VITAL_COVERAGE,
+            rr_range=RR_SANITY_RANGE_PER_MIN,
         ),
+        # Operational statuses are never counted or learned as Sleep Stages.
+        "sleep": sleep.get("state") if sleep_recordable else None,
+        "sleep_confirmed_state": (sleep.get("confirmed_state") if sleep_recordable else None),
         "sleep_evidence_candidate": (sleep.get("evidence") or {}).get("candidate"),
         "sleep_confirmation": sleep.get("confirmation") or {},
         "sleep_provisional": bool(sleep.get("provisional")),
-        "sleep_held_previous_state": bool(
-            sleep.get("held_previous_state")
-        ),
+        "sleep_held_previous_state": bool(sleep.get("held_previous_state")),
         "sleep_data_status": sleep.get("data_status"),
-        "sleep_score_attribution_state": (
-            sleep.get("score_attribution_state")
-            if sleep_recordable else None
-        ),
-        "sleep_challenger_counted_as_new_state": bool(
-            sleep.get("challenger_counted_as_new_state")
-        ),
-        "sleep_score_eligible": bool(
-            sleep_recordable and sleep.get("score_eligible", True)
-        ),
-        "sleep_excluded_from_score": bool(
-            not sleep_recordable or sleep.get("excluded_from_score", False)
-        ),
-        "sleep_excluded_from_personal_baseline": bool(
-            sleep.get("excluded_from_personal_baseline", False)
-        ),
+        "sleep_score_attribution_state": (sleep.get("score_attribution_state") if sleep_recordable else None),
+        "sleep_challenger_counted_as_new_state": bool(sleep.get("challenger_counted_as_new_state")),
+        "sleep_score_eligible": bool(sleep_recordable and sleep.get("score_eligible", True)),
+        "sleep_excluded_from_score": bool(not sleep_recordable or sleep.get("excluded_from_score", False)),
+        "sleep_excluded_from_personal_baseline": bool(sleep.get("excluded_from_personal_baseline", False)),
         "sleep_estimator_version": sleep.get("version"),
         "sleep_evidence_version": sleep.get("evidence_version"),
         "sleep_baseline_version": (sleep.get("baseline_definition") or {}).get("version"),
-        "sleep_transition_policy": (sleep.get("baseline_definition") or {}).get(
-            "transition_policy"),
-        # These fields remain in the in-memory Session record and are reduced
-        # into final_summary. They do not turn audio/environment into a stage
-        # input: confidence is reported, while corroborated sound explains a
-        # possible disturbance only when BCG or Bed Status agrees.
+        "sleep_transition_policy": (sleep.get("baseline_definition") or {}).get("transition_policy"),
+        # Kept for final_summary; audio/environment never creates a Stage, while
+        # corroborated sound can explain disturbance when BCG/Bed agrees.
         "sleep_confidence": sleep.get("confidence"),
         "sleep_probability": (sleep.get("probabilities") or {}).get(sleep.get("state")),
         "acoustic_corroborated": bool(acoustic.get("corroborated")),
-        # Compact evidence is persisted with the same canonical Session sample
-        # so the post-session score can reproduce its debounced disturbance index.
+        # Persist compact evidence so reports reproduce the disturbance index.
         "arousal_proxy": sample_arousal_proxy,
     }
 
@@ -5170,28 +4823,35 @@ def _begin_recording(active: Dict[str, Any]):
     record = active["record"]
     vital_gate = session_vital_gate_now(active)
     if not vital_gate["ready"]:
-        raise RuntimeError(
-            f"cannot start Session before HR/RR gate: {vital_gate['reason']}"
-        )
+        raise RuntimeError(f"cannot start Session before HR/RR gate: {vital_gate['reason']}")
     now_iso = datetime.now(timezone.utc).isoformat()
     with session_lock:
         active["last_sample"] = float("-inf")  # เก็บ sample แรกทันที
         record["started_at_utc"] = now_iso
         record["started_monotonic"] = time.monotonic()
-        record["sample_cadence_segments"] = [{
-            "start_at_utc": now_iso,
-            "sample_interval_s": _sample_interval_seconds(
-                record.get("sample_interval_s"), SESSION_SAMPLE_SECONDS),
-        }]
-    database.enqueue("sessions", "session_start", {
-        "session_id": record["session_id"], "user": record["username"],
-        "username_key": record["username_key"], "gender": record["gender"],
-        "identity_subject": record.get("identity_subject"), "pod_id": record.get("pod_id"),
-        "zeep_public_id": record.get("zeep_public_id"),
-        "rest_mode": record.get("rest_mode"),
-        "target_duration_s": record.get("target_duration_s"),
-        "start_time": now_iso, "created_at": record["armed_at_utc"],
-    })
+        record["sample_cadence_segments"] = [
+            {
+                "start_at_utc": now_iso,
+                "sample_interval_s": _sample_interval_seconds(record.get("sample_interval_s"), SESSION_SAMPLE_SECONDS),
+            }
+        ]
+    database.enqueue(
+        "sessions",
+        "session_start",
+        {
+            "session_id": record["session_id"],
+            "user": record["username"],
+            "username_key": record["username_key"],
+            "gender": record["gender"],
+            "identity_subject": record.get("identity_subject"),
+            "pod_id": record.get("pod_id"),
+            "zeep_public_id": record.get("zeep_public_id"),
+            "rest_mode": record.get("rest_mode"),
+            "target_duration_s": record.get("target_duration_s"),
+            "start_time": now_iso,
+            "created_at": record["armed_at_utc"],
+        },
+    )
     # Make the DB row durable before announcing the Recording phase.
     if not database.flush(30):
         raise RuntimeError("database writer did not flush Session start")
@@ -5202,14 +4862,23 @@ def _begin_recording(active: Dict[str, Any]):
             if _active_session is not active:
                 raise RuntimeError("active Session changed during start")
             active["phase"] = "recording"
-            state["session"].update({
-                "recording": True, "started_at": time.time(), "bed_wait_s": 0,
-                "vital_gate": {**vital_gate, "ready": True, "reason": "recording"},
-            })
+            state["session"].update(
+                {
+                    "recording": True,
+                    "started_at": time.time(),
+                    "bed_wait_s": 0,
+                    "vital_gate": {**vital_gate, "ready": True, "reason": "recording"},
+                }
+            )
     _save_active_session_checkpoint(active)
-    log_event("session", "bed_confirmed_start", session_id=record["session_id"],
-              user=record["username"], required_s=BED_START_SECONDS,
-              vital_packets=SESSION_VITAL_START_PACKETS)
+    log_event(
+        "session",
+        "bed_confirmed_start",
+        session_id=record["session_id"],
+        user=record["username"],
+        required_s=BED_START_SECONDS,
+        vital_packets=SESSION_VITAL_START_PACKETS,
+    )
 
 
 def session_sampler():
@@ -5248,15 +4917,19 @@ def session_sampler():
                     with state_lock:
                         state["session"]["vital_gate"] = vital_gate
                     log_event(
-                        "session", "vital_start_gate_changed",
-                        session_id=active["record"]["session_id"], error=str(exc),
+                        "session",
+                        "vital_start_gate_changed",
+                        session_id=active["record"]["session_id"],
+                        error=str(exc),
                     )
             else:
                 with state_lock:
-                    state["session"].update({
-                        "bed_wait_s": round(min(wait_s, BED_START_SECONDS), 1),
-                        "vital_gate": vital_gate,
-                    })
+                    state["session"].update(
+                        {
+                            "bed_wait_s": round(min(wait_s, BED_START_SECONDS), 1),
+                            "vital_gate": vital_gate,
+                        }
+                    )
             continue
 
         # ---- ระยะบันทึกจริง ----
@@ -5283,16 +4956,26 @@ def session_sampler():
             with state_lock:
                 state["session"]["samples"] = count
             # Persist the timeline row (DB writer thread owns the actual write)
-            database.enqueue("sessions", "timeline", {
-                "session_id": session_id,
-                "timestamp": datetime.fromtimestamp(sample["t"], timezone.utc).isoformat(),
-                "temperature": sample["temp"], "humidity": sample["hum"],
-                "co2": sample["co2"], "pm2_5": sample.get("pm2_5"),
-                "voc_index": sample.get("voc"), "lux": sample["lux"],
-                "sound": sample["dba"],
-                "heart_rate": sample["hr"], "respiration_rate": sample["rr"],
-                "bed_status": sample["bed"],
-            })
+            database.enqueue(
+                "sessions",
+                "timeline",
+                {
+                    "session_id": session_id,
+                    "timestamp": datetime.fromtimestamp(sample["t"], timezone.utc).isoformat(),
+                    "temperature": sample["temp"],
+                    "humidity": sample["hum"],
+                    "co2": sample["co2"],
+                    "pm2_5": sample.get("pm2_5"),
+                    "voc_index": sample.get("voc"),
+                    "lux": sample["lux"],
+                    "sound": sample["dba"],
+                    "heart_rate": sample["hr"],
+                    "respiration_rate": sample["rr"],
+                    "bed_status": sample["bed"],
+                    "respiratory_evidence_valid": sample["respiratory_evidence_valid"],
+                    "respiratory_evidence_reason": sample["respiratory_evidence_reason"],
+                },
+            )
 
 
 def occupancy_lease_supervisor():
@@ -5307,11 +4990,7 @@ def occupancy_lease_supervisor():
         time.sleep(1.0)
         with session_lock:
             active = _active_session
-            due = bool(
-                active
-                and time.monotonic() - active.get("last_lease_renew", 0)
-                >= OCCUPANCY_RENEW_SECONDS
-            )
+            due = bool(active and time.monotonic() - active.get("last_lease_renew", 0) >= OCCUPANCY_RENEW_SECONDS)
             lease = active.get("occupancy_lease") if active else None
             if due:
                 active["last_lease_renew"] = time.monotonic()
@@ -5366,6 +5045,7 @@ def _build_ingest_payload(
         current_report_version=SESSION_REPORT_VERSION,
     )
 
+
 def _ingest_outbox_path(session_id: str) -> Path:
     # session_id is generated by this process (s-<utc>-<hex>) and never reaches
     # here from a request, but keep the filename to one path component anyway.
@@ -5402,12 +5082,22 @@ def _post_ingest_entry(entry: Dict[str, Any], *, timeout: Optional[float] = None
     session_id = payload["externalSessionId"]
     entry["attempts"] = int(entry.get("attempts") or 0) + 1
     try:
-        body = _zeep_request("POST", ZEEP_INGEST_PATH, json_body=payload,
-                             api_key=ZEEP_INGEST_API_KEY, timeout=timeout)
+        body = _zeep_request(
+            "POST",
+            ZEEP_INGEST_PATH,
+            json_body=payload,
+            api_key=ZEEP_INGEST_API_KEY,
+            timeout=timeout,
+        )
     except ZeepApiOffline as exc:
         entry["last_error"] = str(exc)
-        log_event("ingest", "deferred", session_id=session_id,
-                  attempts=entry["attempts"], error=str(exc))
+        log_event(
+            "ingest",
+            "deferred",
+            session_id=session_id,
+            attempts=entry["attempts"],
+            error=str(exc),
+        )
         return False
     except HTTPException as exc:
         detail = str(getattr(exc, "detail", exc))
@@ -5420,21 +5110,31 @@ def _post_ingest_entry(entry: Dict[str, Any], *, timeout: Optional[float] = None
         # should then flush on their own rather than need unparking by hand.
         if 400 <= status < 500 and status not in (401, 403, 408, 429):
             entry["parked"] = True
-            log_event("ingest", "rejected", session_id=session_id,
-                      status=status, error=detail)
+            log_event("ingest", "rejected", session_id=session_id, status=status, error=detail)
             return True
-        log_event("ingest", "deferred", session_id=session_id,
-                  attempts=entry["attempts"], status=status, error=detail)
+        log_event(
+            "ingest",
+            "deferred",
+            session_id=session_id,
+            attempts=entry["attempts"],
+            status=status,
+            error=detail,
+        )
         return False
     remote = (body.get("data") or {}) if isinstance(body, dict) else {}
-    log_event("ingest", "uploaded", session_id=session_id,
-              attempts=entry["attempts"], remote_id=remote.get("id"),
-              remote_type=remote.get("type"), message=body.get("message"))
+    log_event(
+        "ingest",
+        "uploaded",
+        session_id=session_id,
+        attempts=entry["attempts"],
+        remote_id=remote.get("id"),
+        remote_type=remote.get("type"),
+        message=body.get("message"),
+    )
     return True
 
 
-def _enqueue_session_ingest(record: Dict[str, Any],
-                            report_samples: List[Dict[str, Any]]) -> None:
+def _enqueue_session_ingest(record: Dict[str, Any], report_samples: List[Dict[str, Any]]) -> None:
     """Best-effort upload of a finished Session; never fails finalization.
 
     The pending marker is written before the request so a power cut mid-upload
@@ -5443,9 +5143,13 @@ def _enqueue_session_ingest(record: Dict[str, Any],
     """
     payload = _build_ingest_payload(record, report_samples)
     if payload is None:
-        log_event("ingest", "skipped", session_id=record.get("session_id"),
-                  configured=bool(ZEEP_INGEST_API_KEY and ZEEP_INGEST_DEVICE_ID),
-                  zeep_account=bool(record.get("zeep_public_id")))
+        log_event(
+            "ingest",
+            "skipped",
+            session_id=record.get("session_id"),
+            configured=bool(ZEEP_INGEST_API_KEY and ZEEP_INGEST_DEVICE_ID),
+            zeep_account=bool(record.get("zeep_public_id")),
+        )
         return
     entry = {
         "schema_version": INGEST_OUTBOX_VERSION,
@@ -5460,17 +5164,24 @@ def _enqueue_session_ingest(record: Dict[str, Any],
     except OSError as exc:
         # Without a durable marker a failed upload could not be retried, so a
         # one-shot attempt is still better than nothing.
-        log_event("ingest", "outbox_write_failed",
-                  session_id=record.get("session_id"), error=str(exc))
+        log_event(
+            "ingest",
+            "outbox_write_failed",
+            session_id=record.get("session_id"),
+            error=str(exc),
+        )
     try:
-        if (_post_ingest_entry(entry, timeout=ZEEP_INGEST_INLINE_TIMEOUT)
-                and not entry.get("parked")):
+        if _post_ingest_entry(entry, timeout=ZEEP_INGEST_INLINE_TIMEOUT) and not entry.get("parked"):
             _clear_ingest_outbox(payload["externalSessionId"])
             return
         _write_ingest_outbox(entry)
     except Exception as exc:
-        log_event("ingest", "upload_failed",
-                  session_id=record.get("session_id"), error=str(exc))
+        log_event(
+            "ingest",
+            "upload_failed",
+            session_id=record.get("session_id"),
+            error=str(exc),
+        )
 
 
 def _sweep_ingest_outbox() -> None:
@@ -5478,8 +5189,7 @@ def _sweep_ingest_outbox() -> None:
     if not (ZEEP_INGEST_API_KEY and ZEEP_INGEST_DEVICE_ID):
         return
     try:
-        pending = sorted(INGEST_OUTBOX_DIR.glob("*.json"),
-                         key=lambda item: item.stat().st_mtime)
+        pending = sorted(INGEST_OUTBOX_DIR.glob("*.json"), key=lambda item: item.stat().st_mtime)
     except OSError:
         return
     for path in pending:
@@ -5522,6 +5232,69 @@ def ingest_outbox_sweeper() -> None:
             log_event("ingest", "sweep_failed", error=str(exc))
 
 
+def _database_flush_failure(context: str) -> RuntimeError:
+    error = database.health().get("last_error")
+    detail = f"; writer error: {error}" if error else ""
+    return RuntimeError(f"database writer did not flush {context}{detail}")
+
+
+def _restore_active_after_finalization_failure(active: Dict[str, Any]) -> None:
+    """Keep the live Session recoverable when its durable close did not commit."""
+    global _active_session
+    with session_lock:
+        if _active_session is None:
+            _active_session = active
+    report_shares.discard(active["record"].get("identity_subject"))
+    try:
+        bcg_storage.start_session(active["record"]["session_id"])
+    except Exception as exc:
+        log_event(
+            "session",
+            "bcg_restart_after_finalize_failure_failed",
+            session_id=active["record"]["session_id"],
+            error=str(exc),
+        )
+
+
+def _commit_live_session_finalization(
+    active: Dict[str, Any],
+    final_summary: Dict[str, Any],
+    terminal_wake: Optional[Dict[str, Any]],
+) -> None:
+    """Atomically close a Session, then and only then remove restart recovery."""
+    record = active["record"]
+    terminal_event = None
+    if terminal_wake is not None:
+        terminal_event = {
+            "timestamp": terminal_wake["start_time"],
+            "value": terminal_wake,
+        }
+    try:
+        database.enqueue(
+            "sessions",
+            "session_finalize",
+            {
+                "session_id": record["session_id"],
+                "end_time": record["ended_at_utc"],
+                "duration": record["duration_s"],
+                "note": record.get("note"),
+                "end_reason": record["end_reason"],
+                "terminal_wake": terminal_event,
+                "final_summary": final_summary,
+            },
+        )
+        if not database.flush(30):
+            raise _database_flush_failure("before Session finalization")
+    except Exception:
+        _restore_active_after_finalization_failure(active)
+        raise
+    record.pop("started_monotonic", None)
+    # Explicit User/Admin completion is the only point that clears restart
+    # recovery. A committed row is authoritative if the process crashes in
+    # the narrow window immediately before this unlink.
+    _clear_active_session_checkpoint()
+
+
 def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]:
     """Close the active session and persist its record. Returns None if idle."""
     global _active_session
@@ -5533,22 +5306,18 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
     record = active["record"]
     report_shares.reserve(record.get("identity_subject"))
     samples = active["samples"]
-    acquisition_interval_s = _sample_interval_seconds(
-        record.get("sample_interval_s"), SESSION_SAMPLE_SECONDS)
+    acquisition_interval_s = _sample_interval_seconds(record.get("sample_interval_s"), SESSION_SAMPLE_SECONDS)
     ended_at_utc = datetime.now(timezone.utc).isoformat()
-    started_monotonic = record.pop("started_monotonic", None)
+    # Preserve the monotonic origin until the atomic DB close succeeds.  A
+    # failed writer can then retry the same live Session without turning it
+    # into a synthetic zero-duration/non-recorded close.
+    started_monotonic = record.get("started_monotonic")
     never_recorded = started_monotonic is None
-    duration = (
-        0.0
-        if never_recorded
-        else max(0.0, time.monotonic() - started_monotonic)
-    )
+    duration = 0.0 if never_recorded else max(0.0, time.monotonic() - started_monotonic)
     start_epoch: Optional[float] = None
     if not never_recorded:
         try:
-            start_epoch = datetime.fromisoformat(
-                str(record.get("started_at_utc"))
-            ).timestamp()
+            start_epoch = datetime.fromisoformat(str(record.get("started_at_utc"))).timestamp()
         except (TypeError, ValueError):
             start_epoch = time.time() - duration
     # Sleep decisions are emitted at the end of a 30-second Evidence epoch,
@@ -5564,24 +5333,21 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
             if _active_session is None:
                 _active_session = active
         report_shares.discard(record.get("identity_subject"))
+        writer_error = database.health().get("last_error")
         log_event(
             "session",
             "sleep_attribution_projection_deferred",
             session_id=record["session_id"],
-            reason="database_flush_timeout",
+            reason=("database_writer_error" if writer_error else "database_flush_timeout"),
+            error=writer_error,
         )
-        raise RuntimeError(
-            "database writer did not flush before Sleep attribution projection"
-        )
+        raise _database_flush_failure("before Sleep attribution projection")
     stage_events = database.read_sessions(
-        "SELECT timestamp,value FROM events "
-        "WHERE session_id=? AND type='sleep_stage' ORDER BY timestamp",
+        "SELECT timestamp,value FROM events WHERE session_id=? AND type='sleep_stage' ORDER BY timestamp",
         (record["session_id"],),
     )
     status_events = database.read_sessions(
-        "SELECT timestamp,value FROM events "
-        "WHERE session_id=? AND type='sleep_stage_status' "
-        "ORDER BY timestamp",
+        "SELECT timestamp,value FROM events WHERE session_id=? AND type='sleep_stage_status' ORDER BY timestamp",
         (record["session_id"],),
     )
     if never_recorded:
@@ -5589,22 +5355,24 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
         # HR/RR gate never passes, close only the Login lease/checkpoint and do
         # not create a zero-duration report, timeline, or personal baseline.
         vital_gate = session_vital_gate_now(active)
-        record.update({
-            "ended_at_utc": ended_at_utc,
-            "end_reason": (
-                "not_recorded" if reason == "logout"
-                else f"{reason}_not_recorded"
-            ),
-            "duration_s": 0.0,
-            "samples": [],
-            "recording_started": False,
-            "start_gate": vital_gate,
-        })
+        record.update(
+            {
+                "ended_at_utc": ended_at_utc,
+                "end_reason": ("not_recorded" if reason == "logout" else f"{reason}_not_recorded"),
+                "duration_s": 0.0,
+                "samples": [],
+                "recording_started": False,
+                "start_gate": vital_gate,
+            }
+        )
         _clear_active_session_checkpoint()
         log_event(
-            "session", "closed_without_recording",
-            session_id=record["session_id"], user=record["username"],
-            reason=record["end_reason"], gate_reason=vital_gate["reason"],
+            "session",
+            "closed_without_recording",
+            session_id=record["session_id"],
+            user=record["username"],
+            reason=record["end_reason"],
+            gate_reason=vital_gate["reason"],
         )
         lease = active.get("occupancy_lease")
         if lease is not None:
@@ -5612,39 +5380,57 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
                 occupancy_client.release(lease)
             except (CoordinatorUnavailable, OccupancyConflict) as exc:
                 log_event(
-                    "occupancy", "lease_release_deferred",
-                    session_id=record["session_id"], pod_id=POD_ID, error=str(exc),
+                    "occupancy",
+                    "lease_release_deferred",
+                    session_id=record["session_id"],
+                    pod_id=POD_ID,
+                    error=str(exc),
                 )
         refresh_token = (active.get("auth") or {}).get("refresh_token")
         if refresh_token:
             try:
                 _zeep_request(
-                    "POST", "/v1/auth/logout",
+                    "POST",
+                    "/v1/auth/logout",
                     json_body={"refreshToken": refresh_token},
                 )
             except (ZeepApiOffline, HTTPException) as exc:
                 log_event(
-                    "auth", "zeep_logout_failed", user=record["username"],
+                    "auth",
+                    "zeep_logout_failed",
+                    user=record["username"],
                     error=str(getattr(exc, "detail", exc)),
                 )
         with state_lock:
-            state["session"].update({
-                "active": False, "username": None, "account_key": None,
-                "email": None, "display_name": None, "auth_source": None,
-                "gender": None, "age": None, "age_group": None,
-                "health_reference": None, "rest_mode": None,
-                "target_duration_s": None,
-                "session_id": None, "started_at": None, "samples": 0,
-                "recording": False, "bed_wait_s": 0,
-                "vital_gate": {
-                    "ready": False,
-                    "heart_rate_valid": False,
-                    "respiration_rate_valid": False,
-                    "confirmed_packets": 0,
-                    "required_packets": SESSION_VITAL_START_PACKETS,
-                    "reason": "no_session",
-                },
-            })
+            state["session"].update(
+                {
+                    "active": False,
+                    "username": None,
+                    "account_key": None,
+                    "email": None,
+                    "display_name": None,
+                    "auth_source": None,
+                    "gender": None,
+                    "age": None,
+                    "age_group": None,
+                    "health_reference": None,
+                    "rest_mode": None,
+                    "target_duration_s": None,
+                    "session_id": None,
+                    "started_at": None,
+                    "samples": 0,
+                    "recording": False,
+                    "bed_wait_s": 0,
+                    "vital_gate": {
+                        "ready": False,
+                        "heart_rate_valid": False,
+                        "respiration_rate_valid": False,
+                        "confirmed_packets": 0,
+                        "required_packets": SESSION_VITAL_START_PACKETS,
+                        "reason": "no_session",
+                    },
+                }
+            )
         _reset_live_sleep_inference(None)
         report_shares.discard(record.get("identity_subject"))
         return record
@@ -5670,54 +5456,50 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
             if _active_session is None:
                 _active_session = active
         report_shares.discard(record.get("identity_subject"))
-        raise RuntimeError(
-            "report continuity invariant failed: unattributed recording time"
-        )
+        raise RuntimeError("report continuity invariant failed: unattributed recording time")
     bed_counts = projection["bed_status_counts"]
     sleep_counts = projection["sleep_state_counts"]
     sleep_score_counts = projection["sleep_score_state_counts"]
-    estimator_versions = Counter(
-        smp.get("sleep_estimator_version") for smp in samples
-        if smp.get("sleep_estimator_version")
-    )
+    estimator_versions = Counter(smp.get("sleep_estimator_version") for smp in samples if smp.get("sleep_estimator_version"))
     latest_estimator_version = next(
-        (smp.get("sleep_estimator_version") for smp in reversed(samples)
-         if smp.get("sleep_estimator_version")),
+        (smp.get("sleep_estimator_version") for smp in reversed(samples) if smp.get("sleep_estimator_version")),
         SLEEP_ESTIMATOR_VERSION,
     )
-    record.update({
-        "ended_at_utc": ended_at_utc,
-        "end_reason": reason,
-        "duration_s": round(duration, 1),
-        "sample_interval_s": sample_interval_s,
-        "sensor_sample_interval_s": acquisition_interval_s,
-        "sample_cadence_segments": record.get("sample_cadence_segments") or [],
-        "sample_cadence_summary": cadence_summary,
-        "report_sample_grid": sample_grid_summary,
-        "samples": samples,
-        "summary": {
-            # Mixed-cadence rows are expanded only for calculation so these are
-            # time-weighted statistics; ``record['samples']`` stays raw/auditable.
-            "temperature_c": _series_stats([s["temp"] for s in report_samples]),
-            "humidity_rh": _series_stats([s["hum"] for s in report_samples]),
-            "sound_dba_est": _series_stats([s["dba"] for s in report_samples]),
-            "lux": _series_stats([s["lux"] for s in report_samples]),
-            "heart_rate_bpm": _series_stats([s["hr"] for s in report_samples]),
-            "respiration_rate": _series_stats([s["rr"] for s in report_samples]),
-            "bed_status_counts": bed_counts,
-            "sleep_state_counts": sleep_counts,
-            "sleep_score_state_counts": sleep_score_counts,
-        },
-        "sleep_estimator": latest_estimator_version,
-        "sleep_estimator_versions": dict(estimator_versions),
-        "sleep_provenance_complete": bool(samples) and sum(estimator_versions.values()) == len(samples),
-        "sleep_evidence_version": SLEEP_EVIDENCE_VERSION,
-        "sleep_baseline_version": ZEEP_SLEEP_BASELINE_VERSION,
-        "sleep_transition_policy": ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
-        "sleep_g2_ontology": SLEEP_G2_ONTOLOGY_VERSION,
-        "terminal_wake_policy": TERMINAL_WAKE_POLICY_VERSION,
-        "counters": active["counters"],
-    })
+    record.update(
+        {
+            "ended_at_utc": ended_at_utc,
+            "end_reason": reason,
+            "duration_s": round(duration, 1),
+            "sample_interval_s": sample_interval_s,
+            "sensor_sample_interval_s": acquisition_interval_s,
+            "sample_cadence_segments": record.get("sample_cadence_segments") or [],
+            "sample_cadence_summary": cadence_summary,
+            "report_sample_grid": sample_grid_summary,
+            "samples": samples,
+            "summary": {
+                # Mixed-cadence rows are expanded only for calculation so these are
+                # time-weighted statistics; ``record['samples']`` stays raw/auditable.
+                "temperature_c": _series_stats([s["temp"] for s in report_samples]),
+                "humidity_rh": _series_stats([s["hum"] for s in report_samples]),
+                "sound_dba_est": _series_stats([s["dba"] for s in report_samples]),
+                "lux": _series_stats([s["lux"] for s in report_samples]),
+                "heart_rate_bpm": _series_stats([s["hr"] for s in report_samples]),
+                "respiration_rate": _series_stats([s["rr"] for s in report_samples]),
+                "bed_status_counts": bed_counts,
+                "sleep_state_counts": sleep_counts,
+                "sleep_score_state_counts": sleep_score_counts,
+            },
+            "sleep_estimator": latest_estimator_version,
+            "sleep_estimator_versions": dict(estimator_versions),
+            "sleep_provenance_complete": bool(samples) and sum(estimator_versions.values()) == len(samples),
+            "sleep_evidence_version": SLEEP_EVIDENCE_VERSION,
+            "sleep_baseline_version": ZEEP_SLEEP_BASELINE_VERSION,
+            "sleep_transition_policy": ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
+            "sleep_g2_ontology": SLEEP_G2_ONTOLOGY_VERSION,
+            "terminal_wake_policy": TERMINAL_WAKE_POLICY_VERSION,
+            "counters": active["counters"],
+        }
+    )
     # The final visible sequence must close the human episode as
     # ``... -> Wake -> occupancy/Session end``.  This is an operational
     # boundary from the explicit End action or a confirmed terminal bed exit,
@@ -5738,7 +5520,15 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
     )
     record["terminal_wake_transition"] = terminal_wake
     # SQLite คือ source of truth; ส่วนที่ schema ไม่มีเก็บใน final_summary.
-    bcg_storage.end_session(record["session_id"])
+    try:
+        bcg_storage.end_session(record["session_id"])
+        # Drain the final BCG epoch separately. If it fails, do not allow the
+        # Session close transaction to commit over an unseen writer error.
+        if not database.flush(30):
+            raise _database_flush_failure("final BCG epoch")
+    except Exception:
+        _restore_active_after_finalization_failure(active)
+        raise
     # night summary (proxy จาก per-sample sleep state) — ป้อน baseline ส่วนบุคคล
     sleep_like = {"n1", "n2", "n3", "rem", "nrem_light", "nrem_deep"}
     onset_proxy_s = None
@@ -5751,15 +5541,10 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
     except (TypeError, ValueError):
         started_epoch = None
     for smp in report_samples:
-        st = "off_bed" if _sample_off_bed(smp) else (
-            smp.get("sleep")
-            if smp.get("sleep_score_eligible") is not False else None
-        )
+        st = "off_bed" if _sample_off_bed(smp) else (smp.get("sleep") if smp.get("sleep_score_eligible") is not False else None)
         if st in sleep_like:
             if onset_proxy_s is None and started_epoch:
-                interval_s = _sample_interval_seconds(
-                    smp.get("sample_interval_s"), sample_interval_s
-                )
+                interval_s = _sample_interval_seconds(smp.get("sample_interval_s"), sample_interval_s)
                 onset_proxy_s = round(
                     max(0.0, smp["t"] - interval_s - started_epoch),
                     1,
@@ -5768,36 +5553,41 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
             sleep_started = True
         elif st in ("wake", "off_bed"):
             if sleep_started:
-                waso_seconds += _sample_interval_seconds(
-                    smp.get("sample_interval_s"), sample_interval_s
-                )
+                waso_seconds += _sample_interval_seconds(smp.get("sample_interval_s"), sample_interval_s)
             if asleep:
                 awakenings += 1
                 asleep = False
-    total_sleep_samples = sum(
-        v for k, v in record["summary"]["sleep_score_state_counts"].items()
-        if k in sleep_like
-    )
-    total_scored = total_sleep_samples + record["summary"][
-        "sleep_score_state_counts"
-    ].get("wake", 0)
+    total_sleep_samples = sum(v for k, v in record["summary"]["sleep_score_state_counts"].items() if k in sleep_like)
+    total_scored = total_sleep_samples + record["summary"]["sleep_score_state_counts"].get("wake", 0)
     night_summary = {
         "sleep_onset_proxy_s": onset_proxy_s,
         "awakenings": awakenings,
         "waso_proxy_s": round(waso_seconds, 1),
         "estimated_sleep_s": round(min(duration, total_sleep_samples * sample_interval_s), 1),
-        "sleep_efficiency": (round(total_sleep_samples / total_scored, 3)
-                             if total_scored else None),
-        "deep_ratio": (round((record["summary"]["sleep_score_state_counts"].get("n3", 0)
-                              + record["summary"]["sleep_score_state_counts"].get("nrem_deep", 0))
-                             / total_sleep_samples, 3) if total_sleep_samples else None),
-        "rem_ratio": (round(record["summary"]["sleep_score_state_counts"].get("rem", 0)
-                            / total_sleep_samples, 3) if total_sleep_samples else None),
+        "sleep_efficiency": (round(total_sleep_samples / total_scored, 3) if total_scored else None),
+        "deep_ratio": (
+            round(
+                (record["summary"]["sleep_score_state_counts"].get("n3", 0) + record["summary"]["sleep_score_state_counts"].get("nrem_deep", 0)) / total_sleep_samples,
+                3,
+            )
+            if total_sleep_samples
+            else None
+        ),
+        "rem_ratio": (
+            round(
+                record["summary"]["sleep_score_state_counts"].get("rem", 0) / total_sleep_samples,
+                3,
+            )
+            if total_sleep_samples
+            else None
+        ),
     }
     # Persist final quality beside its factors for reproducible history.
     sleep_quality = build_sleep_quality(
-        record["duration_s"], night_summary,
-        record["summary"]["sleep_state_counts"], completed=True,
+        record["duration_s"],
+        night_summary,
+        record["summary"]["sleep_state_counts"],
+        completed=True,
         rest_mode=record.get("rest_mode") or "auto",
         stage_sequence=report_samples,
         sensor_samples=report_samples,
@@ -5811,117 +5601,119 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
     night_summary["sleep_quality"] = sleep_quality
     night_summary["wellness_score"] = sleep_quality.get("score")
     record["sleep_quality"] = sleep_quality
-    restore_context = baselines.behaviour_context(
-        record["username_key"], record.get("rest_mode") or "auto")
+    restore_context = baselines.behaviour_context(record["username_key"], record.get("rest_mode") or "auto")
     session_report = build_session_report(
-        record["duration_s"], report_samples, night_summary,
-        record["summary"]["sleep_state_counts"], sleep_quality,
+        record["duration_s"],
+        report_samples,
+        night_summary,
+        record["summary"]["sleep_state_counts"],
+        sleep_quality,
         rest_mode=record.get("rest_mode") or "auto",
         sample_interval_s=sample_interval_s,
-        estimator_version=record.get("sleep_estimator"), completed=True,
+        estimator_version=record.get("sleep_estimator"),
+        completed=True,
         timeline_schema_version=SESSION_TIMELINE_SCHEMA_VERSION,
         target_duration_s=record.get("target_duration_s"),
-        personal_context=restore_context, trend_context=restore_context,
-        sleep_score_state_counts=record["summary"][
-            "sleep_score_state_counts"
-        ],
+        personal_context=restore_context,
+        trend_context=restore_context,
+        health_reference=record.get("health_reference"),
+        sleep_score_state_counts=record["summary"]["sleep_score_state_counts"],
     )
     record["session_report"] = session_report
-    if terminal_wake:
-        database.enqueue("sessions", "event", {
-            "session_id": record["session_id"],
-            "timestamp": terminal_wake["start_time"],
-            "type": "session_terminal_wake",
-            "value": terminal_wake,
-        })
-    database.enqueue("sessions", "event", {
-        "session_id": record["session_id"],
-        "timestamp": record["ended_at_utc"],
-        "type": "final_summary",
-        "value": {
-            "bed_status_counts": record["summary"]["bed_status_counts"],
-            "sleep_state_counts": record["summary"]["sleep_state_counts"],
-            "sleep_score_state_counts": record["summary"][
-                "sleep_score_state_counts"
-            ],
-            "sleep_estimator": record.get("sleep_estimator"),
-            "sleep_estimator_versions": record.get("sleep_estimator_versions") or {},
-            "sleep_provenance_complete": record.get("sleep_provenance_complete", False),
-            "sleep_evidence_version": record.get("sleep_evidence_version"),
-            "sleep_baseline_version": record.get("sleep_baseline_version"),
-            "sleep_transition_policy": record.get("sleep_transition_policy"),
-            "sleep_g2_ontology": record.get("sleep_g2_ontology"),
-            "terminal_wake_policy": record.get("terminal_wake_policy"),
-            "rest_mode": record.get("rest_mode") or "auto",
-            "target_duration_s": record.get("target_duration_s"),
-            "sample_interval_s": sample_interval_s,
-            "sensor_sample_interval_s": acquisition_interval_s,
-            "timeline_schema_version": SESSION_TIMELINE_SCHEMA_VERSION,
-            "sample_cadence_segments": record.get("sample_cadence_segments") or [],
-            "sample_cadence_summary": cadence_summary,
-            "report_sample_grid": sample_grid_summary,
-            # Snapshot the non-diagnostic Profile context used during this
-            # Session so later account edits do not rewrite historical reports.
-            "health_reference": record.get("health_reference") or {},
-            # Optional, consented lifestyle context is frozen separately from
-            # physiology. It may explain/report a Session but cannot create or
-            # modify W/N1/N2/N3/REM.
-            "wellness_context": record.get("wellness_context"),
-            "restore_context": restore_context,
-            "counters": record["counters"],
-            "armed_at_utc": record.get("armed_at_utc"),
-            "bed_start_s": BED_START_SECONDS,
-            "night_summary": night_summary,
-            "session_report": session_report,
-            "terminal_wake_transition": terminal_wake,
-        },
-    })
-    database.enqueue("sessions", "session_end", {
-        "session_id": record["session_id"], "end_time": record["ended_at_utc"],
-        "duration": record["duration_s"], "note": record.get("note"),
-        "end_reason": reason,
-    })
-    if not database.flush(30):
-        raise RuntimeError("database writer did not flush before session finalization")
-    # Explicit User/Admin completion is the only point that clears restart
-    # recovery. Service stop/restart deliberately leaves this file intact.
-    _clear_active_session_checkpoint()
-    log_event("session", "logout", session_id=record["session_id"],
-              user=record["username"], duration_s=record["duration_s"],
-              samples=len(samples), reason=reason)
+    final_summary = {
+        "bed_status_counts": record["summary"]["bed_status_counts"],
+        "sleep_state_counts": record["summary"]["sleep_state_counts"],
+        "sleep_score_state_counts": record["summary"]["sleep_score_state_counts"],
+        "sleep_estimator": record.get("sleep_estimator"),
+        "sleep_estimator_versions": record.get("sleep_estimator_versions") or {},
+        "sleep_provenance_complete": record.get("sleep_provenance_complete", False),
+        "sleep_evidence_version": record.get("sleep_evidence_version"),
+        "sleep_baseline_version": record.get("sleep_baseline_version"),
+        "sleep_transition_policy": record.get("sleep_transition_policy"),
+        "sleep_g2_ontology": record.get("sleep_g2_ontology"),
+        "terminal_wake_policy": record.get("terminal_wake_policy"),
+        "rest_mode": record.get("rest_mode") or "auto",
+        "target_duration_s": record.get("target_duration_s"),
+        "sample_interval_s": sample_interval_s,
+        "sensor_sample_interval_s": acquisition_interval_s,
+        "timeline_schema_version": SESSION_TIMELINE_SCHEMA_VERSION,
+        "sample_cadence_segments": record.get("sample_cadence_segments") or [],
+        "sample_cadence_summary": cadence_summary,
+        "report_sample_grid": sample_grid_summary,
+        # Snapshot the non-diagnostic Profile context used during this
+        # Session so later account edits do not rewrite historical reports.
+        "health_reference": record.get("health_reference") or {},
+        # Optional, consented lifestyle context is frozen separately from
+        # physiology. It may explain/report a Session but cannot create or
+        # modify W/N1/N2/N3/REM.
+        "wellness_context": record.get("wellness_context"),
+        "restore_context": restore_context,
+        "counters": record["counters"],
+        "armed_at_utc": record.get("armed_at_utc"),
+        "bed_start_s": BED_START_SECONDS,
+        "night_summary": night_summary,
+        "session_report": session_report,
+        "terminal_wake_transition": terminal_wake,
+    }
+    _commit_live_session_finalization(active, final_summary, terminal_wake)
+    log_event(
+        "session",
+        "logout",
+        session_id=record["session_id"],
+        user=record["username"],
+        duration_s=record["duration_s"],
+        samples=len(samples),
+        reason=reason,
+    )
     lease = active.get("occupancy_lease")
     if lease is not None:
         try:
             occupancy_client.release(lease)
-            log_event("occupancy", "lease_released", session_id=record["session_id"],
-                      pod_id=POD_ID)
+            log_event(
+                "occupancy",
+                "lease_released",
+                session_id=record["session_id"],
+                pod_id=POD_ID,
+            )
         except (CoordinatorUnavailable, OccupancyConflict) as exc:
             # The lease expires automatically; never lose a completed sleep
             # record merely because the coordinator is temporarily offline.
-            log_event("occupancy", "lease_release_deferred", session_id=record["session_id"],
-                      pod_id=POD_ID, error=str(exc))
+            log_event(
+                "occupancy",
+                "lease_release_deferred",
+                session_id=record["session_id"],
+                pod_id=POD_ID,
+                error=str(exc),
+            )
     # เพิกถอน refresh token family ฝั่ง ZEEP เพื่อไม่ให้ session ของตู้ค้างอยู่ใน
     # บัญชีผู้ใช้. best-effort: เน็ตหลุดตอน logout ต้องไม่ทำให้บันทึกผลไม่สำเร็จ
     # (DB flush ผ่านไปแล้วก่อนถึงจุดนี้)
     refresh_token = (active.get("auth") or {}).get("refresh_token")
     if refresh_token:
         try:
-            _zeep_request("POST", "/v1/auth/logout",
-                          json_body={"refreshToken": refresh_token})
+            _zeep_request("POST", "/v1/auth/logout", json_body={"refreshToken": refresh_token})
         except (ZeepApiOffline, HTTPException) as exc:
-            log_event("auth", "zeep_logout_failed", user=record["username"],
-                      error=str(getattr(exc, "detail", exc)))
+            log_event(
+                "auth",
+                "zeep_logout_failed",
+                user=record["username"],
+                error=str(getattr(exc, "detail", exc)),
+            )
     # Upload after DB flush; the idempotent outbox survives network/restart.
     _enqueue_session_ingest(record, report_samples)
     report_shares.fulfil(record, access_token=(active.get("auth") or {}).get("access_token"))
     # Adaptive learning: อัปเดต baseline ส่วนบุคคลจากคืนล่าสุด (≤7 คืน rolling)
     try:
         bl = baselines.update_user(record["username_key"])
-        log_event("ai", "baseline_updated", user=record["username"],
-                  status=bl.get("status"), nights=bl.get("nights_used"))
+        log_event(
+            "ai",
+            "baseline_updated",
+            user=record["username"],
+            status=bl.get("status"),
+            nights=bl.get("nights_used"),
+        )
     except Exception as exc:
-        log_event("ai", "baseline_update_failed", user=record["username"],
-                  error=str(exc))
+        log_event("ai", "baseline_update_failed", user=record["username"], error=str(exc))
     availability = session_availability_by_account(
         database.read_sessions,
         PERSONAL_BASELINE_LEARNING_START_UTC,
@@ -5932,33 +5724,39 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
         if profile is not None:
             # SQLite is authoritative. Incrementing a cached JSON counter can
             # drift after cleanup, migration or a retried finalisation.
-            profile["sessions"] = int(
-                availability.get("lifetime_sessions") or 0
-            )
-            profile["last_session_utc"] = (
-                availability.get("last_data_session_utc")
-                or record["ended_at_utc"]
-            )
+            profile["sessions"] = int(availability.get("lifetime_sessions") or 0)
+            profile["last_session_utc"] = availability.get("last_data_session_utc") or record["ended_at_utc"]
             _save_profiles(profiles)
     with state_lock:
-        state["session"].update({
-            "active": False, "username": None, "account_key": None,
-            "email": None, "display_name": None,
-            "auth_source": None, "gender": None, "age": None, "age_group": None,
-            "health_reference": None,
-            "rest_mode": None,
-            "target_duration_s": None,
-            "session_id": None, "started_at": None, "samples": 0,
-            "recording": False, "bed_wait_s": 0,
-            "vital_gate": {
-                "ready": False,
-                "heart_rate_valid": False,
-                "respiration_rate_valid": False,
-                "confirmed_packets": 0,
-                "required_packets": SESSION_VITAL_START_PACKETS,
-                "reason": "no_session",
-            },
-        })
+        state["session"].update(
+            {
+                "active": False,
+                "username": None,
+                "account_key": None,
+                "email": None,
+                "display_name": None,
+                "auth_source": None,
+                "gender": None,
+                "age": None,
+                "age_group": None,
+                "health_reference": None,
+                "rest_mode": None,
+                "target_duration_s": None,
+                "session_id": None,
+                "started_at": None,
+                "samples": 0,
+                "recording": False,
+                "bed_wait_s": 0,
+                "vital_gate": {
+                    "ready": False,
+                    "heart_rate_valid": False,
+                    "respiration_rate_valid": False,
+                    "confirmed_packets": 0,
+                    "required_packets": SESSION_VITAL_START_PACKETS,
+                    "reason": "no_session",
+                },
+            }
+        )
     _reset_live_sleep_inference(None)
     return record
 
@@ -5966,22 +5764,19 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
 def _restore_waiting_session(checkpoint: Dict[str, Any]) -> Optional[str]:
     """Restore a logged-in occupant before bed confirmation/DB Session start."""
     global _active_session
+    safety_context = _restore_safety_checkpoint_context(checkpoint)
     record = dict(checkpoint["record"])
     session_id = record["session_id"]
     with profile_lock:
         profiles = _load_profiles()
         profile = profiles.get(record["username_key"], {})
     age = record.get("age") if record.get("age") is not None else profile.get("age")
-    age_group = (
-        record.get("age_group") or profile.get("age_group") or _age_group(age)
-    )
+    age_group = record.get("age_group") or profile.get("age_group") or _age_group(age)
     health_reference = record.get("health_reference")
     if not isinstance(health_reference, dict) or health_reference.get("schema_version") != 1:
         health_reference = _health_reference_from_profile(profile)
     restored_mode = record.get("rest_mode") or "auto"
-    restored_target = resolve_rest_target(
-        restored_mode, record.get("target_duration_s")
-    )
+    restored_target = resolve_rest_target(restored_mode, record.get("target_duration_s"))
     identity_subject = record["identity_subject"]
     restored_lease: Optional[OccupancyLease] = None
     occupancy_error: Optional[str] = None
@@ -5997,21 +5792,20 @@ def _restore_waiting_session(checkpoint: Dict[str, Any]) -> Optional[str]:
         # because the shared coordinator is temporarily unreachable.
         occupancy_error = getattr(exc, "reason", None) or str(exc)
 
-    record.update({
-        "age": age,
-        "age_group": age_group,
-        "health_reference": health_reference,
-        "rest_mode": restored_mode,
-        "target_duration_s": restored_target.get("seconds"),
-        "sample_interval_s": _sample_interval_seconds(
-            record.get("sample_interval_s"), SESSION_SAMPLE_SECONDS),
-        "started_at_utc": None,
-        "started_monotonic": None,
-    })
+    record.update(
+        {
+            "age": age,
+            "age_group": age_group,
+            "health_reference": health_reference,
+            "rest_mode": restored_mode,
+            "target_duration_s": restored_target.get("seconds"),
+            "sample_interval_s": _sample_interval_seconds(record.get("sample_interval_s"), SESSION_SAMPLE_SECONDS),
+            "started_at_utc": None,
+            "started_monotonic": None,
+        }
+    )
     with state_lock:
-        vital_gate_start_packet_count = int(
-            state["sensor"]["bcg"].get("packets") or 0
-        )
+        vital_gate_start_packet_count = int(state["sensor"]["bcg"].get("packets") or 0)
     restored = {
         "record": record,
         "auth": None,
@@ -6019,8 +5813,11 @@ def _restore_waiting_session(checkpoint: Dict[str, Any]) -> Optional[str]:
         "occupancy_lease": restored_lease,
         "occupancy_error": occupancy_error,
         "last_lease_renew": time.monotonic(),
-        "samples": [], "counters": {},
-        "last_sample": float("-inf"), "phase": "waiting_bed",
+        "samples": [],
+        "counters": {},
+        "last_sample": float("-inf"),
+        "phase": "waiting_bed",
+        "safety_context": safety_context,
         # Re-check the complete BED_START_SECONDS after boot because the Pi
         # cannot verify whether the person stayed on the bed while offline.
         "onbed_since": None,
@@ -6042,26 +5839,34 @@ def _restore_waiting_session(checkpoint: Dict[str, Any]) -> Optional[str]:
         armed_epoch = time.time()
     vital_gate = session_vital_gate_now(restored)
     with state_lock:
-        state["session"].update({
-            "active": True, "username": record["username"],
-            "account_key": record["username_key"],
-            "email": profile.get("email") or profile.get("zeep_email"),
-            "gender": record.get("gender"),
-            "display_name": profile.get("display_name") or record["username"],
-            "auth_source": record.get("auth_source") or (
-                "zeep" if record.get("zeep_public_id") else "local"
-            ),
-            "age": age, "age_group": age_group,
-            "health_reference": health_reference, "session_id": session_id,
-            "rest_mode": restored_mode,
-            "target_duration_s": restored_target.get("seconds"),
-            "started_at": armed_epoch, "samples": 0,
-            "recording": False, "bed_wait_s": 0,
-            "vital_gate": vital_gate,
-        })
+        state["session"].update(
+            {
+                "active": True,
+                "username": record["username"],
+                "account_key": record["username_key"],
+                "email": profile.get("email") or profile.get("zeep_email"),
+                "gender": record.get("gender"),
+                "display_name": profile.get("display_name") or record["username"],
+                "auth_source": record.get("auth_source") or ("zeep" if record.get("zeep_public_id") else "local"),
+                "age": age,
+                "age_group": age_group,
+                "health_reference": health_reference,
+                "session_id": session_id,
+                "rest_mode": restored_mode,
+                "target_duration_s": restored_target.get("seconds"),
+                "started_at": armed_epoch,
+                "samples": 0,
+                "recording": False,
+                "bed_wait_s": 0,
+                "vital_gate": vital_gate,
+            }
+        )
     log_event(
-        "session", "login_restored_after_restart",
-        session_id=session_id, user=record["username"], phase="waiting_bed",
+        "session",
+        "login_restored_after_restart",
+        session_id=session_id,
+        user=record["username"],
+        phase="waiting_bed",
         owner_login_restored=bool(checkpoint.get("owner_auth_session_id")),
         occupancy_error=occupancy_error,
     )
@@ -6084,17 +5889,14 @@ def _restore_interrupted_session() -> Optional[str]:
             (checkpoint_record["session_id"],),
         )
         checkpoint_row = checkpoint_rows[0] if checkpoint_rows else None
-        explicitly_ended = bool(
-            checkpoint_row
-            and checkpoint_row.get("end_time") is not None
-            and checkpoint_row.get("end_reason") != "server_shutdown"
-        )
+        explicitly_ended = bool(checkpoint_row and checkpoint_row.get("end_time") is not None and checkpoint_row.get("end_reason") != "server_shutdown")
         if explicitly_ended:
             # A crash after final DB commit but before unlink must never reopen
             # a Session that the User/Admin explicitly completed.
             _clear_active_session_checkpoint()
             log_event(
-                "session", "stale_restart_checkpoint_removed",
+                "session",
+                "stale_restart_checkpoint_removed",
                 session_id=checkpoint_record["session_id"],
                 end_reason=checkpoint_row.get("end_reason"),
             )
@@ -6142,30 +5944,45 @@ def _restore_interrupted_session() -> Optional[str]:
             cadence_segments[-1].get("sample_interval_s"),
             restored_sample_interval_s,
         )
-        if cadence_segments else restored_sample_interval_s
+        if cadence_segments
+        else restored_sample_interval_s
     )
     cadence_upgraded = not math.isclose(
-        previous_live_interval_s, SESSION_SAMPLE_SECONDS,
-        rel_tol=0.0, abs_tol=0.001,
+        previous_live_interval_s,
+        SESSION_SAMPLE_SECONDS,
+        rel_tol=0.0,
+        abs_tol=0.001,
     )
     if cadence_upgraded:
-        cadence_segments.append({
-            "start_at_utc": migration_at_utc,
-            "sample_interval_s": SESSION_SAMPLE_SECONDS,
-        })
-    samples = [{
-        "t": datetime.fromisoformat(x["timestamp"]).timestamp(),
-        "temp": x.get("temperature"), "hum": x.get("humidity"),
-        "co2": x.get("co2"), "pm2_5": x.get("pm2_5"),
-        "voc": x.get("voc_index"), "lux": x.get("lux"), "dba": x.get("sound"),
-        "hr": x.get("heart_rate"), "rr": x.get("respiration_rate"),
-        "bed": x.get("bed_status"), "sleep": None,
-        "sample_interval_s": _cadence_interval_at(
-            datetime.fromisoformat(x["timestamp"]).timestamp(),
-            cadence_segments,
-            restored_sample_interval_s,
-        ),
-    } for x in timeline]
+        cadence_segments.append(
+            {
+                "start_at_utc": migration_at_utc,
+                "sample_interval_s": SESSION_SAMPLE_SECONDS,
+            }
+        )
+    samples = [
+        {
+            "t": datetime.fromisoformat(x["timestamp"]).timestamp(),
+            "temp": x.get("temperature"),
+            "hum": x.get("humidity"),
+            "co2": x.get("co2"),
+            "pm2_5": x.get("pm2_5"),
+            "voc": x.get("voc_index"),
+            "lux": x.get("lux"),
+            "dba": x.get("sound"),
+            "hr": x.get("heart_rate"),
+            "rr": x.get("respiration_rate"),
+            "bed": x.get("bed_status"),
+            "sleep": None,
+            **rr_evidence.persisted_evidence_fields(x),
+            "sample_interval_s": _cadence_interval_at(
+                datetime.fromisoformat(x["timestamp"]).timestamp(),
+                cadence_segments,
+                restored_sample_interval_s,
+            ),
+        }
+        for x in timeline
+    ]
     event_rows = database.read_sessions(
         "SELECT type,COUNT(*) AS n FROM events WHERE session_id=? AND type!='final_summary' GROUP BY type",
         (session_id,),
@@ -6175,11 +5992,7 @@ def _restore_interrupted_session() -> Optional[str]:
         database.read_sessions,
         session_id,
         samples=samples,
-        checkpoint_context=(
-            checkpoint.get("sleep_context")
-            if isinstance(checkpoint, dict)
-            else None
-        ),
+        checkpoint_context=(checkpoint.get("sleep_context") if isinstance(checkpoint, dict) else None),
         heart_rate_range=HR_SANITY_RANGE_BPM,
         respiration_rate_range=RR_SANITY_RANGE_PER_MIN,
         fallback_interval_s=SLEEP_EVIDENCE_EPOCH_SECONDS,
@@ -6193,23 +6006,13 @@ def _restore_interrupted_session() -> Optional[str]:
     with profile_lock:
         profiles = _load_profiles()
         profile = profiles.get(row["username_key"], {})
-        age = (checkpoint_record.get("age")
-               if checkpoint_record.get("age") is not None else profile.get("age"))
-        age_group = (checkpoint_record.get("age_group")
-                     or profile.get("age_group") or _age_group(age))
+        age = checkpoint_record.get("age") if checkpoint_record.get("age") is not None else profile.get("age")
+        age_group = checkpoint_record.get("age_group") or profile.get("age_group") or _age_group(age)
         health_reference = checkpoint_record.get("health_reference")
         if not isinstance(health_reference, dict) or health_reference.get("schema_version") != 1:
             health_reference = _health_reference_from_profile(profile)
-    identity_subject = (
-        checkpoint_record.get("identity_subject")
-        or row.get("identity_subject")
-        or (f"zeep:{row['zeep_public_id']}" if row.get("zeep_public_id") else f"legacy:{row['username_key']}")
-    )
-    restored_mode = (
-        checkpoint_record.get("rest_mode")
-        or row.get("rest_mode")
-        or "auto"
-    )
+    identity_subject = checkpoint_record.get("identity_subject") or row.get("identity_subject") or (f"zeep:{row['zeep_public_id']}" if row.get("zeep_public_id") else f"legacy:{row['username_key']}")
+    restored_mode = checkpoint_record.get("rest_mode") or row.get("rest_mode") or "auto"
     persisted_target = checkpoint_record.get("target_duration_s")
     if persisted_target is None:
         persisted_target = row.get("target_duration_s")
@@ -6228,20 +6031,22 @@ def _restore_interrupted_session() -> Optional[str]:
         # surface a DEGRADED lease state for the administrator to resolve.
         occupancy_error = getattr(exc, "reason", None) or str(exc)
 
+    safety_context = _restore_safety_checkpoint_context(checkpoint) if checkpoint is not None else _current_safety_checkpoint_context()
     _active_session = {
         "record": {
-            "session_id": session_id, "username": row["user"],
-            "username_key": row["username_key"], "gender": row.get("gender"),
-            "age": age, "age_group": age_group,
+            "session_id": session_id,
+            "username": row["user"],
+            "username_key": row["username_key"],
+            "gender": row.get("gender"),
+            "age": age,
+            "age_group": age_group,
             "health_reference": health_reference,
             "armed_at_utc": checkpoint_record.get("armed_at_utc") or row["created_at"],
             # Old/open rows may predate explicit intent storage. Keep ``auto``
             # unresolved; elapsed time and model output cannot invent intent.
             "rest_mode": restored_mode,
             "target_duration_s": restored_target.get("seconds"),
-            "auth_source": checkpoint_record.get("auth_source") or (
-                "zeep" if row.get("zeep_public_id") else "local"
-            ),
+            "auth_source": checkpoint_record.get("auth_source") or ("zeep" if row.get("zeep_public_id") else "local"),
             "started_at_utc": row["start_time"],
             "started_monotonic": time.monotonic() - elapsed_s,
             # New samples use the active 10-second contract. Historical rows
@@ -6253,14 +6058,16 @@ def _restore_interrupted_session() -> Optional[str]:
             "zeep_public_id": row.get("zeep_public_id"),
         },
         "auth": None,
-        "owner_auth_session_id": (
-            checkpoint.get("owner_auth_session_id") if checkpoint is not None else None
-        ),
+        "owner_auth_session_id": (checkpoint.get("owner_auth_session_id") if checkpoint is not None else None),
         "occupancy_lease": restored_lease,
         "occupancy_error": occupancy_error,
         "last_lease_renew": time.monotonic(),
-        "samples": samples, "counters": counters,
-        "last_sample": float("-inf"), "phase": "recording", "onbed_since": None,
+        "samples": samples,
+        "counters": counters,
+        "last_sample": float("-inf"),
+        "phase": "recording",
+        "onbed_since": None,
+        "safety_context": safety_context,
     }
     if was_legacy_closed:
         database.enqueue("sessions", "session_resume", {"session_id": session_id})
@@ -6274,50 +6081,56 @@ def _restore_interrupted_session() -> Optional[str]:
             profiles = _load_profiles()
             profile = profiles.get(row["username_key"])
             if profile is not None:
-                profile["sessions"] = int(
-                    availability.get("lifetime_sessions") or 0
-                )
-                profile["last_session_utc"] = availability.get(
-                    "last_data_session_utc"
-                )
+                profile["sessions"] = int(availability.get("lifetime_sessions") or 0)
+                profile["last_session_utc"] = availability.get("last_data_session_utc")
                 _save_profiles(profiles)
     bcg_storage.start_session(session_id)
     with state_lock:
-        state["session"].update({
-            "active": True, "username": row["user"],
-            "account_key": row["username_key"],
-            "email": profile.get("email") or profile.get("zeep_email"),
-            "gender": row.get("gender"),
-            "display_name": profile.get("display_name") or row["user"],
-            "auth_source": checkpoint_record.get("auth_source") or (
-                "zeep" if row.get("zeep_public_id") else "local"
-            ),
-            "age": age, "age_group": age_group,
-            "health_reference": health_reference, "session_id": session_id,
-            "rest_mode": restored_mode,
-            "target_duration_s": restored_target.get("seconds"),
-            "started_at": started_dt.timestamp(), "samples": len(samples),
-            "recording": True, "bed_wait_s": 0,
-            "vital_gate": {
-                "ready": True,
-                "heart_rate_valid": None,
-                "respiration_rate_valid": None,
-                "confirmed_packets": SESSION_VITAL_START_PACKETS,
-                "required_packets": SESSION_VITAL_START_PACKETS,
-                "reason": "recording_resumed",
-            },
-        })
-    database.enqueue(
-        "sessions", "event", service_resume_event(session_id, migration_at_utc))
-    log_event("session", "resumed_after_restart", session_id=session_id,
-              user=row["user"], samples=len(samples), legacy_closed=was_legacy_closed,
-              owner_login_restored=bool(
-                  checkpoint and checkpoint.get("owner_auth_session_id")
-              ), occupancy_error=occupancy_error,
-              sleep_context=restored_sleep_context)
+        state["session"].update(
+            {
+                "active": True,
+                "username": row["user"],
+                "account_key": row["username_key"],
+                "email": profile.get("email") or profile.get("zeep_email"),
+                "gender": row.get("gender"),
+                "display_name": profile.get("display_name") or row["user"],
+                "auth_source": checkpoint_record.get("auth_source") or ("zeep" if row.get("zeep_public_id") else "local"),
+                "age": age,
+                "age_group": age_group,
+                "health_reference": health_reference,
+                "session_id": session_id,
+                "rest_mode": restored_mode,
+                "target_duration_s": restored_target.get("seconds"),
+                "started_at": started_dt.timestamp(),
+                "samples": len(samples),
+                "recording": True,
+                "bed_wait_s": 0,
+                "vital_gate": {
+                    "ready": True,
+                    "heart_rate_valid": None,
+                    "respiration_rate_valid": None,
+                    "confirmed_packets": SESSION_VITAL_START_PACKETS,
+                    "required_packets": SESSION_VITAL_START_PACKETS,
+                    "reason": "recording_resumed",
+                },
+            }
+        )
+    database.enqueue("sessions", "event", service_resume_event(session_id, migration_at_utc))
+    log_event(
+        "session",
+        "resumed_after_restart",
+        session_id=session_id,
+        user=row["user"],
+        samples=len(samples),
+        legacy_closed=was_legacy_closed,
+        owner_login_restored=bool(checkpoint and checkpoint.get("owner_auth_session_id")),
+        occupancy_error=occupancy_error,
+        sleep_context=restored_sleep_context,
+    )
     if cadence_upgraded:
         log_event(
-            "session", "sample_cadence_upgraded",
+            "session",
+            "sample_cadence_upgraded",
             session_id=session_id,
             previous_sample_interval_s=previous_live_interval_s,
             sample_interval_s=SESSION_SAMPLE_SECONDS,
@@ -6340,8 +6153,12 @@ async def lifespan(_: FastAPI):
     try:
         result = migrate_jsonl(database, SESSIONS_PATH)
         if result["status"] == "migrated":
-            log_event("db", "migrated_jsonl", imported=result["imported"],
-                      backup=str(result["backup"]))
+            log_event(
+                "db",
+                "migrated_jsonl",
+                imported=result["imported"],
+                backup=str(result["backup"]),
+            )
     except Exception as exc:
         # Never rename or discard the legacy file on a failed migration.
         log_event("db", "migration_skipped", error=str(exc))
@@ -6352,9 +6169,12 @@ async def lifespan(_: FastAPI):
             migrated_baselines = baselines.rekey_users(account_mapping)
             migrated_auth = auth_sessions.rekey_account_keys(account_mapping)
             log_event(
-                "db", "account_keys_migrated_to_email",
-                profiles=len(account_mapping), sessions=migrated_sessions,
-                baselines=migrated_baselines, browser_sessions=migrated_auth,
+                "db",
+                "account_keys_migrated_to_email",
+                profiles=len(account_mapping),
+                sessions=migrated_sessions,
+                baselines=migrated_baselines,
+                browser_sessions=migrated_auth,
             )
     except Exception as exc:
         # Identity migration is additive/re-keying only. Keep the original
@@ -6399,11 +6219,16 @@ async def lifespan(_: FastAPI):
         # waiting_bed deliberately has no sessions.db row yet, so an event
         # would violate its foreign key. The checkpoint alone restores Login.
         if active.get("phase") == "recording":
-            database.enqueue("sessions", "event", {
-                "session_id": active["record"]["session_id"],
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "type": "service_pause", "value": {"reason": "server_shutdown"},
-            })
+            database.enqueue(
+                "sessions",
+                "event",
+                {
+                    "session_id": active["record"]["session_id"],
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "type": "service_pause",
+                    "value": {"reason": "server_shutdown"},
+                },
+            )
         database.flush(30)
     try:
         _persist_last_sensor_frame(analysis_frame_cached())
@@ -6525,35 +6350,47 @@ def _pod_is_occupied() -> bool:
         return _active_session is not None
 
 
-app.include_router(create_qr_login_router(
-    qr_logins,
-    # Late binding on purpose: both hooks are swapped in regression tests.
-    zeep_request=lambda *a, **kw: _zeep_request(*a, **kw),
-    zeep_offline=ZeepApiOffline,
-    complete_login=lambda *a, **kw: _complete_occupant_login(*a, **kw),
-    pod_occupied=_pod_is_occupied,
-    log_event=log_event,
-))
-app.include_router(create_report_share_router(
-    report_shares, zeep_request=lambda *a, **kw: _zeep_request(*a, **kw),
-    zeep_offline=ZeepApiOffline, log_event=log_event))
+app.include_router(
+    create_qr_login_router(
+        qr_logins,
+        # Late binding on purpose: both hooks are swapped in regression tests.
+        zeep_request=lambda *a, **kw: _zeep_request(*a, **kw),
+        zeep_offline=ZeepApiOffline,
+        complete_login=lambda *a, **kw: _complete_occupant_login(*a, **kw),
+        pod_occupied=_pod_is_occupied,
+        log_event=log_event,
+    )
+)
+app.include_router(
+    create_report_share_router(
+        report_shares,
+        zeep_request=lambda *a, **kw: _zeep_request(*a, **kw),
+        zeep_offline=ZeepApiOffline,
+        log_event=log_event,
+    )
+)
 app.include_router(create_history_router(database, require_admin=require_admin))
 app.include_router(create_occupancy_router(occupancy_store, OCCUPANCY_COORDINATOR_TOKEN))
-app.include_router(create_api_v1_router(
-    require_pod_operator=require_pod_operator,
-    require_admin=require_admin,
-    snapshot_for=snapshot_for,
-    public_status=lambda: public_status(),
-    sensor_contract_snapshot=sensor_contract_snapshot,
-    sleep_policy_snapshot=sleep_policy_snapshot,
-    maintenance_contract_snapshot=maintenance_contract_snapshot,
-))
-app.include_router(create_usage_sessions_router(
-    require_user=require_user, history_service=lambda: _session_history_service(),
-    profiles_snapshot=lambda: _load_profiles(),
-    profiles_lock=profile_lock,
-    timezone_name=POD_TIMEZONE or "Asia/Bangkok",
-))
+app.include_router(
+    create_api_v1_router(
+        require_pod_operator=require_pod_operator,
+        require_admin=require_admin,
+        snapshot_for=snapshot_for,
+        public_status=lambda: public_status(),
+        sensor_contract_snapshot=sensor_contract_snapshot,
+        sleep_policy_snapshot=sleep_policy_snapshot,
+        maintenance_contract_snapshot=maintenance_contract_snapshot,
+    )
+)
+app.include_router(
+    create_usage_sessions_router(
+        require_user=require_user,
+        history_service=lambda: _session_history_service(),
+        profiles_snapshot=lambda: _load_profiles(),
+        profiles_lock=profile_lock,
+        timezone_name=POD_TIMEZONE or "Asia/Bangkok",
+    )
+)
 
 
 def _require_username_access(username: str, principal: Principal) -> str:
@@ -6565,10 +6402,7 @@ def _require_username_access(username: str, principal: Principal) -> str:
         # Profile; arbitrary cross-account usernames remain forbidden.
         with profile_lock:
             profile = _load_profiles().get(principal.account_key) or {}
-        aliases = {
-            str(value).strip().casefold()
-            for value in (profile.get("legacy_account_keys") or []) if value
-        }
+        aliases = {str(value).strip().casefold() for value in (profile.get("legacy_account_keys") or []) if value}
         aliases.add(str(profile.get("username") or "").strip().casefold())
         if key not in aliases:
             raise HTTPException(403, "ดูข้อมูลการนอนของบัญชีอื่นไม่ได้")
@@ -6580,15 +6414,16 @@ def _require_username_access(username: str, principal: Principal) -> str:
 def api_baseline(username: str, principal: Principal = Depends(require_user)):
     """Baseline ส่วนบุคคล + คำแนะนำ (advisory เท่านั้น — คนตัดสินใจ/กดปุ่มเอง)"""
     key = _require_username_access(username, principal)
-    record = baselines.get(key) or {"status": "no_data", "nights_used": 0,
-                                    "min_nights": 3}
+    record = baselines.get(key) or {
+        "status": "no_data",
+        "nights_used": 0,
+        "min_nights": 3,
+    }
     return {
         "username": username,
         "baseline": record,
         "recommendations": baselines.recommendations(key),
-        "guardrail": ("ระบบเรียนรู้/แนะนำ/ปรับเกณฑ์การอ่านค่าเท่านั้น — "
-                      "ไม่สั่งอุปกรณ์อัตโนมัติจาก sleep state ก่อนผ่าน G2 "
-                      "(docs/closed-loop-spec.md)"),
+        "guardrail": ("ระบบเรียนรู้/แนะนำ/ปรับเกณฑ์การอ่านค่าเท่านั้น — ไม่สั่งอุปกรณ์อัตโนมัติจาก sleep state ก่อนผ่าน G2 (docs/closed-loop-spec.md)"),
     }
 
 
@@ -6611,20 +6446,33 @@ async def bcg_trend(minutes: int = 10):
     for i in range(n):
         fs = grouped.get(i)
         if not fs:
-            buckets.append({"t": start + i * bucket_s, "hr": None, "rr": None,
-                            "move": None, "onbed": None})
+            buckets.append(
+                {
+                    "t": start + i * bucket_s,
+                    "hr": None,
+                    "rr": None,
+                    "move": None,
+                    "onbed": None,
+                }
+            )
             continue
         hrs = [f["hr"] for f in fs if f["hr"]]
         rrs = [f["rr"] for f in fs if f["rr"]]
-        buckets.append({
-            "t": start + i * bucket_s,
-            "hr": round(sum(hrs) / len(hrs), 1) if hrs else None,
-            "rr": round(sum(rrs) / len(rrs), 1) if rrs else None,
-            "move": round(sum(1 for f in fs if f["status"] == 2) / len(fs), 2),
-            "onbed": any(f["status"] in ON_BED_CODES for f in fs),
-        })
-    return {"bucket_s": bucket_s, "minutes": minutes, "buckets": buckets,
-            "sleep": sleep_state_cached()}
+        buckets.append(
+            {
+                "t": start + i * bucket_s,
+                "hr": round(sum(hrs) / len(hrs), 1) if hrs else None,
+                "rr": round(sum(rrs) / len(rrs), 1) if rrs else None,
+                "move": round(sum(1 for f in fs if f["status"] == 2) / len(fs), 2),
+                "onbed": any(f["status"] in ON_BED_CODES for f in fs),
+            }
+        )
+    return {
+        "bucket_s": bucket_s,
+        "minutes": minutes,
+        "buckets": buckets,
+        "sleep": sleep_state_cached(),
+    }
 
 
 @app.get("/api/bcg/raw", dependencies=[Depends(require_admin)])
@@ -6650,82 +6498,112 @@ def sensor_calibration_inspector_snapshot() -> Dict[str, Any]:
     channels = []
     for metric, spec in SENSOR_CALIBRATION_SPECS.items():
         device = devices.get(spec["device_key"]) or {}
-        raw_value = (
-            hub1.get(spec.get("raw_field"))
-            if spec.get("raw_field") else raw_values.get(metric)
-        )
+        raw_value = hub1.get(spec.get("raw_field")) if spec.get("raw_field") else raw_values.get(metric)
         channel_meta = metadata.get(metric) or {}
-        channels.append({
-            "metric": metric,
-            "device": spec["device"],
-            "device_key": spec["device_key"],
-            "label": spec["label"],
-            "unit": spec["unit"],
-            "raw_unit": spec.get("raw_unit", spec["unit"]),
-            "raw": raw_value,
-            "bias": sensor_bias_value(metric),
-            "bias_label": spec.get("bias_label", "additive bias"),
-            "parameter_unit": spec.get("parameter_unit", spec["unit"]),
-            "formula": spec.get("formula", "clamp(raw + bias)"),
-            "calibrated": environment.get(metric),
-            "editable": True,
-            "bias_min": spec["bias_min"],
-            "bias_max": spec["bias_max"],
-            "step": spec["step"],
-            "source": device.get("source_label"),
-            "status": device.get("status", "offline"),
-            "data_age_s": device.get("data_age_s"),
-            "bias_source": SENSOR_BIAS_SOURCES.get(metric, "default"),
-            "updated_at": channel_meta.get("updated_at"),
-            "reference_value": channel_meta.get("reference_value"),
-        })
+        channels.append(
+            {
+                "metric": metric,
+                "device": spec["device"],
+                "device_key": spec["device_key"],
+                "label": spec["label"],
+                "unit": spec["unit"],
+                "raw_unit": spec.get("raw_unit", spec["unit"]),
+                "raw": raw_value,
+                "bias": sensor_bias_value(metric),
+                "bias_label": spec.get("bias_label", "additive bias"),
+                "parameter_unit": spec.get("parameter_unit", spec["unit"]),
+                "formula": spec.get("formula", "clamp(raw + bias)"),
+                "calibrated": environment.get(metric),
+                "editable": True,
+                "bias_min": spec["bias_min"],
+                "bias_max": spec["bias_max"],
+                "step": spec["step"],
+                "source": device.get("source_label"),
+                "status": device.get("status", "offline"),
+                "data_age_s": device.get("data_age_s"),
+                "bias_source": SENSOR_BIAS_SOURCES.get(metric, "default"),
+                "updated_at": channel_meta.get("updated_at"),
+                "reference_value": channel_meta.get("reference_value"),
+            }
+        )
 
     sound_device = devices.get("sph0645") or {}
-    channels.append(sound_inspector_channel(
-        hub1,
-        environment,
-        sound_device,
-    ))
+    channels.append(
+        sound_inspector_channel(
+            hub1,
+            environment,
+            sound_device,
+        )
+    )
 
     # These algorithm-owned values are inspected beside the adjustable
     # channels, but are intentionally not offset in software. SGP40 learns its
     # own 24-hour baseline; BCG summary bytes feed the physiology estimator.
     sgp = devices.get("sgp40") or {}
-    channels.extend([
-        {
-            "metric": "voc_index", "device": "SGP40", "device_key": "sgp40",
-            "label": "VOC Index", "unit": "index", "raw": raw_values.get("voc_index"),
-            "bias": 0.0, "calibrated": environment.get("voc_index"), "editable": False,
-            "source": sgp.get("source_label"), "status": sgp.get("status", "offline"),
-            "data_age_s": sgp.get("data_age_s"),
-            "lock_reason": "Adaptive Baseline ของ SGP40 — ไม่ควรบวก offset ด้วยมือ",
-        },
-        {
-            "metric": "sgp40_raw", "device": "SGP40", "device_key": "sgp40",
-            "label": "SRAW VOC", "unit": "raw", "raw": raw_values.get("sgp40_raw"),
-            "bias": 0.0, "calibrated": environment.get("sgp40_raw"), "editable": False,
-            "source": sgp.get("source_label"), "status": sgp.get("status", "offline"),
-            "data_age_s": sgp.get("data_age_s"),
-            "lock_reason": "ค่าดิบสำหรับตรวจ Algorithm เท่านั้น",
-        },
-        {
-            "metric": "bcg_heart_rate", "device": "LSM-800-T", "device_key": "bcg",
-            "label": "Heart Rate", "unit": "BPM", "raw": bcg.get("heart_rate_bpm"),
-            "bias": 0.0, "calibrated": bcg.get("heart_rate_bpm"), "editable": False,
-            "source": "BCG · Serial", "status": "live" if bcg.get("connected") else "offline",
-            "data_age_s": bcg.get("data_age_s"),
-            "lock_reason": "Firmware physiology output — แสดงดิบเพื่อเทียบเครื่องอ้างอิง",
-        },
-        {
-            "metric": "bcg_respiration_rate", "device": "LSM-800-T", "device_key": "bcg",
-            "label": "Respiratory Rate", "unit": "ครั้ง/นาที",
-            "raw": bcg.get("respiration_rate"), "bias": 0.0,
-            "calibrated": bcg.get("respiration_rate"), "editable": False,
-            "source": "BCG · Serial", "status": "live" if bcg.get("connected") else "offline",
-            "data_age_s": bcg.get("data_age_s"),
-            "lock_reason": "ใช้โดย Sleep Estimator — ห้ามปรับ bias โดยไม่มี validation",
-        },
-    ])
+    channels.extend(
+        [
+            {
+                "metric": "voc_index",
+                "device": "SGP40",
+                "device_key": "sgp40",
+                "label": "VOC Index",
+                "unit": "index",
+                "raw": raw_values.get("voc_index"),
+                "bias": 0.0,
+                "calibrated": environment.get("voc_index"),
+                "editable": False,
+                "source": sgp.get("source_label"),
+                "status": sgp.get("status", "offline"),
+                "data_age_s": sgp.get("data_age_s"),
+                "lock_reason": "Adaptive Baseline ของ SGP40 — ไม่ควรบวก offset ด้วยมือ",
+            },
+            {
+                "metric": "sgp40_raw",
+                "device": "SGP40",
+                "device_key": "sgp40",
+                "label": "SRAW VOC",
+                "unit": "raw",
+                "raw": raw_values.get("sgp40_raw"),
+                "bias": 0.0,
+                "calibrated": environment.get("sgp40_raw"),
+                "editable": False,
+                "source": sgp.get("source_label"),
+                "status": sgp.get("status", "offline"),
+                "data_age_s": sgp.get("data_age_s"),
+                "lock_reason": "ค่าดิบสำหรับตรวจ Algorithm เท่านั้น",
+            },
+            {
+                "metric": "bcg_heart_rate",
+                "device": "LSM-800-T",
+                "device_key": "bcg",
+                "label": "Heart Rate",
+                "unit": "BPM",
+                "raw": bcg.get("heart_rate_bpm"),
+                "bias": 0.0,
+                "calibrated": bcg.get("heart_rate_bpm"),
+                "editable": False,
+                "source": "BCG · Serial",
+                "status": "live" if bcg.get("connected") else "offline",
+                "data_age_s": bcg.get("data_age_s"),
+                "lock_reason": "Firmware physiology output — แสดงดิบเพื่อเทียบเครื่องอ้างอิง",
+            },
+            {
+                "metric": "bcg_respiration_rate",
+                "device": "LSM-800-T",
+                "device_key": "bcg",
+                "label": "Respiratory Rate",
+                "unit": "ครั้ง/นาที",
+                "raw": bcg.get("respiration_rate"),
+                "bias": 0.0,
+                "calibrated": bcg.get("respiration_rate"),
+                "editable": False,
+                "source": "BCG · Serial",
+                "status": "live" if bcg.get("connected") else "offline",
+                "data_age_s": bcg.get("data_age_s"),
+                "lock_reason": "ใช้โดย Sleep Estimator — ห้ามปรับ bias โดยไม่มี validation",
+            },
+        ]
+    )
     return {
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "session_active": bool((snap.get("session") or {}).get("active")),
@@ -6751,7 +6629,9 @@ def sensor_calibration_bias(
     metric = str(cmd.metric or "").strip()
     try:
         updated = update_sensor_bias(
-            metric, cmd.bias, operator=principal.username,
+            metric,
+            cmd.bias,
+            operator=principal.username,
             reference_value=cmd.reference_value,
         )
     except ValueError as exc:
@@ -6760,13 +6640,19 @@ def sensor_calibration_bias(
             raise HTTPException(422, "Sensor channel นี้ไม่อนุญาตให้ปรับ bias") from exc
         raise HTTPException(422, "ค่า bias/reference อยู่นอกช่วงที่อนุญาต") from exc
     log_event(
-        "calibration", "sensor_bias_updated", operator=principal.username,
-        metric=metric, bias=updated["bias"],
+        "calibration",
+        "sensor_bias_updated",
+        operator=principal.username,
+        metric=metric,
+        bias=updated["bias"],
         reference_value=updated.get("reference_value"),
         active_session=bool(_active_session),
     )
-    return {"ok": True, "update": updated,
-            "calibration": sensor_calibration_inspector_snapshot()}
+    return {
+        "ok": True,
+        "update": updated,
+        "calibration": sensor_calibration_inspector_snapshot(),
+    }
 
 
 @app.get("/api/logs", dependencies=[Depends(require_admin)])
@@ -6775,8 +6661,11 @@ async def api_logs(limit: int = 100):
     limit = max(1, min(EVENT_RING_LIMIT, int(limit)))
     with event_log_lock:
         events = list(_event_ring)[-limit:]
-    return {"events": events, "log_file": str(EVENT_LOG_PATH),
-            "db_health": database.health()}
+    return {
+        "events": events,
+        "log_file": str(EVENT_LOG_PATH),
+        "db_health": database.health(),
+    }
 
 
 def _normalize_aircon_command(raw: str) -> str:
@@ -6786,7 +6675,9 @@ def _normalize_aircon_command(raw: str) -> str:
         raise HTTPException(422, str(exc)) from exc
 
 
-def _apply_aircon_temperature_bias(command: str) -> Tuple[str, Optional[int], Optional[int]]:
+def _apply_aircon_temperature_bias(
+    command: str,
+) -> Tuple[str, Optional[int], Optional[int]]:
     try:
         return apply_aircon_temperature_bias(
             command,
@@ -6812,10 +6703,19 @@ def safety_arm():
     faults = _safety_faults()
     blocking = [f for f in faults if f["severity"] in ("blocking", "critical")]
     if blocking:
-        raise HTTPException(409, {"message": "Safety Supervisor ยังไม่พร้อม Arm",
-                                  "faults": blocking})
+        raise HTTPException(409, {"message": "Safety Supervisor ยังไม่พร้อม Arm", "faults": blocking})
     with state_lock:
         state["safety"]["armed"] = True
+    try:
+        _refresh_active_session_safety_checkpoint(armed=True)
+    except Exception as exc:
+        log_event(
+            "safety",
+            "checkpoint_refresh_failed",
+            operation="arm",
+            error=str(exc),
+        )
+        raise HTTPException(500, "บันทึกสถานะ Safety ไม่สำเร็จ") from exc
     log_event("safety", "armed")
     return {"ok": True, "safety": snapshot()["safety"]}
 
@@ -6824,6 +6724,7 @@ def safety_arm():
 def safety_disarm():
     with state_lock:
         state["safety"]["armed"] = False
+    # Deliberately process-local: a restart must never preserve a disarmed Pod.
     log_event("safety", "disarmed")
     return {"ok": True, "safety": snapshot()["safety"]}
 
@@ -6836,13 +6737,33 @@ def safety_safe_mode():
 
 @app.post("/api/safety/ack", dependencies=[Depends(require_admin)])
 def safety_acknowledge():
-    faults = _safety_faults()
-    critical = [f for f in faults if f["severity"] == "critical"]
-    if critical:
-        raise HTTPException(409, {"message": "ยังมี critical fault จึง acknowledge ไม่ได้",
-                                  "faults": critical})
-    with state_lock:
-        state["safety"]["latched"] = False
+    with _safety_action_lock:
+        faults = _safety_faults()
+        critical = [f for f in faults if f["severity"] == "critical"]
+        if critical:
+            raise HTTPException(
+                409,
+                {
+                    "message": "ยังมี critical fault จึง acknowledge ไม่ได้",
+                    "faults": critical,
+                },
+            )
+        with state_lock:
+            state["safety"]["latched"] = False
+        try:
+            _refresh_active_session_safety_checkpoint(latched=False)
+        except Exception as exc:
+            # ACK succeeds only after memory and the checkpoint agree. Restore
+            # the fail-safe latch when durable storage cannot be refreshed.
+            with state_lock:
+                state["safety"]["latched"] = True
+            log_event(
+                "safety",
+                "checkpoint_refresh_failed",
+                operation="ack",
+                error=str(exc),
+            )
+            raise HTTPException(500, "บันทึกการรับทราบ Safety ไม่สำเร็จ") from exc
     log_event("safety", "acknowledged")
     return {"ok": True, "safety": snapshot()["safety"]}
 
@@ -6928,7 +6849,10 @@ def aircon_command(
     if cmd.direct and not getattr(principal, "is_admin", False):
         raise HTTPException(
             403,
-            {"code": "admin_required", "message": "Direct Aircon command ใช้ได้เฉพาะผู้ดูแลระบบ"},
+            {
+                "code": "admin_required",
+                "message": "Direct Aircon command ใช้ได้เฉพาะผู้ดูแลระบบ",
+            },
         )
     if direct_temperature:
         commanded_temperature = int(requested_command.split(" ", 1)[1])
@@ -6937,9 +6861,7 @@ def aircon_command(
         command = requested_command
         desired_temperature = None
     else:
-        command, desired_temperature, commanded_temperature = _apply_aircon_temperature_bias(
-            requested_command
-        )
+        command, desired_temperature, commanded_temperature = _apply_aircon_temperature_bias(requested_command)
     # OFF and read-only status remain available during a safety latch. Other
     # commands follow the same safe-default policy as controllable outputs.
     if command not in ("off", "status"):
@@ -6992,11 +6914,7 @@ def aircon_command(
                 fan_level = reported_level
                 fan_level_source = "esp_ack"
             else:
-                fan_level = (
-                    current_level % 5 + 1
-                    if isinstance(current_level, int) and 1 <= current_level <= 5
-                    else 1
-                )
+                fan_level = current_level % 5 + 1 if isinstance(current_level, int) and 1 <= current_level <= 5 else 1
                 fan_level_source = "acknowledged_ir_cycle"
             aircon_state["fan_level"] = fan_level
             aircon_state["fan_level_source"] = fan_level_source
@@ -7006,22 +6924,23 @@ def aircon_command(
         # transmit routine. A timeout/error therefore leaves the reference at
         # the last known level instead of guessing that the command worked.
         _persist_aircon_fan_level(fan_level, fan_level_source)
-    note_session_activity("aircon_command", {
-        "requested_command": requested_command,
-        "command": command,
-        "direct": direct_temperature,
-        "fan_level": fan_level,
-        "desired_temperature_c": desired_temperature,
-        "commanded_temperature_c": commanded_temperature,
-        "temperature_bias_c": AIRCON_TEMPERATURE_BIAS_C,
-        "power_on_default_temperature_c": (
-            AIRCON_POWER_ON_DEFAULT_TEMP_C if command == "on" else None
-        ),
-        "preflight_command": preflight_command,
-        "followup_command": followup_command,
-        "swing_command": swing_command,
-        "tx_count": (swing_ack or followup_ack or acknowledgement).get("tx_count"),
-    })
+    note_session_activity(
+        "aircon_command",
+        {
+            "requested_command": requested_command,
+            "command": command,
+            "direct": direct_temperature,
+            "fan_level": fan_level,
+            "desired_temperature_c": desired_temperature,
+            "commanded_temperature_c": commanded_temperature,
+            "temperature_bias_c": AIRCON_TEMPERATURE_BIAS_C,
+            "power_on_default_temperature_c": (AIRCON_POWER_ON_DEFAULT_TEMP_C if command == "on" else None),
+            "preflight_command": preflight_command,
+            "followup_command": followup_command,
+            "swing_command": swing_command,
+            "tx_count": (swing_ack or followup_ack or acknowledgement).get("tx_count"),
+        },
+    )
     return {
         "ok": True,
         "command": command,
@@ -7031,9 +6950,7 @@ def aircon_command(
         "desired_temperature_c": desired_temperature,
         "commanded_temperature_c": commanded_temperature,
         "temperature_bias_c": AIRCON_TEMPERATURE_BIAS_C,
-        "power_on_default_temperature_c": (
-            AIRCON_POWER_ON_DEFAULT_TEMP_C if command == "on" else None
-        ),
+        "power_on_default_temperature_c": (AIRCON_POWER_ON_DEFAULT_TEMP_C if command == "on" else None),
         "preflight_command": preflight_command,
         "preflight_ack": preflight_ack,
         "followup_command": followup_command,
@@ -7046,12 +6963,8 @@ def aircon_command(
         "delivery_status": "ir_transmitted_unverified",
         "physical_confirmation": False,
         "min_ir_gap_seconds": CONTROLHUB1_MIN_IR_GAP_SECONDS,
-        "power_on_settle_seconds": (
-            CONTROLHUB1_POWER_ON_SETTLE_SECONDS if command == "on" else None
-        ),
-        "fan_wake_settle_seconds": (
-            CONTROLHUB1_FAN_WAKE_SETTLE_SECONDS if command == "fan" else None
-        ),
+        "power_on_settle_seconds": (CONTROLHUB1_POWER_ON_SETTLE_SECONDS if command == "on" else None),
+        "fan_wake_settle_seconds": (CONTROLHUB1_FAN_WAKE_SETTLE_SECONDS if command == "fan" else None),
         "aircon": snapshot().get("aircon", {}),
     }
 
@@ -7088,11 +7001,14 @@ def set_aircon_fan_level_reference(
         note=(cmd.note or "")[:200],
         ir_transmitted=False,
     )
-    note_session_activity("aircon_fan_level_reference", {
-        "level": int(cmd.level),
-        "source": "admin_declared_reference",
-        "ir_transmitted": False,
-    })
+    note_session_activity(
+        "aircon_fan_level_reference",
+        {
+            "level": int(cmd.level),
+            "source": "admin_declared_reference",
+            "ir_transmitted": False,
+        },
+    )
     return {
         "ok": True,
         "fan_level": int(cmd.level),
@@ -7107,10 +7023,14 @@ def set_aircon_fan_level_reference(
 @app.post("/api/bed/command", dependencies=[Depends(require_pod_operator)])
 def bed_control_command(cmd: BedControlCommand):
     requested_command = _normalize_bed_command(cmd.command)
-    acknowledgement, command = controlhub2_bed_mqtt.publish_and_wait(
-        requested_command, toggle_repeat=False)
+    acknowledgement, command = controlhub2_bed_mqtt.publish_and_wait(requested_command, toggle_repeat=False)
     movement_commands = {
-        "head_up", "head_down", "foot_up", "foot_down", "flat", "center_all",
+        "head_up",
+        "head_down",
+        "foot_up",
+        "foot_down",
+        "flat",
+        "center_all",
     }
     auto_stop_after_s = None
     if command in movement_commands:
@@ -7118,11 +7038,14 @@ def bed_control_command(cmd: BedControlCommand):
         auto_stop_after_s = BED_MOVE_SECONDS
     elif command == "bed_stop":
         _cancel_bed_auto_stop("explicit_stop")
-    note_session_activity("bed_command", {
-        "requested_command": requested_command,
-        "command": command,
-        "auto_stop_after_s": auto_stop_after_s,
-    })
+    note_session_activity(
+        "bed_command",
+        {
+            "requested_command": requested_command,
+            "command": command,
+            "auto_stop_after_s": auto_stop_after_s,
+        },
+    )
     return {
         "ok": True,
         "command": command,
@@ -7284,11 +7207,7 @@ def _start_pod_session(
         raise HTTPException(422, "รูปแบบการพักไม่ถูกต้อง") from exc
     target = resolve_rest_target(
         rest_mode,
-        (
-            target_duration_minutes * 60
-            if target_duration_minutes is not None
-            else None
-        ),
+        (target_duration_minutes * 60 if target_duration_minutes is not None else None),
         use_mode_default=True,
     )
     if not target.get("available"):
@@ -7330,14 +7249,10 @@ def _start_pod_session(
                 "age": age,
                 "age_is_estimated": incoming_health.get("age_years") is None,
                 "age_group": age_group,
-                "date_of_birth": _normalise_date_of_birth(
-                    incoming_health.get("date_of_birth")),
-                "height_cm": _normalise_body_measurement(
-                    incoming_health.get("height_cm"), measurement="height_cm"),
-                "weight_kg": _normalise_body_measurement(
-                    incoming_health.get("weight_kg"), measurement="weight_kg"),
-                "blood_group": _normalise_blood_group(
-                    incoming_health.get("blood_group")),
+                "date_of_birth": _normalise_date_of_birth(incoming_health.get("date_of_birth")),
+                "height_cm": _normalise_body_measurement(incoming_health.get("height_cm"), measurement="height_cm"),
+                "weight_kg": _normalise_body_measurement(incoming_health.get("weight_kg"), measurement="weight_kg"),
+                "blood_group": _normalise_blood_group(incoming_health.get("blood_group")),
                 "created_at_utc": datetime.now(timezone.utc).isoformat(),
                 "sessions": 0,
                 "last_session_utc": None,
@@ -7359,14 +7274,10 @@ def _start_pod_session(
                     profile["age_is_estimated"] = False
             profile["age_group"] = age_group
             optional_health_fields = {
-                "date_of_birth": _normalise_date_of_birth(
-                    incoming_health.get("date_of_birth")),
-                "height_cm": _normalise_body_measurement(
-                    incoming_health.get("height_cm"), measurement="height_cm"),
-                "weight_kg": _normalise_body_measurement(
-                    incoming_health.get("weight_kg"), measurement="weight_kg"),
-                "blood_group": _normalise_blood_group(
-                    incoming_health.get("blood_group")),
+                "date_of_birth": _normalise_date_of_birth(incoming_health.get("date_of_birth")),
+                "height_cm": _normalise_body_measurement(incoming_health.get("height_cm"), measurement="height_cm"),
+                "weight_kg": _normalise_body_measurement(incoming_health.get("weight_kg"), measurement="weight_kg"),
+                "blood_group": _normalise_blood_group(incoming_health.get("blood_group")),
             }
             if profile_refreshed:
                 # Login refresh is a complete profile snapshot.  Explicitly
@@ -7404,9 +7315,7 @@ def _start_pod_session(
         profiles[key] = profile
         _save_profiles(profiles)
 
-    session_id = (
-        f"s-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:6]}"
-    )
+    session_id = f"s-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:6]}"
     # This is the cross-pod atomic gate.  With a remote coordinator configured,
     # the same immutable ZEEP subject cannot acquire a second pod concurrently.
     try:
@@ -7418,24 +7327,22 @@ def _start_pod_session(
         )
     except OccupancyConflict as exc:
         code = exc.reason
-        message = (
-            "บัญชีนี้กำลังใช้งานตู้อื่นอยู่"
-            if code == "account_already_in_use"
-            else "ตู้นี้กำลังมีผู้ใช้งาน"
-        )
+        message = "บัญชีนี้กำลังใช้งานตู้อื่นอยู่" if code == "account_already_in_use" else "ตู้นี้กำลังมีผู้ใช้งาน"
         raise HTTPException(409, {"code": code, "message": message, "pod_id": exc.pod_id}) from exc
     except CoordinatorUnavailable as exc:
         # Fail closed for a new occupant. Existing occupants continue locally
         # even if the coordinator/network later becomes unavailable.
-        raise HTTPException(503, {
-            "code": "occupancy_coordinator_unavailable",
-            "message": "ยังตรวจสอบการใช้งานซ้ำระหว่างตู้ไม่ได้ จึงยังไม่เริ่ม Session ใหม่",
-        }) from exc
+        raise HTTPException(
+            503,
+            {
+                "code": "occupancy_coordinator_unavailable",
+                "message": "ยังตรวจสอบการใช้งานซ้ำระหว่างตู้ไม่ได้ จึงยังไม่เริ่ม Session ใหม่",
+            },
+        ) from exc
 
+    safety_context = _current_safety_checkpoint_context()
     with state_lock:
-        vital_gate_start_packet_count = int(
-            state["sensor"]["bcg"].get("packets") or 0
-        )
+        vital_gate_start_packet_count = int(state["sensor"]["bcg"].get("packets") or 0)
     new_session = {
         "record": {
             "session_id": session_id,
@@ -7453,7 +7360,7 @@ def _start_pod_session(
             "identity_subject": owner.subject,
             "pod_id": POD_ID,
             "armed_at_utc": datetime.now(timezone.utc).isoformat(),
-            "started_at_utc": None,     # ตั้งค่าเมื่อยืนยันนอนครบ BED_START_SECONDS
+            "started_at_utc": None,  # ตั้งค่าเมื่อยืนยันนอนครบ BED_START_SECONDS
             "started_monotonic": None,
             "sample_interval_s": SESSION_SAMPLE_SECONDS,
             "sample_cadence_segments": [],
@@ -7467,7 +7374,8 @@ def _start_pod_session(
         "samples": [],
         "counters": {},
         "last_sample": float("-inf"),
-        "phase": "waiting_bed",         # ยังไม่เริ่มนับจนกว่าจะนอนครบตามเกณฑ์
+        "phase": "waiting_bed",  # ยังไม่เริ่มนับจนกว่าจะนอนครบตามเกณฑ์
+        "safety_context": safety_context,
         "onbed_since": None,
         "vital_gate_start_packet_count": vital_gate_start_packet_count,
     }
@@ -7492,46 +7400,64 @@ def _start_pod_session(
     # A new sleeper/session must build its own independent 36-sample window.
     _reset_live_sleep_inference(session_id)
     # DB session_start + BCG storage จะเริ่มตอน _begin_recording (นอนครบ 20 วิ)
-    log_event("session", "login_waiting_bed", session_id=session_id, user=username,
-              bed_start_s=BED_START_SECONDS, monitor_only=monitor_only,
-              safety_level=safety.get("level"),
-              rest_mode=rest_mode,
-              target_duration_s=target["seconds"],
-              auth_source=new_session["record"]["auth_source"], pod_id=POD_ID)
+    log_event(
+        "session",
+        "login_waiting_bed",
+        session_id=session_id,
+        user=username,
+        bed_start_s=BED_START_SECONDS,
+        monitor_only=monitor_only,
+        safety_level=safety.get("level"),
+        rest_mode=rest_mode,
+        target_duration_s=target["seconds"],
+        auth_source=new_session["record"]["auth_source"],
+        pod_id=POD_ID,
+    )
     vital_gate = session_vital_gate_now(new_session)
     with state_lock:
-        state["session"].update({
-            "active": True, "username": username, "account_key": key,
-            "email": email, "gender": profile["gender"],
-            "display_name": (auth or {}).get("display_name") or username,
-            "auth_source": new_session["record"]["auth_source"],
-            "age": profile.get("age"),
-            "age_group": profile.get("age_group") or _age_group(profile.get("age")),
-            "health_reference": session_health_reference,
-            "wellness_context_available": bool(session_wellness_context),
-            "rest_mode": rest_mode,
-            "target_duration_s": target["seconds"],
-            "session_id": session_id, "started_at": time.time(), "samples": 0,
-            "recording": False, "bed_wait_s": 0,
-            "vital_gate": vital_gate,
-        })
+        state["session"].update(
+            {
+                "active": True,
+                "username": username,
+                "account_key": key,
+                "email": email,
+                "gender": profile["gender"],
+                "display_name": (auth or {}).get("display_name") or username,
+                "auth_source": new_session["record"]["auth_source"],
+                "age": profile.get("age"),
+                "age_group": profile.get("age_group") or _age_group(profile.get("age")),
+                "health_reference": session_health_reference,
+                "wellness_context_available": bool(session_wellness_context),
+                "rest_mode": rest_mode,
+                "target_duration_s": target["seconds"],
+                "session_id": session_id,
+                "started_at": time.time(),
+                "samples": 0,
+                "recording": False,
+                "bed_wait_s": 0,
+                "vital_gate": vital_gate,
+            }
+        )
     return {
         "ok": True,
         "session": snapshot()["session"],
         "pod_id": POD_ID,
-        "occupancy": {"mode": occupancy_client.mode, "lease_expires_at": lease.expires_at},
+        "occupancy": {
+            "mode": occupancy_client.mode,
+            "lease_expires_at": lease.expires_at,
+        },
         "monitor_only": monitor_only,
-        "warning": (
-            "Session เริ่มใน Monitor Mode — ระบบตอบสนองฉุกเฉินอัตโนมัติยังไม่ทำงาน"
-            if monitor_only else None
-        ),
+        "warning": ("Session เริ่มใน Monitor Mode — ระบบตอบสนองฉุกเฉินอัตโนมัติยังไม่ทำงาน" if monitor_only else None),
     }
 
 
 # Password and QR login bind an account identically; only the HTTP client, the
 # event log and the offline sentinel stay in the composition root.
-_zeep_binding = {"zeep_request": _zeep_request, "log_event": log_event,
-                 "offline_error": ZeepApiOffline}
+_zeep_binding = {
+    "zeep_request": _zeep_request,
+    "log_event": log_event,
+    "offline_error": ZeepApiOffline,
+}
 _zeep_identity_from_auth_data = partial(identity_from_auth_data, **_zeep_binding)
 _authenticate_zeep_account = partial(authenticate_password, **_zeep_binding)
 
@@ -7562,11 +7488,13 @@ def _complete_occupant_login(
     if age_group is None:
         age_group = prior.get("age_group")
     if age_group is None:
-        raise HTTPException(422, {
-            "code": "age_group_required",
-            "message": "โปรไฟล์ ZEEP ยังไม่ได้ตั้งวันเกิด — เลือกช่วงอายุเพื่อกำหนด "
-            "Baseline ของ Session นี้",
-        })
+        raise HTTPException(
+            422,
+            {
+                "code": "age_group_required",
+                "message": "โปรไฟล์ ZEEP ยังไม่ได้ตั้งวันเกิด — เลือกช่วงอายุเพื่อกำหนด Baseline ของ Session นี้",
+            },
+        )
 
     display_override = str(prior.get("display_name_override") or "").strip()
     gender_override = str(prior.get("gender_override") or "").strip().lower()
@@ -7589,8 +7517,13 @@ def _complete_occupant_login(
     )
     try:
         result = _start_pod_session(
-            auth["username"], health_reference.get("gender"), age, age_group,
-            owner=principal, auth=auth, health_reference=health_reference,
+            auth["username"],
+            health_reference.get("gender"),
+            age,
+            age_group,
+            owner=principal,
+            auth=auth,
+            health_reference=health_reference,
             rest_mode=rest_mode,
             target_duration_minutes=target_duration_minutes,
         )
@@ -7598,8 +7531,7 @@ def _complete_occupant_login(
         auth_sessions.revoke(cookie_token)
         raise
     _set_auth_cookies(response, cookie_token, principal)
-    result["user"] = {k: auth[k] for k in
-                      ("public_id", "username", "email", "display_name", "role", "plan")}
+    result["user"] = {k: auth[k] for k in ("public_id", "username", "email", "display_name", "role", "plan")}
     result["principal"] = principal.public_dict()
     return result
 
@@ -7612,23 +7544,27 @@ def auth_login(cmd: AuthLoginCommand, response: Response):
         raise HTTPException(422, "กรอก Username/Email และรหัสผ่านให้ครบ")
     with session_lock:
         if _active_session is not None:
-            raise HTTPException(409, {
-                "code": "pod_already_occupied", "message": "ตู้นี้กำลังมีผู้ใช้งาน"
-            })
+            raise HTTPException(409, {"code": "pod_already_occupied", "message": "ตู้นี้กำลังมีผู้ใช้งาน"})
     try:
         auth, me = _authenticate_zeep_account(identifier, cmd.password)
     except ZeepApiOffline as exc:
         ticket = auth_sessions.issue_offline_ticket(identifier)
         log_event("auth", "zeep_offline", stage="login", error=str(exc))
-        raise HTTPException(503, {
-            "code": "offline",
-            "message": "ต่อ ZEEP API ไม่ได้ — สามารถใช้ Local fallback ได้ภายใน 5 นาที",
-            "offline_ticket": ticket,
-            "identifier": identifier,
-        }) from exc
+        raise HTTPException(
+            503,
+            {
+                "code": "offline",
+                "message": "ต่อ ZEEP API ไม่ได้ — สามารถใช้ Local fallback ได้ภายใน 5 นาที",
+                "offline_ticket": ticket,
+                "identifier": identifier,
+            },
+        ) from exc
 
     return _complete_occupant_login(
-        auth, me, age_group_choice=cmd.age_group, rest_mode=cmd.rest_mode,
+        auth,
+        me,
+        age_group_choice=cmd.age_group,
+        rest_mode=cmd.rest_mode,
         target_duration_minutes=cmd.target_duration_minutes,
         response=response,
     )
@@ -7653,25 +7589,25 @@ def admin_auth_login(cmd: AdminLoginCommand, response: Response):
         try:
             auth, _ = _authenticate_zeep_account(identifier, cmd.password)
         except ZeepApiOffline as exc:
-            raise HTTPException(503, {
-                "code": "admin_auth_offline",
-                "message": "ZEEP API ใช้งานไม่ได้ และ Local Admin ไม่ผ่านการยืนยัน",
-            }) from exc
-        allowed_roles = {
-            role.strip().casefold()
-            for role in os.getenv("ZEEP_ADMIN_ROLES", "admin").split(",")
-            if role.strip()
-        }
+            raise HTTPException(
+                503,
+                {
+                    "code": "admin_auth_offline",
+                    "message": "ZEEP API ใช้งานไม่ได้ และ Local Admin ไม่ผ่านการยืนยัน",
+                },
+            ) from exc
+        allowed_roles = {role.strip().casefold() for role in os.getenv("ZEEP_ADMIN_ROLES", "admin").split(",") if role.strip()}
         if str(auth.get("role") or "").casefold() not in allowed_roles:
             if auth.get("refresh_token"):
                 try:
-                    _zeep_request("POST", "/v1/auth/logout",
-                                  json_body={"refreshToken": auth["refresh_token"]})
+                    _zeep_request(
+                        "POST",
+                        "/v1/auth/logout",
+                        json_body={"refreshToken": auth["refresh_token"]},
+                    )
                 except (ZeepApiOffline, HTTPException):
                     pass
-            raise HTTPException(403, {
-                "code": "admin_required", "message": "บัญชีนี้ไม่มีสิทธิ์ผู้ดูแลระบบ"
-            })
+            raise HTTPException(403, {"code": "admin_required", "message": "บัญชีนี้ไม่มีสิทธิ์ผู้ดูแลระบบ"})
         username = auth["username"]
         subject = f"zeep:{auth['public_id']}"
         display_name = auth["display_name"]
@@ -7682,8 +7618,11 @@ def admin_auth_login(cmd: AdminLoginCommand, response: Response):
         # ZEEP token family immediately because it is not needed for admin APIs.
         if auth.get("refresh_token"):
             try:
-                _zeep_request("POST", "/v1/auth/logout",
-                              json_body={"refreshToken": auth["refresh_token"]})
+                _zeep_request(
+                    "POST",
+                    "/v1/auth/logout",
+                    json_body={"refreshToken": auth["refresh_token"]},
+                )
             except (ZeepApiOffline, HTTPException):
                 pass
 
@@ -7722,10 +7661,13 @@ def auth_me(principal: Principal = Depends(require_user)):
 def _require_profile_owner(principal: Principal) -> str:
     """Return the authenticated account key for self-service Profile APIs."""
     if principal.is_admin:
-        raise HTTPException(403, {
-            "code": "user_profile_required",
-            "message": "แบบสอบถามนี้เป็นสิทธิ์ของผู้ใช้งานแต่ละบัญชี",
-        })
+        raise HTTPException(
+            403,
+            {
+                "code": "user_profile_required",
+                "message": "แบบสอบถามนี้เป็นสิทธิ์ของผู้ใช้งานแต่ละบัญชี",
+            },
+        )
     return principal.account_key
 
 
@@ -7762,7 +7704,9 @@ def progressive_profile_consent(
         _save_profiles(profiles)
         snapshot = progressive_profile_snapshot(profile)
     log_event(
-        "profile", "progressive_consent_updated", account_key=account_key,
+        "profile",
+        "progressive_consent_updated",
+        account_key=account_key,
         status="granted" if cmd.granted else "withdrawn",
     )
     return {"ok": True, "profile": snapshot}
@@ -7784,21 +7728,31 @@ def progressive_profile_answer(
         try:
             apply_progressive_answer(profile, question_id, cmd.value)
         except PermissionError as exc:
-            raise HTTPException(409, {
-                "code": str(exc), "message": "กรุณาให้ความยินยอมก่อนตอบแบบสอบถาม",
-            }) from exc
+            raise HTTPException(
+                409,
+                {
+                    "code": str(exc),
+                    "message": "กรุณาให้ความยินยอมก่อนตอบแบบสอบถาม",
+                },
+            ) from exc
         except ValueError as exc:
-            raise HTTPException(422, {
-                "code": str(exc), "message": "คำตอบไม่อยู่ในรูปแบบที่กำหนด",
-            }) from exc
+            raise HTTPException(
+                422,
+                {
+                    "code": str(exc),
+                    "message": "คำตอบไม่อยู่ในรูปแบบที่กำหนด",
+                },
+            ) from exc
         profiles[account_key] = profile
         _save_profiles(profiles)
         snapshot = progressive_profile_snapshot(profile)
     # Do not put the answer value in application logs. The audit trail records
     # only who changed which versioned question and when.
     log_event(
-        "profile", "progressive_answer_updated",
-        account_key=account_key, question_id=question_id,
+        "profile",
+        "progressive_answer_updated",
+        account_key=account_key,
+        question_id=question_id,
     )
     return {"ok": True, "profile": snapshot}
 
@@ -7819,9 +7773,13 @@ def progressive_profile_defer(
         try:
             defer_progressive_question(profile, question_id)
         except ValueError as exc:
-            raise HTTPException(422, {
-                "code": str(exc), "message": "ไม่พบคำถามที่ต้องการเลื่อน",
-            }) from exc
+            raise HTTPException(
+                422,
+                {
+                    "code": str(exc),
+                    "message": "ไม่พบคำถามที่ต้องการเลื่อน",
+                },
+            ) from exc
         profiles[account_key] = profile
         _save_profiles(profiles)
         snapshot = progressive_profile_snapshot(profile)
@@ -7843,15 +7801,21 @@ def progressive_profile_delete_answer(
         try:
             delete_progressive_answer(profile, question_id)
         except ValueError as exc:
-            raise HTTPException(404, {
-                "code": str(exc), "message": "ไม่พบคำตอบที่ต้องการลบ",
-            }) from exc
+            raise HTTPException(
+                404,
+                {
+                    "code": str(exc),
+                    "message": "ไม่พบคำตอบที่ต้องการลบ",
+                },
+            ) from exc
         profiles[account_key] = profile
         _save_profiles(profiles)
         snapshot = progressive_profile_snapshot(profile)
     log_event(
-        "profile", "progressive_answer_deleted",
-        account_key=account_key, question_id=question_id,
+        "profile",
+        "progressive_answer_deleted",
+        account_key=account_key,
+        question_id=question_id,
     )
     return {"ok": True, "profile": snapshot}
 
@@ -7866,10 +7830,13 @@ def auth_logout(
         active = _active_session
         owns_active = _principal_owns_active(active, principal)
     if owns_active and not principal.is_admin:
-        raise HTTPException(409, {
-            "code": "pod_session_active",
-            "message": "กรุณาจบและบันทึก Session การนอนก่อนออกจากระบบ",
-        })
+        raise HTTPException(
+            409,
+            {
+                "code": "pod_session_active",
+                "message": "กรุณาจบและบันทึก Session การนอนก่อนออกจากระบบ",
+            },
+        )
     auth_sessions.revoke(request.cookies.get(COOKIE_NAME))
     _clear_auth_cookies(response)
     log_event("auth", "browser_logout", user=principal.username, role=principal.role)
@@ -7884,10 +7851,13 @@ def session_login(cmd: LoginCommand, response: Response):
     Backend บังคับ one-time offline ticket จึงเรียก endpoint นี้ตรง ๆ ไม่ได้.
     """
     if not auth_sessions.consume_offline_ticket(cmd.offline_ticket, cmd.offline_identifier):
-        raise HTTPException(403, {
-            "code": "offline_ticket_invalid",
-            "message": "Local fallback หมดอายุ กรุณาลองเชื่อมต่อ ZEEP ใหม่",
-        })
+        raise HTTPException(
+            403,
+            {
+                "code": "offline_ticket_invalid",
+                "message": "Local fallback หมดอายุ กรุณาลองเชื่อมต่อ ZEEP ใหม่",
+            },
+        )
     username = _normalize_username(cmd.username)
     cookie_token, principal = auth_sessions.create(
         subject=f"local:{POD_ID}:{username.casefold()}",
@@ -7900,7 +7870,11 @@ def session_login(cmd: LoginCommand, response: Response):
     )
     try:
         result = _start_pod_session(
-            username, cmd.gender, cmd.age, cmd.age_group, owner=principal,
+            username,
+            cmd.gender,
+            cmd.age,
+            cmd.age_group,
+            owner=principal,
             health_reference={
                 "gender": cmd.gender,
                 "age_years": cmd.age,
@@ -7957,9 +7931,7 @@ def admin_force_logout(
 ):
     # Backward-compatible alias.  Existing Admin clients that call
     # force-logout receive the same strong semantics as the new kick command.
-    return _admin_finish_occupant_session(
-        cmd, principal, action="kick", default_reason="admin_force_logout"
-    )
+    return _admin_finish_occupant_session(cmd, principal, action="kick", default_reason="admin_force_logout")
 
 
 @app.post("/api/admin/session/profile")
@@ -8002,18 +7974,20 @@ def admin_update_active_session_profile(
         profile = dict(profiles.get(account_key) or {})
         if not profile:
             raise HTTPException(404, "ไม่พบ Profile ของ Session ปัจจุบัน")
-        profile.update({
-            "display_name": display_name,
-            "display_name_override": display_name,
-            "gender": gender,
-            "gender_override": gender,
-            "health_reference_source": "admin_profile_correction",
-            "health_reference_refresh_status": "admin_corrected",
-            "health_reference_updated_at_utc": corrected_at,
-            "profile_override_updated_at_utc": corrected_at,
-            "profile_override_operator": principal.username,
-            "profile_override_reason": reason,
-        })
+        profile.update(
+            {
+                "display_name": display_name,
+                "display_name_override": display_name,
+                "gender": gender,
+                "gender_override": gender,
+                "health_reference_source": "admin_profile_correction",
+                "health_reference_refresh_status": "admin_corrected",
+                "health_reference_updated_at_utc": corrected_at,
+                "profile_override_updated_at_utc": corrected_at,
+                "profile_override_operator": principal.username,
+                "profile_override_reason": reason,
+            }
+        )
         health_reference = _health_reference_from_profile(profile)
         profiles[account_key] = profile
         _save_profiles(profiles)
@@ -8022,45 +7996,62 @@ def admin_update_active_session_profile(
         active = _active_session
         if active is None or (active.get("record") or {}).get("session_id") != session_id:
             raise HTTPException(409, "Session สิ้นสุดระหว่างแก้ไข Profile")
-        active["record"].update({
-            "display_name": display_name,
-            "gender": gender,
-            "health_reference": health_reference,
-        })
+        active["record"].update(
+            {
+                "display_name": display_name,
+                "gender": gender,
+                "health_reference": health_reference,
+            }
+        )
         if isinstance(active.get("auth"), dict):
             active["auth"]["display_name"] = display_name
         _save_active_session_checkpoint(active)
 
     browser_sessions = auth_sessions.update_user_display_name(account_key, display_name)
     with state_lock:
-        state["session"].update({
-            "display_name": display_name,
-            "gender": gender,
-            "health_reference": health_reference,
-        })
-    if recording_started:
-        database.enqueue("sessions", "session_profile_update", {
-            "session_id": session_id,
-            "gender": gender,
-        })
-        database.enqueue("sessions", "event", {
-            "session_id": session_id,
-            "timestamp": corrected_at,
-            "type": "profile_metadata_correction",
-            "value": {
+        state["session"].update(
+            {
                 "display_name": display_name,
                 "gender": gender,
-                "reason": reason,
-                "operator": principal.username,
+                "health_reference": health_reference,
+            }
+        )
+    if recording_started:
+        database.enqueue(
+            "sessions",
+            "session_profile_update",
+            {
+                "session_id": session_id,
+                "gender": gender,
             },
-        })
+        )
+        database.enqueue(
+            "sessions",
+            "event",
+            {
+                "session_id": session_id,
+                "timestamp": corrected_at,
+                "type": "profile_metadata_correction",
+                "value": {
+                    "display_name": display_name,
+                    "gender": gender,
+                    "reason": reason,
+                    "operator": principal.username,
+                },
+            },
+        )
         if not database.flush(5.0):
             raise HTTPException(503, "บันทึก Profile correction ลงฐานข้อมูลยังไม่เสร็จ")
     _reset_live_sleep_inference(session_id)
     log_event(
-        "admin", "active_profile_corrected", admin=principal.username,
-        session_id=session_id, account_key=account_key,
-        display_name=display_name, gender=gender, reason=reason,
+        "admin",
+        "active_profile_corrected",
+        admin=principal.username,
+        session_id=session_id,
+        account_key=account_key,
+        display_name=display_name,
+        gender=gender,
+        reason=reason,
         browser_sessions_updated=browser_sessions,
     )
     return {
@@ -8112,9 +8103,13 @@ def _admin_finish_occupant_session(
     )
     event = "occupant_kicked" if action == "kick" else "session_ended"
     log_event(
-        "admin", event, admin=principal.username,
-        session_id=record["session_id"], user=record["username"],
-        reason=reason, revoked_browser_sessions=revoked,
+        "admin",
+        event,
+        admin=principal.username,
+        session_id=record["session_id"],
+        user=record["username"],
+        reason=reason,
+        revoked_browser_sessions=revoked,
     )
     return {
         "ok": True,
@@ -8122,11 +8117,7 @@ def _admin_finish_occupant_session(
         "session_id": record["session_id"],
         "username": record["username"],
         "account_key": record["username_key"],
-        "email": (
-            record["username_key"]
-            if "@" in str(record.get("username_key") or "")
-            else None
-        ),
+        "email": (record["username_key"] if "@" in str(record.get("username_key") or "") else None),
         "duration_s": record["duration_s"],
         "samples": len(record["samples"]),
         "recording_started": record.get("recording_started", True),
@@ -8142,9 +8133,7 @@ def admin_end_session(
     principal: Principal = Depends(require_admin),
 ):
     """Gracefully finish the current recording and sign out its owner."""
-    return _admin_finish_occupant_session(
-        cmd, principal, action="end", default_reason="admin_end_session"
-    )
+    return _admin_finish_occupant_session(cmd, principal, action="end", default_reason="admin_end_session")
 
 
 @app.post("/api/admin/session/kick")
@@ -8153,9 +8142,7 @@ def admin_kick_occupant(
     principal: Principal = Depends(require_admin),
 ):
     """Finish the Session and revoke every local User login for its owner."""
-    return _admin_finish_occupant_session(
-        cmd, principal, action="kick", default_reason="admin_kick_occupant"
-    )
+    return _admin_finish_occupant_session(cmd, principal, action="kick", default_reason="admin_kick_occupant")
 
 
 @app.get("/api/users", dependencies=[Depends(require_admin)])
@@ -8181,9 +8168,11 @@ def users_list():
 @app.get("/api/sleep/baselines")
 def sleep_baselines():
     """Single source of truth for the age-range selector and estimator UI."""
-    return {"age_groups": AGE_SLEEP_BASELINES,
-            "gender_adjustments": GENDER_BASELINE_ADJUSTMENTS,
-            "order": ["18-29", "30-44", "45-59", "60+"]}
+    return {
+        "age_groups": AGE_SLEEP_BASELINES,
+        "gender_adjustments": GENDER_BASELINE_ADJUSTMENTS,
+        "order": ["18-29", "30-44", "45-59", "60+"],
+    }
 
 
 @app.get("/api/admin/sleep/policy", dependencies=[Depends(require_admin)])
@@ -8336,18 +8325,15 @@ def history_detail(
     response.headers["Pragma"] = "no-cache"
     key = _require_username_access(username, principal)
     rows = database.read_sessions(
-        "SELECT s.* FROM sessions AS s WHERE s.session_id=? AND "
-        + USER_HISTORY_FILTER,
+        "SELECT s.* FROM sessions AS s WHERE s.session_id=? AND " + USER_HISTORY_FILTER,
         (session_id, key, PERSONAL_BASELINE_LEARNING_START_UTC),
     )
     if not rows:
         raise HTTPException(404, "ไม่พบ session นี้")
     row = rows[0]
-    timeline = database.read_sessions(
-        "SELECT * FROM timeline WHERE session_id=? ORDER BY timestamp", (session_id,))
+    timeline = database.read_sessions("SELECT * FROM timeline WHERE session_id=? ORDER BY timestamp", (session_id,))
     timeline_interval_s = _timeline_sample_interval(timeline, 5.0)
-    canonical_bed_labels = debounced_bed_status_labels(
-        [x["bed_status"] for x in timeline])
+    canonical_bed_labels = debounced_bed_status_labels([x["bed_status"] for x in timeline])
     samples = history_support.history_samples_from_rows(
         timeline,
         canonical_bed_labels,
@@ -8355,23 +8341,20 @@ def history_detail(
         include_raw_bed_status=principal.is_admin,
     )
     events = database.read_sessions(
-        "SELECT timestamp,type,value FROM events WHERE session_id=? ORDER BY timestamp", (session_id,))
+        "SELECT timestamp,type,value FROM events WHERE session_id=? ORDER BY timestamp",
+        (session_id,),
+    )
     final_summary = history_support.latest_final_summary(events)
-    history_interval_s = _sample_interval_seconds(
-        final_summary.get("sample_interval_s"), timeline_interval_s)
+    history_interval_s = _sample_interval_seconds(final_summary.get("sample_interval_s"), timeline_interval_s)
     cadence_segments = _normalise_cadence_segments(
         final_summary.get("sample_cadence_segments"),
         start_at_utc=row["start_time"],
         fallback_interval_s=history_interval_s,
     )
     for sample in samples:
-        sample["sample_interval_s"] = _cadence_interval_at(
-            sample.get("t"), cadence_segments, history_interval_s)
-    report_samples, history_interval_s, cadence_summary = (
-        _normalise_samples_for_report(samples, history_interval_s)
-    )
-    annotation_rows = [event for event in events
-                       if event["type"] == "sleep_stage_annotation"]
+        sample["sample_interval_s"] = _cadence_interval_at(sample.get("t"), cadence_segments, history_interval_s)
+    report_samples, history_interval_s, cadence_summary = _normalise_samples_for_report(samples, history_interval_s)
+    annotation_rows = [event for event in events if event["type"] == "sleep_stage_annotation"]
     annotations = load_annotations(annotation_rows)
     parsed_events = history_support.parse_history_sleep_events(
         events,
@@ -8398,9 +8381,7 @@ def history_detail(
         end_reason=row["end_reason"],
         sample_interval_s=history_interval_s,
         fallback_estimator=final_summary.get("sleep_estimator"),
-        persisted_terminal_wake=final_summary.get(
-            "terminal_wake_transition"
-        ),
+        persisted_terminal_wake=final_summary.get("terminal_wake_transition"),
         terminal_wake_event=terminal_wake_event,
     )
     sleep_timeline = timeline_result["sleep_timeline"]
@@ -8415,31 +8396,26 @@ def history_detail(
     )
     with profile_lock:
         profile = _load_profiles().get(row["username_key"], {})
-    history_rest_mode = (
-        final_summary.get("rest_mode") or row.get("rest_mode") or "auto"
+    history_rest_mode, history_target_duration_s = (
+        history_support.canonical_history_rest_metadata(row, final_summary)
     )
-    history_target_duration_s = final_summary.get("target_duration_s")
-    if history_target_duration_s is None:
-        history_target_duration_s = row.get("target_duration_s")
     night_summary = final_summary.get("night_summary") or {}
     sleep_quality = night_summary.get("sleep_quality")
     sleep_quality = _released_historical_quality(
-        final_summary, sleep_quality,
+        final_summary,
+        sleep_quality,
     )
     persisted_session_report = final_summary.get("session_report")
     restore_context = final_summary.get("restore_context")
     if not isinstance(restore_context, dict):
         restore_context = None
-    persisted_report_version = (
-        persisted_session_report.get("version")
-        if isinstance(persisted_session_report, dict) else None
-    )
+    health_reference = final_summary.get("health_reference")
+    if not isinstance(health_reference, dict):
+        health_reference = _health_reference_from_profile(profile)
+    persisted_report_version = persisted_session_report.get("version") if isinstance(persisted_session_report, dict) else None
     session_report = persisted_session_report
     history_sleep_counts = final_summary.get("sleep_state_counts") or {}
-    if (
-        not isinstance(session_report, dict)
-        or persisted_report_version != SESSION_REPORT_VERSION
-    ):
+    if not isinstance(session_report, dict) or persisted_report_version != SESSION_REPORT_VERSION:
         projection = history_support.project_history_report_samples(
             samples,
             start_at=row["start_time"],
@@ -8463,57 +8439,57 @@ def history_detail(
         projected_score_counts = projection["sleep_score_state_counts"]
         history_sleep_counts = projected_sleep_counts
         session_report = build_session_report(
-            row["duration"], projected_report_samples, night_summary,
-            projected_sleep_counts, sleep_quality,
+            row["duration"],
+            projected_report_samples,
+            night_summary,
+            projected_sleep_counts,
+            sleep_quality,
             rest_mode=history_rest_mode,
             sample_interval_s=projected_interval_s,
             estimator_version=final_summary.get("sleep_estimator"),
             completed=bool(row["end_time"]),
-            timeline_schema_version=int(
-                final_summary.get("timeline_schema_version") or 3),
+            timeline_schema_version=int(final_summary.get("timeline_schema_version") or 3),
             target_duration_s=history_target_duration_s,
-            personal_context=restore_context, trend_context=restore_context,
+            personal_context=restore_context,
+            trend_context=restore_context,
+            health_reference=health_reference,
             sleep_score_state_counts=projected_score_counts,
         )
         session_report["display_recomputed"] = True
         session_report["display_recomputed_from_version"] = persisted_report_version
         session_report["persisted_record_unchanged"] = True
-    health_reference = final_summary.get("health_reference")
-    if not isinstance(health_reference, dict):
-        health_reference = _health_reference_from_profile(profile)
     return {
-        "session_id": row["session_id"], "username": row["user"],
+        "session_id": row["session_id"],
+        "username": row["user"],
         "display_name": profile.get("display_name") or row["user"],
         "account_key": row["username_key"],
-        "email": profile.get("email")
-        or profile.get("zeep_email")
-        or (row["username_key"] if "@" in row["username_key"] else None),
+        "email": profile.get("email") or profile.get("zeep_email") or (row["username_key"] if "@" in row["username_key"] else None),
         # Legacy response alias retained for existing Admin tools.
-        "username_key": row["username_key"], "gender": row["gender"],
-        "age": profile.get("age"), "age_group": profile.get("age_group"),
+        "username_key": row["username_key"],
+        "gender": row["gender"],
+        "age": profile.get("age"),
+        "age_group": profile.get("age_group"),
         "health_reference": health_reference,
         "wellness_context": final_summary.get("wellness_context"),
-        "started_at_utc": row["start_time"], "ended_at_utc": row["end_time"],
-        "duration_s": row["duration"], "end_reason": row["end_reason"],
+        "started_at_utc": row["start_time"],
+        "ended_at_utc": row["end_time"],
+        "duration_s": row["duration"],
+        "end_reason": row["end_reason"],
         "sample_interval_s": history_interval_s,
-        "sensor_sample_interval_s": final_summary.get(
-            "sensor_sample_interval_s", history_interval_s),
+        "sensor_sample_interval_s": final_summary.get("sensor_sample_interval_s", history_interval_s),
         "sample_cadence_segments": cadence_segments,
-        "sample_cadence_summary": (
-            final_summary.get("sample_cadence_summary") or cadence_summary),
+        "sample_cadence_summary": (final_summary.get("sample_cadence_summary") or cadence_summary),
         "samples": samples,
         "sleep_timeline": sleep_timeline,
         "sleep_timeline_rounds": len(stage_points),
         "sleep_status_timeline_rounds": len(status_points),
-        "sleep_timeline_source": (
-            "persisted_decisions_with_continuity_fill"
-        ),
+        "sleep_timeline_source": ("persisted_decisions_with_continuity_fill"),
         "sleep_continuity_accounting": sleep_continuity_accounting,
         "sleep_classification_gap_count": len(classification_gaps),
-        "sleep_classification_gap_seconds": round(sum(
-            float(period.get("duration_s") or 0.0)
-            for period in classification_gaps
-        ), 1),
+        "sleep_classification_gap_seconds": round(
+            sum(float(period.get("duration_s") or 0.0) for period in classification_gaps),
+            1,
+        ),
         "terminal_occupancy_timeline": terminal_occupancy,
         "terminal_wake_transition": terminal_wake,
         "sleep_stage_annotation_count": len(annotations),
@@ -8558,16 +8534,22 @@ def user_delete(username: str):
             raise HTTPException(404, "ไม่พบผู้ใช้นี้")
         removed = profiles.pop(key)
         _save_profiles(profiles)
-    records = database.read_sessions(
-        "SELECT session_id FROM sessions WHERE username_key=?", (key,))
+    records = database.read_sessions("SELECT session_id FROM sessions WHERE username_key=?", (key,))
     for record in records:
         database.enqueue("bcg", "delete_bcg_session", {"session_id": record["session_id"]})
         database.enqueue("sessions", "delete_session", {"session_id": record["session_id"]})
     database.flush(30)
-    log_event("session", "user_deleted", user=removed.get("username"),
-              sessions_removed=len(records))
-    return {"ok": True, "username": removed.get("username"),
-            "sessions_removed": len(records)}
+    log_event(
+        "session",
+        "user_deleted",
+        user=removed.get("username"),
+        sessions_removed=len(records),
+    )
+    return {
+        "ok": True,
+        "username": removed.get("username"),
+        "sessions_removed": len(records),
+    }
 
 
 # ---------- music ----------
@@ -8605,9 +8587,7 @@ def brainwave_preview(
     if volume != int(cmd.volume):
         raise HTTPException(422, "Sound Lab จำกัดระดับ Digital Volume ที่ 0–60%")
     try:
-        rendered = render_brainwave_preview(
-            cmd.preset_id, cmd.duration_seconds, BRAINWAVE_PREVIEW_DIR
-        )
+        rendered = render_brainwave_preview(cmd.preset_id, cmd.duration_seconds, BRAINWAVE_PREVIEW_DIR)
     except ValueError as exc:
         if str(exc) == "unknown_preset":
             raise HTTPException(404, "ไม่พบ Brainwave preset") from exc
@@ -8629,8 +8609,10 @@ def brainwave_preview(
     }
     note_session_activity("music", detail)
     log_event(
-        "brainwave_audio", "preview_play",
-        operator=principal.username, **detail,
+        "brainwave_audio",
+        "preview_play",
+        operator=principal.username,
+        **detail,
     )
     return {
         "ok": True,
@@ -8644,10 +8626,8 @@ def brainwave_preview(
 @app.get("/api/music", dependencies=[Depends(require_pod_operator)])
 async def music_list():
     exts = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".aac"}
-    tracks = sorted([p.name for p in MUSIC_DIR.iterdir()
-                     if p.is_file() and p.suffix.lower() in exts])
-    return {"tracks": tracks, "state": snapshot()["music"],
-            "player": player.backend}
+    tracks = sorted([p.name for p in MUSIC_DIR.iterdir() if p.is_file() and p.suffix.lower() in exts])
+    return {"tracks": tracks, "state": snapshot()["music"], "player": player.backend}
 
 
 # Music endpoints are plain `def` on purpose: they call subprocess spawn/wait
@@ -8671,14 +8651,30 @@ def music_play(cmd: TrackCommand):
             player.play(candidate, loop=cmd.resolved_loop, queue=bool(cmd.queue))
         except Exception as exc:
             raise HTTPException(500, str(exc))
-    note_session_activity("music", {"action": "play", "track": candidate.name,
-                                    "loop": cmd.resolved_loop,
-                                    "queue": bool(cmd.queue)})
-    log_event("music", "play", track=candidate.name, loop=cmd.resolved_loop,
-              queue=bool(cmd.queue))
-    return {"ok": True, "track": candidate.name, "loop": cmd.resolved_loop,
-            "queue": bool(cmd.queue), "player": player.backend,
-            "state": snapshot()["music"]}
+    note_session_activity(
+        "music",
+        {
+            "action": "play",
+            "track": candidate.name,
+            "loop": cmd.resolved_loop,
+            "queue": bool(cmd.queue),
+        },
+    )
+    log_event(
+        "music",
+        "play",
+        track=candidate.name,
+        loop=cmd.resolved_loop,
+        queue=bool(cmd.queue),
+    )
+    return {
+        "ok": True,
+        "track": candidate.name,
+        "loop": cmd.resolved_loop,
+        "queue": bool(cmd.queue),
+        "player": player.backend,
+        "state": snapshot()["music"],
+    }
 
 
 @app.post("/api/music/stop", dependencies=[Depends(require_pod_operator)])
@@ -8690,8 +8686,11 @@ def music_stop():
     # Return the authoritative stopped state immediately. Waiting for the
     # next WebSocket frame left the touch toggle looking active and allowed
     # another browser to mistake Stop for a naturally ended queue item.
-    return {"ok": True, "state": snapshot()["music"],
-            "restart_guard_seconds": MUSIC_STOP_GUARD_SECONDS}
+    return {
+        "ok": True,
+        "state": snapshot()["music"],
+        "restart_guard_seconds": MUSIC_STOP_GUARD_SECONDS,
+    }
 
 
 @app.post("/api/music/pause", dependencies=[Depends(require_pod_operator)])
@@ -8722,11 +8721,16 @@ def _graceful_poweroff() -> None:
         if active is not None:
             _save_active_session_checkpoint(active)
             if active.get("phase") == "recording":
-                database.enqueue("sessions", "event", {
-                    "session_id": active["record"]["session_id"],
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "type": "service_pause", "value": {"reason": "system_poweroff"},
-                })
+                database.enqueue(
+                    "sessions",
+                    "event",
+                    {
+                        "session_id": active["record"]["session_id"],
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "type": "service_pause",
+                        "value": {"reason": "system_poweroff"},
+                    },
+                )
         bcg_storage.flush()
         database.flush(30)
         daily_backup.stop()
@@ -8782,6 +8786,7 @@ async def websocket_endpoint(ws: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
+
     # Do not let long-lived tablet WebSockets consume systemd's entire
     # TimeoutStopSec.  Uvicorn closes them after five seconds, leaving the
     # lifespan shutdown enough time to flush the active Session database.

@@ -91,6 +91,16 @@ class DatabaseManager:
                             connection.execute(
                                 f"ALTER TABLE timeline ADD COLUMN {name} REAL"
                             )
+                    evidence_columns = {
+                        "respiratory_evidence_valid": "INTEGER",
+                        "respiratory_evidence_reason": "TEXT",
+                    }
+                    for name, field_type in evidence_columns.items():
+                        if name not in timeline_columns:
+                            connection.execute(
+                                f"ALTER TABLE timeline ADD COLUMN "
+                                f"{name} {field_type}"
+                            )
                 else:
                     # Existing Pod databases predate the explicit tx label.
                     # Keep epoch_index authoritative and backfill tx1, tx2, ...
@@ -149,7 +159,13 @@ class DatabaseManager:
         deadline = time.monotonic() + timeout
         while self._queue.unfinished_tasks and time.monotonic() < deadline:
             time.sleep(0.02)
-        return self._queue.unfinished_tasks == 0
+        if self._queue.unfinished_tasks:
+            return False
+        # A drained queue does not mean the writes succeeded: the writer rolls
+        # a failed job back before marking it done. Keep the failure latched
+        # until process restart so every caller observes the lost write.
+        with self._error_lock:
+            return self._last_error is None
 
     def stop(self, timeout: float = 30.0) -> None:
         self._stopping.set()
@@ -214,6 +230,54 @@ class DatabaseManager:
                 (p["end_time"], p["duration"], p.get("note"), p.get("end_reason"),
                 p["session_id"]),
             )
+        elif job.operation == "session_finalize":
+            # The canonical Session row and its reproducible summary are one
+            # commit boundary.  Delete-and-replace keeps a retry after an
+            # ambiguous timeout idempotent without requiring a schema change.
+            cursor = connection.execute(
+                """UPDATE sessions SET end_time=?,duration=?,note=?,end_reason=?
+                   WHERE session_id=?""",
+                (p["end_time"], p["duration"], p.get("note"), p.get("end_reason"),
+                 p["session_id"]),
+            )
+            if cursor.rowcount != 1:
+                raise RuntimeError(
+                    f"cannot finalize missing Session {p['session_id']}"
+                )
+            connection.execute(
+                """DELETE FROM events
+                   WHERE session_id=? AND type IN ('final_summary','session_terminal_wake')""",
+                (p["session_id"],),
+            )
+            terminal_wake = p.get("terminal_wake")
+            if terminal_wake is not None:
+                terminal_value = terminal_wake.get("value")
+                if terminal_value is not None and not isinstance(terminal_value, str):
+                    terminal_value = json.dumps(
+                        terminal_value,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                connection.execute(
+                    "INSERT INTO events(session_id,timestamp,type,value) VALUES (?,?,?,?)",
+                    (
+                        p["session_id"],
+                        terminal_wake["timestamp"],
+                        "session_terminal_wake",
+                        terminal_value,
+                    ),
+                )
+            final_value = p["final_summary"]
+            if not isinstance(final_value, str):
+                final_value = json.dumps(
+                    final_value,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+            connection.execute(
+                "INSERT INTO events(session_id,timestamp,type,value) VALUES (?,?,?,?)",
+                (p["session_id"], p["end_time"], "final_summary", final_value),
+            )
         elif job.operation == "session_resume":
             # A service restart is a pause in acquisition, not a user logout.
             connection.execute(
@@ -236,12 +300,14 @@ class DatabaseManager:
             connection.execute(
                 """INSERT INTO timeline
                    (session_id,timestamp,temperature,humidity,co2,pm2_5,voc_index,
-                    lux,sound,heart_rate,respiration_rate,bed_status)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    lux,sound,heart_rate,respiration_rate,bed_status,
+                    respiratory_evidence_valid,respiratory_evidence_reason)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (p["session_id"], p["timestamp"], p.get("temperature"), p.get("humidity"),
                  p.get("co2"), p.get("pm2_5"), p.get("voc_index"), p.get("lux"),
                  p.get("sound"), p.get("heart_rate"), p.get("respiration_rate"),
-                 p.get("bed_status")),
+                 p.get("bed_status"), p.get("respiratory_evidence_valid"),
+                 p.get("respiratory_evidence_reason")),
             )
         elif job.operation == "event":
             value = p.get("value")

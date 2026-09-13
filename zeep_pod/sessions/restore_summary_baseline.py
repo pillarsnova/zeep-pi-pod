@@ -29,11 +29,11 @@ def _session_count(context: Mapping[str, Any]) -> int:
 
 def _maturity(sessions: int) -> dict[str, Any]:
     if sessions >= RESTORE_BASELINE_STABLE_SESSIONS:
-        key, label, confidence = "stable", "Baseline ส่วนบุคคลเสถียร", "high"
+        key, label, confidence = "stable", "รูปแบบของคุณชัดเจนขึ้น", "high"
     elif sessions >= RESTORE_BASELINE_MIN_COMPARISON_SESSIONS:
-        key, label, confidence = "active", "Personal Baseline พร้อมใช้", "medium"
+        key, label, confidence = "active", "พร้อมเทียบกับรูปแบบของคุณ", "medium"
     elif sessions >= 3:
-        key, label, confidence = "early", "Baseline เบื้องต้น", "low"
+        key, label, confidence = "early", "เริ่มเห็นรูปแบบของคุณ", "low"
     else:
         key, label, confidence = "learning", "กำลังเรียนรู้", "insufficient"
     return {
@@ -59,9 +59,7 @@ def _score_reference(
         (value for item in candidates if (value := _number(item)) is not None),
         None,
     )
-    raw_range = (
-        reference.get("typical_range") if isinstance(reference, Mapping) else None
-    ) or context.get("score_typical_range")
+    raw_range = (reference.get("typical_range") if isinstance(reference, Mapping) else None) or context.get("score_typical_range")
     typical = None
     if isinstance(raw_range, (list, tuple)) and len(raw_range) == 2:
         low, high = _number(raw_range[0]), _number(raw_range[1])
@@ -82,26 +80,16 @@ def build_baseline_summary(
     median, typical = _score_reference(record)
     comparison = {
         "available": False,
-        "reason": (
-            "ต้องมี Session ที่ผ่านเกณฑ์อย่างน้อย 7 ครั้งในโหมดเดียวกัน"
-            if sessions < RESTORE_BASELINE_MIN_COMPARISON_SESSIONS
-            else "ยังไม่มีค่ากลางคะแนนของโหมดนี้"
-            if median is None
-            else "คะแนนหลักของ Session นี้ยังไม่พร้อม"
-        ),
+        "reason": ("ZEEP กำลังเรียนรู้รูปแบบของคุณจากการพักรูปแบบเดียวกัน และจะเปรียบเทียบได้ชัดขึ้นเมื่อมีข้อมูลจากหลายครั้ง" if sessions < RESTORE_BASELINE_MIN_COMPARISON_SESSIONS else "กำลังเตรียมค่ากลางของรูปแบบการพักนี้" if median is None else "กำลังเตรียมคะแนนของการพักครั้งนี้"),
     }
-    if (
-        sessions >= RESTORE_BASELINE_MIN_COMPARISON_SESSIONS
-        and median is not None
-        and score is not None
-    ):
+    if sessions >= RESTORE_BASELINE_MIN_COMPARISON_SESSIONS and median is not None and score is not None:
         delta = round(score - median, 1)
         if typical and score < typical[0]:
-            key, label = "below_typical", "ต่ำกว่าช่วงปกติส่วนบุคคล"
+            key, label = "below_typical", "ต่ำกว่าช่วงที่พบเป็นประจำของคุณ"
         elif typical and score > typical[1]:
-            key, label = "above_typical", "สูงกว่าช่วงปกติส่วนบุคคล"
+            key, label = "above_typical", "สูงกว่าช่วงที่พบเป็นประจำของคุณ"
         elif typical:
-            key, label = "within_typical", "อยู่ในช่วงปกติส่วนบุคคล"
+            key, label = "within_typical", "ใกล้ช่วงที่พบเป็นประจำของคุณ"
         elif delta >= 5:
             key, label = "above_typical", "สูงกว่าค่ากลางส่วนบุคคล"
         elif delta <= -5:
@@ -141,7 +129,7 @@ def build_trend_summary(
     if len(values) < 3:
         return {
             "available": False,
-            "reason": "ต้องมีคะแนนอย่างน้อย 3 Session ในโหมดเดียวกัน",
+            "reason": ("แนวโน้มจะพร้อมเมื่อมีผลโหมดเดียวกันอย่างน้อย 3 ครั้ง"),
             "windows": {},
         }
     windows = {}

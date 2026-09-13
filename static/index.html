@@ -78,6 +78,18 @@
     .flat-message.info{border-left-color:var(--cyan);color:#a9d8e9}.flat-message.success{border-left-color:var(--good);color:#baffdf;background:#062018}
     .flat-message.warning{border-left-color:var(--amber);color:#ffe1a5;background:#211806}.flat-message.danger{border-left-color:var(--bad);color:#ffc4cc;background:#230910}
     .flat-message.loading .flat-icon{width:17px;height:17px;border:2px solid #19e3ff44;border-top-color:var(--cyan);border-radius:50%;animation:spin .7s linear infinite}
+    .safety-user-alert{position:sticky;top:10px;z-index:80;display:grid;
+      grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;
+      margin:0 0 14px;padding:14px 16px;border:1px solid #a82f42;border-left:5px solid var(--bad);
+      border-radius:12px;background:#2a0c14f5;color:#ffd7dd;box-shadow:0 12px 34px #0009,0 0 22px #ff4d5e24}
+    .safety-user-alert[hidden]{display:none!important}.safety-user-alert .safety-alert-icon{display:grid;place-items:center;
+      width:34px;height:34px;border-radius:50%;background:#711c2a;color:#fff;font-size:20px;font-weight:900}
+    .safety-user-alert b{display:block;color:#fff;font-size:14px}.safety-user-alert span{display:block;margin-top:3px;line-height:1.55}
+    .safety-user-alert a{min-height:42px;padding:10px 14px;border:1px solid #ff8797;border-radius:9px;
+      color:#fff;background:#7d1d2d;text-decoration:none;font-weight:800;white-space:nowrap}
+    .safety-user-alert.warning{border-color:#8b641e;border-left-color:var(--amber);background:#2a1e09f5;color:#ffe4ad}
+    .safety-user-alert.warning .safety-alert-icon{background:#76510e}.safety-user-alert.warning a{border-color:#dca846;background:#64430a}
+    @media(max-width:700px){.safety-user-alert{grid-template-columns:auto minmax(0,1fr)}.safety-user-alert a{grid-column:1/-1;text-align:center}}
     .status-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border:1px solid var(--line-dim);color:var(--muted)}
     .status-chip::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 7px currentColor}
     .status-chip.success{color:var(--good);border-color:#0e6349}.status-chip.warning{color:var(--amber);border-color:#7d5b1d}.status-chip.danger{color:var(--bad);border-color:#6d2430}
@@ -882,21 +894,21 @@
 </svg>
 <div id="boot">
   <div class="reactor"></div>
-  <div class="boot-text">Initializing Systems<span class="cursor"></span></div>
-  <div class="boot-sub">ZEEP Onboard Interface</div>
+  <div class="boot-text">กำลังเตรียม ZEEP<span class="cursor"></span></div>
+  <div class="boot-sub">พื้นที่พักผ่อนของคุณ</div>
 </div>
 <div id="login" class="hide">
   <div class="login-card">
     <div class="section-title" id="loginTitle">เข้าสู่ระบบผู้ใช้งาน · ZEEP</div>
     <div class="login-route-badge" id="loginRouteBadge" aria-live="polite">
       <span class="login-route-icon" aria-hidden="true">Z</span>
-      <div><b id="loginRouteLabel">ผู้ใช้งาน ZEEP</b><small id="loginRouteCaption">เริ่ม Session การพักผ่อนในตู้นี้</small></div>
+      <div><b id="loginRouteLabel">ผู้ใช้งาน ZEEP</b><small id="loginRouteCaption">เริ่มการพักใน ZEEP เครื่องนี้</small></div>
     </div>
 
     <!-- โหมดปกติ: บัญชี ZEEP (API ตัวเดียวกับแอปมือถือ) -->
     <div id="loginPaneZeep">
       <div class="muted" id="loginAudienceHelp">ใช้บัญชี ZEEP เดียวกับในแอปมือถือ · หนึ่งบัญชีใช้งานได้ครั้งละหนึ่งตู้</div>
-      <input id="loginIdentifier" type="text" placeholder="Username หรือ user@zeep.world" maxlength="120"
+      <input id="loginIdentifier" type="text" placeholder="อีเมลหรือชื่อผู้ใช้" maxlength="120"
              autocomplete="username" autocapitalize="off" spellcheck="false">
       <div class="pw-field">
         <input id="loginPassword" type="password" placeholder="รหัสผ่าน" maxlength="120" autocomplete="current-password">
@@ -906,7 +918,7 @@
 
     <!-- โหมด Local: เสนอเฉพาะเมื่อ Pi ต่อ ZEEP API ไม่ได้ -->
     <div id="loginPaneLocal" class="login-off">
-      <div class="muted">โหมด Local · ข้อมูลเก็บในตู้นี้</div>
+      <div class="muted">ใช้งานแบบออฟไลน์ · ข้อมูลการพักบันทึกใน ZEEP เครื่องนี้</div>
       <div id="userChips" class="chips"></div>
       <input id="loginName" type="text" placeholder="ชื่อผู้ใช้ (username)" maxlength="40" autocomplete="off">
       <div class="genders" id="genderSeg">
@@ -931,7 +943,7 @@
     </div>
 
     <div id="loginRestModeBlock">
-      <div class="pilot-welcome"><b>ยินดีต้อนรับสู่การทดสอบใช้งาน ZEEP</b><span>เลือกการทดสอบ 1 รูปแบบก่อนเริ่ม</span></div>
+      <div class="pilot-welcome"><b>ยินดีต้อนรับสู่การทดสอบใช้งาน ZEEP</b><span>เลือกรูปแบบการพัก 1 แบบก่อนเริ่ม</span></div>
       <div class="muted">รูปแบบการทดสอบ</div>
       <select id="loginRestMode" onchange="renderRestModeHint()">
         <option value="nap_recovery">Nap &amp; Refresh · ประมาณ 30 นาที</option>
@@ -942,14 +954,14 @@
         <summary>ขั้นตอนก่อน–หลังการทดสอบ</summary>
         <ol>
           <li>ดาวน์โหลดแอป ZEEP เพื่อเชื่อมต่อระบบและดูผลหลังใช้งาน</li>
-          <li>จัดการภารกิจส่วนตัวให้เรียบร้อย; Overnight Recovery เปลี่ยนเป็นชุดที่ทีมจัดเตรียม</li>
+          <li>เตรียมตัวให้พร้อม; หากพักค้างคืน ทีมงานจะช่วยแนะนำเรื่องชุด</li>
           <li>ทำแบบประเมินก่อนใช้และรับคำแนะนำจากทีมงาน</li>
-          <li>พักอย่างเป็นธรรมชาติและงดใช้โทรศัพท์ระหว่างทดสอบ</li>
+          <li>พักอย่างเป็นธรรมชาติ และวางโทรศัพท์ไว้นอก ZEEP ระหว่างพัก</li>
           <li>ทำแบบประเมินหลังใช้และรีวิวประสบการณ์เบื้องต้น</li>
         </ol>
-        <p>ข้อมูล Sensor และความคิดเห็นของผู้ทดสอบใช้เพื่อพัฒนา ZEEP และจะแสดงผลผ่านแอป ZEEP</p>
+        <p>ข้อมูลการใช้งานและความคิดเห็นของคุณจะช่วยให้ทีมพัฒนา ZEEP ได้ดียิ่งขึ้น และดูผลได้ผ่านแอป ZEEP</p>
       </details>
-      <div class="mini">รูปแบบมีผลต่อรายงานและคะแนนเท่านั้น · ไม่แก้ผล W/N1/N2/N3/REM</div>
+      <div class="mini">ZEEP จะสรุปผลให้เหมาะกับรูปแบบการพักที่คุณเลือก</div>
     </div>
 
     <!-- โหมด QR: มือถือที่ล็อกอินอยู่เป็นฝ่ายยืนยัน · pollSecret อยู่บน Pi ไม่ลงมาถึงหน้านี้ -->
@@ -963,11 +975,11 @@
     </div>
 
     <div id="loginError" class="login-safety danger login-off" role="alert"></div>
-    <div id="loginSafety" class="login-safety login-off"></div>
+    <div id="loginSafety" class="login-safety login-off" role="alert" aria-live="assertive"></div>
     <button class="btn primary" id="loginStartBtn" style="width:100%;margin-top:14px" onclick="submitLogin(this)">เข้าสู่ระบบ</button>
     <button type="button" class="login-mode-link login-off" id="loginModeLink" onclick="toggleLoginMode()"></button>
     <button type="button" class="login-mode-link login-off" id="loginQrLink" onclick="toggleQrLogin()"></button>
-    <div class="mini">ข้อมูล Session เก็บในเครื่อง Pi ของตู้นี้</div>
+    <div class="mini">ข้อมูลการพักจะถูกบันทึกใน ZEEP เครื่องนี้</div>
   </div>
 </div>
 <!-- ผลการนอนหลังจบ Session: จอตู้เป็นจอรวม ผู้ใช้จึงต้องหยิบผลกลับไปเองด้วย QR -->
@@ -975,8 +987,8 @@
   <div class="session-end-card">
     <div class="session-end-head">
       <div>
-        <div class="sleep-quality-eyebrow">SESSION COMPLETE · ZEEP</div>
-        <h2 id="sessionEndTitle">บันทึก Session เรียบร้อยแล้ว</h2>
+        <div class="sleep-quality-eyebrow">REST COMPLETE · ZEEP</div>
+        <h2 id="sessionEndTitle">บันทึกการพักเรียบร้อยแล้ว</h2>
         <div class="mini" id="sessionEndMeta"></div>
       </div>
       <div class="mini" id="sessionEndCountdown" aria-live="polite"></div>
@@ -984,7 +996,7 @@
     <div class="session-end-body">
       <div id="sessionEndSummary"></div>
       <div class="session-end-share">
-        <h4>เก็บผลการนอนไว้กับตัว</h4>
+        <h4>เก็บผลการพักไว้กับคุณ</h4>
         <div class="mini" id="sessionEndShareNote">สแกนด้วยมือถือของคุณ (ใช้เน็ตมือถือ ไม่ใช่ Wi-Fi ของตู้)</div>
         <div class="mini session-end-save-hint">เปิดแล้ว <b>กดค้างที่รูป</b> → บันทึกลงในรูปภาพ</div>
         <div class="session-end-qr pending" id="sessionEndQr">กำลังสร้าง QR…</div>
@@ -1013,13 +1025,13 @@
       <div class="reactor"></div>
       <div>
         <h1>ZEEP&nbsp;CONTROL</h1>
-        <div class="sub">Onboard Interface</div>
+        <div class="sub">Wellness Control</div>
       </div>
     </div>
     <div id="userPill" class="top-user">
       <div class="top-user-avatar" id="topUserAvatar">Z</div>
-      <div class="top-user-copy"><span id="topUserRole">USER</span><strong id="topUserName">ยังไม่มีผู้ใช้งาน</strong><small id="topUserMeta">เริ่ม Session เพื่อแสดงข้อมูลสุขภาพ</small></div>
-      <div class="top-session-state" id="topUserState">NO SESSION</div>
+      <div class="top-user-copy"><span id="topUserRole">USER</span><strong id="topUserName">พร้อมเริ่มการพัก</strong><small id="topUserMeta">เข้าสู่ระบบเพื่อดูข้อมูลการพักของคุณ</small></div>
+      <div class="top-session-state" id="topUserState">ยังไม่เริ่ม</div>
     </div>
     <div class="pills">
       <div id="esp32Pill" class="pill"><span class="dot"></span>Pi5 Sensor Set 1</div>
@@ -1058,6 +1070,11 @@
     <div class="page-context">LOCAL · RASPBERRY PI</div>
   </section>
   <div id="pageMessage" class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังเชื่อมต่อระบบ</b><span>รอข้อมูลสถานะล่าสุดจาก ZEEP</span></div></div>
+  <div id="safetyUserAlert" class="safety-user-alert" role="alert" aria-live="assertive" hidden>
+    <span class="safety-alert-icon" aria-hidden="true">!</span>
+    <div><b id="safetyUserAlertTitle"></b><span id="safetyUserAlertDetail"></span></div>
+    <a id="safetyUserAlertAction" href="/control">เปิดหน้าควบคุมประตู</a>
+  </div>
   <div class="monitor-alert-bar" data-pages="monitor">
     <span class="ui-section-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-bell"/></svg></span><div class="monitor-alert-status" id="monitorAlertStatus">Monitor alerts พร้อมทำงาน · เสียงปิดอยู่</div>
     <button class="btn ui-label-button" id="alertSoundBtn" onclick="toggleAlertSound()"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-volume-off"/></svg><span class="ui-button-label">เปิดเสียงแจ้งเตือน</span></button>
@@ -1076,10 +1093,10 @@
       </div>
       <div class="dash-user-head">
         <div class="dash-user-main"><div class="dash-avatar" id="dashAvatar">Z</div><div><h3 id="dashUserName">ยังไม่เริ่ม Session</h3><p id="dashUserMeta">เลือกผู้ใช้งานเพื่อเริ่มติดตามสุขภาพและสภาพแวดล้อม</p></div></div>
-        <div class="dash-session-badge" id="dashSessionBadge">NO SESSION</div>
+        <div class="dash-session-badge" id="dashSessionBadge">ยังไม่เริ่ม</div>
       </div>
       <section class="dash-profile-reference idle" id="dashProfileReference" aria-label="ข้อมูลอ้างอิงสุขภาพของผู้ใช้งาน">
-        <div class="dash-profile-reference-head"><b>ข้อมูลอ้างอิงสุขภาพ</b><small id="dashProfileSource">แสดงเฉพาะข้อมูลจริงจาก Profile · ไม่ใช่การวินิจฉัย</small></div>
+        <div class="dash-profile-reference-head"><b>ข้อมูลสำหรับคำแนะนำของคุณ</b><small id="dashProfileSource">ข้อมูลจาก Profile ช่วยให้คำแนะนำเหมาะกับคุณมากขึ้น</small></div>
         <div class="dash-profile-reference-grid">
           <div class="dash-profile-fact" id="dashProfileGender"><span>เพศ</span><strong>—</strong></div>
           <div class="dash-profile-fact" id="dashProfileAge"><span>อายุ</span><strong>—</strong></div>
@@ -1090,7 +1107,7 @@
       </section>
       <div class="dashboard-zone-grid">
         <section class="dashboard-zone dashboard-health-zone" aria-label="สุขภาพผู้ใช้งาน">
-          <div class="dashboard-zone-head"><div><span class="dashboard-zone-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M3 12h4l2-4 4 9 2-5h6"/><path d="M12 21C5 17 3 13 3 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 9 2.5c0 3.5-2 7.5-9 11.5Z"/></svg></span>สุขภาพผู้ใช้งาน</div><span>BIO SIGNAL</span></div>
+          <div class="dashboard-zone-head"><div><span class="dashboard-zone-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M3 12h4l2-4 4 9 2-5h6"/><path d="M12 21C5 17 3 13 3 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 9 2.5c0 3.5-2 7.5-9 11.5Z"/></svg></span>สุขภาพผู้ใช้งาน</div><span>ข้อมูลระหว่างพัก</span></div>
           <div class="dash-health-grid">
             <div class="dash-health dash-health-heart"><div class="dash-metric-head"><span class="dash-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h4l2-4 4 9 2-5h6"/><path d="M12 21C5 17 3 13 3 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 9 2.5c0 3.5-2 7.5-9 11.5Z"/></svg></span><span>ชีพจร</span></div><b id="dashHr">--</b><small id="dashHrNote">ครั้ง/นาที</small></div>
             <div class="dash-health dash-health-breath"><div class="dash-metric-head"><span class="dash-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M11 5v7c-1-2-2-4-4-4-2.5 0-4 2.5-4 6.5S5 21 9 21c2 0 3-1.5 3-4V5m1 7c1-2 2-4 4-4 2.5 0 4 2.5 4 6.5S19 21 15 21c-2 0-3-1.5-3-4"/><path d="M9 4c1 1 2 1 3 1s2 0 3-1"/></svg></span><span>อัตราการหายใจ</span></div><b id="dashRr">--</b><small id="dashRrNote">ครั้ง/นาที</small></div>
@@ -1111,8 +1128,8 @@
             <div class="dash-sensor dash-atmosphere atmosphere-unknown" id="dashAtmosphereCard" aria-label="ภาพรวมภายใน ZEEP รอข้อมูล">
               <div class="dash-metric-head"><span class="dash-metric-icon dash-atmosphere-icon" id="dashAtmosphereIcon" aria-hidden="true">?</span><span>ภาพรวม</span></div>
               <b id="dashAtmosphereLevel">รอข้อมูล</b>
-              <small id="dashAtmosphereReason">รอข้อมูล Sensor 7 เกณฑ์</small>
-              <div class="atmosphere-scale" aria-label="ระดับภาพรวม 5 ระดับ"><i data-level="excellent" title="ยอดเยี่ยม · ทุกเกณฑ์อยู่ในเป้าหมาย">●</i><i data-level="good" title="ดี · มีบางเกณฑ์เริ่มออกจากเป้าหมาย">●</i><i data-level="fair" title="พอใช้ · ควรปรับสภาพแวดล้อม">●</i><i data-level="poor" title="แย่ · ควรปรับทันที">●</i><i data-level="critical" title="วิกฤต · ต้องตรวจสอบและแก้ไขเร่งด่วน">●</i></div>
+              <small id="dashAtmosphereReason">กำลังรวบรวมข้อมูลภายใน ZEEP</small>
+              <div class="atmosphere-scale" aria-label="ระดับภาพรวม 5 ระดับ"><i data-level="excellent" title="ยอดเยี่ยม · ทุกเกณฑ์อยู่ในเป้าหมาย">●</i><i data-level="good" title="ดี · มีบางเกณฑ์เริ่มออกจากเป้าหมาย">●</i><i data-level="fair" title="พอใช้ · ยังปรับให้สบายขึ้นได้">●</i><i data-level="poor" title="ควรปรับ · มีปัจจัยที่ดูแลเพิ่มได้">●</i><i data-level="critical" title="แนะนำให้ปรับตอนนี้ · มีปัจจัยที่ควรดูแลเพิ่ม">●</i></div>
             </div>
           </div>
         </section>
@@ -1161,7 +1178,7 @@
         <!-- Sensor readings sit beside the controls they inform, so operators
              can compare the live condition before sending a command. -->
         <section class="device-zone door-zone priority-safety" data-controller="PI 5 CORE">
-          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon device-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 20V4h16v16M8 6l8 1.5v11L8 17Z"/><path d="M2 12h4m-2-2-2 2 2 2m18-2h-4m2-2 2 2-2 2"/></svg></span>ประตู</div><span class="device-zone-status" id="unifiedDoorStatus">GPIO · --</span></div>
+          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon device-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 20V4h16v16M8 6l8 1.5v11L8 17Z"/><path d="M2 12h4m-2-2-2 2 2 2m18-2h-4m2-2 2 2-2 2"/></svg></span>ประตู</div><span class="device-zone-status" id="unifiedDoorStatus">กำลังเชื่อมต่อ</span></div>
           <div class="door-control-stage">
             <div id="podDoorMap" class="pod-door-map" role="img" aria-label="ประตู ZEEP ตำแหน่งยังไม่ได้รับการยืนยัน">
               <svg viewBox="0 0 260 168" aria-hidden="true" focusable="false">
@@ -1195,10 +1212,10 @@
         </section>
 
         <section class="device-zone wide air-zone" data-controller="ESP32 AIRCON">
-          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon device-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9.5 5.5 12 8l2.5-2.5M9.5 18.5 12 16l2.5 2.5"/></svg></span>อากาศและอุณหภูมิ</div><span class="device-zone-status" id="unifiedAirconStatus">Aircon · Offline</span></div>
+          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon device-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9.5 5.5 12 8l2.5-2.5M9.5 18.5 12 16l2.5 2.5"/></svg></span>อากาศและอุณหภูมิ</div><span class="device-zone-status" id="unifiedAirconStatus">กำลังเชื่อมต่อแอร์</span></div>
           <div class="zone-sensor-grid air-sensor-grid" aria-label="ค่าตรวจวัดอากาศภายใน ZEEP">
             <div class="zone-sensor" id="zoneSensorTemp"><span title="อุณหภูมิ"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-thermometer"/></svg></span><b id="unifiedTemp">--</b><small>อุณหภูมิ · °C</small></div>
-            <div class="zone-sensor quality-unknown" id="zoneSensorAirQuality"><span title="สภาพอากาศ"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-air-quality"/></svg></span><b id="unifiedAirQuality">รอข้อมูล</b><small id="unifiedAirQualityDetail">Air Sensor 0/3</small></div>
+            <div class="zone-sensor quality-unknown" id="zoneSensorAirQuality"><span title="สภาพอากาศ"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-air-quality"/></svg></span><b id="unifiedAirQuality">รอข้อมูล</b><small id="unifiedAirQualityDetail">ข้อมูลอากาศ 0/3</small></div>
           </div>
           <div class="aircon-comfort-panel" aria-label="ควบคุมเครื่องปรับอากาศและอุณหภูมิ">
             <div id="airconComfortMap" class="aircon-comfort-map" role="img" aria-label="เครื่องปรับอากาศปิดอยู่">
@@ -1238,7 +1255,7 @@
         </section>
 
         <section class="device-zone wide bed-zone priority-health" data-controller="ESP32 BED">
-          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon device-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M3 18h18M5 18v3m14-3v3M5 16V9m0 5h14v4M7 11h4q2 0 2 3H7Z"/></svg></span>เตียงและผู้ใช้งาน</div><span class="device-zone-status" id="unifiedBedStatus">ESP32 Bed · --</span></div>
+          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon device-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M3 18h18M5 18v3m14-3v3M5 16V9m0 5h14v4M7 11h4q2 0 2 3H7Z"/></svg></span>เตียงและผู้ใช้งาน</div><span class="device-zone-status" id="unifiedBedStatus">กำลังเชื่อมต่อ</span></div>
           <div class="zone-sensor-grid bed-sensor-grid" aria-label="ค่าตรวจวัดผู้ใช้งานบนเตียง">
             <div class="zone-sensor" id="zoneSensorHeart"><span title="ชีพจร"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-heart"/></svg></span><b id="unifiedHeartRate">--</b><small>ชีพจร · bpm</small></div>
             <div class="zone-sensor" id="zoneSensorRespiration"><span title="อัตราหายใจ"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-lungs"/></svg></span><b id="unifiedRespiration">--</b><small>หายใจ/นาที</small></div>
@@ -1285,7 +1302,7 @@
         </section>
 
         <section class="device-zone light-zone" data-controller="PI 5 CORE">
-          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon pod-light-zone-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M3 20V11a9 9 0 0 1 18 0v9M8 8h8M9 11l-2 4m5-4v5m3-5 2 4"/></svg></span>แสงภายใน ZEEP</div><span class="device-zone-status" id="unifiedLightStatus">GPIO · --</span></div>
+          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon pod-light-zone-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M3 20V11a9 9 0 0 1 18 0v9M8 8h8M9 11l-2 4m5-4v5m3-5 2 4"/></svg></span>แสงภายใน ZEEP</div><span class="device-zone-status" id="unifiedLightStatus">กำลังเชื่อมต่อ</span></div>
           <div class="zone-sensor-grid single-sensor-grid" aria-label="ค่าความสว่างภายใน ZEEP">
             <div class="zone-sensor" id="zoneSensorLight"><span title="ความสว่างปัจจุบัน"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-light"/></svg></span><b id="unifiedLight">--</b><small>ความสว่าง · lux</small></div>
           </div>
@@ -1365,9 +1382,9 @@
         </section>
 
         <section class="device-zone audio-zone" data-controller="PI 5 CORE">
-          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon device-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 14v-2a8 8 0 0 1 16 0v2M4 14h3v6H5q-1 0-1-1Zm16 0h-3v6h2q1 0 1-1Z"/></svg></span>เสียงใน ZEEP</div><span class="device-zone-status" id="unifiedAudioStatus">Audio · --</span></div>
+          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon device-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 14v-2a8 8 0 0 1 16 0v2M4 14h3v6H5q-1 0-1-1Zm16 0h-3v6h2q1 0 1-1Z"/></svg></span>เสียงใน ZEEP</div><span class="device-zone-status" id="unifiedAudioStatus">พร้อมเล่น</span></div>
           <div class="zone-sensor-grid single-sensor-grid" aria-label="ระดับเสียงภายใน ZEEP">
-            <div class="zone-sensor" id="zoneSensorSound"><span title="ระดับเสียงปัจจุบัน"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-volume-on"/></svg></span><b id="unifiedSound">--</b><small id="unifiedSoundState">ค่าจาก ESP32 · dBA</small></div>
+            <div class="zone-sensor" id="zoneSensorSound"><span title="ระดับเสียงปัจจุบัน"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-volume-on"/></svg></span><b id="unifiedSound">--</b><small id="unifiedSoundState">ระดับเสียง · dBA</small></div>
           </div>
           <div class="audio-control-panel" aria-label="ภาพเสียงภายใน ZEEP และเครื่องเล่นเสียงบรรยากาศ">
             <div id="audioPodMap" class="audio-pod-map unified-pod-device-map" role="img" aria-label="ระบบเสียงภายใน ZEEP พร้อมเล่น">
@@ -1407,7 +1424,7 @@
         </section>
 
         <section class="device-zone aroma-zone" data-controller="PI 5 CORE">
-          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon device-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M7 20c-2-4 2-6 0-10m5 10c-2-4 2-6 0-10m5 10c-2-4 2-6 0-10M5 6c2-3 4-3 6 0m2 0c2-3 4-3 6 0"/></svg></span>กลิ่นและไอน้ำ</div><span class="device-zone-status">PI5 · Pulse</span></div>
+          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon device-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M7 20c-2-4 2-6 0-10m5 10c-2-4 2-6 0-10m5 10c-2-4 2-6 0-10M5 6c2-3 4-3 6 0m2 0c2-3 4-3 6 0"/></svg></span>กลิ่นและไอน้ำ</div><span class="device-zone-status">พร้อมใช้งาน</span></div>
           <div class="zone-sensor-grid comfort-output-grid humidity-comfort-grid" aria-label="ความชื้นและสถานะระบบกระจายกลิ่นและไอน้ำ">
             <div class="zone-sensor humidity-evaluation-sensor humidity-unknown" id="zoneSensorHumidity">
               <span title="ความชื้นสัมพัทธ์"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-droplet"/></svg></span>
@@ -1417,11 +1434,11 @@
                 <i data-level="excellent" title="ยอดเยี่ยม · 40–60%RH">●</i>
                 <i data-level="good" title="ดี · 35–65%RH">●</i>
                 <i data-level="fair" title="พอใช้ · 30–70%RH">●</i>
-                <i data-level="poor" title="แย่ · 20–80%RH">●</i>
-                <i data-level="critical" title="วิกฤต · นอกช่วง 20–80%RH">●</i>
+                <i data-level="poor" title="ควรปรับ · 20–80%RH">●</i>
+                <i data-level="critical" title="แนะนำให้ปรับตอนนี้ · นอกช่วง 20–80%RH">●</i>
               </div>
             </div>
-            <div class="zone-sensor comfort-output-sensor"><span aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-air"/></svg></span><b id="unifiedComfortStatus">พร้อมใช้ · 5 รายการ</b><small>Pulse Output · 1 วินาที</small></div>
+            <div class="zone-sensor comfort-output-sensor"><span aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-air"/></svg></span><b id="unifiedComfortStatus">พร้อมใช้ · 5 รายการ</b><small>ทำงานครั้งละ 1 วินาที</small></div>
           </div>
           <div class="comfort-control-panel" aria-label="ระบบกระจายกลิ่นและไอน้ำภายใน ZEEP">
             <div id="comfortDeliveryMap" class="comfort-delivery-map" role="img" aria-label="ระบบกลิ่นและไอน้ำพร้อมใช้งาน">
@@ -1599,7 +1616,7 @@
             <svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-stop"/></svg><span><b>จบ Session</b><small>บันทึกผลและคืน ZEEP</small></span>
           </button>
           <button class="btn danger admin-session-kick-button ui-label-button" id="adminKickOccupantBtn" onclick="adminOccupantAction('kick',this)" disabled>
-            <svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-sign-out"/></svg><span><b>เตะผู้ใช้ออก</b><small>จบ Session และยกเลิก Login</small></span>
+            <svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-sign-out"/></svg><span><b>จบและออกจากระบบ</b><small>บันทึก Session และยกเลิก Login</small></span>
           </button>
         </div>
       </section>
@@ -1617,7 +1634,7 @@
     </div>
     <section class="card admin-atmosphere-card" id="adminAtmosphereCard" data-pages="dashboard" data-admin-panel aria-label="แผนปรับสภาพแวดล้อมสำหรับผู้ดูแลระบบ">
       <div class="admin-atmosphere-head">
-        <div><div class="section-title">แผนปรับสภาพแวดล้อม</div><p>พอใช้ขึ้นไปถือว่าผ่านขั้นต่ำ · แสดงเฉพาะจุดที่ต้องแก้หรือปรับเพิ่ม · เกณฑ์ฉบับเต็มเปิดดูได้ด้านล่าง</p></div>
+        <div><div class="section-title">แผนปรับสภาพแวดล้อม</div><p>พอใช้ขึ้นไปถือว่าผ่านขั้นต่ำ · แสดงเฉพาะจุดที่ควรดูแลหรือปรับเพิ่ม · เกณฑ์ฉบับเต็มเปิดดูได้ด้านล่าง</p></div>
         <div class="admin-atmosphere-summary atmosphere-unknown" id="adminAtmosphereSummary"><span id="adminAtmosphereIcon">?</span><div><b id="adminAtmosphereLevel">รอข้อมูล</b><small id="adminAtmosphereCoverage">Sensor 0/7 เกณฑ์</small></div></div>
       </div>
       <div class="admin-atmosphere-layout">
@@ -1676,7 +1693,7 @@
       <div class="integrity-grid" id="sensorIntegrityRows"></div>
     </section>
 
-    <div class="card bcg" id="bcgCard" data-pages="dashboard monitor">
+    <div class="card bcg" id="bcgCard" data-pages="dashboard monitor" data-admin-panel>
       <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 8L9 4l-3 8H2"/></svg>Biosignal · BCG LSM-800-T</div>
       <div class="bcg-chart-head">
         <div class="chart-label">แรงสั่นสะเทือนเชิงกลที่รับผ่านที่นอน · ค่าสัมพัทธ์ (a.u.)</div>
@@ -1798,7 +1815,7 @@
         <div class="control-metric"><div class="control-metric-head"><span class="control-metric-icon">dB</span>เสียง</div><b class="control-metric-value" id="quickSound">-- dBA</b><small id="quickSoundNote">SPH0645LM4H-B</small></div>
       </div>
 
-      <section class="smart-response" id="smartResponsePanel" aria-label="Smart Sleep Response" aria-live="polite">
+      <section class="smart-response" id="smartResponsePanel" data-admin-panel aria-label="Smart Sleep Response" aria-live="polite">
         <div class="smart-response-head">
           <div class="smart-response-title"><span class="smart-response-orb">◇</span><div><strong>Smart Sleep Response</strong><span>Pi ประเมินสภาพแวดล้อมทุก 1 วินาที · ไม่พึ่ง Internet</span></div></div>
           <div class="smart-mode" id="smartModeBadge">SHADOW · OBSERVE ONLY</div>
@@ -1848,7 +1865,7 @@
       </nav>
     </div>
 
-    <div class="card control" id="controlCard" data-pages="control">
+    <div class="card control" id="controlCard" data-pages="control" data-admin-panel>
       <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M15 12h.01"/></svg>ประตู · Door</div>
       <div class="row">
         <button id="doorOpenBtn" class="btn primary wide" onclick="doorAction('open', this)">เปิด · Open</button>
@@ -1860,7 +1877,7 @@
       <div id="outputs"></div>
     </div>
 
-    <div class="card redlight" id="redLightCard" data-pages="control">
+    <div class="card redlight" id="redLightCard" data-pages="control" data-admin-panel>
       <div class="section-title">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>
@@ -1887,7 +1904,7 @@
       <div class="redlight-note">แต่ละโซนเป็นสวิตช์ค้างแยกกัน: ON = GPIO HIGH, OFF = GPIO LOW · เป็นแสงบรรยากาศสำหรับงานทดสอบ ไม่ใช่การรักษา · ปิดทั้งหมดอัตโนมัติเมื่อ Safety Supervisor เข้า Safe Mode</div>
     </div>
 
-    <div class="card aircon" id="airconCard" data-pages="control">
+    <div class="card aircon" id="airconCard" data-pages="control" data-admin-panel>
       <div class="aircon-head">
         <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="9" rx="2"/><path d="M7 18h10M8 14v2M16 14v2M7 9h.01M17 9h.01"/></svg>เครื่องปรับอากาศ · Air Conditioner</div>
         <div class="aircon-status">
@@ -1953,7 +1970,7 @@
       <div class="aircon-note">สถานะ Power และ Temperature เป็นค่าจากคำสั่งล่าสุดที่ Control Hub ส่ง ไม่ใช่การยืนยันจากตัวแอร์ หากใช้รีโมตจริง สถานะบนหน้านี้อาจไม่ตรงกับแอร์</div>
     </div>
 
-    <div class="card bedcontrol" id="bedControlCard" data-pages="control">
+    <div class="card bedcontrol" id="bedControlCard" data-pages="control" data-admin-panel>
       <div class="bed-head">
         <div class="section-title">เตียงปรับระดับ · ESP32 Bed</div>
         <div class="bed-status-chips">
@@ -1995,7 +2012,7 @@
       <div class="bed-note">ทุกคำสั่งเคลื่อนไหวจะหยุดอัตโนมัติ · Safety Supervisor ยังสามารถหยุดเตียงได้ทันทีจากระบบภายใน</div>
     </div>
 
-    <div class="card music" id="musicCard" data-pages="control">
+    <div class="card music" id="musicCard" data-pages="control" data-admin-panel>
       <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>เสียง · Audio</div>
       <div id="trackList" class="track-list"></div>
       <div class="row" style="margin-top:12px">
@@ -2078,10 +2095,10 @@
           <div><b>W</b><strong>ตื่น</strong><span>ช่วงที่ระบบประเมินว่ายังตื่นหรือกลับเข้าสู่สถานะตื่น</span></div>
           <div><b>N1</b><strong>หลับตื้น / เคลิ้มหลับ</strong><span>เริ่มเข้าสู่การนอน ร่างกายผ่อนคลาย และปลุกให้ตื่นได้ง่าย</span></div>
           <div><b>N2</b><strong>หลับสนิทขึ้น / หลับตื้นต่อเนื่อง</strong><span>หัวใจและการหายใจช้าลง ร่างกายเข้าสู่การนอนที่ต่อเนื่องขึ้น</span></div>
-          <div><b>N3</b><strong>หลับลึก</strong><span>รูปแบบ BCG/HR/RR ที่สอดคล้องกับ N3; ตามสรีรวิทยาการนอน N3 เชื่อมโยงกับการฟื้นฟู แต่ ZEEP ไม่ได้วัดการซ่อมแซมโดยตรง</span></div>
-          <div><b>REM</b><strong>ระยะ REM</strong><span>รูปแบบ BCG/HR/RR ที่สอดคล้องกับ REM; ตามสรีรวิทยา REM สัมพันธ์กับความฝันและความจำ แต่ ZEEP ไม่ได้วัดความฝันหรือความจำโดยตรง</span></div>
+          <div><b>N3</b><strong>หลับลึก</strong><span>ช่วงหลับลึกที่ร่างกายได้พักอย่างต่อเนื่อง</span></div>
+          <div><b>REM</b><strong>ระยะ REM / หลับฝัน</strong><span>ช่วงหลับที่สมองยังทำงานมากขึ้นและมักมีความฝัน</span></div>
         </div>
-        <div class="stage-guide-note">ค่าบน ZEEP เป็นการประเมินจาก BCG และ Sensor ไม่ใช่ผล Sleep Stage จากการตรวจ PSG</div>
+        <div class="stage-guide-note">Sleep Stage เป็นค่าประเมินแนวโน้มจากข้อมูลที่ ZEEP บันทึกได้ โดย ZEEP ไม่ได้วัดการฟื้นตัวของร่างกาย ความฝัน หรือความจำโดยตรง</div>
       </details>
       <div id="sessionList" class="hist-list"><div class="mini">กำลังโหลดประวัติการใช้งาน…</div></div>
       <div id="sessionDetail"></div>
@@ -2100,7 +2117,89 @@ function setUiIconReference(svg,name){
 let alertSoundEnabled = localStorage.getItem('zeep_monitor_sound') === '1';
 const monitorAlertState = {};
 let monitorAudioContext = null;
-let dashboardAtmosphereCriticalActive = false;
+const USER_PRODUCT_COPY=Object.freeze({
+  scoreLevels:Object.freeze({
+    very_good:'ดีมาก',good:'ดี',fair:'พอใช้',low:'ให้เวลากับการพักเพิ่ม',
+    unavailable:'กำลังเตรียมผลสรุป',unknown:'ผลการพักครั้งนี้',
+  }),
+  environmentLevels:Object.freeze({
+    excellent:'ยอดเยี่ยม',good:'ดี',fair:'พอใช้',poor:'ควรปรับ',
+    critical:'แนะนำให้ปรับตอนนี้',unknown:'กำลังรวบรวมข้อมูล',
+  }),
+  confidenceLevels:Object.freeze({
+    high:'ข้อมูลชัดเจน',medium:'ข้อมูลเพียงพอ',low:'กำลังรวบรวมข้อมูลเพิ่ม',
+    unknown:'กำลังเตรียมผลสรุป',
+  }),
+  environmentMetrics:Object.freeze({
+    temperature:'อุณหภูมิ',temp:'อุณหภูมิ',humidity:'ความชื้น',hum:'ความชื้น',
+    sound:'เสียง',dba:'เสียง',co2:'CO₂',pm25:'PM2.5',pm2_5:'PM2.5',voc:'VOC Index',
+  }),
+});
+function userScoreLevelLabel(quality={}){
+  return USER_PRODUCT_COPY.scoreLevels[String(quality.level_key||'').toLowerCase()]
+    ||USER_PRODUCT_COPY.scoreLevels.unknown;
+}
+function userConfidenceLevelLabel(level){
+  return USER_PRODUCT_COPY.confidenceLevels[String(level||'unknown').toLowerCase()]
+    ||USER_PRODUCT_COPY.confidenceLevels.unknown;
+}
+function userScoreMeaning(quality={}){
+  if(!quality?.available)return 'ZEEP กำลังรวบรวมข้อมูลเพื่อสรุปผลการพักครั้งนี้';
+  const level=String(quality.level_key||'unknown').toLowerCase();
+  const recovery=quality.quality_type==='rest_goal'||String(quality.score_title||'').includes('Recovery');
+  const meanings=recovery?{
+    very_good:'ช่วงพักนี้เป็นไปได้ดีมากตามเป้าหมายที่เลือก',
+    good:'ช่วงพักนี้เป็นไปได้ดีตามเป้าหมายที่เลือก',
+    fair:'ช่วงพักนี้ช่วยให้ร่างกายได้หยุดนิ่งและผ่อนคลาย',
+    low:'ครั้งนี้ยังมีบางจุดที่ช่วยให้ช่วงพักสบายขึ้นได้',
+  }:{
+    very_good:'เวลา ความต่อเนื่อง และรูปแบบการนอนคืนนี้อยู่ในระดับดีมาก',
+    good:'ภาพรวมการนอนคืนนี้อยู่ในระดับดี',
+    fair:'คืนนี้ได้พักในระดับหนึ่ง และยังมีบางจุดที่ดูแลเพิ่มได้',
+    low:'ครั้งนี้ยังมีบางจุดที่ช่วยให้การพักสบายและต่อเนื่องขึ้นได้',
+  };
+  return meanings[level]||'ดูภาพรวมการพักครั้งนี้ร่วมกับรายละเอียดด้านล่าง';
+}
+function userReportFinding(item={}){
+  const metricKey=String(item.metric_key||item.key||'')
+    .replace(/_safety_excursion$/,'').toLowerCase();
+  const metric=USER_PRODUCT_COPY.environmentMetrics[metricKey]||'สภาพแวดล้อม';
+  const severity=String(item.severity||'unavailable');
+  const safetyReview=item.decision==='safety_review';
+  const label=safetyReview
+    ?'ควรให้ทีมตรวจสอบ'
+    :USER_PRODUCT_COPY.environmentLevels[severity]||'กำลังรวบรวมข้อมูล';
+  const detail=safetyReview
+    ?'มีค่าบางช่วงแตะเกณฑ์ความปลอดภัย กรุณาแจ้งทีมงานก่อนใช้งานครั้งถัดไป'
+    :severity==='unavailable'
+      ?'ZEEP กำลังรวบรวมข้อมูลส่วนนี้'
+      :['good','excellent'].includes(severity)
+        ?'อยู่ในช่วงที่เหมาะกับการพักครั้งนี้'
+        :severity==='fair'
+          ?'ยังปรับให้เหมาะกับการพักได้อีกเล็กน้อย'
+          :'มีปัจจัยที่ปรับให้การพักสบายขึ้นได้';
+  const action=safetyReview
+    ?'กรุณาแจ้งทีมงาน'
+    :['critical','poor'].includes(severity)
+      ?'ทีมงานช่วยปรับค่านี้ให้เหมาะกับครั้งถัดไปได้'
+      :'';
+  return {metric,severity,label,detail,action};
+}
+function userEnvironmentPresentation(result={}){
+  const key=String(result.key||'unknown').toLowerCase();
+  const limiting=Array.isArray(result.limiting)&&result.limiting.length
+    ?result.limiting[0].name:null;
+  const reason={
+    excellent:'ทุกค่าที่พร้อมอยู่ในช่วงเป้าหมาย',
+    good:'สภาพแวดล้อมโดยรวมเหมาะกับการพัก',
+    fair:`ใช้งานได้${limiting?` · ${limiting} ยังปรับให้สบายขึ้นได้`:''}`,
+    poor:`${limiting||'บางปัจจัย'} ควรปรับเพื่อให้พักสบายขึ้น`,
+    critical:`${limiting||'สภาพแวดล้อม'} แนะนำให้ปรับสำหรับการพักครั้งนี้`,
+    unknown:'กำลังรวบรวมข้อมูลภายใน ZEEP',
+  }[key]||'กำลังรวบรวมข้อมูลภายใน ZEEP';
+  return {...result,label:USER_PRODUCT_COPY.environmentLevels[key]
+    ||USER_PRODUCT_COPY.environmentLevels.unknown,reason};
+}
 function updateAlertButton(){
   const b=document.getElementById('alertSoundBtn');if(!b)return;
   setUiIconReference(b.querySelector('.ui-icon'),alertSoundEnabled?'volume-on':'volume-off');
@@ -2117,7 +2216,8 @@ function setMonitorAlert(key,active,message,level='warn'){
   const hadAnyAlert=Object.values(monitorAlertState).some(Boolean);
   const previous=!!monitorAlertState[key];
   monitorAlertState[key]=active?{message,level}:null;
-  if(active&&!previous&&!hadAnyAlert){
+  const announceNewEmergency=key==='safety_emergency'&&level==='bad';
+  if(active&&!previous&&(!hadAnyAlert||announceNewEmergency)){
     playMonitorTone(level);toast(`${level==='bad'?'⛔':'⚠️'} ${message} · ดูรายการรวมด้านล่าง`,level==='bad'?'error':'',4200);
   }
   const activeAlerts=Object.values(monitorAlertState).filter(Boolean),root=document.getElementById('monitorAlertStatus');if(!root)return;
@@ -2231,6 +2331,13 @@ function renderSafety(sf={}){
   ready.textContent=sf.latched?'ล็อกเหตุฉุกเฉิน':sf.armed?'Auto Response เปิด':sf.ready?'พร้อมใช้งาน':'ต้องตรวจสอบ';
   ready.className=`status-chip ${sf.latched?'danger':sf.ready?'success':'warning'}`;
   const faults=Array.isArray(sf.faults)?sf.faults:[],root=document.getElementById('safetyFaults');
+  const hasCriticalFault=faults.some(f=>f.severity==='critical');
+  setMonitorAlert(
+    'safety_emergency',
+    currentPrincipal?.role==='admin'&&(!!sf.latched||hasCriticalFault),
+    sf.latched?'ระบบเข้าโหมดปลอดภัยแล้ว':'พบเหตุด้านความปลอดภัยที่ต้องตรวจทันที',
+    'bad',
+  );
   root.replaceChildren();
   const severityLabels={critical:'ฉุกเฉิน',blocking:'ต้องแก้ก่อนเปิด Auto',warning:'ควรตรวจ'};
   faults.forEach(f=>{const el=document.createElement('div');el.className=`safety-fault ${f.severity||''}`;el.title=f.code||'';const tag=document.createElement('b');tag.textContent=severityLabels[f.severity]||'แจ้งเตือน';const message=document.createElement('span');message.textContent=f.message||f.code;el.append(tag,message);root.appendChild(el);});
@@ -2264,13 +2371,17 @@ function renderSafety(sf={}){
   document.querySelectorAll('.safety-case-grid article').forEach(article=>article.classList.toggle('current',article.dataset.level===visualLevel));
   renderLoginSafety(sf);
 }
-function renderLoginSafety(){
+function renderLoginSafety(sf={},occupied=authPod?.occupied){
   const el=document.getElementById('loginSafety');
   if(!el)return;
-  // Safety never blocks authentication/session access. Supervisor details and
-  // actuator readiness belong to the Admin Monitor view.
-  el.className='login-safety login-off';
-  el.textContent='';
+  const emergency=!!sf.latched||sf.level==='emergency';
+  if(!emergency){el.className='login-safety login-off';el.textContent='';return;}
+  // Login remains available so the User/Admin can reach the door controls.
+  // The message is deliberately action-led and contains no engineering code.
+  el.className='login-safety danger';
+  el.textContent=occupied
+    ?'ระบบอยู่ในโหมดปลอดภัย หากมีผู้ใช้อยู่ภายใน กรุณาเปิดประตู ออกจาก ZEEP และแจ้งทีมงาน'
+    :'ระบบอยู่ในโหมดปลอดภัย กรุณาให้ทีมงานตรวจสอบก่อนเริ่มใช้งาน';
 }
 async function safetyAction(action,btn){
   if(action==='safe-mode'){
@@ -2334,11 +2445,11 @@ async function adminOccupantAction(action,btn){
   const kick=action==='kick';
   const shownName=identityLabel(sessionState,'ผู้ใช้งานปัจจุบัน');
   const confirmed=await confirmAction({
-    title:kick?'เตะผู้ใช้งานออกจาก ZEEP':'จบและบันทึก Session',
+    title:kick?'จบการใช้งานและออกจากระบบ':'จบและบันทึก Session',
     message:kick
       ? `ระบบจะบันทึก W · ตื่นเป็นจุดจบของลำดับ จากนั้นจบ Session ของ “${shownName}” และยกเลิก Login ฝั่งผู้ใช้ทั้งหมด ต้องการดำเนินการหรือไม่?`
       : `ระบบจะบันทึก W · ตื่นเป็นจุดจบของลำดับ จากนั้นจบ Session ของ “${shownName}” และนำหน้าจอผู้ใช้กลับไปหน้า Login ต้องการดำเนินการหรือไม่?`,
-    confirmText:kick?'เตะผู้ใช้ออก':'จบ Session',
+    confirmText:kick?'จบและออกจากระบบ':'จบ Session',
     tone:kick?'danger':'warning',
     icon:kick?'↪':'■',
   });
@@ -2356,7 +2467,7 @@ async function adminOccupantAction(action,btn){
   renderAdminOccupantActions(sessionState);
   toast(
     kick
-      ? `เตะ ${identityLabel(result)} ออกและบันทึก Session แล้ว`
+      ? `จบ Session ของ ${identityLabel(result)} และออกจากระบบแล้ว`
       : `จบและบันทึก Session ของ ${identityLabel(result)} แล้ว`,
     'ok',3600,
   );
@@ -2388,6 +2499,11 @@ const BCG_STATUS_CONTROL_TH = {
   0:'มีผู้ใช้งาน', 1:'เตียงว่าง', 2:'กำลังขยับ',
   3:'สัญญาณอ่อน', 4:'พบวัตถุ', 5:'มีเสียงกรน'
 };
+const USER_BED_STATUS_TH = {
+  0:'ตรวจพบผู้ใช้งานบนเตียง', 1:'ไม่พบผู้ใช้งานบนเตียง',
+  2:'พบการขยับบนเตียง', 3:'กำลังอ่านข้อมูลจากเตียง',
+  4:'ตรวจพบแรงกดบนเตียง', 5:'ตรวจพบผู้ใช้งานบนเตียง'
+};
 
 function genderTh(g){ return ({male:'ชาย', female:'หญิง', other:'อื่น ๆ', unspecified:'ไม่ระบุ'})[g] || g || '-'; }
 function ageToGroup(age){ return age>=60?'60+':age>=45?'45-59':age>=30?'30-44':'18-29'; }
@@ -2408,6 +2524,7 @@ function setHealthReferenceFact(id,value){
 function renderHealthReference(session={}){
   const root=document.getElementById('dashProfileReference');if(!root)return;
   const ref=session.health_reference||{},active=!!session.active;
+  const adminView=currentPrincipal?.role==='admin';
   root.classList.toggle('idle',!active);
   setHealthReferenceFact('dashProfileGender',active?genderTh(ref.gender||session.gender):'—');
   setHealthReferenceFact('dashProfileAge',active?displayAge(session):'—');
@@ -2415,14 +2532,21 @@ function renderHealthReference(session={}){
   setHealthReferenceFact('dashProfileWeight',active?healthReferenceValue(ref.weight_kg,' กก.'):'—');
   setHealthReferenceFact('dashProfileBlood',active?(ref.blood_group||'—'):'—');
   const source=document.getElementById('dashProfileSource');
-  if(!active){source.textContent='แสดงเฉพาะข้อมูลจริงจาก Profile · ไม่ใช่การวินิจฉัย';return;}
+  if(!active){
+    source.textContent=adminView
+      ?'แสดงเฉพาะข้อมูลจริงจาก Profile · ไม่ใช่การวินิจฉัย'
+      :'ข้อมูลจากบัญชีช่วยให้คำแนะนำเหมาะกับคุณมากขึ้น';
+    return;
+  }
   const updated=ref.updated_at_utc?fmtDateTh(ref.updated_at_utc):'';
   const refresh=ref.refresh_status==='live_login'
     ? `อัปเดตจากบัญชี ZEEP เมื่อ Login${updated?` · ${updated}`:''}`
     : ref.refresh_status==='cached'
-      ? `ใช้ข้อมูลบัญชีล่าสุดในเครื่อง · Profile API ไม่พร้อม${updated?` · อัปเดตล่าสุด ${updated}`:''}`
+      ? `ใช้ข้อมูลบัญชีล่าสุดในเครื่อง · จะอัปเดตอีกครั้งเมื่อเชื่อมต่อบัญชี ZEEP${updated?` · อัปเดตล่าสุด ${updated}`:''}`
       : `ข้อมูล Profile ในเครื่อง${updated?` · ${updated}`:''}`;
-  source.textContent=`${refresh} · ช่องว่างหมายถึงบัญชียังไม่มีข้อมูล · ไม่ใช่การวินิจฉัย`;
+  source.textContent=adminView
+    ?`${refresh} · ช่องว่างหมายถึงบัญชียังไม่มีข้อมูล · ไม่ใช่การวินิจฉัย`
+    :'ใช้ข้อมูลจากบัญชี ZEEP เพื่อปรับคำแนะนำให้เหมาะกับคุณ · เติมข้อมูลที่ยังว่างได้ในแอป';
 }
 function healthReferenceInline(rec={}){
   const ref=rec.health_reference||{};
@@ -2448,11 +2572,11 @@ function renderLoginBaseline(){
   const group=document.getElementById('loginAgeGroup').value;
   const root=document.getElementById('loginBaselinePreview');
   const base=loginBaselines[group];
-  if(!base){root.innerHTML='<div class="mini">เลือกช่วงอายุเพื่อดู Baseline ของ W (Wake), N1, N2, N3 และ REM</div>';return;}
-  const gender=selectedGender||'unspecified', adj=genderAdjustments[gender]||{hr_offset:0,rr_offset:0,note:'เลือกเพศเพื่อดู Gender Baseline'};
-  const order=['wake','n1','n2','n3','rem'];
-  root.innerHTML=`<div class="mini"><b>Age ${group}</b> + <b>Gender ${genderTh(gender)}</b> · ${adj.note||'neutral'}</div><div class="base-row base-head"><span>State</span><span>HR · BPM</span><span>RR · ครั้ง/นาที</span></div>`+
-    order.map(k=>`<div class="base-row"><b>${k==='wake'?'W · ตื่น':k.toUpperCase()}</b><span>${base[k].hr[0]+adj.hr_offset}–${base[k].hr[1]+adj.hr_offset}</span><span>${base[k].rr[0]+adj.rr_offset}–${base[k].rr[1]+adj.rr_offset}</span></div>`).join('');
+  if(!base){
+    root.innerHTML='<div class="mini">เลือกช่วงอายุเพื่อให้ ZEEP เตรียมค่าเริ่มต้นที่เหมาะกับคุณ</div>';
+    return;
+  }
+  root.innerHTML='<div class="mini"><b>พร้อมสำหรับการพักครั้งนี้</b><br>ZEEP จะใช้ข้อมูลโปรไฟล์เป็นจุดเริ่มต้น และเรียนรู้รูปแบบของคุณจากการพักแต่ละครั้ง</div>';
 }
 
 /* Canonical five-state presentation. Keep title/meaning in sync with
@@ -2461,8 +2585,8 @@ const SLEEP_TH = {
   wake:       {code:'W',   title:'ตื่น',meaning:'ช่วงที่ระบบประเมินว่ายังตื่นหรือกลับเข้าสู่สถานะตื่น',label:'ตื่น',cls:'wake'},
   n1:         {code:'N1',  title:'หลับตื้น / เคลิ้มหลับ',meaning:'เริ่มเข้าสู่การนอน ร่างกายผ่อนคลาย และปลุกให้ตื่นได้ง่าย',label:'หลับตื้น',cls:'nrem'},
   n2:         {code:'N2',  title:'หลับสนิทขึ้น / หลับตื้นต่อเนื่อง',meaning:'หัวใจและการหายใจช้าลง ร่างกายเข้าสู่การนอนที่ต่อเนื่องขึ้น',label:'หลับสนิทขึ้น',cls:'nrem'},
-  n3:         {code:'N3',  title:'หลับลึก',meaning:'รูปแบบ BCG/HR/RR ที่สอดคล้องกับ N3; ตามสรีรวิทยาการนอน N3 เชื่อมโยงกับการฟื้นฟู แต่ ZEEP ไม่ได้วัดการซ่อมแซมโดยตรง',label:'หลับลึก',cls:'deep'},
-  rem:        {code:'REM', title:'ระยะ REM',meaning:'รูปแบบ BCG/HR/RR ที่สอดคล้องกับ REM; ตามสรีรวิทยา REM สัมพันธ์กับความฝันและความจำ แต่ ZEEP ไม่ได้วัดความฝันหรือความจำโดยตรง',label:'REM',cls:'rem'},
+  n3:         {code:'N3',  title:'หลับลึก',meaning:'ช่วงหลับลึกที่ร่างกายได้พักอย่างต่อเนื่อง',label:'หลับลึก',cls:'deep'},
+  rem:        {code:'REM', title:'ระยะ REM / หลับฝัน',meaning:'ช่วงหลับที่สมองยังทำงานมากขึ้นและมักมีความฝัน',label:'หลับฝัน',cls:'rem'},
   // ``nrem`` is kept only for rendering old history. The live estimator never
   // emits a generic NREM because ZEEP's current ontology is W/N1/N2/N3/REM.
   nrem:       {code:'NREM', label:'หลับ · ข้อมูลเดิม',cls:'nrem'},
@@ -2470,6 +2594,13 @@ const SLEEP_TH = {
   wait_initial:{code:'WAIT', title:'WAIT · กำลังยืนยันสถานะ',label:'กำลังยืนยันสถานะ',cls:'na'},
   no_data:    {code:'NO DATA', label:'หลักฐานไม่ครบ', cls:'na'},
 };
+const USER_SLEEP_STAGE_LABELS=Object.freeze({
+  wake:'ตื่น',n1:'หลับตื้น',n2:'หลับสนิทขึ้น',n3:'หลับลึก',rem:'หลับฝัน',
+  nrem:'ช่วงหลับ',off_bed:'ออกจากเตียง',
+});
+function userSleepStageLabel(state){
+  return USER_SLEEP_STAGE_LABELS[String(state||'').toLowerCase()]||'ช่วงการพัก';
+}
 function renderSleepState(sl={},session={},bcg={}){
   const box = document.getElementById('sleepState');
   const classificationActive=sl.classification_active===true;
@@ -2624,12 +2755,16 @@ async function runOutputAction(k, btn, pulse){
   }
   const label = currentLabel(k);
   if(pulse)setComfortCommandFeedback(k,'success',1800);
-  toast(pulse ? `${label}: ส่งคำสั่ง Pulse แล้ว` : `${label}: ${targetOn ? 'เปิด' : 'ปิด'}แล้ว`, 'ok', 2400);
+  const successMessage=pulse
+    ?(currentPrincipal?.role==='admin'?`${label}: ส่งคำสั่ง Pulse แล้ว`:`เริ่มพ่น ${label} แล้ว`)
+    :`${label}: ${targetOn ? 'เปิด' : 'ปิด'}แล้ว`;
+  toast(successMessage,'ok',2400);
   flashCommandResult(btn,true);
 }
 function updateOutputs(gpio={}){
   const gpioOk = !!current.system?.gpio_available;
   const safetyLatched = !!current.safety?.latched;
+  const adminView=currentPrincipal?.role==='admin';
   Object.keys(names).forEach(k=>{
     const on = !!gpio[k];
     const el = outputEls[k];
@@ -2637,8 +2772,10 @@ function updateOutputs(gpio={}){
     if (!el.editing) el.title.textContent = currentLabel(k);
     if (!gpioOk || (safetyLatched && !(k==='led' && !on))){
       // นโยบาย: ไม่มี mock — เชื่อมต่อไม่ได้ = สั่งไม่ได้ ปุ่มปิดจริง
-      sub.textContent = 'GPIO เชื่อมต่อไม่ได้';
-      btn.textContent = 'OFF';
+      sub.textContent = adminView
+        ?'GPIO เชื่อมต่อไม่ได้'
+        :safetyLatched?'โหมดปลอดภัย':'กำลังเชื่อมต่อ';
+      btn.textContent = adminView?'OFF':'—';
       btn.disabled = true;
       btn.classList.remove('on');
       return;
@@ -2648,12 +2785,15 @@ function updateOutputs(gpio={}){
       sub.textContent = on ? 'กำลังพ่น…' : 'กดเพื่อพ่น 5 วินาที';
       // While busy, the pressed button owns its own state — don't fight it.
       if (!btn.classList.contains('busy')){
-        btn.textContent = on ? 'ON' : 'OFF';
+        btn.textContent = adminView?(on?'ON':'OFF'):(on?'กำลังพ่น':'พ่น');
         btn.disabled = on;
       }
     } else {
-      sub.textContent = `GPIO ${on ? 'HIGH' : 'LOW'}`;
-      if (!btn.classList.contains('busy')){ btn.textContent = on ? 'ON' : 'OFF'; btn.disabled = false; }
+      sub.textContent = adminView?`GPIO ${on ? 'HIGH' : 'LOW'}`:(on?'เปิดอยู่':'ปิดอยู่');
+      if (!btn.classList.contains('busy')){
+        btn.textContent = adminView?(on?'ON':'OFF'):(on?'ปิด':'เปิด');
+        btn.disabled = false;
+      }
     }
     btn.classList.toggle('on', on);
   });
@@ -2792,14 +2932,16 @@ function setDashboardSensor(cardId,valueId,value,unit,device,digits=0){
   valueEl.textContent=compactMetric(value,unit,digits);
   const live=device?.status==='live';
   card.classList.toggle('live',live);card.classList.toggle('offline',!live);
-  const fieldNames={dashSensorTemp:'Temperature',dashSensorHumidity:'Humidity',dashSensorLight:'Light',dashSensorSound:'Sound',dashSensorCo2:'CO₂',dashSensorPm:'PM2.5',dashSensorVoc:'VOC'};
-  card.title=`${device?.model||'Sensor'} · ${fieldNames[cardId]||'Reading'} · ${device?.status||'no data'}${Number.isFinite(Number(device?.data_age_s))?` · ${Number(device.data_age_s).toFixed(1)}s`:''}`;
+  const fieldNames={dashSensorTemp:'อุณหภูมิ',dashSensorHumidity:'ความชื้น',dashSensorLight:'แสง',dashSensorSound:'เสียง',dashSensorCo2:'CO₂',dashSensorPm:'PM2.5',dashSensorVoc:'VOC'};
+  card.title=currentPrincipal?.role==='admin'
+    ?`${device?.model||'Sensor'} · ${fieldNames[cardId]||'Reading'} · ${device?.status||'no data'}${Number.isFinite(Number(device?.data_age_s))?` · ${Number(device.data_age_s).toFixed(1)}s`:''}`
+    :`${fieldNames[cardId]||'ข้อมูล'} · ${live?'ข้อมูลพร้อม':'กำลังรวบรวมข้อมูล'}`;
 }
 
 const dashboardAtmosphereLevels=Object.freeze([
-  {key:'critical',label:'วิกฤต',english:'Critical',symbol:'!',description:'มีอย่างน้อยหนึ่งเกณฑ์อยู่ในช่วงรุนแรง ต้องตรวจสาเหตุและแก้ไขทันที',principle:'มีอย่างน้อย 1 ใน 7 ค่าอยู่ระดับวิกฤต'},
-  {key:'poor',label:'แย่',english:'Poor',symbol:'↓',description:'สภาพแวดล้อมรบกวนการพักผ่อนอย่างชัดเจน ควรปรับทันที',principle:'ไม่มีค่าวิกฤต แต่มีอย่างน้อย 1 ค่าอยู่ระดับแย่'},
-  {key:'fair',label:'พอใช้',english:'Fair',symbol:'–',description:'ใช้งานได้ชั่วคราวแต่มีปัจจัยที่ควรปรับก่อนเริ่มนอน',principle:'ไม่มีค่าระดับแย่/วิกฤต แต่มีอย่างน้อย 1 ค่าอยู่ระดับพอใช้'},
+  {key:'critical',label:'แนะนำให้ปรับตอนนี้',english:'Needs attention',symbol:'!',description:'มีอย่างน้อยหนึ่งค่าหลุดจากช่วง Wellness ที่กำหนด และปรับให้เหมาะขึ้นได้',principle:'มีอย่างน้อย 1 ใน 7 ค่าอยู่นอกช่วง Wellness ชั้นนอก'},
+  {key:'poor',label:'ควรปรับ',english:'Adjust',symbol:'↓',description:'มีบางปัจจัยที่ควรปรับเพื่อให้พักได้สบายขึ้น',principle:'ไม่มีค่าหลุดช่วงชั้นนอก แต่มีอย่างน้อย 1 ค่าที่ควรปรับ'},
+  {key:'fair',label:'พอใช้',english:'Fair',symbol:'–',description:'ใช้งานได้ และยังมีบางปัจจัยที่ปรับให้สบายขึ้นได้',principle:'ไม่มีค่าระดับควรปรับ/ต้องดูแล แต่มีอย่างน้อย 1 ค่าอยู่ระดับพอใช้'},
   {key:'good',label:'ดี',english:'Good',symbol:'✓',description:'สภาพแวดล้อมเหมาะสมโดยรวม แต่ยังมีเกณฑ์ที่ปรับได้อีกเล็กน้อย',principle:'เกณฑ์หลักที่พร้อมใช้งานอยู่ระดับดีขึ้นไป; เสียงเป็นข้อมูลเสริม'},
   {key:'excellent',label:'ยอดเยี่ยม',english:'Excellent',symbol:'★',description:'เกณฑ์หลักที่พร้อมใช้งานอยู่ในช่วงเป้าหมายสำหรับการพักผ่อน',principle:'ทุกเกณฑ์หลักอยู่ระดับยอดเยี่ยม; Sensor เสริมที่ขาดจะแสดงแยกโดยไม่บล็อกภาพรวม'},
 ]);
@@ -2814,13 +2956,13 @@ function dashboardRangeScore(value,ranges){
 // The overall atmosphere covers comfort, ambience and air. The worst live
 // criterion wins so a healthy reading cannot hide a genuinely bad one.
 const dashboardAtmosphereCriteria=Object.freeze([
-  {id:'temperature',name:'อุณหภูมิ',deviceKey:'sht3x_dis',source:'SHT3x-DIS',unit:'°C',digits:1,target:'18–27°C',principle:'ประเมิน Thermal comfort จากอุณหภูมิจริงใน ZEEP',bands:'ยอดเยี่ยม 18–27 · ดี 17–28 · พอใช้ 16–29 · แย่ 13–32 · วิกฤตนอกช่วง',read:e=>e.temperature_c,score:v=>dashboardRangeScore(v,[[18,27],[17,28],[16,29],[13,32]]),control:'เครื่องปรับอากาศ',action:v=>v>27?'ลดอุณหภูมิที่เลือกหรือเปิดแอร์':v<18?'เพิ่มอุณหภูมิที่เลือกหรือลดความเย็น':'รักษาอุณหภูมิปัจจุบัน'},
-  {id:'humidity',name:'ความชื้น',deviceKey:'sht3x_dis',source:'SHT3x-DIS',unit:'%RH',digits:1,target:'40–60%RH',principle:'ป้องกันอากาศแห้งเกินไปหรือความชื้นสะสมและการควบแน่น',bands:'ยอดเยี่ยม 40–60 · ดี 35–65 · พอใช้ 30–70 · แย่ 20–80 · วิกฤตนอกช่วง',read:e=>e.humidity_rh,score:v=>dashboardRangeScore(v,[[40,60],[35,65],[30,70],[20,80]]),control:'ไอน้ำ · ระบบระบายอากาศ',action:v=>v>60?'ปิดไอน้ำและเร่งระบายอากาศ':v<40?'เปิดไอน้ำเป็นช่วงและติดตามค่า':'รักษาความชื้นปัจจุบัน'},
-  {id:'light',name:'ความสว่าง',deviceKey:'opt3001',source:'OPT3001',unit:'lux',digits:1,target:'≤5 lux',principle:'ประเมินแสงรบกวนในโหมดเตรียมนอนและขณะนอน',bands:'ยอดเยี่ยม ≤5 · ดี ≤10 · พอใช้ ≤30 · แย่ ≤100 · วิกฤต >100 lux',read:e=>e.lux,score:v=>dashboardUpperScore(v,[5,10,30,100]),control:'ไฟเพดาน · แสงแดง · ประตู',action:v=>v>5?'ลดหรือปิดไฟ ตรวจแสงรั่วและตำแหน่งประตู':'รักษาระดับแสงปัจจุบัน'},
-  {id:'sound',name:'เสียง',deviceKey:'sph0645',source:'SPH0645LM4H-B',unit:'dBA',digits:1,target:'<40 dBA',requiredForOverall:false,principle:'รับค่า sound_dba ที่ Sensor Hub 1 ส่งจาก ESP32 โดยตรง',bands:'ยอดเยี่ยม <40 · ดี 40–45 · พอใช้ >45–50 · แย่ >50–60 · วิกฤต >60 dBA',read:e=>e.sound_dba_est,score:v=>v<40?4:v<=45?3:v<=50?2:v<=60?1:0,control:'เสียงบรรยากาศ · พัดลม · คอมเพรสเซอร์',action:v=>v>=40?'ลดเสียงเพลงและตรวจพัดลม คอมเพรสเซอร์ หรือการสั่น':'รักษาระดับเสียงปัจจุบัน'},
-  {id:'co2',name:'CO₂',deviceKey:'mhz19c',source:'MH-Z19C',unit:'ppm',digits:0,target:'≤800 ppm',principle:'ใช้ CO₂ เป็นตัวชี้การระบายอากาศ ไม่ใช่ค่าปริมาณออกซิเจน',bands:'ยอดเยี่ยม ≤800 · ดี ≤1,000 · พอใช้ ≤1,150 · แย่ <1,300 · วิกฤต ≥1,300 ppm',read:e=>e.co2_ppm,score:v=>v<=800?4:v<=1000?3:v<=1150?2:v<1300?1:0,control:'พัดลมลมเข้า · พัดลมลมออก',action:v=>v>800?'เพิ่มการเติมและระบายอากาศ พร้อมตรวจ Filter อุดตัน':'รักษาการหมุนเวียนอากาศปัจจุบัน'},
-  {id:'pm25',name:'PM2.5',deviceKey:'pms7003',source:'PMS7003',unit:'µg/m³',digits:1,target:'≤15 µg/m³',principle:'ตรวจประสิทธิภาพการกรองฝุ่นละเอียดและการรั่วของอากาศ',bands:'ยอดเยี่ยม ≤15 · ดี ≤25 · พอใช้ ≤37.5 · แย่ ≤50 · วิกฤต >50 µg/m³',read:e=>e.pm2_5_ug_m3,score:v=>dashboardUpperScore(v,[15,25,37.5,50]),control:'Pre-Filter · HEPA · ซีลประตู',action:v=>v>15?'ตรวจหรือเปลี่ยน Pre/HEPA Filter และตรวจรอยรั่ว':'รักษาระบบกรองอากาศปัจจุบัน'},
-  {id:'voc',name:'VOC Index',deviceKey:'sgp40',source:'SGP40',unit:'',digits:0,target:'≤120',principle:'เทียบสารระเหยกับ Adaptive baseline ของ SGP40 ซึ่งปรับตัวใกล้ 100',bands:'ยอดเยี่ยม ≤120 · ดี ≤150 · พอใช้ ≤200 · แย่ ≤300 · วิกฤต >300',read:e=>e.voc_index,score:v=>dashboardUpperScore(v,[120,150,200,300]),control:'กลิ่น · พัดลมระบาย · Carbon Filter',action:v=>v>120?'หยุดแหล่งกลิ่นหรือสารระเหย เร่งระบาย และตรวจ Carbon Filter':'รักษาการระบายอากาศปัจจุบัน'},
+  {id:'temperature',name:'อุณหภูมิ',deviceKey:'sht3x_dis',source:'SHT3x-DIS',unit:'°C',digits:1,target:'18–27°C',principle:'ประเมิน Thermal comfort จากอุณหภูมิจริงใน ZEEP',bands:'ยอดเยี่ยม 18–27 · ดี 17–28 · พอใช้ 16–29 · ควรปรับ 13–32 · ต้องดูแลเมื่ออยู่นอกช่วง',read:e=>e.temperature_c,score:v=>dashboardRangeScore(v,[[18,27],[17,28],[16,29],[13,32]]),control:'เครื่องปรับอากาศ',action:v=>v>27?'ลดอุณหภูมิที่เลือกหรือเปิดแอร์':v<18?'เพิ่มอุณหภูมิที่เลือกหรือลดความเย็น':'รักษาอุณหภูมิปัจจุบัน'},
+  {id:'humidity',name:'ความชื้น',deviceKey:'sht3x_dis',source:'SHT3x-DIS',unit:'%RH',digits:1,target:'40–60%RH',principle:'ป้องกันอากาศแห้งเกินไปหรือความชื้นสะสมและการควบแน่น',bands:'ยอดเยี่ยม 40–60 · ดี 35–65 · พอใช้ 30–70 · ควรปรับ 20–80 · ต้องดูแลเมื่ออยู่นอกช่วง',read:e=>e.humidity_rh,score:v=>dashboardRangeScore(v,[[40,60],[35,65],[30,70],[20,80]]),control:'ไอน้ำ · ระบบระบายอากาศ',action:v=>v>60?'ปิดไอน้ำและเร่งระบายอากาศ':v<40?'เปิดไอน้ำเป็นช่วงและติดตามค่า':'รักษาความชื้นปัจจุบัน'},
+  {id:'light',name:'ความสว่าง',deviceKey:'opt3001',source:'OPT3001',unit:'lux',digits:1,target:'≤5 lux',principle:'ประเมินแสงรบกวนในโหมดเตรียมนอนและขณะนอน',bands:'ยอดเยี่ยม ≤5 · ดี ≤10 · พอใช้ ≤30 · ควรปรับ ≤100 · ต้องดูแล >100 lux',read:e=>e.lux,score:v=>dashboardUpperScore(v,[5,10,30,100]),control:'ไฟเพดาน · แสงแดง · ประตู',action:v=>v>5?'ลดหรือปิดไฟ ตรวจแสงรั่วและตำแหน่งประตู':'รักษาระดับแสงปัจจุบัน'},
+  {id:'sound',name:'เสียง',deviceKey:'sph0645',source:'SPH0645LM4H-B',unit:'dBA',digits:1,target:'<40 dBA',requiredForOverall:false,principle:'รับค่า sound_dba ที่ Sensor Hub 1 ส่งจาก ESP32 โดยตรง',bands:'ยอดเยี่ยม <40 · ดี 40–45 · พอใช้ >45–50 · ควรปรับ >50–60 · ต้องดูแล >60 dBA',read:e=>e.sound_dba_est,score:v=>v<40?4:v<=45?3:v<=50?2:v<=60?1:0,control:'เสียงบรรยากาศ · พัดลม · คอมเพรสเซอร์',action:v=>v>=40?'ลดเสียงเพลงและตรวจพัดลม คอมเพรสเซอร์ หรือการสั่น':'รักษาระดับเสียงปัจจุบัน'},
+  {id:'co2',name:'CO₂',deviceKey:'mhz19c',source:'MH-Z19C',unit:'ppm',digits:0,target:'≤800 ppm',principle:'ใช้ CO₂ เป็นตัวชี้การระบายอากาศ ไม่ใช่ค่าปริมาณออกซิเจน',bands:'ยอดเยี่ยม ≤800 · ดี ≤1,000 · พอใช้ ≤1,150 · ควรปรับ <1,300 · เกณฑ์หยุด ≥1,300 ppm',read:e=>e.co2_ppm,score:v=>v<=800?4:v<=1000?3:v<=1150?2:v<1300?1:0,control:'พัดลมลมเข้า · พัดลมลมออก',action:v=>v>800?'เพิ่มการเติมและระบายอากาศ พร้อมตรวจ Filter อุดตัน':'รักษาการหมุนเวียนอากาศปัจจุบัน'},
+  {id:'pm25',name:'PM2.5',deviceKey:'pms7003',source:'PMS7003',unit:'µg/m³',digits:1,target:'≤15 µg/m³',principle:'ตรวจประสิทธิภาพการกรองฝุ่นละเอียดและการรั่วของอากาศ',bands:'ยอดเยี่ยม ≤15 · ดี ≤25 · พอใช้ ≤37.5 · ควรปรับ ≤50 · ต้องดูแล >50 µg/m³',read:e=>e.pm2_5_ug_m3,score:v=>dashboardUpperScore(v,[15,25,37.5,50]),control:'Pre-Filter · HEPA · ซีลประตู',action:v=>v>15?'ตรวจหรือเปลี่ยน Pre/HEPA Filter และตรวจรอยรั่ว':'รักษาระบบกรองอากาศปัจจุบัน'},
+  {id:'voc',name:'VOC Index',deviceKey:'sgp40',source:'SGP40',unit:'',digits:0,target:'≤120',principle:'เทียบสารระเหยกับ Adaptive baseline ของ SGP40 ซึ่งปรับตัวใกล้ 100',bands:'ยอดเยี่ยม ≤120 · ดี ≤150 · พอใช้ ≤200 · ควรปรับ ≤300 · ต้องดูแล >300',read:e=>e.voc_index,score:v=>dashboardUpperScore(v,[120,150,200,300]),control:'กลิ่น · พัดลมระบาย · Carbon Filter',action:v=>v>120?'หยุดแหล่งกลิ่นหรือสารระเหย เร่งระบาย และตรวจ Carbon Filter':'รักษาการระบายอากาศปัจจุบัน'},
 ]);
 function assessDashboardAtmosphere(environment={},devices={}){
   const evaluations=dashboardAtmosphereCriteria.map(criterion=>{
@@ -2859,7 +3001,7 @@ function assessDashboardAtmosphere(environment={},devices={}){
     required_actions:[...requiredActions,...blockingMissingActions],advisory_actions:advisoryActions,optimisation_actions:optimisationActions,
     meets_expected:!blockingUnavailable.length&&!requiredActions.length,
     assessment_quality:blockingUnavailable.length?'incomplete_required':advisoryUnavailable.length?'degraded_optional':'complete',
-    reason:firstRequired?`ต้องแก้ ${firstRequired.name} · ${firstRequired.action}`:firstOptimise?`ผ่านขั้นต่ำพอใช้ · ปรับเพิ่มได้ ${firstOptimise.name}`:advisoryUnavailable.length?`ประเมินจาก ${metrics.length}/${evaluations.length} เกณฑ์ · ${advisoryUnavailable[0].name}ไม่มีข้อมูล แต่ไม่บล็อกภาพรวม`:`ครบ ${metrics.length}/${evaluations.length} เกณฑ์ · รักษาค่าปัจจุบัน`,
+    reason:firstRequired?`แนะนำให้ปรับ ${firstRequired.name} · ${firstRequired.action}`:firstOptimise?`ผ่านขั้นต่ำพอใช้ · ปรับเพิ่มได้ ${firstOptimise.name}`:advisoryUnavailable.length?`ประเมินจาก ${metrics.length}/${evaluations.length} เกณฑ์ · ${advisoryUnavailable[0].name}ไม่มีข้อมูล แต่ไม่บล็อกภาพรวม`:`ครบ ${metrics.length}/${evaluations.length} เกณฑ์ · รักษาค่าปัจจุบัน`,
   };
 }
 function renderAdminAtmosphere(result){
@@ -2876,15 +3018,15 @@ function renderAdminAtmosphere(result){
   const passed=evaluations.filter(metric=>metric.status==='live'&&Number(metric.score)>=2).length;
   // The dashboard card above is the single source for the current overall
   // level. This Admin summary reports workload instead of repeating it.
-  levelEl.textContent=blockingUnavailable.length?`${blockingUnavailable.length} Sensor หลักไม่พร้อม`:belowExpected.length?`${belowExpected.length} จุดต้องแก้`:advisoryUnavailable.length?`${advisoryUnavailable.length} Sensor เสริมไม่พร้อม`:optimise.length?`${optimise.length} จุดปรับเพิ่ม`:'ไม่พบจุดผิดปกติ';
-  coverage.textContent=`ผ่านขั้นต่ำ ${passed}/${evaluations.length||7} · ต้องแก้ ${belowExpected.length} · หลักไม่พร้อม ${blockingUnavailable.length} · เสริมไม่พร้อม ${advisoryUnavailable.length}`;
+  levelEl.textContent=blockingUnavailable.length?`${blockingUnavailable.length} Sensor หลักไม่พร้อม`:belowExpected.length?`${belowExpected.length} จุดควรปรับ`:advisoryUnavailable.length?`${advisoryUnavailable.length} Sensor เสริมไม่พร้อม`:optimise.length?`${optimise.length} จุดปรับเพิ่ม`:'ค่าที่พร้อมอยู่ในเกณฑ์';
+  coverage.textContent=`ผ่านขั้นต่ำ ${passed}/${evaluations.length||7} · ควรปรับ ${belowExpected.length} · หลักไม่พร้อม ${blockingUnavailable.length} · เสริมไม่พร้อม ${advisoryUnavailable.length}`;
   icon.textContent=result.symbol;
   const levels=Array.isArray(result.levels)&&result.levels.length?result.levels:dashboardAtmosphereLevels;
   guide.innerHTML=[...levels].reverse().map(level=>`<article class="atmosphere-guide-${level.key}${level.key===result.key?' active':''}"><span>${level.symbol}</span><div><b>${level.label} · ${level.english}</b><small>${level.description||level.principle||''}</small></div></article>`).join('');
   criteria.innerHTML=[...required,...advisoryUnavailable].map(metric=>{
     if(metric.status!=='live')return `<article class="admin-criterion unavailable"><div><b>${metric.name}</b><span>${metric.source} · ${metric.deviceStatus||'ไม่พร้อม'}</span></div><strong>${metric.display||'--'}</strong><small>เป้าหมาย ${metric.target}<br>${metric.principle}<br><em>${metric.bands}</em><br>${metric.required_for_overall===false?'Sensor เสริม · ไม่บล็อกภาพรวม':metric.deviceStatus==='stale'?'ค่าล่าสุดก่อน Restart · รอข้อมูลสด':'ตรวจ Sensor และ freshness'}</small></article>`;
     return `<article class="admin-criterion criterion-${metric.level.key}"><div><b>${metric.name}</b><span>${metric.source} · ${metric.level.label}</span></div><strong>${metric.display}</strong><small>ผ่านขั้นต่ำ ${metric.expected_floor||metric.target} · เป้าหมายสูงสุด ${metric.target}<br>${metric.recommendation||metric.principle}${metric.control?` · ตรวจที่ ${metric.control}`:''}</small></article>`;
-  }).join('')||'<div class="admin-atmosphere-success"><span>✓</span><div><b>ผ่านขั้นต่ำพอใช้ขึ้นไปครบทุกเกณฑ์</b><small>ไม่มีค่าที่ต้องแก้ไข · ระดับพอใช้ยังแสดงเป็นข้อเสนอให้ปรับเพิ่มด้านล่าง</small></div></div>';
+  }).join('')||'<div class="admin-atmosphere-success"><span>✓</span><div><b>ผ่านขั้นต่ำพอใช้ขึ้นไปครบทุกเกณฑ์</b><small>ค่าที่พร้อมอยู่ในเกณฑ์ · ระดับพอใช้ยังแสดงเป็นข้อเสนอให้ปรับเพิ่มด้านล่าง</small></div></div>';
   const policyCriteria=Array.isArray(result.criteria)&&result.criteria.length?result.criteria:evaluations;
   thresholds.innerHTML=policyCriteria.map(metric=>`<article><b>${metric.label||metric.name}</b><span>${metric.bands_text||metric.bands}</span><small>${metric.source}${metric.mode?` · ${metric.mode}`:''}<br>${ADMIN_EXPLANATION_CONTEXT[metric.id||metric.key]||metric.principle||''}</small></article>`).join('');
   const basis=document.getElementById('adminAtmosphereBasis'),basisInfo=current.safety?.threshold_basis||{};
@@ -2909,27 +3051,25 @@ function renderDashboardAtmosphere(environment={},devices={}){
   // Pi is the source of truth so every User/Admin view uses exactly the same
   // Mode-aware, versioned bands. The local evaluator remains only as a
   // backward-compatible fallback while an older Pi is being upgraded.
-  const result=environment.assessment||assessDashboardAtmosphere(environment,devices);
+  const sourceResult=environment.assessment||assessDashboardAtmosphere(environment,devices);
+  const adminView=currentPrincipal?.role==='admin';
+  const result=adminView?sourceResult:userEnvironmentPresentation(sourceResult);
   card.classList.remove('live','offline','atmosphere-unknown',...dashboardAtmosphereLevels.map(level=>`atmosphere-${level.key}`));
   card.classList.add(`atmosphere-${result.key}`,result.key==='unknown'?'offline':'live');
   levelEl.textContent=result.label;reasonEl.textContent=result.reason;icon.textContent=result.symbol;
   card.setAttribute('aria-label',`ภาพรวมภายใน ZEEP ${result.label} ${result.description} ${result.reason}`);
   const readings=result.metrics.length?result.metrics.map(metric=>`${metric.name} ${metric.display}`).join(' · '):result.reason;
   card.title=`${result.description} · ${readings} · คะแนนต่ำสุดจาก ${result.metrics.length||0} เกณฑ์ที่พร้อมเป็นระดับรวม`;
-  const critical=result.key==='critical';
-  card.setAttribute('aria-live',critical?'assertive':'polite');
-  if(critical&&!dashboardAtmosphereCriticalActive){
-    playMonitorTone('bad');
-    toast(`ภาพรวมอยู่ระดับวิกฤต · ${result.reason}`,'error',6000);
-  }
-  dashboardAtmosphereCriticalActive=critical;
+  // This card describes Wellness and comfort. True emergency signalling is
+  // driven by renderSafety() from the Pi-local Safety Supervisor state.
+  card.setAttribute('aria-live','polite');
   card.querySelectorAll('.atmosphere-scale > i').forEach(marker=>{
     const active=marker.dataset.level===result.key;
     marker.classList.toggle('active',active);
     if(active)marker.setAttribute('aria-current','true');else marker.removeAttribute('aria-current');
   });
-  renderAdminAtmosphere(result);
-  return result;
+  renderAdminAtmosphere(sourceResult);
+  return sourceResult;
 }
 
 const ADMIN_EXPLANATION_CONTEXT=Object.freeze({
@@ -2946,14 +3086,14 @@ const ADMIN_LEVEL_COPY=Object.freeze({
   good:'ดีและผ่านเกณฑ์ขั้นต่ำของ Mode นี้',
   fair:'พอใช้ แต่ยังปรับให้เหมาะขึ้นได้',
   poor:'ต่ำกว่าเกณฑ์ที่คาดหวัง ควรปรับ',
-  critical:'วิกฤต ต้องตรวจสอบและแก้ไขทันที',
+  critical:'ควรปรับสภาพแวดล้อมตอนนี้',
   unknown:'ยังแปลผลไม่ได้',
 });
 const ADMIN_EXPLANATION_ICON=Object.freeze({
   hr:'♥',rr:'≈',sleep:'☾',temperature:'°',humidity:'%',light:'☼',sound:'dB',co2:'CO₂',pm25:'PM',voc:'VOC',unknown:'•',
 });
 const ADMIN_EXPLANATION_STATUS=Object.freeze({
-  excellent:'ยอดเยี่ยม',good:'อยู่ในช่วง',info:'ยืนยันแล้ว',fair:'ควรติดตาม',poor:'ควรปรับ',critical:'เร่งแก้ไข',unknown:'รอข้อมูล',
+  excellent:'ยอดเยี่ยม',good:'อยู่ในช่วง',info:'ยืนยันแล้ว',fair:'ควรติดตาม',poor:'ควรปรับ',critical:'ควรปรับตอนนี้',unknown:'รอข้อมูล',
 });
 function adminExplanationRow({tone='unknown',icon='unknown',title,value='--',status,summary,detail}){
   const marker=ADMIN_EXPLANATION_ICON[icon]||ADMIN_EXPLANATION_ICON.unknown;
@@ -2962,13 +3102,13 @@ function adminExplanationRow({tone='unknown',icon='unknown',title,value='--',sta
   return `<article class="admin-live-explanation-row tone-${tone}${value?'':' is-summary'}"><div class="admin-live-explanation-row-head"><span class="admin-live-explanation-metric-icon" aria-hidden="true">${marker}</span><b>${title}</b><em>${state}</em></div>${valueMarkup}<p>${summary}</p><small><i aria-hidden="true">→</i>${detail}</small></article>`;
 }
 function adminBaselineComparison(value,range,unit){
-  if(!Number.isFinite(Number(value))||!Array.isArray(range)||range.length<2)return 'ยังไม่มีช่วง Baseline ที่ใช้เทียบได้';
+  if(!Number.isFinite(Number(value))||!Array.isArray(range)||range.length<2)return 'ยังไม่มีช่วงอ้างอิงของ State model ที่ใช้เทียบได้';
   const numeric=Number(value),minimum=Number(range[0]),maximum=Number(range[1]);
-  if(!Number.isFinite(minimum)||!Number.isFinite(maximum))return 'ยังไม่มีช่วง Baseline ที่ใช้เทียบได้';
+  if(!Number.isFinite(minimum)||!Number.isFinite(maximum))return 'ยังไม่มีช่วงอ้างอิงของ State model ที่ใช้เทียบได้';
   const band=`${minimum.toLocaleString('th-TH-u-nu-latn',{maximumFractionDigits:1})}–${maximum.toLocaleString('th-TH-u-nu-latn',{maximumFractionDigits:1})} ${unit}`;
-  if(numeric<minimum)return `ต่ำกว่าช่วง Baseline ${band}`;
-  if(numeric>maximum)return `สูงกว่าช่วง Baseline ${band}`;
-  return `อยู่ในช่วง Baseline ${band}`;
+  if(numeric<minimum)return `ต่ำกว่าช่วงอ้างอิงของ State model ${band}`;
+  if(numeric>maximum)return `สูงกว่าช่วงอ้างอิงของ State model ${band}`;
+  return `อยู่ในช่วงอ้างอิงของ State model ${band}`;
 }
 function adminBaselineTone(value,range){
   if(!Number.isFinite(Number(value))||!Array.isArray(range)||range.length<2)return 'unknown';
@@ -2984,15 +3124,28 @@ function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
   const stageKey=sleep.classification_active===true?(sleep.confirmed_state||sleep.state):null;
   const stage=SLEEP_TH[stageKey]||SLEEP_TH.no_data;
   const baseline=(sleep.baseline||sleep.age_baseline||{})[stageKey]||{};
-  const live=!!bcg.connected&&!bcg.stale;
+  const live=!!bcg.connected&&!bcg.stale&&bcg.analysis_stale!==true;
   const restored=bcg.restored_after_restart===true;
   const onBed=live&&[0,2,3,5].includes(Number(bcg.status_code));
   const rawHr=bcg.heart_rate_bpm,rawRr=bcg.respiration_rate;
   const hr=Number(rawHr),rr=Number(rawRr);
+  const pairedPackets=Number(bcg.paired_vital_packets);
+  const pairedCoverage=Number(bcg.paired_vital_coverage);
+  const analysisEligible=live&&!restored
+    &&bcg.analysis_valid===true
+    &&[0,5].includes(Number(bcg.status_code))
+    &&bcg.motion_contaminated!==true
+    &&bcg.respiratory_signal_contaminated!==true
+    &&Number.isFinite(pairedPackets)&&pairedPackets>=8
+    &&Number.isFinite(pairedCoverage)&&pairedCoverage>=0.8;
   // ``Number(null)`` is zero in JavaScript. Preserve the explicit missing-data
   // contract so an empty vital can never be described as a real 0 reading.
-  const hrValid=onBed&&rawHr!==null&&rawHr!==undefined&&rawHr!==''&&Number.isFinite(hr);
-  const rrValid=onBed&&rawRr!==null&&rawRr!==undefined&&rawRr!==''&&Number.isFinite(rr);
+  const rawHrVisible=rawHr!==null&&rawHr!==undefined&&rawHr!==''&&Number.isFinite(hr);
+  const rawRrVisible=rawRr!==null&&rawRr!==undefined&&rawRr!==''&&Number.isFinite(rr);
+  const hrValid=analysisEligible&&bcg.heart_rate_current_valid===true
+    &&bcg.heart_rate_held!==true&&rawHrVisible;
+  const rrValid=analysisEligible&&bcg.respiration_current_valid===true
+    &&bcg.respiration_held!==true&&rawRrVisible;
   const hrRestored=restored&&rawHr!==null&&rawHr!==undefined&&rawHr!==''&&Number.isFinite(hr);
   const rrRestored=restored&&rawRr!==null&&rawRr!==undefined&&rawRr!==''&&Number.isFinite(rr);
   const stageTone=stageKey?'info':'unknown';
@@ -3006,19 +3159,19 @@ function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
   // Repeat a vital here only when an operator must investigate it.
   if(!hrValid||hrRestored||hrTone!=='good')bioRows.push(adminExplanationRow({
     tone:hrTone,icon:'hr',title:'ชีพจร',value:(hrValid||hrRestored)?`${hr.toFixed(1)} ครั้ง/นาที`:'--',
-    status:hrRestored?'ก่อน Restart':hrValid?'นอก Baseline':'รอข้อมูล',
-    summary:hrRestored?'แสดงค่าล่าสุดเพื่อความต่อเนื่อง · ยังไม่เทียบ Baseline':hrValid?adminBaselineComparison(hr,baseline.hr,'ครั้ง/นาที'):(onBed?'ยังคำนวณชีพจรไม่ได้':'ไม่มีสัญญาณผู้ใช้งานบนเตียง'),
+    status:hrRestored?'ก่อน Restart':hrValid?(hrTone==='unknown'?'ไม่มีช่วงเทียบ':hrTone==='good'?'สอดคล้อง':'ต่างจากช่วงอ้างอิง'):rawHrVisible?'ยังไม่ใช้ตีความ':'รอข้อมูล',
+    summary:hrRestored?'แสดงค่าล่าสุดเพื่อความต่อเนื่อง · ยังไม่เทียบช่วงอ้างอิง':hrValid?adminBaselineComparison(hr,baseline.hr,'ครั้ง/นาที'):rawHrVisible?'มีค่าแสดงผล แต่ Data-quality gate ยังไม่ครบ จึงไม่ใช้ตีความ':(onBed?'ยังคำนวณชีพจรไม่ได้':'ไม่มีสัญญาณผู้ใช้งานบนเตียง'),
     detail:hrRestored?'รอ BCG packet สดก่อนนำกลับไปวิเคราะห์':hrValid?`ค่าประมาณจาก BCG${bcg.heart_rate_held?' · เป็นค่าล่าสุดที่คงไว้ระหว่างตรวจคุณภาพสัญญาณ':''}; ตรวจแนวโน้มร่วมกับ ${source}`:'ตรวจสถานะเตียง ตำแหน่งผู้ใช้ และคุณภาพสัญญาณ BCG',
   }));
   if(!rrValid||rrRestored||rrTone!=='good')bioRows.push(adminExplanationRow({
     tone:rrTone,icon:'rr',title:'อัตราการหายใจ',value:(rrValid||rrRestored)?`${rr.toFixed(1)} ครั้ง/นาที`:'--',
-    status:rrRestored?'ก่อน Restart':rrValid?'นอก Baseline':'รอข้อมูล',
-    summary:rrRestored?'แสดงค่าล่าสุดเพื่อความต่อเนื่อง · ยังไม่เทียบ Baseline':rrValid?adminBaselineComparison(rr,baseline.rr,'ครั้ง/นาที'):(onBed?'ยังคำนวณอัตราการหายใจไม่ได้':'ไม่มีสัญญาณผู้ใช้งานบนเตียง'),
+    status:rrRestored?'ก่อน Restart':rrValid?(rrTone==='unknown'?'ไม่มีช่วงเทียบ':rrTone==='good'?'สอดคล้อง':'ต่างจากช่วงอ้างอิง'):rawRrVisible?'ยังไม่ใช้ตีความ':'รอข้อมูล',
+    summary:rrRestored?'แสดงค่าล่าสุดเพื่อความต่อเนื่อง · ยังไม่เทียบช่วงอ้างอิง':rrValid?adminBaselineComparison(rr,baseline.rr,'ครั้ง/นาที'):rawRrVisible?'มีค่าแสดงผล แต่ Data-quality gate ยังไม่ครบ จึงไม่ใช้ตีความ':(onBed?'ยังคำนวณอัตราการหายใจไม่ได้':'ไม่มีสัญญาณผู้ใช้งานบนเตียง'),
     detail:rrRestored?'รอ BCG packet สดก่อนนำกลับไปวิเคราะห์':rrValid?`ค่าประมาณจาก BCG${bcg.respiration_held?' · เป็นค่าล่าสุดที่คงไว้ระหว่างตรวจคุณภาพสัญญาณ':''}; ตรวจความนิ่งร่วมกับ HR และ Movement`:'ยังไม่ใช้เป็นหลักฐาน Sleep Stage จนกว่า HR และ RR จะผ่าน Data-quality gate',
   }));
   if(hrValid&&rrValid&&!hrRestored&&!rrRestored&&hrTone==='good'&&rrTone==='good')bioRows.push(adminExplanationRow({
-    tone:'good',icon:'hr',title:'สัญญาณชีพ',value:'',status:'ใน Baseline',
-    summary:'ชีพจรและอัตราการหายใจอยู่ในช่วง Baseline ของสถานะที่ยืนยัน',
+    tone:'good',icon:'hr',title:'สัญญาณชีพ',value:'',status:'สอดคล้องกับโมเดล',
+    summary:'ชีพจรและอัตราการหายใจอยู่ในช่วงอ้างอิงของ State model ที่ยืนยัน',
     detail:`ติดตามแนวโน้มร่วมกับ Movement และ ${source} · ค่าปัจจุบันดูจากการ์ดด้านบน`,
   }));
   bioRows.push(adminExplanationRow({
@@ -3057,26 +3210,38 @@ function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
 }
 function renderSimpleDashboard(state={},environment={},bcg={},session={}){
   const active=!!session.active,recording=!!session.recording;
+  const adminView=currentPrincipal?.role==='admin';
   renderHealthReference(session);
   const avatar=document.getElementById('dashAvatar');
   const account=active?identityLabel(session):'ยังไม่เริ่ม Session';
   avatar.textContent=active?String(account||'Z').trim().slice(0,1).toUpperCase():'Z';
   document.getElementById('dashUserName').textContent=account;
   document.getElementById('dashUserMeta').textContent=active
-    ? `${genderTh(session.gender)} · ${displayAge(session)} · ${recording?`บันทึกแล้ว ${session.samples||0} จุด`:sessionStartGateText(session,state.system||{})}`
-    : 'เลือกผู้ใช้งานเพื่อเริ่มติดตามสุขภาพและสภาพแวดล้อม';
+    ? `${genderTh(session.gender)} · ${displayAge(session)} · ${adminView
+      ?recording?`บันทึกแล้ว ${session.samples||0} จุด`:sessionStartGateText(session,state.system||{})
+      :recording?'กำลังบันทึกการพัก':'กำลังเตรียมเริ่มบันทึก'}`
+    : adminView?'เลือกผู้ใช้งานเพื่อเริ่มติดตามสุขภาพและสภาพแวดล้อม':'เข้าสู่ระบบเพื่อเริ่มการพัก';
   const badge=document.getElementById('dashSessionBadge');
-  badge.textContent=recording?'● RECORDING':active?'WAITING FOR VITALS':'NO SESSION';badge.classList.toggle('live',recording);
+  badge.textContent=adminView
+    ?recording?'● RECORDING':active?'WAITING FOR VITALS':'NO SESSION'
+    :recording?'● กำลังบันทึก':active?'กำลังเตรียม':'ยังไม่เริ่ม';
+  badge.classList.toggle('live',recording);
   const bcgLive=!!bcg.connected&&!bcg.stale,bcgStatus=Number(bcg.status_code),bcgRestored=bcg.restored_after_restart===true;
   const personOnBed=bcgLive&&[0,2,3,5].includes(bcgStatus);
-  const vitalFallbackNote=!bcgLive?'รอสัญญาณ BCG':bcgStatus===1?'ไม่พบผู้ใช้งานบนเตียง':personOnBed?'กำลังวิเคราะห์สัญญาณ':'รอข้อมูลจาก Sensor';
+  const vitalFallbackNote=adminView
+    ?!bcgLive?'รอสัญญาณ BCG':bcgStatus===1?'ไม่พบผู้ใช้งานบนเตียง':personOnBed?'กำลังวิเคราะห์สัญญาณ':'รอข้อมูลจาก Sensor'
+    :!bcgLive?'กำลังเชื่อมต่อข้อมูล':bcgStatus===1?'ออกจากเตียง':personOnBed?'กำลังอ่านสัญญาณ':'กำลังเตรียมข้อมูล';
   document.getElementById('dashHr').textContent=bcg.heart_rate_bpm??(personOnBed?'…':'--');
   document.getElementById('dashRr').textContent=bcg.respiration_rate==null?(personOnBed?'…':'--'):Number(bcg.respiration_rate).toFixed(1);
-  document.getElementById('dashHrNote').textContent=bcg.heart_rate_bpm==null?vitalFallbackNote:bcgRestored?'ค่าล่าสุดก่อน Restart · รอ BCG สด':(bcg.heart_rate_held?'ค่าล่าสุด · กำลังวิเคราะห์':'ครั้ง/นาที');
-  document.getElementById('dashRrNote').textContent=bcg.respiration_rate==null?vitalFallbackNote:bcgRestored?'ค่าล่าสุดก่อน Restart · รอ BCG สด':(bcg.respiration_held?'ค่าล่าสุด · กำลังวิเคราะห์':'ครั้ง/นาที');
-  const bedShort=({0:'ON BED',1:'OFF BED',2:'MOVING',3:'WEAK',4:'OBJECT',5:'SNORING'})[bcg.status_code]||'--';
+  document.getElementById('dashHrNote').textContent=bcg.heart_rate_bpm==null?vitalFallbackNote:bcgRestored?(adminView?'ค่าล่าสุดก่อน Restart · รอ BCG สด':'กำลังเชื่อมต่อข้อมูลล่าสุด'):(bcg.heart_rate_held?(adminView?'ค่าล่าสุด · กำลังวิเคราะห์':'กำลังตรวจความต่อเนื่อง'):'ครั้ง/นาที');
+  document.getElementById('dashRrNote').textContent=bcg.respiration_rate==null?vitalFallbackNote:bcgRestored?(adminView?'ค่าล่าสุดก่อน Restart · รอ BCG สด':'กำลังเชื่อมต่อข้อมูลล่าสุด'):(bcg.respiration_held?(adminView?'ค่าล่าสุด · กำลังวิเคราะห์':'กำลังตรวจความต่อเนื่อง'):'ครั้ง/นาที');
+  const bedShort=(adminView
+    ?{0:'ON BED',1:'OFF BED',2:'MOVING',3:'WEAK',4:'OBJECT',5:'SNORING'}
+    :{0:'อยู่บนเตียง',1:'ออกจากเตียง',2:'กำลังขยับ',3:'กำลังอ่านสัญญาณ',4:'พบแรงกด',5:'อยู่บนเตียง'})[bcg.status_code]||'--';
   document.getElementById('dashBed').textContent=bedShort;
-  document.getElementById('dashBedNote').textContent=BCG_STATUS_TH[bcg.status_code]||bcg.status_text||'รอสัญญาณจากเตียง';
+  document.getElementById('dashBedNote').textContent=adminView
+    ?BCG_STATUS_TH[bcg.status_code]||bcg.status_text||'รอสัญญาณจากเตียง'
+    :USER_BED_STATUS_TH[bcg.status_code]||'กำลังอ่านสถานะเตียง';
   const sleep=state.sleep||{};
   const restartSleepHold=sleep.display_only_after_restart===true
     &&sleep.held_previous_state===true&&sleep.classification_active===true;
@@ -3091,23 +3256,31 @@ function renderSimpleDashboard(state={},environment={},bcg={},session={}){
     : classificationActive?sleep.state
     : recording&&initialWait?'wait_initial':'no_data';
   const sleepMeta=SLEEP_TH[sleepStateKey]||SLEEP_TH.no_data;
-  document.getElementById('dashSleep').textContent=sleepStateKey==='wait_initial'
-    ? sleepMeta.title
-    : sleepMeta.label;
+  document.getElementById('dashSleep').textContent=!adminView&&['wait_initial','no_data'].includes(sleepStateKey)
+    ?'กำลังประเมินการพัก'
+    :sleepStateKey==='wait_initial'?sleepMeta.title:sleepMeta.label;
   document.getElementById('dashSleep').title=sleepMeta.meaning||sleepMeta.title||'';
   const confidence=({high:'สูง',medium:'ปานกลาง',low:'ต่ำ'})[sleep.confidence]||'ไม่ระบุ';
   const sleepSource=sleep.classification_source==='personal'?'Baseline ส่วนบุคคล':'Baseline อายุและเพศ';
   const evidenceCandidate=sleep.evidence?.candidate||sleep.probability_winner||sleep.raw_candidate;
   const confirmation=sleep.confirmation||{};
-  document.getElementById('dashSleepNote').textContent=classificationActive
-    ? restartSleepHold
-      ? `${sleepMeta.code} ก่อน Restart · กำลังรับหลักฐานสด · ไม่บันทึกซ้ำ`
-      : sleep.held_previous_state
-        ? `${sleepMeta.code} · ${sleep.provisional?'provisional · ':''}คง State ก่อนหน้า · ผู้ท้าชิง ${(confirmation.pending_state||evidenceCandidate||'--').toUpperCase()} ยังไม่นับเป็น State ใหม่ · ${sleep.score_eligible?'นับเวลาตาม State เดิม':'ยังไม่นับคะแนน'}`
-        : `${sleepMeta.code} ยืนยันแล้ว · หลักฐาน ${(evidenceCandidate||'--').toUpperCase()} · ${sleepSource} · มั่นใจ ${confidence}`
-    : sleep.evidence_active
-      ? `หลักฐาน ${(evidenceCandidate||'--').toUpperCase()} · กำลังยืนยัน ${confirmation.candidate_epochs||0}/${confirmation.required_epochs||2} epoch`
-      : `${sleepMeta.code} · ${sleep.reason||vitalFallbackNote} · ยังไม่จัดประเภทการนอน`;
+  document.getElementById('dashSleepNote').textContent=adminView
+    ?classificationActive
+      ?restartSleepHold
+        ?`${sleepMeta.code} ก่อน Restart · กำลังรับหลักฐานสด · ไม่บันทึกซ้ำ`
+        :sleep.held_previous_state
+          ?`${sleepMeta.code} · ${sleep.provisional?'provisional · ':''}คง State ก่อนหน้า · ผู้ท้าชิง ${(confirmation.pending_state||evidenceCandidate||'--').toUpperCase()} ยังไม่นับเป็น State ใหม่ · ${sleep.score_eligible?'นับเวลาตาม State เดิม':'ยังไม่นับคะแนน'}`
+          :`${sleepMeta.code} ยืนยันแล้ว · หลักฐาน ${(evidenceCandidate||'--').toUpperCase()} · ${sleepSource} · มั่นใจ ${confidence}`
+      :sleep.evidence_active
+        ?`หลักฐาน ${(evidenceCandidate||'--').toUpperCase()} · กำลังยืนยัน ${confirmation.candidate_epochs||0}/${confirmation.required_epochs||2} epoch`
+        :`${sleepMeta.code} · ${sleep.reason||vitalFallbackNote} · ยังไม่จัดประเภทการนอน`
+    :restartSleepHold
+      ?'กำลังเชื่อมต่อข้อมูลล่าสุด · แสดงสถานะเดิมต่อเนื่อง'
+      :classificationActive&&sleep.held_previous_state
+        ?'กำลังยืนยันการเปลี่ยนแปลง · แสดงสถานะเดิมต่อเนื่อง'
+        :classificationActive
+          ?'ประเมินจากแนวโน้มชีพจร การหายใจ และการพักนิ่ง'
+          :sleep.evidence_active?'กำลังดูแนวโน้มให้ชัดขึ้น':'กำลังอ่านสัญญาณจากเตียง';
   renderAdminSleepBaseline(sleep,session);
   const devices=environment.devices||{};
   setDashboardSensor('dashSensorTemp','dashTemp',environment.temperature_c,'°C',devices.sht3x_dis,1);
@@ -3120,7 +3293,9 @@ function renderSimpleDashboard(state={},environment={},bcg={},session={}){
   setDashboardSensor('dashSensorSound','dashSound',soundMetric.value,soundMetric.unit,devices.sph0645,soundMetric.digits);
   const atmosphere=renderDashboardAtmosphere(environment,devices);
   renderAdminLiveExplanation({bcg,sleep,session,atmosphere});
-  document.getElementById('dashSensorSummary').textContent=`Sensor ${environment.live_count||0}/${environment.total_count||6} · ${environment.status||'offline'}`;
+  document.getElementById('dashSensorSummary').textContent=adminView
+    ?`Sensor ${environment.live_count||0}/${environment.total_count||6} · ${environment.status||'offline'}`
+    :`ข้อมูลพร้อม ${environment.live_count||0}/${environment.total_count||6}`;
 }
 
 function renderAdminSleepBaseline(sleep={},session={}){
@@ -3267,7 +3442,10 @@ function toggleUnifiedAudioMode(btn){
 }
 async function setUnifiedAudioMode(mode,btn){
   if(!['repeat_one','queue'].includes(mode))return;
-  if(current.safety?.latched){toast('Safety Stop กำลังทำงาน','error');return;}
+  if(current.safety?.latched){
+    toast(currentPrincipal?.role==='admin'?'Safety Stop กำลังทำงาน':'ระบบอยู่ในโหมดปลอดภัย จึงยังเปลี่ยนเสียงไม่ได้','error');
+    return;
+  }
   unifiedAudioMode=mode;
   unifiedAudioModeInitialized=true;
   renderUnifiedAudioModeControls();
@@ -3415,7 +3593,11 @@ async function applyUnifiedAirconTemperature(select){
   }else{
     const confirmed=Number(current.aircon?.desired_temperature_c);
     if(Number.isInteger(confirmed)&&confirmed>=AIRCON_DESIRED_TEMPERATURE_MIN_C&&confirmed<=AIRCON_DESIRED_TEMPERATURE_MAX_C)select.value=String(confirmed);
-    setUnifiedAirconTempFeedback('error','ปรับไม่สำเร็จ',2400);
+    setUnifiedAirconTempFeedback(
+      'error',
+      currentPrincipal?.role==='admin'?'ปรับไม่สำเร็จ':'ยังปรับไม่ได้ · ลองอีกครั้ง',
+      2400,
+    );
   }
 }
 function syncUnifiedSwitch(id,on,enabled,onText='ปิด',offText='เปิด'){
@@ -3486,12 +3668,13 @@ function syncUnifiedAirconComfort(on,online,targetTemperature,measuredTemperatur
   const measured=measuredTemperature===null||measuredTemperature===undefined||measuredTemperature===''?NaN:Number(measuredTemperature);
   const hasTarget=Number.isInteger(target)&&target>=AIRCON_DESIRED_TEMPERATURE_MIN_C&&target<=AIRCON_DESIRED_TEMPERATURE_MAX_C;
   const targetText=hasTarget?`${Math.round(target)}°C`:'';
+  const adminView=currentPrincipal?.role==='admin';
   map.classList.toggle('on',!!on&&!!online);
   map.classList.toggle('offline',!online);
   map.dataset.cool=hasTarget&&target<=20?'deep':hasTarget&&target<=22?'cool':'gentle';
-  caption.textContent=!online?'ระบบแอร์ Offline':on?(targetText?`${targetText} · กำลังทำความเย็น`:'กำลังทำความเย็น'):'แอร์ปิดอยู่';
+  caption.textContent=!online?(adminView?'ระบบแอร์ Offline':'กำลังเชื่อมต่อแอร์'):on?(targetText?`${targetText} · กำลังทำความเย็น`:'กำลังทำความเย็น'):'แอร์ปิดอยู่';
   const measuredText=Number.isFinite(measured)?` อุณหภูมิแอร์ ${measured.toFixed(1)}°C`:'';
-  map.setAttribute('aria-label',!online?'เครื่องปรับอากาศ Offline':on?`เครื่องปรับอากาศเปิดอยู่ เป้าหมาย ${targetText||'รอข้อมูล'}${measuredText}`:'เครื่องปรับอากาศปิดอยู่');
+  map.setAttribute('aria-label',!online?(adminView?'เครื่องปรับอากาศ Offline':'กำลังเชื่อมต่อเครื่องปรับอากาศ'):on?`เครื่องปรับอากาศเปิดอยู่ ตั้งไว้ที่ ${targetText||'รอข้อมูล'}${adminView?measuredText:''}`:'เครื่องปรับอากาศปิดอยู่');
   const podScene=document.getElementById('podRoomLightMap');
   if(podScene){
     podScene.classList.toggle('aircon-on',!!on&&!!online);
@@ -3538,7 +3721,9 @@ function setUnifiedSensor(cardId,valueId,displayValue,device={}){
   card.classList.toggle('live',live);
   card.classList.toggle('warning',!live&&['stale','held','warming'].includes(status));
   card.classList.toggle('offline',!live&&!['stale','held','warming'].includes(status));
-  card.title=`${device.model||'Sensor'} · ${sensorStatusTh[status]||status}${Number.isFinite(Number(device.data_age_s))?` · ${Number(device.data_age_s).toFixed(1)}s`:''}`;
+  card.title=currentPrincipal?.role==='admin'
+    ?`${device.model||'Sensor'} · ${sensorStatusTh[status]||status}${Number.isFinite(Number(device.data_age_s))?` · ${Number(device.data_age_s).toFixed(1)}s`:''}`
+    :live?'ข้อมูลพร้อม':'กำลังรวบรวมข้อมูล';
 }
 const unifiedComfortProfiles=Object.freeze({
   // These are wellness ambience profiles, not treatment claims. The physical
@@ -3599,14 +3784,15 @@ function syncUnifiedComfortDelivery(status='ready',profile=null){
   const caption=document.getElementById('comfortDeliveryState');
   if(!map||!caption)return;
   const profileName=profile?.name||'';
+  const adminView=currentPrincipal?.role==='admin';
   const labels={
     ready:'พร้อมใช้งาน',
     active:`กำลังพ่น${profileName?` · ${profileName}`:''}`,
     pending:`กำลังส่ง${profileName?` · ${profileName}`:''}`,
     success:`ส่งสำเร็จ${profileName?` · ${profileName}`:''}`,
-    error:'ส่งไม่สำเร็จ',
-    locked:'Safety Locked',
-    offline:'ระบบ Offline',
+    error:adminView?'ส่งไม่สำเร็จ':'ยังไม่ตอบสนอง · ลองอีกครั้ง',
+    locked:adminView?'Safety Locked':'โหมดปลอดภัย',
+    offline:adminView?'ระบบ Offline':'กำลังเชื่อมต่อ',
   };
   const label=labels[status]||labels.ready;
   map.dataset.state=status;
@@ -3616,6 +3802,7 @@ function syncUnifiedComfortDelivery(status='ready',profile=null){
 
 function renderUnifiedComfort(gpio={},gpioOk=false,safetyLatched=false){
   const now=Date.now(),states=[];
+  const adminView=currentPrincipal?.role==='admin';
   Object.entries(unifiedComfortProfiles).forEach(([name,profile],index)=>{
     const button=document.getElementById(unifiedComfortButtonIds[name]);
     if(!button)return;
@@ -3632,7 +3819,7 @@ function renderUnifiedComfort(gpio={},gpioOk=false,safetyLatched=false){
       active:`กำลังพ่น · ${profile.purpose}`,
       pending:'กำลังส่งคำสั่ง…',
       success:`ส่งสำเร็จ · ${profile.purpose}`,
-      error:'ส่งไม่สำเร็จ · ลองอีกครั้ง',
+      error:adminView?'ส่งไม่สำเร็จ · ลองอีกครั้ง':'ยังไม่ตอบสนอง · ลองอีกครั้ง',
       idle:`พร้อมพ่น · ${profile.purpose}`,
     }[status];
     if(stateLabel)stateLabel.textContent=statusText;
@@ -3646,13 +3833,16 @@ function renderUnifiedComfort(gpio={},gpioOk=false,safetyLatched=false){
   renderDebugAromaReference(current.labels||{});
   const summary=document.getElementById('unifiedComfortStatus');
   if(!summary)return;
-  if(safetyLatched){summary.textContent='Safety Locked';summary.dataset.state='locked';syncUnifiedComfortDelivery('locked');return;}
-  if(!gpioOk){summary.textContent='Offline';summary.dataset.state='offline';syncUnifiedComfortDelivery('offline');return;}
+  if(safetyLatched){summary.textContent=adminView?'Safety Locked':'โหมดปลอดภัย';summary.dataset.state='locked';syncUnifiedComfortDelivery('locked');return;}
+  if(!gpioOk){summary.textContent=adminView?'Offline':'กำลังเชื่อมต่อ';summary.dataset.state='offline';syncUnifiedComfortDelivery('offline');return;}
   const priority={active:4,pending:3,error:2,success:1};
   states.sort((a,b)=>(priority[b.status]-priority[a.status])||(b.updatedAt-a.updatedAt));
   const latest=states[0];
   if(!latest){summary.textContent='พร้อมใช้ · 5 รายการ';summary.dataset.state='ready';syncUnifiedComfortDelivery('ready');return;}
-  const prefix={active:'กำลังพ่น',pending:'กำลังส่ง',success:'ส่งสำเร็จ',error:'ส่งไม่สำเร็จ'}[latest.status];
+  const prefix={
+    active:'กำลังพ่น',pending:'กำลังส่ง',success:'ส่งสำเร็จ',
+    error:adminView?'ส่งไม่สำเร็จ':'ลองอีกครั้ง',
+  }[latest.status];
   summary.textContent=`${prefix} · ${latest.profile.name}`;
   summary.dataset.state=latest.status;
   syncUnifiedComfortDelivery(latest.status,latest.profile);
@@ -3669,7 +3859,7 @@ function renderUnifiedAirQuality(environment={},devices={}){
     {name:'VOC',raw:environment.voc_index,value:Number(environment.voc_index),device:devices.sgp40,unit:'Index',bands:[120,150,200]},
   ].filter(metric=>metric.raw!==null&&metric.raw!==undefined&&metric.raw!==''&&Number.isFinite(metric.value)&&metric.device?.status==='live');
   const grade=metric=>metric.value<=metric.bands[0]?3:metric.value<=metric.bands[1]?2:metric.value<=metric.bands[2]?1:0;
-  const labels=['แย่','ปานกลาง','ดี','ดีมาก'],keys=['bad','moderate','good','excellent'];
+  const labels=['ควรปรับ','ปานกลาง','ดี','ดีมาก'],keys=['bad','moderate','good','excellent'];
   let key='unknown',label='รอข้อมูล';
   if(metrics.length){
     let score=Math.min(...metrics.map(grade));
@@ -3679,10 +3869,11 @@ function renderUnifiedAirQuality(environment={},devices={}){
   card.classList.remove('quality-unknown','quality-bad','quality-moderate','quality-good','quality-excellent','live','warning','offline');
   card.classList.add(`quality-${key}`);
   value.textContent=label;
-  detail.textContent=`Air Sensor ${metrics.length}/3`;
+  const adminView=currentPrincipal?.role==='admin';
+  detail.textContent=adminView?`Air Sensor ${metrics.length}/3`:`ข้อมูลอากาศ ${metrics.length}/3`;
   card.title=metrics.length
     ? metrics.map(metric=>`${metric.name} ${metric.value} ${metric.unit}`).join(' · ')
-    : 'MH-Z19C, PMS7003 และ SGP40 ยังไม่มีข้อมูล Live';
+    : adminView?'MH-Z19C, PMS7003 และ SGP40 ยังไม่มีข้อมูล Live':'กำลังรวบรวมข้อมูลอากาศ';
 }
 
 // Humidity uses the exact same five assessment bands as the Dashboard.
@@ -3703,7 +3894,9 @@ function renderUnifiedHumidity(environment={},device={}){
     const warning=['stale','held','warming'].includes(status);
     card.classList.add(warning?'warning':'offline','humidity-unknown');
     levelEl.textContent=warning?'ข้อมูลไม่สด':'รอข้อมูล';
-    card.title=`${device.model||'SHT3x-DIS'} · ${sensorStatusTh[status]||status} · ยังไม่ประเมินระดับความชื้น`;
+    card.title=currentPrincipal?.role==='admin'
+      ?`${device.model||'SHT3x-DIS'} · ${sensorStatusTh[status]||status} · ยังไม่ประเมินระดับความชื้น`
+      :'กำลังรวบรวมข้อมูลความชื้น';
     card.setAttribute('aria-label',`ความชื้น ${levelEl.textContent}`);
     return;
   }
@@ -3713,12 +3906,15 @@ function renderUnifiedHumidity(environment={},device={}){
   levelEl.textContent=level.label;
   const activeMarker=card.querySelector(`.humidity-level-scale > i[data-level="${level.key}"]`);
   if(activeMarker){activeMarker.classList.add('active');activeMarker.setAttribute('aria-current','true');}
-  card.title=`${humidity.toFixed(1)}%RH · ${level.label} · ${criterion.bands}`;
+  card.title=currentPrincipal?.role==='admin'
+    ?`${humidity.toFixed(1)}%RH · ${level.label} · ${criterion.bands}`
+    :`ความชื้น ${humidity.toFixed(1)}%RH · ${level.label}`;
   card.setAttribute('aria-label',`ความชื้น ${humidity.toFixed(1)} เปอร์เซ็นต์ ระดับ${level.label}`);
 }
 
 function renderUnifiedControl(state={},environment={},aircon={},bed={},music={}){
   const devices=environment.devices||{},gpio=state.gpio||{},sys=state.system||{},safety=state.safety||{};
+  const adminView=currentPrincipal?.role==='admin';
   setUnifiedSensor('zoneSensorTemp','unifiedTemp',compactMetric(environment.temperature_c,'',1),devices.sht3x_dis);
   renderUnifiedHumidity(environment,devices.sht3x_dis||{});
   renderUnifiedAirQuality(environment,devices);
@@ -3727,14 +3923,18 @@ function renderUnifiedControl(state={},environment={},aircon={},bed={},music={})
   setUnifiedSensor('zoneSensorSound','unifiedSound',compactMetric(soundMetric.value,'',soundMetric.digits),devices.sph0645);
   const soundState=document.getElementById('unifiedSoundState');
   if(soundState){
-    soundState.textContent='ค่าจาก ESP32 · dBA';
+    soundState.textContent=adminView?'ค่าจาก ESP32 · dBA':'ระดับเสียง · dBA';
   }
   const bcg=state.sensor?.bcg||{},bcgBase={model:'BCG Sensor',data_age_s:bcg.data_age_s};
   const bcgMetric=value=>({...bcgBase,status:bcg.restored_after_restart&&value!==null&&value!==undefined?'stale':bcg.connected&&value!==null&&value!==undefined?'live':bcg.connected?'no_data':'offline'});
   setUnifiedSensor('zoneSensorHeart','unifiedHeartRate',compactMetric(bcg.heart_rate_bpm,'',0),bcgMetric(bcg.heart_rate_bpm));
   setUnifiedSensor('zoneSensorRespiration','unifiedRespiration',compactMetric(bcg.respiration_rate,'',1),bcgMetric(bcg.respiration_rate));
-  const bedStatusShort=BCG_STATUS_CONTROL_TH[bcg.status_code]||(bcg.status_text?'ไม่ทราบ':'--');
-  const bedStatusFull=BCG_STATUS_TH[bcg.status_code]||bcg.status_text||'รอสัญญาณจากเตียง';
+  const bedStatusShort=adminView
+    ?BCG_STATUS_CONTROL_TH[bcg.status_code]||(bcg.status_text?'ไม่ทราบ':'--')
+    :USER_BED_STATUS_TH[bcg.status_code]||'กำลังอ่านสถานะเตียง';
+  const bedStatusFull=adminView
+    ?BCG_STATUS_TH[bcg.status_code]||bcg.status_text||'รอสัญญาณจากเตียง'
+    :USER_BED_STATUS_TH[bcg.status_code]||'กำลังอ่านสถานะเตียง';
   setUnifiedSensor('zoneSensorBed','unifiedBedPresence',bedStatusShort,bcgMetric(bcg.status_code));
   const bedStatusCard=document.getElementById('zoneSensorBed');
   if(bedStatusCard){
@@ -3758,10 +3958,10 @@ function renderUnifiedControl(state={},environment={},aircon={},bed={},music={})
 
   const airconOnline=airconControllerOnline,airconOn=aircon.power===true;
   document.getElementById('unifiedAirconStatus').textContent=airconOnline
-    ? aircon.power==null?'คำสั่งล่าสุด · ยังไม่ทราบ':airconOn
-      ? 'คำสั่งล่าสุด · ON'
-      : 'คำสั่งล่าสุด · OFF'
-    : 'Offline';
+    ? aircon.power==null
+      ? adminView?'คำสั่งล่าสุด · ยังไม่ทราบ':'กำลังตรวจสถานะแอร์'
+      : airconOn?'แอร์เปิดอยู่':'แอร์ปิดอยู่'
+    : adminView?'Offline':'กำลังเชื่อมต่อแอร์';
   // One touch target controls both states. The visual state and next command
   // always derive from the latest ESP32 ACK, never from a click alone.
   const powerButton=document.getElementById('unifiedAirconPowerBtn');
@@ -3782,27 +3982,31 @@ function renderUnifiedControl(state={},environment={},aircon={},bed={},music={})
     if(actionLabel)actionLabel.textContent=nextCommand==='off'?'ปิด':'เปิด';
     if(stateLabel)stateLabel.textContent=!powerKnown?'ยังไม่ทราบ':aircon.power===true?'เปิดอยู่':'ปิดอยู่';
     powerButton.title=!airconOnline
-      ? 'ESP32 Aircon Offline'
+      ? adminView?'ESP32 Aircon Offline':'กำลังเชื่อมต่อแอร์'
       : blockedBySafety
-        ? 'Safety latch: อนุญาตเฉพาะปิดแอร์'
-        : `${nextCommand==='off'?'ปิด':'เปิด'}เครื่องปรับอากาศ · สถานะอ้างอิงคำสั่ง IR ที่ ESP32 ยืนยันล่าสุด`;
+        ? 'ระบบอยู่ในโหมดปลอดภัย ขณะนี้ปิดแอร์ได้เท่านั้น'
+        : adminView
+          ? `${nextCommand==='off'?'ปิด':'เปิด'}เครื่องปรับอากาศ · สถานะอ้างอิงคำสั่ง IR ที่ ESP32 ยืนยันล่าสุด`
+          : `${nextCommand==='off'?'ปิด':'เปิด'}แอร์`;
   }
   const swingState=resolveUnifiedAirconSwingState(aircon),swingOn=swingState===true;
   const swingButton=document.getElementById('unifiedSwingBtn');
   const swingAllowed=airconOnline&&airconOn&&!safety.latched;
-  syncUnifiedSwitch('unifiedSwingBtn',swingOn,swingAllowed,'ปิด',airconOnline?'เปิด':'OFFLINE');
+  syncUnifiedSwitch('unifiedSwingBtn',swingOn,swingAllowed,'ปิด',airconOnline?'เปิด':adminView?'OFFLINE':'รอเชื่อมต่อ');
   if(swingButton){
     swingButton.dataset.airconCommand=swingOn?'swing_off':'swing_on';
     swingButton.classList.toggle('state-unknown',swingState==null);
     const swingStateLabel=swingButton.querySelector('[data-state-label]');
     if(swingStateLabel&&swingState==null)swingStateLabel.textContent='ยังไม่ทราบ';
     swingButton.title=!airconOnline
-      ? 'ESP32 Aircon Offline'
+      ? adminView?'ESP32 Aircon Offline':'กำลังเชื่อมต่อแอร์'
       : !airconOn
         ? 'เปิดแอร์ก่อนควบคุมสวิง'
         : swingState==null
-          ? 'ยังไม่มีสถานะสวิงจาก ESP32 · กดเพื่อส่งคำสั่งเปิดสวิง'
-          : `${swingOn?'ปิด':'เปิด'}สวิงพัดลม · สถานะตามคำสั่ง IR ล่าสุด`;
+          ? adminView?'ยังไม่มีสถานะสวิงจาก ESP32 · กดเพื่อส่งคำสั่งเปิดสวิง':'กดเพื่อเปิดสวิงพัดลม'
+          : adminView
+            ? `${swingOn?'ปิด':'เปิด'}สวิงพัดลม · สถานะตามคำสั่ง IR ล่าสุด`
+            : `${swingOn?'ปิด':'เปิด'}สวิงพัดลม`;
   }
   const fanButton=document.getElementById('unifiedFanLevelBtn');
   const fanLevel=normalizedAirconFanLevel(aircon.fan_level);
@@ -3830,12 +4034,12 @@ function renderUnifiedControl(state={},environment={},aircon={},bed={},music={})
       ? `ปรับแรงลม · ค่าอ้างอิงถัดไป ${nextFanLevel} จาก 5`
       : 'ปรับแรงลมแอร์');
     fanButton.title=!airconOnline
-      ? 'ESP32 Aircon Offline'
+      ? adminView?'ESP32 Aircon Offline':'กำลังเชื่อมต่อแอร์'
       : !airconOn
         ? 'เปิดแอร์ก่อนปรับระดับพัดลม'
         : showFanReference
           ? `ค่าอ้างอิงตามคำสั่งล่าสุด ${fanLevel??'ยังไม่ทราบ'} จาก 5 · ไม่ใช่ค่าที่วัดจากแอร์`
-          : 'กดเพื่อส่งคำสั่งปรับแรงลม · ไม่แสดงระดับเพราะแอร์ไม่มีสถานะตอบกลับ';
+          : 'กดเพื่อปรับแรงลมหนึ่งระดับ';
   }
   const tempSelect=document.getElementById('unifiedAirconTemp'),desiredTemp=Number(aircon.desired_temperature_c);
   if(Number.isInteger(unifiedAirconDraftTemp)){
@@ -3853,7 +4057,7 @@ function renderUnifiedControl(state={},environment={},aircon={},bed={},music={})
 
   const gpioOk=!!sys.gpio_available;
   const activeLights=['led','star_light','red_light_face','red_light_body','red_light_leg'].filter(name=>!!gpio[name]).length;
-  document.getElementById('unifiedLightStatus').textContent=gpioOk?`${activeLights}/5 เปิด`:'Offline';
+  document.getElementById('unifiedLightStatus').textContent=gpioOk?`${activeLights}/5 เปิด`:adminView?'Offline':'กำลังเชื่อมต่อ';
   syncUnifiedPodRoomLight(!!gpio.led,gpioOk&&!safety.latched);
   syncUnifiedStarLight(!!gpio.star_light,gpioOk&&!safety.latched);
   syncUnifiedRedLights(gpio,gpioOk&&!safety.latched);
@@ -3870,13 +4074,17 @@ function renderUnifiedControl(state={},environment={},aircon={},bed={},music={})
   renderUnifiedAudioPlayer(music,safety);
 
   const bedOnline=bedControllerOnline,bedStatus=document.getElementById('unifiedBedStatus');
-  bedStatus.textContent=bedOnline?'พร้อมควบคุม':bed.mqtt_connected?'กำลังเชื่อมต่อ':'ออฟไลน์';
+  bedStatus.textContent=bedOnline?'พร้อมควบคุม':bed.mqtt_connected?'กำลังเชื่อมต่อ':adminView?'ออฟไลน์':'กำลังเชื่อมต่อ';
   bedStatus.title=bedOnline
-    ? `ESP32 Bed Online${Number.isFinite(Number(bed.data_age_s))?` · ล่าสุด ${Number(bed.data_age_s).toFixed(1)} วินาที`:''}`
-    : bed.error||'ปุ่มขยับเตียงจะเปิดอัตโนมัติเมื่อ ESP32 Bed กลับมา Online';
+    ? adminView
+      ? `ESP32 Bed Online${Number.isFinite(Number(bed.data_age_s))?` · ล่าสุด ${Number(bed.data_age_s).toFixed(1)} วินาที`:''}`
+      : 'เตียงพร้อมปรับระดับ'
+    : adminView
+      ? bed.error||'ปุ่มขยับเตียงจะเปิดอัตโนมัติเมื่อ ESP32 Bed กลับมา Online'
+      : 'กำลังเชื่อมต่อระบบเตียง';
   renderUnifiedBedMotion(bed);
   const doorOpen=document.getElementById('unifiedDoorOpenBtn'),doorClose=document.getElementById('unifiedDoorCloseBtn');
-  document.getElementById('unifiedDoorStatus').textContent=gpioOk?'พร้อมสั่ง':'Offline';
+  document.getElementById('unifiedDoorStatus').textContent=gpioOk?'พร้อมใช้งาน':adminView?'Offline':'กำลังเชื่อมต่อ';
   if(!doorOpen.classList.contains('busy'))doorOpen.disabled=!gpioOk||doorBusy;
   if(!doorClose.classList.contains('busy'))doorClose.disabled=!gpioOk||doorBusy||!!safety.latched;
 
@@ -3904,11 +4112,18 @@ async function redLightAction(name, btn){
   updateRedLights(current.gpio);
   syncUnifiedRedLights(current.gpio,!!current.system?.gpio_available&&!current.safety?.latched);
   flashCommandResult(btn,true);
-  toast(`Red Light ${cfg.label}: ${targetOn?'ON · GPIO HIGH':'OFF · GPIO LOW'}`,'ok',2400);
+  toast(
+    currentPrincipal?.role==='admin'
+      ?`Red Light ${cfg.label}: ${targetOn?'ON · GPIO HIGH':'OFF · GPIO LOW'}`
+      :`${targetOn?'เปิด':'ปิด'}แสงแดง${cfg.label}แล้ว`,
+    'ok',
+    2400,
+  );
 }
 function updateRedLights(gpio={}){
   const gpioOk=!!current.system?.gpio_available;
   const safetyLatched=!!current.safety?.latched;
+  const adminView=currentPrincipal?.role==='admin';
   const pinMap=current.system?.gpio_pins||{};
   Object.entries(redLightZones).forEach(([name,cfg])=>{
     const on=!!gpio[name];
@@ -3920,22 +4135,22 @@ function updateRedLights(gpio={}){
     zone.classList.toggle('active',on);
     btn.classList.toggle('on',on);
     if(!gpioOk){
-      stateEl.textContent=`GPIO ${pin} · unavailable`;
-      btn.textContent='OFF';
+      stateEl.textContent=adminView?`GPIO ${pin} · unavailable`:'กำลังเชื่อมต่อ';
+      btn.textContent=adminView?'OFF':'—';
       btn.disabled=true;
       btn.classList.remove('on');
       zone.classList.remove('active');
       return;
     }
     if(safetyLatched){
-      stateEl.textContent=`GPIO ${pin} · Safety locked`;
-      btn.textContent=on?'ON':'OFF';
+      stateEl.textContent=adminView?`GPIO ${pin} · Safety locked`:'โหมดปลอดภัย';
+      btn.textContent=adminView?(on?'ON':'OFF'):(on?'เปิดอยู่':'ปิดอยู่');
       btn.disabled=true;
       return;
     }
-    stateEl.textContent=`GPIO ${pin} · ${on?'HIGH':'LOW'}`;
+    stateEl.textContent=adminView?`GPIO ${pin} · ${on?'HIGH':'LOW'}`:(on?'เปิดอยู่':'ปิดอยู่');
     if(!btn.classList.contains('busy')){
-      btn.textContent=on?'ON':'OFF';
+      btn.textContent=adminView?(on?'ON':'OFF'):(on?'ปิด':'เปิด');
       btn.disabled=false;
     }
   });
@@ -3960,17 +4175,28 @@ async function airconCommand(command,btn){
     if(!result){flashCommandResult(btn,false);return null;}
     const label=airconCommandLabel(result.command||command);
     const hasDesiredTemperature=Number.isInteger(result.desired_temperature_c);
-    const message=command==='status'
-      ? 'ESP32 Aircon: รับสถานะล่าสุดแล้ว'
-      : command==='on'
-        ? 'ส่ง IR เปิดแอร์และตั้งค่าเริ่มต้นแล้ว · กรุณาตรวจการตอบสนองของแอร์'
-      : command==='fan'&&normalizedAirconFanLevel(result.fan_level)!=null
-        ? currentPrincipal?.role==='admin'
-          ? `ส่ง IR ปรับแรงลมแล้ว · ค่าอ้างอิง ${result.fan_level}/5 (ไม่ใช่ค่าที่วัดจากแอร์)`
-          : 'ส่งคำสั่งปรับแรงลมแล้ว · กรุณาสังเกตการตอบสนองของแอร์'
-      : hasDesiredTemperature
-        ? `ส่ง IR ตั้งอุณหภูมิ ${result.desired_temperature_c}°C แล้ว`
-        : `ESP32 Aircon ยิง IR: ${label} แล้ว`;
+    const adminView=currentPrincipal?.role==='admin';
+    const userMessages={
+      status:'อัปเดตข้อมูลแอร์แล้ว',
+      on:'ส่งคำสั่งเปิดแอร์แล้ว · กรุณาสังเกตการตอบสนองของแอร์',
+      off:'ส่งคำสั่งปิดแอร์แล้ว · กรุณาสังเกตการตอบสนองของแอร์',
+      fan:'ส่งคำสั่งปรับแรงลมแล้ว · กรุณาสังเกตการตอบสนองของแอร์',
+      swing_on:'ส่งคำสั่งเปิดสวิงแล้ว · กรุณาสังเกตการตอบสนองของแอร์',
+      swing_off:'ส่งคำสั่งปิดสวิงแล้ว · กรุณาสังเกตการตอบสนองของแอร์',
+    };
+    const message=adminView
+      ?command==='status'
+        ?'ESP32 Aircon: รับสถานะล่าสุดแล้ว'
+        :command==='on'
+          ?'ส่ง IR เปิดแอร์และตั้งค่าเริ่มต้นแล้ว · กรุณาตรวจการตอบสนองของแอร์'
+          :command==='fan'&&normalizedAirconFanLevel(result.fan_level)!=null
+            ?`ส่ง IR ปรับแรงลมแล้ว · ค่าอ้างอิง ${result.fan_level}/5 (ไม่ใช่ค่าที่วัดจากแอร์)`
+            :hasDesiredTemperature
+              ?`ส่ง IR ตั้งอุณหภูมิ ${result.desired_temperature_c}°C แล้ว`
+              :`ESP32 Aircon ยิง IR: ${label} แล้ว`
+      :hasDesiredTemperature
+        ?`ส่งคำสั่งตั้งอุณหภูมิ ${result.desired_temperature_c}°C แล้ว · กรุณาสังเกตการตอบสนองของแอร์`
+        :userMessages[command]||'ส่งคำสั่งแอร์แล้ว · กรุณาสังเกตการตอบสนองของแอร์';
     toast(message,'ok',3200);
     if(result.aircon)current.aircon=result.aircon;
     if(command==='swing_on'||command==='swing_off'){
@@ -4242,7 +4468,8 @@ const FEEDBACK_META={
 function toast(msg, type='info', ms=3200){
   const root = document.getElementById('toasts');
   const t = document.createElement('div');
-  const kind=type||'info',meta=FEEDBACK_META[kind]||FEEDBACK_META.info;
+  const kind=type||'info',meta={...(FEEDBACK_META[kind]||FEEDBACK_META.info)};
+  if(kind==='error'&&currentPrincipal?.role!=='admin')meta.title='ลองอีกครั้ง';
   t.className = `toast ${kind}`;
   t.innerHTML=`<span class="toast-icon">${meta.icon}</span><div><div class="toast-title">${meta.title}</div><div class="toast-message"></div></div><button class="toast-close" aria-label="ปิด">×</button>`;
   t.querySelector('.toast-message').textContent=msg;
@@ -4257,6 +4484,15 @@ function setPageMessage(type,title,message){
   root.className=`flat-message ${type}`;
   root.innerHTML=`<span class="flat-icon">${meta[0]}</span><div><b></b><span></span></div>`;
   root.querySelector('b').textContent=title;root.querySelector('span:last-child').textContent=message;
+}
+function setSafetyUserAlert(active,title='',message='',showDoorAction=false,tone='danger'){
+  const root=document.getElementById('safetyUserAlert');if(!root)return;
+  root.hidden=!active;
+  if(!active)return;
+  root.className=`safety-user-alert ${tone}`;
+  document.getElementById('safetyUserAlertTitle').textContent=title;
+  document.getElementById('safetyUserAlertDetail').textContent=message;
+  document.getElementById('safetyUserAlertAction').hidden=!showDoorAction;
 }
 let modalResolve=null;
 function confirmAction({title='ยืนยันการทำงาน',message='',confirmText='ยืนยัน',tone='warning',icon='!'}){
@@ -4327,10 +4563,11 @@ function setDeviceInteraction(control,state){
   const label=deviceInteractionLabel(control);
   const intent=control.dataset.interactionIntent||'command';
   const target=control.dataset.interactionTarget||'';
+  const adminView=currentPrincipal?.role==='admin';
   const meta={
     pending:{icon:'refresh',text:`กำลังส่ง · ${label}`},
     success:{icon:'check',text:`รับคำสั่งแล้ว · ${label}`},
-    error:{icon:'alert',text:`ส่งไม่สำเร็จ · ${label}`},
+    error:{icon:'alert',text:adminView?`ส่งไม่สำเร็จ · ${label}`:`ยังไม่ตอบสนอง · ลองอีกครั้ง`},
   }[state];
   if(!meta)return;
 
@@ -4397,17 +4634,22 @@ async function withBusy(btn, fn){
 }
 
 async function post(url, body){
-  if (!serverReachable){ toast('ส่งคำสั่งไม่ได้ — network/server ยังไม่เชื่อมต่อ', 'error'); return null; }
+  const adminView=currentPrincipal?.role==='admin';
+  if (!serverReachable){ toast(adminView?'ส่งคำสั่งไม่ได้ — network/server ยังไม่เชื่อมต่อ':'ระบบยังไม่พร้อมรับคำสั่ง กรุณาลองอีกครั้ง', 'error'); return null; }
   const opt = {method:'POST', headers:authenticatedHeaders({'Content-Type':'application/json'})};
   if (body !== undefined) opt.body = JSON.stringify(body);
   let r;
   try { r = await fetch(url, opt); }
-  catch { toast('ส่งคำสั่งไม่ได้ — เชื่อมต่อ server ไม่ได้', 'error'); return null; }
+  catch { toast(adminView?'ส่งคำสั่งไม่ได้ — เชื่อมต่อ server ไม่ได้':'ยังเชื่อมต่อระบบไม่ได้ กรุณาลองอีกครั้ง', 'error'); return null; }
   if (!r.ok){
     if (r.status === 429){ toast('คำสั่งก่อนหน้ายังทำงานอยู่ — รอสักครู่', '', 1800); return null; }
     let msg = '';
-    try { const d=await r.json(),detail=d.detail;msg=typeof detail==='string'?detail:(detail?.message||JSON.stringify(detail)); } catch { msg = await r.text(); }
-    if (r.status === 401) msg = 'Session เข้าสู่ระบบหมดอายุ กรุณาเข้าสู่ระบบใหม่';
+    if(adminView){
+      try { const d=await r.json(),detail=d.detail;msg=typeof detail==='string'?detail:(detail?.message||JSON.stringify(detail)); } catch { msg = await r.text(); }
+    }
+    if (r.status === 401) msg = adminView?'Session เข้าสู่ระบบหมดอายุ กรุณาเข้าสู่ระบบใหม่':'กรุณาเข้าสู่ระบบอีกครั้ง';
+    if(!adminView)msg=({403:'บัญชีนี้ยังใช้คำสั่งนี้ไม่ได้',404:'ยังไม่พบฟังก์ชันที่เลือก',409:'สถานะเพิ่งเปลี่ยน กรุณาลองอีกครั้ง',422:'กรุณาตรวจค่าที่เลือกแล้วลองอีกครั้ง'})[r.status]
+      ||(r.status>=500?'ระบบกำลังกลับมาทำงาน กรุณาลองอีกครั้ง':'ทำรายการไม่สำเร็จ กรุณาลองอีกครั้ง');
     toast(msg || `HTTP ${r.status}`, 'error');
     return null;
   }
@@ -4640,8 +4882,11 @@ function finishUnifiedDoorMotion(action,succeeded){
       state.textContent=action==='open'?'คำสั่งล่าสุด · เปิด':'คำสั่งล่าสุด · ปิด';
       map.setAttribute('aria-label',`ส่งคำสั่ง${action==='open'?'เปิด':'ปิด'}ประตูแล้ว ตำแหน่งจริงยังไม่ได้รับการยืนยัน`);
     }else{
-      state.textContent='คำสั่งไม่สำเร็จ';
-      map.setAttribute('aria-label','คำสั่งประตูไม่สำเร็จ ตำแหน่งจริงยังไม่ได้รับการยืนยัน');
+      const adminView=currentPrincipal?.role==='admin';
+      state.textContent=adminView?'คำสั่งไม่สำเร็จ':'ยังไม่ตอบสนอง · ลองอีกครั้ง';
+      map.setAttribute('aria-label',adminView
+        ?'คำสั่งประตูไม่สำเร็จ ตำแหน่งจริงยังไม่ได้รับการยืนยัน'
+        :'ประตูยังไม่ตอบสนอง กรุณาลองอีกครั้ง');
     }
   },1450);
 }
@@ -5374,9 +5619,9 @@ function setLoginMode(mode){
   document.getElementById('loginStartBtn').classList.toggle('login-off', qr);
   document.getElementById('loginStartBtn').textContent = loginAudience==='admin'
     ? 'เข้าสู่ระบบผู้ดูแล'
-    : zeep ? 'เข้าสู่ระบบและเริ่มพัก' : '▶ เริ่มพัก (Local)';
+    : zeep ? 'เข้าสู่ระบบและเริ่มพัก' : 'เริ่มพักแบบออฟไลน์';
   document.getElementById('loginModeLink').textContent = zeep
-    ? 'ต่อ ZEEP API ไม่ได้ — ใช้โหมด Local'
+    ? 'หากยังเชื่อมบัญชีไม่ได้ ใช้งานแบบออฟไลน์'
     : '← กลับไปเข้าสู่ระบบด้วยบัญชี ZEEP';
   document.getElementById('loginModeLink').classList.toggle(
     'login-off',loginAudience==='admin'||qr||(zeep&&!offlineTicket)
@@ -5406,8 +5651,8 @@ function renderRestModeHint(){
   const select=document.getElementById('loginRestMode'),hint=document.getElementById('loginRestModeHint');
   if(!select||!hint)return;
   const descriptions={
-    sleep:'พักค้างคืนอย่างน้อย 5 ชม. · คะแนนเวลาสำหรับผู้ใหญ่เต็มที่ 7 ชม. · ประเมินความต่อเนื่องและรูปแบบการนอน',
-    nap_recovery:'พักระหว่างวันประมาณ 30 นาที · จะหลับ พักสายตา หรือทำสมาธิก็ได้ · ไม่บังคับ N3 หรือ REM',
+    sleep:'เหมาะกับการพักค้างคืนประมาณ 5 ชั่วโมงขึ้นไป · สรุปความต่อเนื่องและรูปแบบการนอน',
+    nap_recovery:'พักระหว่างวันประมาณ 30 นาที · จะหลับ พักสายตา หรือทำสมาธิก็ได้',
   };
   hint.textContent=descriptions[select.value]||descriptions.nap_recovery;
 }
@@ -5455,10 +5700,16 @@ function qrSecondsLeft(){
 
 function qrErrorFrom(response, body){
   const detail = body && body.detail, obj = detail && typeof detail === 'object';
+  const code = obj ? detail.code : null;
+  const userMessages={
+    pod_already_occupied:'ZEEP กำลังมีผู้ใช้งาน กรุณารอให้การพักครั้งนี้จบก่อน',
+    offline:'ตอนนี้ยังเชื่อมต่อบัญชี ZEEP ไม่ได้ ระบบจะลองใหม่ให้',
+    age_group_required:'กรุณาเลือกช่วงอายุเพื่อเตรียมผลให้เหมาะกับคุณ',
+    expired:'QR หมดอายุแล้ว กรุณาขอ QR ใหม่',
+  };
   return {
-    code: obj ? detail.code : null,
-    message: (obj ? detail.message : (typeof detail === 'string' ? detail : ''))
-      || `HTTP ${response.status}`,
+    code,
+    message:userMessages[code]||'ยังเชื่อมต่อด้วย QR ไม่ได้ กรุณาลองอีกครั้ง',
   };
 }
 
@@ -5467,7 +5718,7 @@ async function startQrSession(){
   setQrStatus('กำลังขอ QR จาก ZEEP…');
   let r, d = null;
   try { r = await fetch('/api/auth/qr/session', {method:'POST'}); }
-  catch { setQrStatus('ต่อ server ของตู้ไม่ได้ — ตรวจว่า Pi ยังทำงานอยู่','danger'); showQrRetry(); return; }
+  catch { setQrStatus('ยังเชื่อมต่อระบบไม่ได้ กรุณาลองอีกครั้ง','danger'); showQrRetry(); return; }
   try { d = await r.json(); } catch {}
   if (!r.ok){
     const err = qrErrorFrom(r, d);
@@ -5499,7 +5750,7 @@ async function pollQrLogin(){
       method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body),
     });
   } catch {
-    setQrStatus('ต่อ server ของตู้ไม่ได้ — กำลังลองใหม่','warning');
+    setQrStatus('การเชื่อมต่อสะดุด ระบบกำลังลองใหม่ให้','warning');
     qrLogin.timer = setTimeout(pollQrLogin, QR_POLL_MS);
     return;
   }
@@ -5535,7 +5786,7 @@ async function pollQrLogin(){
   }
   if (d.state === 'rejected'){
     qrLogin.loginId = null;
-    setQrStatus('มือถือปฏิเสธการเข้าสู่ระบบนี้','danger');
+    setQrStatus('ยังไม่ได้ยืนยันการเข้าสู่ระบบจากโทรศัพท์','warning');
     showQrRetry();
     return;
   }
@@ -5588,7 +5839,7 @@ async function submitLogin(btn){
 async function doAdminLogin(btn){
   const identifier=document.getElementById('loginIdentifier').value.trim();
   const password=document.getElementById('loginPassword').value;
-  if(!identifier||!password){showLoginError('กรอก Username/Email และรหัสผ่านให้ครบ');return;}
+  if(!identifier||!password){showLoginError('กรอกอีเมลหรือชื่อผู้ใช้และรหัสผ่านให้ครบ');return;}
   await withBusy(btn,async()=>{
     let r;
     try{
@@ -5610,10 +5861,23 @@ async function doAdminLogin(btn){
   });
 }
 
+function userLoginFailure(code,status){
+  const messages={
+    offline:'ตอนนี้ยังเชื่อมต่อบัญชี ZEEP ไม่ได้ คุณสามารถเลือกใช้งานแบบออฟไลน์ได้',
+    age_group_required:'กรุณาเลือกช่วงอายุเพื่อเตรียมผลให้เหมาะกับคุณ',
+    pod_already_occupied:'ZEEP กำลังมีผู้ใช้งาน กรุณารอให้การพักครั้งนี้จบก่อน',
+    invalid_credentials:'อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาลองอีกครั้ง',
+  };
+  if(messages[code])return messages[code];
+  if(status===401)return 'อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาลองอีกครั้ง';
+  if(status>=500)return 'ระบบกำลังกลับมาทำงาน กรุณาลองอีกครั้ง';
+  return 'เข้าสู่ระบบไม่สำเร็จ กรุณาตรวจข้อมูลแล้วลองอีกครั้ง';
+}
+
 async function doZeepLogin(btn){
   const identifier = document.getElementById('loginIdentifier').value.trim();
   const password = document.getElementById('loginPassword').value;
-  if (!identifier || !password){ showLoginError('กรอก Username/Email และรหัสผ่านให้ครบ'); return; }
+  if (!identifier || !password){ showLoginError('กรอกอีเมลหรือชื่อผู้ใช้และรหัสผ่านให้ครบ'); return; }
   const ageBlock = document.getElementById('loginAgeBlock');
   const body = {identifier, password, rest_mode:document.getElementById('loginRestMode').value};
   // ช่องช่วงอายุจะโผล่เฉพาะรอบที่ server ตอบ age_group_required มา → ส่งกลับไปด้วย
@@ -5627,13 +5891,13 @@ async function doZeepLogin(btn){
     const opt = {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)};
     let r;
     try { r = await fetch('/api/auth/login', opt); }
-    catch { showLoginError('ต่อ server ของตู้ไม่ได้ — ตรวจว่า Pi ยังทำงานอยู่'); return; }
+    catch { showLoginError('ยังเชื่อมต่อระบบไม่ได้ กรุณาลองอีกครั้ง'); return; }
     let d = null;
     try { d = await r.json(); } catch {}
     if (!r.ok){
       const detail = d && d.detail, obj = detail && typeof detail === 'object';
       const code = obj ? detail.code : null;
-      const msg = (obj ? detail.message : (typeof detail === 'string' ? detail : '')) || `HTTP ${r.status}`;
+      const msg = userLoginFailure(code,r.status);
       if (code === 'offline'){
         offlineTicket=detail.offline_ticket||null;offlineIdentifier=detail.identifier||identifier;
         document.getElementById('loginName').value=(offlineIdentifier.split('@')[0]||offlineIdentifier).slice(0,40);
@@ -5658,7 +5922,7 @@ async function doLocalLogin(btn){
   const name = document.getElementById('loginName').value.trim();
   const ageGroup = document.getElementById('loginAgeGroup').value;
   if (name.length < 2){ showLoginError('พิมพ์ชื่ออย่างน้อย 2 ตัวอักษร'); return; }
-  if (!ageGroup){ showLoginError('กรุณาเลือกช่วงอายุก่อนเริ่ม Session'); return; }
+  if (!ageGroup){ showLoginError('กรุณาเลือกช่วงอายุก่อนเริ่มการพัก'); return; }
   await withBusy(btn, async ()=>{
     let response;
     try{
@@ -5666,12 +5930,12 @@ async function doLocalLogin(btn){
         username:name,gender:selectedGender,age_group:ageGroup,offline_ticket:offlineTicket,
         offline_identifier:offlineIdentifier,rest_mode:document.getElementById('loginRestMode').value
       })});
-    }catch{showLoginError('ต่อ server ของตู้ไม่ได้');return;}
+    }catch{showLoginError('ยังเชื่อมต่อระบบไม่ได้ กรุณาลองอีกครั้ง');return;}
     let result={};try{result=await response.json();}catch{}
     if(!response.ok){
-      const detail=result.detail;showLoginError(typeof detail==='object'?detail.message:detail||`HTTP ${response.status}`);return;
+      showLoginError(userLoginFailure(null,response.status));return;
     }
-    afterLoginStarted(result, `เริ่ม session (Local): ${result.session.username}`);
+    afterLoginStarted(result, 'เริ่มการพักแบบออฟไลน์เรียบร้อยแล้ว');
   });
 }
 
@@ -5775,10 +6039,10 @@ async function runSessionEndShare(payload){
   const note=document.getElementById('sessionEndShareNote');
   const ticket=payload?.report_share?.ticket;
   const fallback='ดูผลย้อนหลังได้ในแอป ZEEP ด้วยบัญชีเดิม';
-  if(!ticket){setSessionEndQr('failed',`Session นี้ไม่ได้ผูกกับบัญชี ZEEP<br>${fallback}`);return;}
+  if(!ticket){setSessionEndQr('failed','QR สำหรับผลครั้งนี้ยังไม่พร้อม<br>ทีมงานช่วยตรวจสอบผลให้ได้');return;}
   let image;
   try{image=await drawSessionReportPng(payload);}
-  catch{setSessionEndQr('failed',`สร้างรูปผลการนอนไม่สำเร็จ<br>${fallback}`);return;}
+  catch{setSessionEndQr('failed',`ยังเตรียมรูปสรุปไม่ได้<br>${fallback}`);return;}
   let result=null;
   try{
     // ไม่ใช้ post(): cookie ถูกเพิกถอนไปแล้ว ticket คือสิทธิ์ และความล้มเหลว
@@ -5790,7 +6054,7 @@ async function runSessionEndShare(payload){
     if(r.ok)result=await r.json();
   }catch{result=null;}
   if(!result?.ok||!result.qr_data_url){
-    setSessionEndQr('failed',`สร้าง QR ไม่สำเร็จ — ต่ออินเทอร์เน็ตไม่ได้<br>${fallback}`);
+    setSessionEndQr('failed',`ยังเตรียม QR ไม่ได้ · กรุณาดูผลในแอป ZEEP<br>${fallback}`);
     return;
   }
   const minutes=Number(result.expires_in_minutes)||SESSION_END_QR_FALLBACK_MINUTES;
@@ -5867,7 +6131,7 @@ function drawReportHeader(ctx,payload,W,M){
   y=drawWrapped(ctx,payload.display_name||payload.username||'ผู้ใช้งาน',M,y,W-2*M,66,2)+10;
   ctx.fillStyle='#7fa6b8';ctx.font=reportFont(600,26);
   ctx.fillText(sessionEndDateText(payload.ended_at_utc),M,y);y+=38;
-  ctx.fillText(`ระยะเวลา Session ${fmtDur(payload.duration_s)}`,M,y);
+  ctx.fillText(`ระยะเวลาการใช้งาน ${fmtDur(payload.duration_s)}`,M,y);
   return y+62;
 }
 
@@ -5888,14 +6152,16 @@ function drawReportScore(ctx,quality,y,W,M){
   ctx.fillStyle='#7fa6b8';ctx.font=reportFont(600,24);ctx.fillText('/ 100',cx,cy+28);
   ctx.textAlign='left';
   const tx=M+290,tw=W-M-tx-30;
+  const presentation=reportPresentationMode(quality);
+  const scoreTitle=presentation==='recovery'
+    ?'Recovery Score'
+    :presentation==='sleep'?'Sleep Score':'ผลการพักครั้งนี้';
   ctx.fillStyle='#9fd7e6';ctx.font=reportFont(700,24);
-  ctx.fillText(quality?.score_title||'Sleep Score',tx,y+50);
+  ctx.fillText(scoreTitle,tx,y+50);
   ctx.fillStyle='#eaf7fc';ctx.font=reportFont(800,42);
-  drawWrapped(ctx,quality?.available?(quality.level||''):'ข้อมูลไม่พอ',tx,y+88,tw,50,1);
+  drawWrapped(ctx,quality?.available?userScoreLevelLabel(quality):'กำลังเตรียมผลสรุป',tx,y+88,tw,50,1);
   ctx.fillStyle='#7fa6b8';ctx.font=reportFont(500,24);
-  drawWrapped(ctx,quality?.available
-    ?(quality.insight||quality.score_scope||'')
-    :(quality.reason||'ข้อมูล Sensor ไม่เพียงพอสำหรับประเมิน'),tx,y+150,tw,34,3);
+  drawWrapped(ctx,userScoreMeaning(quality),tx,y+150,tw,34,3);
   return y+h+40;
 }
 
@@ -5907,11 +6173,11 @@ function drawReportMetrics(ctx,report,quality,y,W,M){
   const boxes=presentation==='recovery' ? [
     ['เวลาพักที่นับได้',fmtDur(target.eligible_rest_seconds==null?sleep.recording_s:target.eligible_rest_seconds)],
     ['เทียบเป้าหมาย',target.completion_pct==null?'--':`${Math.round(Number(target.completion_pct))}%`],
-    ['ความนิ่ง HR/RR',regularity==null?'--':`${Math.round(100*Number(regularity))}%`],
+    ['ความสม่ำเสมอระหว่างพัก',regularity==null?'--':`${Math.round(100*Number(regularity))}%`],
     ['ความนิ่งร่างกาย',movement==null?'--':`${Math.max(0,Math.round(100-Number(movement)))}%`],
   ] : [
-    ['Sensor ประเมินว่าหลับ',fmtDur(sleep.estimated_sleep_s)],
-    ['ช่วงที่ Sensor บันทึก',fmtDur(sleep.recording_s)],
+    ['เวลานอนโดยประมาณ',fmtDur(sleep.estimated_sleep_s)],
+    ['ระยะเวลาการใช้งาน',fmtDur(sleep.recording_s)],
     ['ประสิทธิภาพ',sleep.sleep_efficiency_pct==null?'--':`${sleep.sleep_efficiency_pct}%`],
     ['W · ตื่น',fmtDur(sleep.wake_s)],
   ];
@@ -5932,7 +6198,7 @@ function drawReportStages(ctx,report,quality,y,W,M){
   const presentation=reportPresentationMode(report);
   const items=reportProfileItems(report,presentation);
   ctx.fillStyle='#9fd7e6';ctx.font=reportFont(700,28);
-  ctx.fillText(presentation==='recovery'?'รูปแบบการพักที่ตรวจพบ':'สัดส่วน Sleep Stage',M,y);y+=48;
+  ctx.fillText(presentation==='recovery'?'รูปแบบการพักโดยประมาณ':'สัดส่วนการนอนโดยประมาณ',M,y);y+=48;
   const barW=W-2*M,barH=44;
   ctx.save();reportRoundRect(ctx,M,y,barW,barH,10);ctx.fillStyle='#122b3a';ctx.fill();ctx.clip();
   let cursor=0;
@@ -5953,19 +6219,23 @@ function drawReportStages(ctx,report,quality,y,W,M){
 }
 
 function drawReportFindings(ctx,report,y,W,M,limit){
-  const findings=(Array.isArray(report.findings)?report.findings:[]).slice(0,5);
+  const findingPriority=item=>item?.decision==='safety_review'?0:({critical:1,poor:2,fair:3}[item?.severity]??4);
+  const findings=(Array.isArray(report.findings)?report.findings:[])
+    .slice().sort((a,b)=>findingPriority(a)-findingPriority(b)).slice(0,5);
   if(!findings.length)return y;
   const presentation=reportPresentationMode(report);
   ctx.fillStyle='#9fd7e6';ctx.font=reportFont(700,28);
   ctx.fillText(presentation==='recovery'?'สิ่งที่ควรรู้จากการพักครั้งนี้':'สิ่งที่ควรรู้จากคืนนี้',M,y);y+=48;
   for(const item of findings){
     if(y>limit)break;
-    ctx.fillStyle=REPORT_PNG_FINDING_COLOR[item.severity]||'#7fa6b8';
+    const finding=userReportFinding(item);
+    ctx.fillStyle=REPORT_PNG_FINDING_COLOR[finding.severity]||'#7fa6b8';
     ctx.fillRect(M,y+8,8,40);
     ctx.fillStyle='#eaf7fc';ctx.font=reportFont(700,27);
-    y=drawWrapped(ctx,item.title||'ข้อมูลประกอบ',M+28,y,W-2*M-28,36,2);
+    y=drawWrapped(ctx,`${finding.metric} · ${finding.label}`,M+28,y,W-2*M-28,36,2);
     ctx.fillStyle='#7fa6b8';ctx.font=reportFont(500,24);
-    y=drawWrapped(ctx,item.detail||'',M+28,y+6,W-2*M-28,34,2)+24;
+    const detail=finding.action?`${finding.detail} · ${finding.action}`:finding.detail;
+    y=drawWrapped(ctx,detail,M+28,y+6,W-2*M-28,34,2)+24;
   }
   return y;
 }
@@ -5975,7 +6245,6 @@ async function drawSessionReportPng(payload){
   const ctx=canvas.getContext('2d');
   const W=canvas.width,H=canvas.height,M=80;
   const report=payload.session_report||{},quality=payload.sleep_quality||{};
-  const coverage=report.data_quality?.coverage||{};
   const presentation=reportPresentationMode(report||quality);
   // รอฟอนต์ไทยของแท็บเล็ตให้พร้อมก่อน ไม่งั้น measureText คำนวณจาก fallback
   try{await document.fonts.ready;}catch{}
@@ -5989,16 +6258,16 @@ async function drawSessionReportPng(payload){
   y=drawReportStages(ctx,report,quality,y,W,M);
   drawReportFindings(ctx,report,y,W,M,H-M-190);
   ctx.fillStyle='#5c8296';ctx.font=reportFont(500,22);
-  const evidence=presentation==='recovery'
-    ?`Recovery evidence: Recording ${coverage.recording_pct||0}% · HR/RR ${quality.physiology?.paired_hr_rr_coverage_pct??'--'}% · Environment ${coverage.environment_pct||0}%`
-    :`Coverage: Recording ${coverage.recording_pct||0}% · BCG ${coverage.bcg_pct||0}% · Sleep Stage ${coverage.sleep_stage_pct||0}% · Environment ${coverage.environment_pct||0}%`;
-  drawWrapped(ctx,`${quality.disclaimer||'ประเมินจาก BCG/Sensor ไม่ใช่ผลวินิจฉัยจาก PSG'} · ${evidence}`,
+  const resultScope=presentation==='recovery'
+    ?'Recovery Score สรุปช่วงพักตามเป้าหมายที่เลือก'
+    :'Sleep Score สรุปภาพรวมการนอนครั้งนี้';
+  drawWrapped(ctx,`${resultScope} · เป็นข้อมูลเพื่อดูแลการพัก ไม่ใช่การวินิจฉัยทางการแพทย์`,
     M,H-M-120,W-2*M,32,3);
   return canvas.toDataURL('image/png');
 }
 
 async function doLogout(btn){
-  if (!await confirmAction({title:'จบและบันทึก Session',message:`การกดจบถือเป็นการยืนยันว่า “ตื่นแล้ว” ระบบจะบันทึก W · ตื่นก่อนจบ Session ของ “${identityLabel(sessionState)}”`,confirmText:'ตื่นแล้ว · จบ Session',tone:'warning',icon:'◷'})) return;
+  if (!await confirmAction({title:'จบและบันทึกการพัก',message:`เมื่อยืนยันว่าตื่นแล้ว ZEEP จะบันทึกสถานะตื่นก่อนสิ้นสุดการพักของ “${identityLabel(sessionState)}”`,confirmText:'ตื่นแล้ว · จบการพัก',tone:'warning',icon:'◷'})) return;
   // User logout is one complete flow: persist the sleep record first, then
   // revoke the browser account. Never leave the former user inside the app
   // after a completed Session on a shared ZEEP tablet.
@@ -6017,7 +6286,7 @@ async function doLogout(btn){
     document.getElementById('logoutBtn').style.display='none';
     if (!result.signedOut){
       sessionEndInProgress=false;
-      setPageMessage('warning','บันทึก Session แล้ว แต่ออกจากบัญชียังไม่สำเร็จ','กดปุ่มออกจากบัญชีที่มุมขวาบนอีกครั้ง');
+      setPageMessage('warning','บันทึกผลการพักแล้ว','กรุณากดออกจากบัญชีที่มุมขวาบนอีกครั้ง');
       document.getElementById('accountLogoutBtn').style.display='';
       return;
     }
@@ -6042,9 +6311,9 @@ async function loadPublicStatus(){
     const r=await fetch('/api/public/status',{cache:'no-store'});
     if(!r.ok)throw new Error(`HTTP ${r.status}`);
     const d=await r.json();serverReachable=true;
-    current.safety=d.safety||{};renderLoginSafety(current.safety);
+    current.safety=d.safety||{};renderLoginSafety(current.safety,!!d.occupied);
     if(d.occupied&&loginAudience==='user'){
-      showLoginError(`ตู้ ${d.pod_id} กำลังมีผู้ใช้งาน · ไม่สามารถ Login ซ้ำได้`,'warning');
+      showLoginError('ZEEP กำลังมีผู้ใช้งาน กรุณารอให้การพักครั้งนี้จบก่อน','warning');
     }
   }catch{showLoginError('ติดต่อระบบของตู้ไม่ได้');}
 }
@@ -6071,7 +6340,7 @@ async function bootstrapAuth(){
     await loadPublicStatus();
     const loggedOut=new URLSearchParams(location.search).get('logged_out');
     if(loggedOut){
-      showLoginError(loggedOut==='session_saved'?'บันทึก Session และออกจากระบบเรียบร้อยแล้ว':'ออกจากระบบเรียบร้อยแล้ว','success');
+      showLoginError(loggedOut==='session_saved'?'บันทึกผลการพักและออกจากระบบเรียบร้อยแล้ว':'ออกจากระบบเรียบร้อยแล้ว','success');
       history.replaceState({},'',location.pathname);
     }
   }finally{dismissBoot();}
@@ -6137,30 +6406,49 @@ function sleepQualityTone(q){
 }
 
 function sleepQualityCompact(q, ended, presentationOverride){
-  if (!ended) return '<span class="hist-quality quality-unavailable"><strong>LIVE</strong><span><b>กำลังบันทึก</b><small>คุณภาพหลังจบ Session</small></span></span>';
+  if (!ended) return `<span class="hist-quality quality-unavailable"><strong>LIVE</strong><span><b>กำลังบันทึก</b><small>${currentPrincipal?.role==='admin'?'คุณภาพหลังจบ Session':'ผลจะแสดงเมื่อจบการพัก'}</small></span></span>`;
   const presentation=presentationOverride||reportPresentationMode(q);
+  const adminView=currentPrincipal?.role==='admin';
   const title=presentation==='recovery'
     ?'Recovery Score'
-    :presentation==='sleep'?'Sleep Score':(q?.score_title||'คะแนน');
-  if (!q?.available) return `<span class="hist-quality quality-unavailable"><strong>—</strong><span><b>ข้อมูลไม่พอ</b><small>${title}</small></span></span>`;
-  return `<span class="hist-quality quality-${sleepQualityTone(q)}"><strong>${q.score}</strong><span><b>${q.level}</b><small>${title}</small></span></span>`;
+    :presentation==='sleep'?'Sleep Score':adminView?(q?.score_title||'คะแนน'):'ผลการพัก';
+  if (!q?.available) return `<span class="hist-quality quality-unavailable"><strong>—</strong><span><b>${adminView?'รอข้อมูลสำหรับคะแนน':'กำลังเตรียมผล'}</b><small>${title}</small></span></span>`;
+  return `<span class="hist-quality quality-${sleepQualityTone(q)}"><strong>${q.score}</strong><span><b>${historyEscape(userScoreLevelLabel(q))}</b><small>${title}</small></span></span>`;
 }
 
 function renderSleepQuality(q, ended, presentationOverride){
+  const adminView=currentPrincipal?.role==='admin';
   const presentation=presentationOverride||reportPresentationMode(q);
   const scoreTitle=presentation==='recovery'
     ?'Recovery Score'
-    :presentation==='sleep'?'Sleep Score':(q?.score_title||'คะแนน Session');
+    :presentation==='sleep'?'Sleep Score':adminView?(q?.score_title||'คะแนน Session'):'ผลการพักครั้งนี้';
   if (!ended || !q?.available){
-    const reason = !ended ? 'คะแนนจะแสดงเมื่อจบและบันทึก Session' : (q?.reason || 'ข้อมูล Sensor ไม่เพียงพอสำหรับประเมิน');
-    return `<section class="sleep-quality-card quality-unavailable mode-${presentation}"><div class="sleep-quality-ring"><strong>—</strong><small>/100</small></div><div class="sleep-quality-copy"><span class="sleep-quality-eyebrow">${scoreTitle}</span><h3>ข้อมูลไม่พอ</h3><p>${reason}</p><small>ระบบไม่สร้างคะแนนเมื่อข้อมูล Sensor ไม่เพียงพอ</small></div></section>`;
+    const reason = !ended
+      ?'คะแนนจะแสดงเมื่อจบการพัก'
+      :'ZEEP กำลังรวบรวมข้อมูลต่อเนื่องเพื่อสรุปคะแนนครั้งนี้';
+    const adminReason=currentPrincipal?.role==='admin'&&q?.reason
+      ?`<small>สำหรับผู้ดูแล · ${historyEscape(q.reason)}</small>`:'';
+    return `<section class="sleep-quality-card quality-unavailable mode-${presentation}"><div class="sleep-quality-ring"><strong>—</strong><small>/100</small></div><div class="sleep-quality-copy"><span class="sleep-quality-eyebrow">${scoreTitle}</span><h3>กำลังเตรียมผลสรุป</h3><p>${reason}</p><small>เมื่อข้อมูลต่อเนื่องเพียงพอ ZEEP จะสรุปให้โดยอัตโนมัติ</small>${adminReason}</div></section>`;
   }
   const components=q.component_points||{},componentMax=q.component_max_points||{};
   const arousal=q.continuity?.arousal_proxy||{};
   const pointText=key=>components[key]==null?'--':`${Number(components[key]).toFixed(1)} / ${Number(componentMax[key]||0).toFixed(0)}`;
-  const legacyLabels={duration:'เวลาพัก',architecture:'โครงสร้างการนอน',continuity:'ความต่อเนื่อง'};
+  const legacyLabels={duration:'เวลาพัก',architecture:'รูปแบบการนอน',continuity:'ความต่อเนื่อง'};
+  const userComponentLabels={
+    ...legacyLabels,
+    sleep_opportunity:'เวลาและการเข้าสู่การนอน',
+    sleep_stability:'ความต่อเนื่องของการนอน',
+    restorative_architecture:'รูปแบบการนอน',
+    cycle_expression:'รอบการนอน',
+    goal_duration:'เวลาพักตามเป้าหมาย',
+    physiological_response:'การตอบสนองระหว่างพัก',
+    rest_continuity:'ความต่อเนื่องในการพัก',
+    environment_support:'บรรยากาศระหว่างพัก',
+  };
   const componentRows=(q.component_order||Object.keys(components)).map(key=>[
-    q.component_labels?.[key]||legacyLabels[key]||key,
+    adminView
+      ?q.component_labels?.[key]||legacyLabels[key]||key
+      :userComponentLabels[key]||'รายละเอียดคะแนน',
     pointText(key),
   ]);
   const targetText=q.duration_target?.target_minutes!=null
@@ -6169,38 +6457,44 @@ function renderSleepQuality(q, ended, presentationOverride){
     ? `${q.duration_target.range_minutes[0]}–${q.duration_target.range_minutes[1]} นาที`
     : q.duration_target?.hours==null?null:`${q.duration_target.hours} ชม.`;
   const restMetrics = [
-    ['รูปแบบการพัก', q.rest_mode?.label || 'ประเมินตามเวลาที่บันทึกจริง'],
+    ['รูปแบบการพัก', adminView
+      ?q.rest_mode?.label||'ประเมินตามเวลาที่บันทึกจริง'
+      :presentation==='sleep'?'Overnight Recovery':presentation==='recovery'?'Nap & Refresh':'การพักครั้งนี้'],
     ...componentRows,
-    targetText?['เป้าหมายเวลา',targetText]:null,
+    targetText?[adminView?'เป้าหมายเวลา':'ช่วงเวลาที่เลือก',targetText]:null,
     q.duration_target?.eligible_rest_minutes==null?null:
       ['เวลาพักที่นับได้',`${q.duration_target.eligible_rest_minutes} นาที`],
     q.duration_target?.completion_pct==null?null:
-      ['ความสำเร็จตามเป้าหมาย',`${q.duration_target.completion_pct}%`],
-    q.physiology?.heart_rate_average==null?null:['ชีพจรเฉลี่ย',`${q.physiology.heart_rate_average} bpm`],
-    q.physiology?.respiration_average==null?null:['หายใจเฉลี่ย',`${q.physiology.respiration_average} ครั้ง/นาที`],
+      [adminView?'ความสำเร็จตามเป้าหมาย':'เวลาพักที่ทำได้',`${q.duration_target.completion_pct}%`],
+    !adminView||q.physiology?.heart_rate_average==null?null:['ชีพจรเฉลี่ย',`${q.physiology.heart_rate_average} bpm`],
+    !adminView||q.physiology?.respiration_average==null?null:['หายใจเฉลี่ย',`${q.physiology.respiration_average} ครั้ง/นาที`],
     q.body_response?.movement_pct==null?null:['การเคลื่อนไหว',`${q.body_response.movement_pct}%`],
     ['ผลที่ตรวจพบ',q.session_character==='hybrid'?'พักและมีช่วงหลับ':'พักขณะตื่น · ไม่จำเป็นต้องหลับ'],
   ];
   const sleepMetrics = [
     ['รูปแบบการพัก', q.rest_mode?.label || 'ประเมินตามเวลาที่บันทึกจริง'],
     ...componentRows,
-    ['Sensor ประเมินว่าหลับ', fmtDur(q.estimated_sleep_s)],
-    targetText?['เป้าหมาย Duration',targetText]:null,
-    ['มีผล Sleep State', fmtDur(q.actual_scored_s)],
-    ['Sleep Efficiency', `${q.sleep_efficiency_pct}%`],
+    ['เวลานอนโดยประมาณ', fmtDur(q.estimated_sleep_s)],
+    targetText?[adminView?'เป้าหมายเวลา':'ช่วงเวลาที่แนะนำ',targetText]:null,
+    ['เวลาที่แสดงสถานะการนอน', fmtDur(q.actual_scored_s)],
+    [adminView?'สัดส่วนเวลานอน':'เวลาที่ระบบประเมินว่าหลับ', `${q.sleep_efficiency_pct}%`],
     ['เข้าสู่ W · ตื่น', `${q.wake_entries ?? q.awakenings ?? 0} ครั้ง`],
     q.deep_pct == null ? null : ['N3 / หลับลึก', `${q.deep_pct}%`],
     q.rem_pct == null ? null : ['REM / หลับฝัน', `${q.rem_pct}%`],
-    arousal.available?['BCG disturbance proxy',`${arousal.episodes} ครั้ง · ${arousal.index_per_hour}/ชม.`]:null,
+    arousal.available?[adminView?'BCG disturbance proxy':'ช่วงที่มีการรบกวน',`${arousal.episodes} ครั้ง · ${arousal.index_per_hour}/ชม.`]:null,
   ];
   const metrics=(q.quality_type==='rest_goal'?restMetrics:sleepMetrics)
     .filter(Boolean).map(([label,value])=>`<div><span>${label}</span><b>${value}</b></div>`).join('');
   const technicalNote=currentPrincipal?.role==='admin'
     ?`${q.outcome_interpretation?`${q.outcome_interpretation} · `:''}${q.score_basis || ''} · ${q.disclaimer || 'ประเมินจาก BCG/Sensor ไม่ใช่ผลวินิจฉัยจาก PSG'}`
     :'ผลประเมินเพื่อ Wellness · ไม่ใช่การวินิจฉัยหรือทดแทนผลตรวจทางการแพทย์';
+  const levelLabel=adminView?(q.level||userScoreLevelLabel(q)):userScoreLevelLabel(q);
+  const insight=adminView
+    ?q.insight||''
+    :userScoreMeaning(q);
   return `<section class="sleep-quality-card quality-${sleepQualityTone(q)} mode-${presentation}" style="--quality-score:${q.score}">
     <div class="sleep-quality-ring"><strong>${q.score}</strong><small>/100</small></div>
-    <div class="sleep-quality-copy"><span class="sleep-quality-eyebrow">${scoreTitle} · ZEEP WELLNESS · SENSOR</span><h3>${q.level}</h3><p>${q.score_scope || 'ค่าประเมินจาก Sensor'} · ${q.insight || ''}</p><div class="sleep-quality-metrics">${metrics}</div><small>${technicalNote}</small></div>
+    <div class="sleep-quality-copy"><span class="sleep-quality-eyebrow">${scoreTitle} · ZEEP WELLNESS</span><h3>${historyEscape(levelLabel)}</h3><p>${adminView?(q.score_scope||'ค่าประเมินจาก Sensor'):'ภาพรวมจากการพักครั้งนี้'}${insight?` · ${historyEscape(insight)}`:''}</p><div class="sleep-quality-metrics">${metrics}</div><small>${technicalNote}</small></div>
   </section>`;
 }
 
@@ -6211,10 +6505,11 @@ async function refreshHistory(btn){
     : '';
   const list = document.getElementById('sessionList');
   if(currentPrincipal?.role==='user'&&!user){
-    list.innerHTML='<div class="mini">ไม่พบบัญชีสำหรับโหลดประวัติ</div>';return;
+    list.innerHTML='<div class="mini">กรุณาเข้าสู่ระบบอีกครั้งเพื่อดูประวัติของคุณ</div>';return;
   }
   const run = async ()=>{
-    list.innerHTML='<div class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังโหลดประวัติการใช้งาน</b><span>กำลังอ่าน Session จากเครื่อง Pi</span></div></div>';
+    const adminView=currentPrincipal?.role==='admin';
+    list.innerHTML=`<div class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังโหลดประวัติการใช้งาน</b><span>${adminView?'กำลังอ่าน Session จากเครื่อง Pi':'กำลังเตรียมรายการย้อนหลังของคุณ'}</span></div></div>`;
     document.getElementById('historySummary').innerHTML='<div class="mini">กำลังสรุปช่วงเวลาที่เลือก…</div>';
     document.getElementById('historyParticipants').innerHTML='';
     document.getElementById('sessionDetail').innerHTML='';
@@ -6224,10 +6519,10 @@ async function refreshHistory(btn){
       : `/api/history/${encodeURIComponent(user)}?${params}`;
     let r;
     try { r=await fetch(path,{cache:'no-store'}); }
-    catch { toast('เชื่อมต่อ server ไม่ได้', 'error'); return; }
+    catch { toast(adminView?'เชื่อมต่อ server ไม่ได้':'ยังเชื่อมต่อระบบไม่ได้ กรุณาลองอีกครั้ง', 'error'); return; }
     if (!r.ok){
       let detail='';try{detail=(await r.json()).detail||'';}catch{}
-      toast(detail||'โหลดประวัติไม่ได้','error');return;
+      toast(adminView?(detail||`โหลดประวัติไม่ได้ · HTTP ${r.status}`):'ยังโหลดประวัติไม่ได้ กรุณาลองอีกครั้ง','error');return;
     }
     renderSessionList(await r.json());
   };
@@ -6327,6 +6622,37 @@ function restoreDriverText(value){
   return historyEscape(copy.length>140?`${copy.slice(0,137)}…`:copy);
 }
 
+const USER_RESTORE_DRIVER_COPY=Object.freeze({
+  sleep_opportunity:'เวลาและช่วงเตรียมตัวก่อนนอนมีส่วนต่อผลครั้งนี้',
+  sleep_stability:'ความต่อเนื่องของการนอนมีส่วนต่อผลครั้งนี้',
+  restorative_architecture:'รูปแบบการนอนที่ประเมินได้มีส่วนต่อผลครั้งนี้',
+  cycle_expression:'ความต่อเนื่องของช่วงการนอนมีส่วนต่อผลครั้งนี้',
+  goal_duration:'เวลาพักตามที่เลือกมีส่วนต่อผลครั้งนี้',
+  physiological_response:'ความนิ่งของชีพจรและการหายใจมีส่วนต่อผลครั้งนี้',
+  rest_continuity:'ความต่อเนื่องและการขยับระหว่างพักมีส่วนต่อผลครั้งนี้',
+  environment_support:'สภาพแวดล้อมภายใน ZEEP มีส่วนต่อผลครั้งนี้',
+});
+function userRestoreDriverText(value,tone){
+  const key=String(value?.key||'').toLowerCase();
+  if(key.startsWith('environment_')){
+    const metric=USER_PRODUCT_COPY.environmentMetrics[key.slice(12)]||'สภาพแวดล้อม';
+    return tone==='positive'?`${metric}เหมาะกับการพักครั้งนี้`:`${metric}ยังปรับให้สบายขึ้นได้`;
+  }
+  return USER_RESTORE_DRIVER_COPY[key]
+    ||(tone==='positive'?'มีปัจจัยที่ช่วยให้การพักครั้งนี้เป็นไปได้ดี':'มีบางจุดที่ลองปรับให้การพักครั้งถัดไปสบายขึ้นได้');
+}
+
+function userRestoreMeaning(statusKey,presentation,unavailable){
+  if(unavailable)return 'ZEEP กำลังรวบรวมข้อมูลเพื่ออธิบายผลการพักครั้งนี้';
+  const meanings={
+    sleep_restore_very_good:'ภาพรวมการนอนคืนนี้เป็นไปได้ดีมาก',sleep_restore_good:'ภาพรวมการนอนคืนนี้เป็นไปได้ดี',
+    pace_morning:'คืนนี้ได้พักในระดับหนึ่ง',prioritise_rest:'ครั้งนี้ยังมีบางจุดที่ช่วยให้การพักสบายขึ้นได้',
+    rest_goal_full:'ช่วงพักนี้เป็นไปได้ดีมากตามเวลาที่เลือก',rest_good:'ช่วงพักนี้เป็นไปได้ดี',
+    rest_partial:'ช่วงพักนี้ช่วยให้ร่างกายได้หยุดนิ่งและผ่อนคลาย',rest_more:'ครั้งนี้ยังมีบางจุดที่ลองปรับให้สบายขึ้นได้',
+  };
+  return meanings[statusKey]||(presentation==='recovery'?'ดูผลช่วงพักนี้ร่วมกับความรู้สึกหลังพัก':'ดูภาพรวมคืนนี้ร่วมกับความรู้สึกหลังตื่น');
+}
+
 function restoreSummaryTone(status){
   const key=String(status?.key||status||'').toLowerCase();
   if([
@@ -6345,50 +6671,73 @@ function renderRestoreSummary(source,presentation){
   const report=payload.session_report||payload;
   const summary=restoreSummarySource(source);
   if(!summary)return '';
+  const adminView=currentPrincipal?.role==='admin';
   const unavailable=summary.available===false;
   const status=summary.status||{};
   const statusKey=String(status?.key||status||'').toLowerCase();
-  const statusLabel=restorePlainText(status?.label||status?.title)
-    ||({excellent:'ยอดเยี่ยม',very_good:'ดีมาก',good:'ดี',fair:'พอใช้',low:'ควรติดตาม'})[statusKey]
-    ||(unavailable?'ยังสรุปไม่ได้':'สรุปผลแล้ว');
-  const statusMeaning=restorePlainText(status?.meaning||status?.description);
+  const statusLabels={
+    excellent:'ยอดเยี่ยม',very_good:'ดีมาก',good:'ดี',fair:'พอใช้',
+    low:'ให้เวลากับการพักเพิ่ม',sleep_restore_very_good:'ดีมาก',
+    sleep_restore_good:'ดี',pace_morning:'ได้พักในระดับหนึ่ง',
+    prioritise_rest:'ให้เวลากับการพักเพิ่ม',rest_goal_full:'พักได้ตามเป้าหมาย',
+    rest_good:'ช่วงพักเป็นไปได้ดี',rest_partial:'ได้พักในระดับหนึ่ง',
+    rest_more:'ลองปรับให้สบายขึ้น',
+  };
+  const statusLabel=(adminView
+    ?restorePlainText(status?.label||status?.title):statusLabels[statusKey])
+    ||statusLabels[statusKey]
+    ||(unavailable?'กำลังเตรียมผลสรุป':'สรุปผลแล้ว');
+  const statusMeaning=adminView
+    ?restorePlainText(status?.meaning||status?.description)
+    :userRestoreMeaning(statusKey,presentation,unavailable);
   const drivers=summary.drivers||{};
   const positives=Array.isArray(drivers.positive)
     ?drivers.positive:Array.isArray(summary.positive_drivers)?summary.positive_drivers:[];
   const attentions=Array.isArray(drivers.attention)
     ?drivers.attention:Array.isArray(summary.attention_drivers)?summary.attention_drivers:[];
   const driverGroup=(title,items,tone)=>{
-    const rows=items.map(restoreDriverText).filter(Boolean).slice(0,2);
+    const rows=items.map(item=>adminView?restoreDriverText(item):historyEscape(userRestoreDriverText(item,tone))).filter(Boolean).slice(0,2);
     if(!rows.length)return '';
     return `<div class="restore-driver-group ${tone}"><b>${title}</b><ul>${rows.map(row=>`<li>${row}</li>`).join('')}</ul></div>`;
   };
   const driverMarkup=unavailable
-    ?'<div class="restore-summary-empty">หลักฐานยังไม่พอสำหรับสรุปปัจจัยของ Session นี้</div>'
+    ?'<div class="restore-summary-empty">ZEEP กำลังรวบรวมข้อมูลเพื่ออธิบายผลการพักครั้งนี้</div>'
     :[
-      driverGroup('ข้อมูลที่สัมพันธ์กับผล',positives,'positive'),
-      driverGroup('จุดที่ควรติดตาม',attentions,'attention'),
-    ].join('')||'<div class="restore-summary-empty">ยังไม่มีปัจจัยเด่นที่ควรสรุปจาก Session นี้</div>';
-  const recommendation=restorePlainText(summary.recommendation,['primary'])
-    ||restorePlainText(report.post_session_guidance,['primary']);
+      driverGroup('สิ่งที่ทำได้ดี',positives,'positive'),
+      driverGroup('สิ่งที่ลองปรับได้',attentions,'attention'),
+    ].join('')||'<div class="restore-summary-empty">ยังไม่มีปัจจัยที่ต้องดูแลเป็นพิเศษ</div>';
+  const recommendation=adminView
+    ?restorePlainText(summary.recommendation,['primary'])||restorePlainText(report.post_session_guidance,['primary'])
+    :presentation==='recovery'
+      ?'ครั้งถัดไปเลือกเวลาที่สบาย แล้วปล่อยให้ร่างกายพักโดยไม่ต้องบังคับให้หลับ'
+      :'รักษาเวลาเข้านอนให้สม่ำเสมอ และค่อย ๆ ปรับสิ่งรบกวนทีละอย่าง';
   const personalBaseline=summary.personal_baseline||{};
   const maturity=personalBaseline.maturity||personalBaseline;
-  const maturityLabel=restorePlainText(maturity)
-    ||(personalBaseline.available===false?'ยังไม่มี Baseline ส่วนบุคคล':'Baseline กำลังสะสม');
+  const maturityKey=String(maturity.key||personalBaseline.status||'learning');
+  const userMaturityLabel={
+    learning:'กำลังเรียนรู้รูปแบบของคุณ',early:'เริ่มเห็นรูปแบบของคุณ',
+    active:'พร้อมเทียบกับรูปแบบของคุณ',stable:'รูปแบบของคุณชัดเจนขึ้น',
+  }[maturityKey]||'กำลังเรียนรู้รูปแบบของคุณ';
+  const maturityLabel=adminView
+    ?restorePlainText(maturity)||userMaturityLabel:userMaturityLabel;
   const sessionsUsed=Number(maturity.sessions_used??personalBaseline.sessions_used);
   const baselineText=Number.isFinite(sessionsUsed)&&sessionsUsed>0
-    ?`${maturityLabel} · ${Math.round(sessionsUsed)} Session`:maturityLabel;
+    ?`${maturityLabel} · จากการพัก ${Math.round(sessionsUsed)} ครั้ง`:maturityLabel;
   const confidence=summary.confidence||payload.data_quality?.confidence
     ||report.data_quality?.confidence||{};
   const confidenceLabel=restorePlainText(confidence)||'ยังไม่ระบุ';
+  const confidenceDisplay=adminView
+    ?confidenceLabel:userConfidenceLevelLabel(confidence.level);
   const scope=summary.session_scope||summary.scope||{};
-  const scopeLabel=restorePlainText(scope)||(
-    presentation==='recovery'?'Nap & Refresh':'Overnight Recovery');
+  const scopeLabel=adminView
+    ?restorePlainText(scope)||(presentation==='recovery'?'Nap & Refresh':'Overnight Recovery')
+    :presentation==='recovery'?'Nap & Refresh':presentation==='sleep'?'Overnight Recovery':'การพักครั้งนี้';
   return `<section class="restore-summary-card mode-${presentation}">
-    <div class="restore-summary-head"><div><span>RESTORE SUMMARY</span><h3>สรุปผลหลังใช้งาน</h3><small>${historyEscape(scopeLabel)} · ประเมินเฉพาะ Session นี้</small></div><strong class="restore-status ${restoreSummaryTone(status)}">${historyEscape(statusLabel)}</strong></div>
+    <div class="restore-summary-head"><div><span>RESTORE SUMMARY</span><h3>สรุปผลหลังใช้งาน</h3><small>${historyEscape(scopeLabel)} · ${adminView?'ประเมินเฉพาะ Session นี้':'สรุปเฉพาะการพักครั้งนี้'}</small></div><strong class="restore-status ${restoreSummaryTone(status)}">${historyEscape(statusLabel)}</strong></div>
     ${statusMeaning?`<p class="restore-status-meaning">${historyEscape(statusMeaning)}</p>`:''}
-    <div class="restore-summary-grid"><div class="restore-drivers">${driverMarkup}</div><div class="restore-recommendation"><b>คำแนะนำถัดไป</b><p>${recommendation?historyEscape(recommendation):'ยังไม่มีคำแนะนำเฉพาะจากผลครั้งนี้'}</p></div></div>
-    <div class="restore-summary-meta"><span><b>Baseline</b>${historyEscape(baselineText)}</span><span><b>ความมั่นใจ</b>${historyEscape(confidenceLabel)}</span></div>
-    <div class="restore-claim-note">ปัจจัยแสดงความสัมพันธ์ใกล้เวลาใน Session · ไม่ยืนยันเหตุ–ผล · ไม่ใช่ความพร้อมตลอดทั้งวัน</div>
+    <div class="restore-summary-grid"><div class="restore-drivers">${driverMarkup}</div><div class="restore-recommendation"><b>ลองทำครั้งถัดไป</b><p>${recommendation?historyEscape(recommendation):'ใช้งานตามปกติและสังเกตความรู้สึกหลังพัก'}</p></div></div>
+    <div class="restore-summary-meta"><span><b>รูปแบบของคุณ</b>${historyEscape(baselineText)}</span><span><b>${adminView?'ความมั่นใจ':'ความชัดเจนของข้อมูล'}</b>${historyEscape(confidenceDisplay)}</span></div>
+    <div class="restore-claim-note">${adminView?'ปัจจัยเป็นความสัมพันธ์ใกล้เวลา ไม่ยืนยันเหตุ–ผล และไม่ใช่ความพร้อมตลอดทั้งวัน':'ผลนี้สะท้อนเฉพาะการพักครั้งนี้ และควรดูร่วมกับความรู้สึกของคุณ'}</div>
   </section>`;
 }
 
@@ -6401,17 +6750,21 @@ function historyScoreMarkup(score){
 function renderHistorySummary(d){
   const summary=d.summary||{};
   const root=document.getElementById('historySummary');
+  const adminView=currentPrincipal?.role==='admin';
   const selected=document.getElementById('historyDateFrom').value===historyLocalToday()
     &&document.getElementById('historyDateTo').value===historyLocalToday();
-  const scope=currentPrincipal?.role==='admin'
+  const scope=adminView
     ? `${summary.people_count||0} คน`
     : `${summary.session_count||0} ครั้ง`;
-  root.innerHTML=`<div class="history-summary-heading"><span>${selected?'วันนี้':'ช่วงที่เลือก'}</span><b>${scope}</b><small>นับการใช้งานที่จบแล้วและมีข้อมูล Sensor · Asia/Bangkok</small></div>
+  const scopeNote=adminView
+    ?'นับการใช้งานที่จบแล้วและมีข้อมูล Sensor · Asia/Bangkok'
+    :'สรุปการพักที่บันทึกไว้ในช่วงนี้';
+  root.innerHTML=`<div class="history-summary-heading"><span>${selected?'วันนี้':'ช่วงที่เลือก'}</span><b>${scope}</b><small>${scopeNote}</small></div>
     <div class="history-summary-metrics">
-      <div><span>Session</span><b>${summary.session_count||0}</b></div>
+      <div><span>${adminView?'Session':'การพัก'}</span><b>${summary.session_count||0}</b></div>
       <div><span>Sleep Score</span><b>${summary.sleep_score_count||0}</b><small>${summary.average_sleep_score==null?'—':`เฉลี่ย ${historyEscape(summary.average_sleep_score)}`}</small></div>
       <div><span>Recovery Score</span><b>${summary.recovery_score_count||0}</b><small>${summary.average_recovery_score==null?'—':`เฉลี่ย ${historyEscape(summary.average_recovery_score)}`}</small></div>
-      <div><span>รอคะแนน</span><b>${summary.awaiting_score_count||0}</b></div>
+      <div><span>${adminView?'รอคะแนน':'กำลังเตรียมผล'}</span><b>${summary.awaiting_score_count||0}</b></div>
     </div>`;
 }
 
@@ -6443,23 +6796,25 @@ function renderSessionList(d){
   renderHistorySummary(d);
   renderHistoryParticipants(d);
   if (!d.sessions.length){
-    root.innerHTML='<div class="history-empty"><b>ไม่พบ Session ในช่วงเวลานี้</b><span>ลองเลือกวัน เวลา หรือชื่อผู้ใช้งานใหม่</span></div>';
+    root.innerHTML=currentPrincipal?.role==='admin'
+      ?`<div class="history-empty"><b>${currentPrincipal?.role==='admin'?'ไม่พบ Session ในช่วงเวลานี้':'ยังไม่มีประวัติในช่วงเวลานี้'}</b><span>ลองเลือกวัน${currentPrincipal?.role==='admin'?' เวลา หรือชื่อผู้ใช้งาน':'หรือช่วงเวลา'}ใหม่</span></div>`
+      :'<div class="history-empty"><b>ยังไม่มีประวัติในช่วงนี้</b><span>ลองเลือกวันหรือช่วงเวลาอื่น</span></div>';
     return;
   }
   d.sessions.forEach(sx=>{
     const presentation=reportPresentationMode(sx);
     const modeLabel=presentation==='recovery'
       ?'Nap & Refresh'
-      :presentation==='sleep'?'Overnight Recovery':'รูปแบบยังไม่ยืนยัน';
+      :presentation==='sleep'?'Overnight Recovery':currentPrincipal?.role==='admin'?'รูปแบบยังไม่ยืนยัน':'ผลการพักครั้งนี้';
     const row = document.createElement('button'); row.className = `hist-row mode-${presentation}`;
     const hr = sx.summary?.heart_rate_bpm;
     const identity=currentPrincipal?.role==='admin'
       ? `<span class="hist-person-label"><b>${historyEscape(identityLabel(sx))}</b><small>${historyEscape(sx.display_name||'')}</small></span>`:'';
     row.innerHTML =
       `${identity}<b>${fmtDateTh(sx.ended_at_utc||sx.started_at_utc)}</b>`+
-      `<span class="hist-mode-label mode-${presentation}"><b>${modeLabel}</b><small>Sensor บันทึก ${fmtDur(sx.duration_s)}</small></span>` +
+      `<span class="hist-mode-label mode-${presentation}"><b>${modeLabel}</b><small>${currentPrincipal?.role==='admin'?'Sensor บันทึก':'ระยะเวลาใช้งาน'} ${fmtDur(sx.duration_s)}</small></span>` +
       `${sleepQualityCompact(sx.sleep_quality, sx.ended_at_utc, presentation)}` +
-      `<span>♥ ${hr ? hr.avg + ' ครั้ง/นาที' : '--'}</span>`;
+      `<span>♥ ${currentPrincipal?.role==='admin'?'HR':'ชีพจร'} ${hr ? hr.avg + ' ครั้ง/นาที' : '--'}</span>`;
     row.onclick = ()=>loadDetail(sx.account_key||d.account_key||d.username, sx.session_id, row);
     root.appendChild(row);
   });
@@ -6468,14 +6823,15 @@ function renderSessionList(d){
 async function loadDetail(user, sid, row){
   document.querySelectorAll('.hist-row').forEach(x=>x.classList.remove('sel'));
   row?.classList.add('sel');
-  document.getElementById('sessionDetail').innerHTML='<div class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังสร้างผลการใช้งาน</b><span>กำลังอ่านผลและ Timeline ของ Session</span></div></div>';
+  const adminView=currentPrincipal?.role==='admin';
+  document.getElementById('sessionDetail').innerHTML=`<div class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังเตรียมผลการพัก</b><span>${adminView?'กำลังอ่านผลและ Timeline ของ Session':'กำลังเรียบเรียงรายละเอียดการพักของคุณ'}</span></div></div>`;
   const legacyPath=`/api/history/${encodeURIComponent(user)}/${encodeURIComponent(sid)}`;
   let r;
   // The local Pi report retains the confirmed Sleep State sequence. The new
   // raw-free v1 API remains the contract for ZEEP Backend/Mobile integration.
   try { r=await fetch(legacyPath,{cache:'no-store'}); }
-  catch { toast('เชื่อมต่อ server ไม่ได้', 'error'); return; }
-  if (!r.ok){ toast('โหลดรายละเอียดไม่ได้', 'error'); return; }
+  catch { toast(adminView?'เชื่อมต่อ server ไม่ได้':'ยังเชื่อมต่อระบบไม่ได้ กรุณาลองอีกครั้ง', 'error'); return; }
+  if (!r.ok){ toast(adminView?`โหลดรายละเอียดไม่ได้ · HTTP ${r.status}`:'ยังโหลดรายละเอียดไม่ได้ กรุณาลองอีกครั้ง', 'error'); return; }
   renderReport(await r.json());
   // On a tablet the history list can fill most of the viewport. Bring the
   // completed report into view so the newly requested quality result is not
@@ -6555,6 +6911,7 @@ function reportProfileItems(report,presentation){
 
 function reportProfileMarkup(report,presentation){
   const sleep=report.sleep||{},quality=report.quality||{};
+  const adminView=currentPrincipal?.role==='admin';
   const profile=reportProfileItems(report,presentation);
   const items=profile.items;
   let cursor=0;
@@ -6571,14 +6928,14 @@ function reportProfileMarkup(report,presentation){
   const centreValue=presentation==='recovery'
     ?fmtDur(eligible==null?sleep.recording_s:eligible)
     :fmtDur(sleep.estimated_sleep_s);
-  const title=presentation==='recovery'?'รูปแบบการพักที่ตรวจพบ':'สัดส่วน Sleep Stage';
+  const title=presentation==='recovery'?'รูปแบบการพักที่ตรวจพบ':adminView?'สัดส่วน Sleep Stage':'สัดส่วนการนอนที่ประเมินได้';
   const note=presentation==='recovery'
-    ?'ไม่บังคับให้หลับ · Sleep State เป็นข้อมูลประกอบ'
-    :`State ที่เข้าคะแนน · ${fmtDur(profile.stateSeconds)}`;
-  const centreLabel=presentation==='recovery'?'เวลาพักที่นับได้':'Sensor ประเมินว่าหลับ';
+    ?'นับคุณค่าของการพักทั้งขณะตื่นและหลับ'
+    :`${adminView?'State ที่เข้าคะแนน':'เวลาที่นำมาสรุปผล'} · ${fmtDur(profile.stateSeconds)}`;
+  const centreLabel=presentation==='recovery'?'เวลาพักที่นับได้':'เวลานอนโดยประมาณ';
   const meaning=presentation==='recovery'
-    ?'<div class="profile-meaning-note">พักขณะตื่นไม่ใช่ผลล้มเหลว · ทุกช่วงที่ยังไม่ยืนยัน OFF BED มี State ประกอบ ส่วน Recovery Score อ่านจากเวลาพัก ความนิ่ง HR/RR ร่างกาย และสิ่งแวดล้อม</div>'
-    :'<div class="profile-meaning-note">ทุกช่วงที่ยังไม่ยืนยัน OFF BED จะเป็น W/N1/N2/N3/REM และเข้าคะแนน · ช่วงคง State เดิมเป็น low-confidence และไม่นำไปเรียนรู้ Personal Baseline · NREM = N1 + N2 + N3</div>';
+    ?'<div class="profile-meaning-note">การพักนิ่งและผ่อนคลายมีคุณค่า แม้ยังไม่หลับ · Recovery Score ดูทั้งเวลาพัก ความนิ่งของร่างกาย และสภาพแวดล้อม</div>'
+    :'<div class="profile-meaning-note">แสดงเวลาที่ระบบประเมินได้ในแต่ละช่วงของการนอน · NREM คือ N1 + N2 + N3</div>';
   return `<div class="stage-summary ${presentation==='recovery'?'recovery-profile-summary':''}"><div class="report-subhead"><span>${title}</span><small>${note}</small></div><div class="stage-summary-content"><div class="stage-donut" style="--stage-ring:conic-gradient(${segments.join(',')})"><span><b>${centreValue}</b><small>${centreLabel}</small></span></div><div class="stage-legend">${rows}${meaning}</div></div></div>`;
 }
 
@@ -6609,6 +6966,22 @@ function classificationAccountingMarkup(report,adminView,presentation){
     :invariant.holds===false
       ?'พบบัญชีเวลาที่ต้องตรวจสอบ'
       :'กำลังตรวจบัญชีเวลา';
+  if(!adminView){
+    const userTitle=invariant.holds===false
+      ?'กำลังตรวจสอบเวลาบางช่วง'
+      :'บันทึกช่วงเวลาการพักครบถ้วน';
+    const userStatus=invariant.holds===false?'กำลังตรวจสอบ':'เรียบร้อย';
+    const offBed=Number(accounting.off_bed_s)||0;
+    return `<section class="classification-accounting-card user-time-summary">
+      <div class="classification-accounting-head"><div><span>ช่วงเวลาการพัก</span><h3>${userTitle}</h3></div><b class="accounting-status ${invariant.holds===false?'attention':'good'}">${userStatus}</b></div>
+      <div class="classification-accounting-metrics">
+        <div><span>ระยะเวลาใช้งาน</span><b>${fmtDur(recording)}</b></div>
+        <div><span>${recovery?'เวลาพักที่นับได้':'เวลาที่ใช้สรุปผล'}</span><b>${fmtDur(eligible)}</b></div>
+        ${offBed>0?`<div><span>ช่วงออกจากเตียง</span><b>${fmtDur(offBed)}</b></div>`:''}
+      </div>
+      <p>${recovery?'ZEEP นับคุณค่าของการพักทั้งขณะตื่นและหลับ':'ทุกช่วงที่อยู่บนเตียงถูกนำมาประเมินอย่างต่อเนื่อง'}</p>
+    </section>`;
+  }
   const details=[
     ['ยืนยันโดยตรง',accounting.direct_confirmed_s],
     ['คง State ก่อนหน้า',accounting.continuity_carried_forward_s],
@@ -6639,6 +7012,7 @@ function classificationAccountingMarkup(report,adminView,presentation){
 
 function reportOverviewMetrics(report,presentation){
   const sleep=report.sleep||{},quality=report.quality||{};
+  const adminView=currentPrincipal?.role==='admin';
   let values;
   if(presentation==='recovery'){
     const target=quality.duration_target||{};
@@ -6649,28 +7023,31 @@ function reportOverviewMetrics(report,presentation){
     const movement=quality.body_response?.movement_pct;
     values=[
       ['◷','เวลาพักที่นับได้',fmtDur(eligible)],
-      ['◎','เทียบเป้าหมาย',completion],
-      ['♥','ความนิ่ง HR/RR',regularity==null?'--':`${Math.round(100*Number(regularity))}%`],
+      ['◎',adminView?'เทียบเป้าหมาย':'เวลาพักที่ทำได้',completion],
+      ['♥',adminView?'ความนิ่ง HR/RR':'ความนิ่งของสัญญาณชีพ',regularity==null?'--':`${Math.round(100*Number(regularity))}%`],
       ['◇','ความนิ่งร่างกาย',movement==null?'--':`${Math.max(0,Math.round(100-Number(movement)))}%`],
     ];
   }else{
     values=[
-      ['◷','Sensor ประเมินว่าหลับ',fmtDur(sleep.estimated_sleep_s)],
-      ['▣','ช่วงที่ Sensor บันทึก',fmtDur(sleep.recording_s)],
-      ['◎','ประสิทธิภาพ',sleep.sleep_efficiency_pct==null?'--':`${sleep.sleep_efficiency_pct}%`],
+      ['◷','เวลานอนโดยประมาณ',fmtDur(sleep.estimated_sleep_s)],
+      ['▣','ระยะเวลาใช้งาน',fmtDur(sleep.recording_s)],
+      ['◎',adminView?'ประสิทธิภาพ':'เวลาที่ประเมินว่าหลับ',sleep.sleep_efficiency_pct==null?'--':`${sleep.sleep_efficiency_pct}%`],
       ['☀','W · ตื่น',fmtDur(sleep.wake_s)],
     ];
   }
   return values.map(([icon,label,value])=>`<div class="session-key-metric"><i>${icon}</i><span><small>${label}</small><b>${value}</b></span></div>`).join('');
 }
 
-function recoveryProtocolBadge(report){
+function recoveryProtocolBadge(report,adminView=false){
   const quality=report.quality||{},sleep=report.sleep||{};
   const minutes=(Number(sleep.recording_s)||0)/60;
   const status=quality.rest_mode?.protocol_status?.status;
-  if(minutes<10)return {tone:'review',label:'สั้นกว่า 10 นาที'};
+  if(minutes<10)return {tone:'review',label:adminView?'สั้นกว่า 10 นาที':'ช่วงพักสั้น'};
   if(status==='implausible_outlier'||status==='out_of_protocol'){
-    return {tone:'review',label:'ตรวจ Mode/ระยะเวลา'};
+    return {
+      tone:'review',
+      label:adminView?'ตรวจ Mode/ระยะเวลา':'ระยะเวลาต่างจากรูปแบบที่เลือก',
+    };
   }
   const target=quality.duration_target||quality.rest_mode?.protocol_status?.target||{};
   const targetUnknown=quality.legacy_score_preserved===true
@@ -6678,18 +7055,108 @@ function recoveryProtocolBadge(report){
     ||status==='target_unknown'
     ||target.source==='legacy_missing';
   if(targetUnknown){
-    return {tone:'legacy',label:minutes>45?'Legacy target ไม่ถูกบันทึก':'Target เดิมไม่ถูกบันทึก'};
+    return adminView
+      ?{tone:'legacy',label:minutes>45?'Legacy target ไม่ถูกบันทึก':'Target เดิมไม่ถูกบันทึก'}
+      :null;
   }
   const targetMinutes=Number(target.target_minutes??target.minutes);
   if(Number.isFinite(targetMinutes)){
     return {
       tone:status==='recommended'?'good':'',
-      label:`เป้าหมาย ${Math.round(targetMinutes)} นาที`,
+      label:adminView?`เป้าหมาย ${Math.round(targetMinutes)} นาที`:`เลือกพัก ${Math.round(targetMinutes)} นาที`,
     };
   }
-  if(minutes>120)return {tone:'review',label:'ตรวจ Mode/ระยะเวลา'};
+  if(minutes>120)return {
+    tone:'review',
+    label:adminView?'ตรวจ Mode/ระยะเวลา':'ระยะเวลาต่างจากรูปแบบที่เลือก',
+  };
   if(status==='recommended')return {tone:'good',label:'เป้าหมาย 25–35 นาที'};
-  return {tone:'legacy',label:'Target ยังไม่ยืนยัน'};
+  return adminView?{tone:'legacy',label:'Target ยังไม่ยืนยัน'}:null;
+}
+
+function respiratoryWellnessTone(status){
+  return ({supportive:'good',observe:'fair',needs_recheck:'attention'})[
+    String(status||'').toLowerCase()
+  ]||'neutral';
+}
+
+function renderRespiratoryWellness(report,adminView=false){
+  const summary=report?.respiratory_wellness;
+  if(!summary||typeof summary!=='object')return '';
+  const status=summary.status||{};
+  const observations=summary.observations||{};
+  const vital=summary.vital_summary||{};
+  const age=summary.age_context||{};
+  const baseline=summary.personal_baseline||{};
+  const confidence=summary.confidence||{};
+  const recommendation=summary.recommendation||{};
+  const finite=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value));
+  const median=finite(observations.median_rr_brpm)
+    ?`${Number(observations.median_rr_brpm).toFixed(1)} ครั้ง/นาที`:'—';
+  if(!adminView){
+    const heartRate=finite(vital.heart_rate_bpm)
+      ?`${Number(vital.heart_rate_bpm).toFixed(1)} ครั้ง/นาที`:'กำลังรวบรวม';
+    const breathingRate=finite(vital.respiration_rate_brpm)
+      ?`${Number(vital.respiration_rate_brpm).toFixed(1)} ครั้ง/นาที`:'กำลังรวบรวม';
+    const summaryText=typeof vital.summary==='string'&&vital.summary.trim()
+      ?vital.summary:'ข้อมูลชีพจรและการหายใจยังไม่พอสรุป';
+    const advice=typeof vital.recommendation==='string'&&vital.recommendation.trim()
+      ?vital.recommendation:'พักตามปกติ เพื่อให้ ZEEP เรียนรู้เพิ่ม';
+    return `<section class="restore-summary-card respiratory-wellness-card user-vitals-summary">
+      <div class="restore-summary-head"><div><span>ระหว่างการพัก</span><h3>ชีพจรและการหายใจ</h3></div></div>
+      <div class="restore-summary-meta"><span><b>ชีพจรโดยประมาณ</b>${historyEscape(heartRate)}</span><span><b>หายใจโดยประมาณ</b>${historyEscape(breathingRate)}</span></div>
+      <p class="restore-status-meaning"><b>สรุป</b> · ${historyEscape(summaryText)}</p>
+      <p class="respiratory-age-guidance"><b>คำแนะนำ</b> · ${historyEscape(advice)}</p>
+      <div class="restore-claim-note">เป็นแนวโน้มเพื่อ Wellness จากการพักครั้งนี้ ไม่ใช่การวินิจฉัย</div>
+    </section>`;
+  }
+  const range=finite(observations.p10_rr_brpm)&&finite(observations.p90_rr_brpm)
+    ?`${Number(observations.p10_rr_brpm).toFixed(1)}–${Number(observations.p90_rr_brpm).toFixed(1)} ครั้ง/นาที`:'กำลังรวบรวมข้อมูลเพิ่ม';
+  const regularity=({stable:'จังหวะค่อนข้างสม่ำเสมอ',mixed:'จังหวะเปลี่ยนแปลงบางช่วง',variable:'จังหวะเปลี่ยนแปลงระหว่างพัก',insufficient:'กำลังเรียนรู้รูปแบบของคุณ'})[
+    observations.regularity_key
+  ]||'กำลังเรียนรู้รูปแบบของคุณ';
+  const baselineText=baseline.available
+    ?`${adminView?(baseline.label||'เทียบกับรูปแบบของคุณแล้ว'):'เทียบกับรูปแบบการพักของคุณแล้ว'} · จากการพัก ${baseline.sessions_used||0} ครั้ง`
+    :adminView
+      ?`กำลังเรียนรู้ ${baseline.sessions_used||0}/${baseline.minimum_sessions||7} ครั้ง`
+      :'กำลังเรียนรู้รูปแบบของคุณจากการพักหลายครั้ง';
+  const ageText=age.available
+    ?adminView?`${age.label||age.age_band}`:'เทียบกับช่วงวัยของคุณ'
+    :'เพิ่มข้อมูลอายุเพื่อรับคำแนะนำที่เหมาะกับช่วงวัย';
+  const ageGuidance=adminView&&age.guidance
+    ?age.guidance:'ดูแนวโน้มหลายครั้งร่วมกับความรู้สึกหลังพักและกิจกรรมประจำวัน';
+  const userStatusLabels={supportive:'จังหวะการหายใจสม่ำเสมอ',observe:'มีการเปลี่ยนแปลงบางช่วง',needs_recheck:'ลองติดตามเพิ่มอีกครั้ง'};
+  const statusLabel=adminView
+    ?status.label||(summary.available?'สรุปผลแล้ว':'กำลังเรียนรู้รูปแบบของคุณ')
+    :userStatusLabels[status.key]||(summary.available?'สรุปแนวโน้มแล้ว':'กำลังเรียนรู้รูปแบบของคุณ');
+  const interpretation=adminView
+    ?summary.interpretation||'ZEEP กำลังรวบรวมข้อมูลเพื่อสรุปแนวโน้ม'
+    :summary.available?'แสดงแนวโน้มการหายใจที่พบระหว่างการพักครั้งนี้':'ZEEP กำลังรวบรวมข้อมูลเพื่อสรุปแนวโน้ม';
+  const confidenceLabel=adminView
+    ?confidence.label||'หลักฐานจำกัด'
+    :({high:'ชัดเจน',medium:'เพียงพอ',low:'กำลังสะสม'})[confidence.level]||'กำลังสะสม';
+  const observationList=adminView
+    ?`<li>ค่ากลาง ${historyEscape(median)}</li><li>ช่วง P10–P90 ${historyEscape(range)}</li><li>${historyEscape(regularity)}</li>`
+    :`<li>อัตราการหายใจ ${historyEscape(median)}</li><li>ช่วงที่พบเป็นส่วนใหญ่ ${historyEscape(range)}</li><li>${historyEscape(regularity)}</li>`;
+  const adminDetails=adminView?`<details class="report-details respiratory-technical"><summary>รายละเอียดคุณภาพสัญญาณสำหรับผู้ดูแล</summary><div class="classification-accounting-detail">
+      <span><small>ช่วงใช้ได้</small><b>${finite(observations.valid_minutes)?Number(observations.valid_minutes).toFixed(1):'—'} นาที</b></span>
+      <span><small>Coverage</small><b>${finite(observations.coverage_pct)?Number(observations.coverage_pct).toFixed(1):'—'}%</b></span>
+      <span><small>ตัวอย่างที่ใช้</small><b>${finite(observations.valid_samples)?Math.round(Number(observations.valid_samples)):'—'}</b></span>
+      <span><small>ต่อเนื่องสูงสุด</small><b>${finite(observations.longest_valid_run_seconds)?fmtDur(Number(observations.longest_valid_run_seconds)):'—'}</b></span>
+      <span><small>Regularity</small><b>${finite(observations.regularity_factor)?Number(observations.regularity_factor).toFixed(3):'—'}</b></span>
+      <span><small>ตัด Movement/สัญญาณอ่อน</small><b>${finite(observations.excluded_motion_or_weak_signal_minutes)?Number(observations.excluded_motion_or_weak_signal_minutes).toFixed(1):'—'} นาที</b></span>
+      <span><small>ตัด Invalid/Held</small><b>${finite(observations.excluded_invalid_or_held_minutes)?Number(observations.excluded_invalid_or_held_minutes).toFixed(1):'—'} นาที</b></span>
+      <span><small>Version</small><b>${historyEscape(summary.version||'—')}</b></span>
+    </div></details>`:'';
+  return `<section class="restore-summary-card respiratory-wellness-card">
+    <div class="restore-summary-head"><div><span>RESTING BREATHING</span><h3>การหายใจระหว่างพัก</h3><small>${adminView?'วิเคราะห์จาก RR ที่ผ่านคุณภาพสัญญาณ BCG':'ดูจากจังหวะและความสม่ำเสมอตลอดช่วงพัก'}</small></div><strong class="restore-status ${respiratoryWellnessTone(status.key)}">${historyEscape(statusLabel)}</strong></div>
+    <p class="restore-status-meaning">${historyEscape(interpretation)}</p>
+    <div class="restore-summary-grid"><div class="restore-driver-group respiratory-observation"><b>สิ่งที่สังเกตได้</b><ul>${observationList}</ul></div><div class="restore-recommendation"><b>ลองทำครั้งถัดไป</b><p>${historyEscape(adminView&&recommendation.primary?recommendation.primary:'พักตามปกติและให้ ZEEP เรียนรู้รูปแบบของคุณเพิ่มอีกครั้ง')}</p></div></div>
+    <div class="restore-summary-meta"><span><b>ช่วงวัย</b>${historyEscape(ageText)}</span><span><b>รูปแบบประจำของคุณ</b>${historyEscape(baselineText)}</span><span><b>${adminView?'ความมั่นใจ':'ความชัดเจนของข้อมูล'}</b>${historyEscape(confidenceLabel)}</span></div>
+    <p class="respiratory-age-guidance"><b>คำแนะนำตามช่วงอายุ</b> · ${historyEscape(ageGuidance)}</p>
+    ${adminDetails}
+    <div class="restore-claim-note">${adminView?'ประเมินจาก BCG · ไม่วัด PFT, SpO₂ หรือ sleep apnea และไม่เปลี่ยน Sleep/Recovery Score':'ข้อมูลนี้ช่วยดูแนวโน้มระหว่างพัก ไม่ใช่การตรวจสมรรถภาพปอด ออกซิเจนในเลือด หรือการวินิจฉัยโรค'}</div>
+  </section>`;
 }
 
 function renderSessionOverview(report,hasRestoreSummary=false){
@@ -6700,7 +7167,11 @@ function renderSessionOverview(report,hasRestoreSummary=false){
   const presentation=reportPresentationMode(report);
   const findingIcon={critical:'!',poor:'↓',fair:'–',good:'✓',excellent:'★',unavailable:'?'};
   const allFindings=Array.isArray(report.findings)?report.findings:[];
-  const findingRow=item=>`<div class="disturbance-item ${item.severity||'unavailable'}"><i>${findingIcon[item.severity]||'·'}</i><div><b>${item.title||'ข้อมูลประกอบ'}</b><small>${item.detail||''}</small></div><span>${item.action||''}</span></div>`;
+  const findingRow=item=>{
+    if(adminView)return `<div class="disturbance-item ${item.severity||'unavailable'}"><i>${findingIcon[item.severity]||'·'}</i><div><b>${historyEscape(item.title||'ข้อมูลประกอบ')}</b><small>${historyEscape(item.detail||'')}</small></div><span>${historyEscape(item.action||'')}</span></div>`;
+    const finding=userReportFinding(item);
+    return `<div class="disturbance-item ${finding.severity}"><i>${findingIcon[finding.severity]||'·'}</i><div><b>${historyEscape(finding.metric)} · ${historyEscape(finding.label)}</b><small>${historyEscape(finding.detail)}</small></div><span>${historyEscape(finding.action)}</span></div>`;
+  };
   const requiredFindings=allFindings.filter(item=>
     ['required','sensor_check','safety_review'].includes(item.decision)
     ||['critical','poor'].includes(item.severity)
@@ -6711,15 +7182,26 @@ function renderSessionOverview(report,hasRestoreSummary=false){
     ||(item.severity==='unavailable'&&item.blocks_overall===false));
   const maintainFindings=allFindings.filter(item=>item.decision==='maintain'||['good','excellent'].includes(item.severity));
   const findingTier=(title,items)=>items.length?`<div class="disturbance-tier"><h5>${title}</h5>${items.map(findingRow).join('')}</div>`:'';
+  const tierTitles=adminView?[
+    'ต้องตรวจสอบ · Safety / ต่ำกว่าเกณฑ์ / Sensor ไม่พร้อม',
+    'ผ่านขั้นต่ำ · ปรับเพิ่มได้',
+    'ดี / ยอดเยี่ยม · รักษาค่า',
+  ]:[
+    'ควรดูแลก่อน',
+    'ปรับเพิ่มได้',
+    'ทำได้ดี',
+  ];
   const findings=[
-    findingTier('ต้องแก้ไข · วิกฤต / แย่ / Sensor ไม่พร้อม',requiredFindings),
-    findingTier('ผ่านขั้นต่ำ · พอใช้และควรติดตาม',optimiseFindings),
-    findingTier('ดี / ยอดเยี่ยม · รักษาค่า',maintainFindings),
+    findingTier(tierTitles[0],requiredFindings),
+    findingTier(tierTitles[1],optimiseFindings),
+    findingTier(tierTitles[2],maintainFindings),
   ].join('');
   const environmentAssessment=report.environment_assessment||{};
   const restMode=report.rest_mode||{},restModeGroup=restMode.group||restMode.resolved||'sleep';
   const profile=reportProfileMarkup(report,presentation);
-  const disturbanceTitle=restModeGroup==='sleep'?'สิ่งที่อาจรบกวนการนอน':'สิ่งที่อาจรบกวนการพัก';
+  const disturbanceTitle=adminView
+    ?restModeGroup==='sleep'?'สิ่งที่อาจรบกวนการนอน':'สิ่งที่อาจรบกวนการพัก'
+    :'ปัจจัยระหว่างการพัก';
   const environmentStatus=adminView
     ?`คาดหวังพอใช้ขึ้นไป · ${environmentAssessment.mode_label||restMode.label||'ตาม Mode'} · ${environmentAssessment.context_only===false?'':'ไม่กำหนด Sleep State'}`
     :`เทียบกับเกณฑ์ของ ${environmentAssessment.mode_label||restMode.label||'รูปแบบการพักครั้งนี้'}`;
@@ -6728,28 +7210,39 @@ function renderSessionOverview(report,hasRestoreSummary=false){
   const confidenceText=confidence?` · Confidence สูง ${confidence.high||0}% · กลาง ${confidence.medium||0}% · ต่ำ ${confidence.low||0}%`:'';
   const scoreConfidence=quality.score_confidence||{};
   const badgeLevel=presentation==='recovery'&&scoreConfidence.level?scoreConfidence.level:(data.level||'low');
-  const badgeLabel=presentation==='recovery'&&scoreConfidence.label?scoreConfidence.label:(data.label||'ข้อมูลจำกัด');
-  const protocolBadge=presentation==='recovery'?recoveryProtocolBadge(report):null;
+  const badgeLabel=adminView
+    ?presentation==='recovery'&&scoreConfidence.label?scoreConfidence.label:(data.label||'ข้อมูลจำกัด')
+    :userConfidenceLevelLabel(
+      presentation==='recovery'&&scoreConfidence.level?scoreConfidence.level:data.level,
+    );
+  const protocolBadge=presentation==='recovery'
+    ?recoveryProtocolBadge(report,adminView):null;
   const guidance=report.post_session_guidance||{};
-  const guidanceHtml=!hasRestoreSummary&&guidance.primary?`<div class="report-context-note"><b>คำแนะนำหลังออกจาก ZEEP</b> · ${guidance.primary}${guidance.next_session?` · ${guidance.next_session}`:''}${guidance.self_check?`<br><b>เช็กความพร้อม</b> · ${guidance.self_check}`:''}</div>`:'';
+  const guidanceHtml=!hasRestoreSummary&&guidance.primary
+    ?adminView
+      ?`<div class="report-context-note"><b>คำแนะนำหลังออกจาก ZEEP</b> · ${historyEscape(guidance.primary)}${guidance.next_session?` · ${historyEscape(guidance.next_session)}`:''}${guidance.self_check?`<br><b>เช็กความพร้อม</b> · ${historyEscape(guidance.self_check)}`:''}</div>`
+      :`<div class="report-context-note"><b>คำแนะนำหลังพัก</b> · ${presentation==='recovery'?'ค่อย ๆ กลับไปทำกิจกรรม และสังเกตว่ารู้สึกสดชื่นขึ้นเพียงใด':'เริ่มวันตามจังหวะที่สบาย และดูความรู้สึกของคุณร่วมกับผลคืนนี้'}</div>`
+    :'';
   const headline=presentation==='recovery'
-    ?`พักใน ZEEP ${fmtDur(sleep.recording_s)} · ไม่จำเป็นต้องหลับ`
-    :`Sensor ประเมินว่าหลับ ${fmtDur(sleep.estimated_sleep_s)}`;
+    ?`พักใน ZEEP ${fmtDur(sleep.recording_s)} · การพักทุกแบบมีคุณค่า`
+    :`เวลานอนโดยประมาณ ${fmtDur(sleep.estimated_sleep_s)}`;
   const footer=adminView
     ?(presentation==='recovery'
       ?`Nap & Refresh ประเมินการพักและการตอบสนอง ไม่ใช้การหลับเป็นเงื่อนไข · HR/RR coverage ${quality.physiology?.paired_hr_rr_coverage_pct??'--'}% · Environment ${coverage.environment_pct||0}%`
       :`ใช้เวลาก่อนเริ่มหลับ ${sleep.sleep_onset_proxy_s==null?'--':fmtDur(sleep.sleep_onset_proxy_s)} · เข้าสู่ W · ตื่น ${sleep.wake_entries ?? sleep.awakenings ?? 0} ครั้ง · ${data.note||''} · Coverage: Recording ${coverage.recording_pct||0}% · BCG ${coverage.bcg_pct||0}% · Sleep Stage ${coverage.sleep_stage_pct||0}% · Environment ${coverage.environment_pct||0}%${confidenceText}`)
     :(presentation==='recovery'
-      ?'Nap & Refresh ประเมินการพักและการตอบสนอง · ไม่บังคับให้หลับ'
+      ?'Nap & Refresh นับคุณค่าของการพักทั้งขณะตื่นและหลับ'
       :`ประเมินเฉพาะการพัก Overnight ครั้งนี้ · ตื่น ${sleep.wake_entries ?? sleep.awakenings ?? 0} ครั้ง`);
   const version=adminView&&report.version?` · ${historyEscape(report.version)}`:'';
+  const respiratoryHtml=renderRespiratoryWellness(report,adminView);
   return `<section class="session-report-overview mode-${presentation}">
     <div class="session-report-head"><div><div class="sleep-quality-eyebrow">${presentation==='recovery'?'NAP & REFRESH SUMMARY':'OVERNIGHT SLEEP SUMMARY'}${version}</div><h3>${headline}</h3></div><div class="report-badge-group"><span class="report-data-badge ${badgeLevel}">${badgeLabel}</span>${protocolBadge?`<span class="report-protocol-badge ${protocolBadge.tone}">${protocolBadge.label}</span>`:''}</div></div>
     <div class="session-key-metrics">${metrics}</div>
     <div class="session-report-body">
       ${profile}
-      <div class="disturbance-summary"><div class="report-subhead"><span>${disturbanceTitle}</span><small>${environmentStatus}</small></div><div class="disturbance-list">${findings||'<div class="mini">ไม่มีข้อมูลเพียงพอ</div>'}</div></div>
+      <div class="disturbance-summary"><div class="report-subhead"><span>${disturbanceTitle}</span><small>${environmentStatus}</small></div><div class="disturbance-list">${findings||'<div class="mini">ยังไม่มีปัจจัยที่ต้องดูแลเป็นพิเศษ</div>'}</div></div>
     </div>
+    ${respiratoryHtml}
     ${guidanceHtml}
     <div class="report-context-note">${footer}</div>
   </section>`;
@@ -6761,14 +7254,19 @@ function renderReport(rec){
   const presentation=reportPresentationMode(rec.session_report||rec);
   const reportTitle=presentation==='recovery'
     ?'ผล Nap & Refresh'
-    :presentation==='sleep'?'ผล Overnight Recovery':'ผล Session · รอยืนยันรูปแบบ';
+    :presentation==='sleep'?'ผล Overnight Recovery':adminView?'ผล Session · รอยืนยันรูปแบบ':'ผลการพักครั้งนี้';
   const timelineTitle=presentation==='recovery'
-    ?'ลำดับการพัก · Sleep State เป็นข้อมูลประกอบ'
-    :presentation==='sleep'?'ลำดับสถานะการนอน':'ลำดับข้อมูลที่ Sensor บันทึก';
-  const timelineEmpty=presentation==='recovery'
-    ?'ยังไม่มีข้อมูลยืนยันรูปแบบการพัก'
-    :presentation==='sleep'?'ยังไม่มีข้อมูลสถานะการนอน':'ยังไม่พบข้อมูลที่ยืนยันได้';
+    ?adminView?'ลำดับการพัก · Sleep State เป็นข้อมูลประกอบ':'ลำดับการพัก'
+    :presentation==='sleep'?'ลำดับสถานะการนอน':adminView?'ลำดับข้อมูลที่ Sensor บันทึก':'ลำดับการพัก';
+  const timelineEmpty=adminView
+    ?presentation==='recovery'
+      ?'ยังไม่มีข้อมูลยืนยันรูปแบบการพัก'
+      :presentation==='sleep'?'ยังไม่มีข้อมูลสถานะการนอน':'ยังไม่พบข้อมูลที่ยืนยันได้'
+    :presentation==='sleep'?'กำลังเตรียมลำดับการนอน':'กำลังเตรียมลำดับการพัก';
   const su = rec.summary || {};
+  const hasCompactVitals=Boolean(
+    rec.session_report?.respiratory_wellness?.vital_summary
+  );
   const bed = su.bed_status_counts || {};
   const bedTotal = Object.values(bed).reduce((a,b)=>a+b, 0);
   const bedTxt = bedTotal
@@ -6780,7 +7278,7 @@ function renderReport(rec){
   const slc = su.sleep_state_counts || {};
   const slTotal = Object.values(slc).reduce((a,b)=>a+b, 0);
   const slTxt = slTotal
-    ? Object.entries(slc).map(([k,v])=>`${(SLEEP_TH[k]?.label || k)} ${Math.round(v*100/slTotal)}%`).join(' · ')
+    ? Object.entries(slc).map(([k,v])=>`${historyEscape(adminView?(SLEEP_TH[k]?.label||k):userSleepStageLabel(k))} ${Math.round(v*100/slTotal)}%`).join(' · ')
     : null;
   const hasChart = (rec.samples || []).length > 1;
   const confidenceTh={low:'ต่ำ',medium:'ปานกลาง',high:'สูง'};
@@ -6830,15 +7328,15 @@ function renderReport(rec){
       const operationLabel='ยืนยัน OFF BED';
       const scoreLabel='แยกออกจาก Sleep State และคะแนน';
       if(!adminView){
-        return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)}</div></div><div class="stage">OFF BED</div><div class="user-period-summary">ยืนยันว่าไม่มีผู้ใช้งานบนเตียง</div></div>`;
+        return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)}</div></div><div class="stage">ออกจากเตียง</div><div class="user-period-summary">ช่วงนี้แยกจากเวลาพัก</div></div>`;
       }
       return `<div class="sleep-period terminal-occupancy-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)} · ${operationLabel}</div></div><div class="stage">${period.label||'OFF BED · ไม่มีผู้ใช้งานบนเตียง'}</div><div>${coverageText}<div class="mini">${scoreLabel}</div></div><div class="reason"><div class="sleep-period-env">${sensorTiles}</div><div class="sleep-period-note">${period.reason||'แยกสถานะการใชงานออกจากผล Sleep State'}</div></div></div>`;
     }
     if(!adminView){
       const heldCopy=period.held_previous_state
-        ? `คงสถานะก่อนหน้า${period.provisional?' · provisional':''}`
-        : 'สถานะที่ระบบยืนยันจากแนวโน้มภายใน Session';
-      return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)}</div></div><div class="stage">${SLEEP_TH[period.state]?.label||String(period.state||'').toUpperCase()}</div><div class="user-period-summary">${heldCopy}</div></div>`;
+        ?'แสดงต่อเนื่องจากช่วงก่อนหน้า'
+        :'ประเมินจากแนวโน้มระหว่างการพัก';
+      return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)}</div></div><div class="stage">${userSleepStageLabel(period.state)}</div><div class="user-period-summary">${heldCopy}</div></div>`;
     }
     const holdMeta=period.held_previous_state
       ? `<div class="mini">คง State ก่อนหน้า ${period.continuity_hold_rounds||0} รอบ${period.provisional_rounds?` · provisional ${period.provisional_rounds} รอบ`:''} · ผู้ท้าชิงยังไม่ถูกนับเป็น State ใหม่</div>`
@@ -6846,18 +7344,19 @@ function renderReport(rec){
     return `<div class="sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)} · ${epoch}</div></div><div class="stage">${SLEEP_TH[period.state]?.label||period.state.toUpperCase()}${period.provisional?' · provisional':''}</div><div>มั่นใจ ${confidenceTh[period.confidence]||'ไม่ระบุ'}<div class="mini">P ${Math.round((prob[period.state]||0)*100)}%</div>${holdMeta}</div><div class="reason"><div class="sleep-period-env">${sensorTiles}</div><div class="sleep-period-note">${sleepReasonExplanation(period.reason)}</div></div></div>`;
   }).join('');
   const terminalOccupancy=(rec.terminal_occupancy_timeline||[]).map(period=>{
-    const meta=TERMINAL_OCCUPANCY_META[period.state]||{label:period.label||period.state,code:'—'};
+    const registeredMeta=TERMINAL_OCCUPANCY_META[period.state];
+    const meta=registeredMeta||{label:period.label||period.state,code:'—'};
     const start=new Date(period.start_time),end=new Date(period.end_time);
     const time=`${start.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}–${end.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`;
     if(!adminView){
-      return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)}</div></div><div class="stage">${meta.code} · ${meta.label}</div><div class="user-period-summary">แยกออกจากผล Sleep State</div></div>`;
+      return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)}</div></div><div class="stage">${registeredMeta?.label||'ออกจากเตียง'}</div><div class="user-period-summary">ช่วงนี้แยกจากเวลาพัก</div></div>`;
     }
     return `<div class="sleep-period terminal-occupancy-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)} · Occupancy</div></div><div class="stage">${meta.code} · ${meta.label}</div><div>HR — · RR —<div class="mini">ไม่นับเป็น Sleep Stage</div></div><div class="reason"><div class="sleep-period-note">${period.reason||'แยกสถานะผู้ใช้งานออกจากผลการนอน'}</div></div></div>`;
   }).join('');
   const sessionEnded=rec.ended_at_utc
     ?(adminView
       ? `<div class="sleep-period terminal-occupancy-period"><div>${new Date(rec.ended_at_utc).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}<div class="mini">เหตุการณ์สุดท้าย</div></div><div class="stage">END · จบ Session</div><div>${rec.end_reason==='logout'?'ผู้ใช้กดจบ':'ผู้ดูแล/ระบบบันทึกการจบ'}</div><div class="reason"><div class="sleep-period-note">${terminalOccupancy?'Session จบหลังลำดับ Wake → ออกจาก ZEEP':'Session จบหลังบันทึก Terminal Wake boundary'}</div></div></div>`
-      :`<div class="sleep-period user-sleep-period"><div>${new Date(rec.ended_at_utc).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}<div class="mini">สิ้นสุดการใช้งาน</div></div><div class="stage">END · จบ Session</div><div class="user-period-summary">บันทึกผลเรียบร้อย</div></div>`):'';
+      :`<div class="sleep-period user-sleep-period"><div>${new Date(rec.ended_at_utc).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}<div class="mini">สิ้นสุดการใช้งาน</div></div><div class="stage">สิ้นสุดการพัก</div><div class="user-period-summary">บันทึกผลเรียบร้อย</div></div>`):'';
   const restoreSummaryHtml=renderRestoreSummary(rec,presentation);
   const timelineCount=`${rec.sleep_timeline?.length||0} ช่วง`;
   const decisionRounds=Number(rec.sleep_timeline_rounds||0)+Number(rec.sleep_status_timeline_rounds||0);
@@ -6871,9 +7370,11 @@ function renderReport(rec){
     ?`<div class="mini">สถานะเตียง: ${bedTxt}</div><div class="mini">การสั่งงานระหว่าง Session: ${cntTxt}</div>`
     :'';
   root.innerHTML = `
-    <div class="section-title report-mode-title mode-${presentation}" style="margin-top:18px">ผลการใช้งาน · ${identityLabel(rec,'')} · ${reportTitle}</div>
+    <div class="section-title report-mode-title mode-${presentation}" style="margin-top:18px">${adminView?'ผลการใช้งาน':'ผลการพัก'} · ${identityLabel(rec,'')} · ${reportTitle}</div>
     <div class="mini" style="margin-top:0">${healthReferenceInline(rec)}</div>
-    <div class="mini" style="margin-top:3px">ข้อมูลอ้างอิงสุขภาพ · ${fmtDateTh(rec.started_at_utc)} → ${fmtDateTh(rec.ended_at_utc)} · Sensor บันทึก ${fmtDur(rec.duration_s)} · ไม่ใช่การวินิจฉัย</div>
+    <div class="mini" style="margin-top:3px">${adminView
+      ?`ข้อมูลอ้างอิงสุขภาพ · ${fmtDateTh(rec.started_at_utc)} → ${fmtDateTh(rec.ended_at_utc)} · Sensor บันทึก ${fmtDur(rec.duration_s)} · ไม่ใช่การวินิจฉัย`
+      :`${fmtDateTh(rec.started_at_utc)} → ${fmtDateTh(rec.ended_at_utc)} · ระยะเวลาการใช้งาน ${fmtDur(rec.duration_s)}`}</div>
     ${renderSleepQuality(rec.sleep_quality, rec.ended_at_utc, presentation)}
     ${restoreSummaryHtml}
     ${renderSessionOverview(rec.session_report,Boolean(restoreSummaryHtml))}
@@ -6883,14 +7384,16 @@ function renderReport(rec){
       ${statBlock('ความชื้นเฉลี่ย', su.humidity_rh, ' %RH')}
       ${statBlock('เสียงเฉลี่ย', su.sound_dba_est, ' dBA')}
       ${statBlock('แสงเฉลี่ย', su.lux, ' lx')}
-      ${statBlock('HR (Heart Rate) เฉลี่ย', su.heart_rate_bpm, ' ครั้ง/นาที (BPM)')}
-      ${statBlock('RR (Respiratory Rate) เฉลี่ย', su.respiration_rate, ' ครั้ง/นาที')}
+      ${adminView||!hasCompactVitals?statBlock(adminView?'HR (Heart Rate) เฉลี่ย':'ชีพจรเฉลี่ย', su.heart_rate_bpm, adminView?' ครั้ง/นาที (BPM)':' ครั้ง/นาที'):''}
+      ${adminView?statBlock('RR (Respiratory Rate) เฉลี่ย', su.respiration_rate, ' ครั้ง/นาที'):''}
     </div>
     ${operationalNotes}
-    ${slTxt ? `<div class="mini">${presentation==='recovery'?'Sleep State ที่ตรวจพบ (ข้อมูลประกอบ)':'สถานะการนอน (ประเมิน)'}: ${slTxt}</div>` : ''}
+    ${slTxt ? `<div class="mini">${adminView
+      ?presentation==='recovery'?'Sleep State ที่ตรวจพบ (ข้อมูลประกอบ)':'สถานะการนอน (ประเมิน)'
+      :presentation==='recovery'?'รูปแบบการพักโดยประมาณ':'สัดส่วนการนอนโดยประมาณ'}: ${slTxt}</div>` : ''}
     ${timelineDetails}
     ${terminalOccupancy||sessionEnded?`<details class="report-details" open><summary>${adminView?'ลำดับจบ Session · Occupancy แยกจาก Sleep Stage':'ช่วงสิ้นสุดการใช้งาน'}</summary><div class="sleep-timeline">${terminalOccupancy}${sessionEnded}</div></details>`:''}
-    <div class="mini">ค่าชีพจรและการหายใจเป็นค่าประเมินจาก BCG</div>
+    ${adminView?'<div class="mini">ค่าชีพจรและการหายใจเป็นค่าประเมินจาก BCG</div>':''}
     ${hasChart ? '<canvas id="histCanvas"></canvas><div class="legend-row"><span><i class="legend-dot" style="background:#19e3ff"></i>อุณหภูมิ</span><span><i class="legend-dot" style="background:#ffb02e"></i>ชีพจร</span></div>' : ''}
   `;
   if (hasChart) drawHistory(rec.samples);
@@ -7029,33 +7532,96 @@ function render(s, source='ws'){
     topUserAvatar.textContent=String(shownAccount).trim().slice(0,1).toUpperCase();
     topUserName.textContent=shownAccount;
     if (se.recording){
-      topUserMeta.textContent=`${genderTh(se.gender)} · ${displayAge(se)} · บันทึกแล้ว ${se.samples??0} จุด`;
+      topUserMeta.textContent=currentPrincipal?.role==='admin'
+        ?`${genderTh(se.gender)} · ${displayAge(se)} · บันทึกแล้ว ${se.samples??0} จุด`
+        :`${genderTh(se.gender)} · ${displayAge(se)} · กำลังบันทึกการพัก`;
       topUserState.textContent='● กำลังบันทึก';
     } else {
-      topUserMeta.textContent=`${genderTh(se.gender)} · ${displayAge(se)} · ${sessionStartGateText(se,sys)}`;
-      topUserState.textContent='รอ HR / RR';
+      topUserMeta.textContent=currentPrincipal?.role==='admin'
+        ?`${genderTh(se.gender)} · ${displayAge(se)} · ${sessionStartGateText(se,sys)}`
+        :`${genderTh(se.gender)} · ${displayAge(se)} · กำลังเตรียมเริ่มบันทึก`;
+      topUserState.textContent=currentPrincipal?.role==='admin'?'รอ HR / RR':'กำลังเตรียม';
     }
     logoutBtn.style.display = currentPrincipal?.role==='user'&&authPod.owns_active_session?'':'none';
   } else {
     userPill.className = 'top-user';
     topUserAvatar.textContent='Z';
-    topUserName.textContent='ยังไม่มีผู้ใช้งาน';
-    topUserMeta.textContent='เริ่ม Session เพื่อแสดงข้อมูลสุขภาพ';
-    topUserState.textContent='NO SESSION';
+    topUserName.textContent=currentPrincipal?.role==='admin'?'ยังไม่มีผู้ใช้งาน':'พร้อมเริ่มการพัก';
+    topUserMeta.textContent=currentPrincipal?.role==='admin'
+      ?'เริ่ม Session เพื่อดูข้อมูลการใช้งาน'
+      :'เข้าสู่ระบบเพื่อดูข้อมูลการพักของคุณ';
+    topUserState.textContent=currentPrincipal?.role==='admin'?'NO SESSION':'ยังไม่เริ่ม';
     logoutBtn.style.display = 'none';
   }
   const environmentLive=Number(environment.live_count)||0,environmentTotal=Number(environment.total_count)||6;
-  if(!environmentLive&&!b.connected){
-    setPageMessage('danger','เซ็นเซอร์ไม่พร้อม','Sensor Hub ทั้งสองชุดและ BCG ยังไม่มีข้อมูลสด กรุณาตรวจหน้า Monitor');
+  const safetyFaults=Array.isArray(s.safety?.faults)?s.safety.faults:[];
+  const userSafetyFaults=safetyFaults.filter(f=>
+    f.severity==='critical'
+    ||['gpio_unavailable','esp32_no_data','esp32_stale','co2_unavailable','temperature_unavailable'].includes(f.code));
+  setSafetyUserAlert(false);
+  if(s.safety?.latched){
+    const title='ระบบเข้าสู่โหมดปลอดภัย';
+    const detail=se.active
+      ?'กรุณาหยุดการพัก เปิดประตูออกจาก ZEEP และแจ้งทีมงานทันที'
+      :'กรุณารอให้ทีมงานตรวจสาเหตุก่อนเริ่มใช้งานครั้งถัดไป';
+    setPageMessage('danger',title,detail);
+    setSafetyUserAlert(true,title,detail,se.active);
+  }else if(se.active&&userSafetyFaults.length){
+    if(currentPrincipal?.role==='admin'){
+      setPageMessage('danger','พบเหตุด้านความปลอดภัยที่ต้องดูแล',userSafetyFaults.map(f=>f.message||f.code).join(' · '));
+    }else{
+      setPageMessage('danger','ระบบตรวจวัดที่จำเป็นขาดการเชื่อมต่อ','กรุณาหยุดการพัก เปิดประตูออกจาก ZEEP และแจ้งทีมงานทันที');
+    }
+    setSafetyUserAlert(
+      true,
+      'พบเหตุด้านความปลอดภัยที่ต้องดูแล',
+      currentPrincipal?.role==='admin'
+        ?'กรุณาหยุด Session ช่วยผู้ใช้งานเปิดประตูออกจาก ZEEP และตรวจสอบระบบทันที'
+        :'กรุณาหยุดการพัก เปิดประตูออกจาก ZEEP และแจ้งทีมงานทันที',
+      true,
+    );
+  }else if(!se.active&&userSafetyFaults.length){
+    if(currentPrincipal?.role==='admin'){
+      setPageMessage('warning','ระบบยังไม่พร้อมเริ่ม Session',userSafetyFaults.map(f=>f.message||f.code).join(' · '));
+    }else{
+      setPageMessage('warning','ระบบกำลังตรวจความพร้อม','กรุณารอทีมงานตรวจระบบให้เรียบร้อยก่อนเริ่มการพัก');
+    }
+    setSafetyUserAlert(
+      true,
+      'ระบบกำลังตรวจความพร้อม',
+      'กรุณารอให้ทีมงานตรวจระบบให้เรียบร้อยก่อนเริ่มการพัก',
+      false,
+      'warning',
+    );
+  }else if(!environmentLive&&!b.connected){
+    if(currentPrincipal?.role==='admin'){
+      setPageMessage('danger','เซ็นเซอร์ไม่พร้อม','Sensor Hub ทั้งสองชุดและ BCG ยังไม่มีข้อมูลสด กรุณาตรวจหน้า Monitor');
+    }else{
+      setPageMessage('info','ระบบกำลังเชื่อมต่อข้อมูล','กรุณารอทีมงานตรวจการเชื่อมต่อสักครู่');
+    }
   }else if(!se.active){
-    setPageMessage('info',currentPrincipal?.role==='admin'?'ตู้ว่างและพร้อมตรวจสอบ':'Session สิ้นสุดแล้ว',currentPrincipal?.role==='admin'?'ยังไม่มีผู้ใช้งานในตู้นี้':'ดูประวัติการใช้งานได้ หรือออกจากบัญชีเพื่อเริ่ม Session ใหม่');
+    setPageMessage('info',currentPrincipal?.role==='admin'?'ตู้ว่างและพร้อมตรวจสอบ':'การพักครั้งนี้สิ้นสุดแล้ว',currentPrincipal?.role==='admin'?'ยังไม่มีผู้ใช้งานในตู้นี้':'ดูประวัติการใช้งานได้ หรือออกจากบัญชีเพื่อเริ่มการพักครั้งใหม่');
   }else if(!se.recording){
-    setPageMessage('warning','รอสัญญาณชีพก่อนบันทึก',`${sessionStartGateText(se,sys)} · ระบบจะยังไม่สร้าง Timeline จนกว่า HR และ RR จะพร้อม`);
+    if(currentPrincipal?.role==='admin'){
+      setPageMessage('warning','รอสัญญาณชีพก่อนบันทึก',`${sessionStartGateText(se,sys)} · ระบบจะยังไม่สร้าง Timeline จนกว่า HR และ RR จะพร้อม`);
+    }else{
+      setPageMessage('info','กำลังเตรียมบันทึกการพัก','กรุณานอนในท่าสบายสักครู่ ระบบจะเริ่มให้อัตโนมัติ');
+    }
   }else if(environmentLive<environmentTotal||!b.connected){
     const missing=Object.values(environment.devices||{}).filter(d=>d.status!=='live').map(d=>d.model).concat(b.connected?[]:['BCG']).join(', ');
-    setPageMessage('warning','Session กำลังบันทึก แต่ข้อมูลบางส่วนไม่พร้อม',`${missing||'Sensor'} ไม่อยู่ในสถานะ Live`);
+    if(currentPrincipal?.role==='admin'){
+      setPageMessage('warning','Session กำลังบันทึก แต่ข้อมูลบางส่วนไม่พร้อม',`${missing||'Sensor'} ไม่อยู่ในสถานะ Live`);
+    }else{
+      setPageMessage('info','กำลังเชื่อมต่อข้อมูลบางส่วน','การพักยังดำเนินต่อได้ และระบบจะเก็บข้อมูลที่พร้อมตามปกติ');
+    }
   }else{
-    setPageMessage('success','Session กำลังบันทึก','Sensor สิ่งแวดล้อม 6/6 และ BCG ส่งข้อมูลสดตามปกติ');
+    setPageMessage(
+      'success',
+      currentPrincipal?.role==='admin'?'Session กำลังบันทึก':'กำลังบันทึกการพัก',
+      currentPrincipal?.role==='admin'
+        ?'Sensor สิ่งแวดล้อม 6/6 และ BCG ส่งข้อมูลสดตามปกติ'
+        :'ระบบพร้อมแล้ว พักผ่อนได้ตามสบาย',
+    );
   }
   if (sessionChanged && se.active){
     const sel = document.getElementById('historyUser');
@@ -7076,19 +7642,26 @@ function render(s, source='ws'){
   const sphStatus=environment.devices?.sph0645?.status||'offline';
   const soundInvalidReason=e.sound_invalid_reason||environment.devices?.sph0645?.invalid_values?.sound_dba_est;
   const soundMetric=soundDisplayMetric(environment);
-  document.getElementById('sound').title = environment.sound_dba_est==null
-    ? `INVALID · ${soundInvalidReason||'ESP32 ยังไม่ส่ง sound_dba'}`
-    : 'SPH0645LM4H-B · รับ sound_dba จาก ESP32 โดยตรง';
+  const adminView=currentPrincipal?.role==='admin';
+  document.getElementById('sound').title = adminView
+    ? environment.sound_dba_est==null
+      ? `INVALID · ${soundInvalidReason||'ESP32 ยังไม่ส่ง sound_dba'}`
+      : 'SPH0645LM4H-B · รับ sound_dba จาก ESP32 โดยตรง'
+    : environment.sound_dba_est==null?'กำลังรวบรวมข้อมูลเสียง':'ข้อมูลเสียงพร้อม';
   const soundQuality=document.getElementById('soundQuality');
-  soundQuality.textContent=espFallback
-    ? `⚠ SPH0645LM4H-B · ข้อมูลไม่สด (${espAgeText})`
-    : environment.sound_dba_est==null
-    ? espOk?`✕ SPH0645LM4H-B · INVALID · ${soundInvalidReason||'รอ sound_dba'}`:'SPH0645LM4H-B · ไม่เชื่อมต่อ'
-    : sphStatus==='live'
-      ? '✓ SPH0645LM4H-B · ESP32 direct'
-      : `⚠ SPH0645LM4H-B · ${sphStatus}`;
+  soundQuality.textContent=adminView
+    ? espFallback
+      ? `⚠ SPH0645LM4H-B · ข้อมูลไม่สด (${espAgeText})`
+      : environment.sound_dba_est==null
+      ? espOk?`✕ SPH0645LM4H-B · INVALID · ${soundInvalidReason||'รอ sound_dba'}`:'SPH0645LM4H-B · ไม่เชื่อมต่อ'
+      : sphStatus==='live'
+        ? '✓ SPH0645LM4H-B · ESP32 direct'
+        : `⚠ SPH0645LM4H-B · ${sphStatus}`
+    : environment.sound_dba_est==null?'กำลังรวบรวมข้อมูลเสียง':'ข้อมูลเสียงพร้อม';
   soundQuality.className=`sensor-note ${espFallback||environment.sound_dba_est==null||sphStatus!=='live'?'status-warn':'status-good'}`;
-  document.getElementById('environmentCard').title=[espFallback?`Pi5 Sensor Set 1 fallback ${espAgeText}`:null,hub2Fallback?`ESP32 Air Sensor fallback ${hub2AgeText}`:null].filter(Boolean).join(' · ');
+  document.getElementById('environmentCard').title=adminView
+    ?[espFallback?`Pi5 Sensor Set 1 fallback ${espAgeText}`:null,hub2Fallback?`ESP32 Air Sensor fallback ${hub2AgeText}`:null].filter(Boolean).join(' · ')
+    :(espFallback||hub2Fallback?'กำลังอัปเดตข้อมูลสภาพแวดล้อม':'ข้อมูลสภาพแวดล้อมพร้อม');
 
   document.getElementById('bcgConn').textContent = b.connected ? 'Connected' : 'Disconnected';
   document.getElementById('bcgConn').className = b.connected ? 'status-good' : 'status-bad';
@@ -7218,9 +7791,19 @@ function render(s, source='ws'){
 function setConnectionStatus(mode){
   const el=document.getElementById('wsStatus'); if(!el)return;
   const age=lastServerUpdateAt?Math.max(0,Math.round((Date.now()-lastServerUpdateAt)/1000)):null;
-  if(mode==='ws'){el.className='pill good';el.innerHTML='<span class="dot"></span>Realtime · WebSocket';}
-  else if(mode==='rest'){el.className='pill warn';el.innerHTML='<span class="dot"></span>Fallback · REST polling';}
-  else{el.className='pill bad';el.innerHTML=`<span class="dot"></span>Offline${age==null?'':` · ค่าล่าสุด ${age}s`}`;}
+  const adminView=currentPrincipal?.role==='admin';
+  if(mode==='ws'){
+    el.className='pill good';
+    el.innerHTML=`<span class="dot"></span>${adminView?'Realtime · WebSocket':'เชื่อมต่อแล้ว'}`;
+  }else if(mode==='rest'){
+    el.className='pill warn';
+    el.innerHTML=`<span class="dot"></span>${adminView?'Fallback · REST polling':'กำลังซิงก์ข้อมูล'}`;
+  }else{
+    el.className='pill bad';
+    el.innerHTML=adminView
+      ?`<span class="dot"></span>Offline${age==null?'':` · ค่าล่าสุด ${age}s`}`
+      :`<span class="dot"></span>กำลังเชื่อมต่อ${age==null?'':` · อัปเดตล่าสุด ${age} วินาที`}`;
+  }
 }
 async function pollStateFallback(){
   const ctrl=new AbortController(),timeout=setTimeout(()=>ctrl.abort(),1800);

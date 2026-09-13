@@ -230,8 +230,8 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
             "wake": ("W", "ตื่น", "ช่วงที่ระบบประเมินว่ายังตื่นหรือกลับเข้าสู่สถานะตื่น"),
             "n1": ("N1", "หลับตื้น / เคลิ้มหลับ", "เริ่มเข้าสู่การนอน ร่างกายผ่อนคลาย และปลุกให้ตื่นได้ง่าย"),
             "n2": ("N2", "หลับสนิทขึ้น / หลับตื้นต่อเนื่อง", "หัวใจและการหายใจช้าลง ร่างกายเข้าสู่การนอนที่ต่อเนื่องขึ้น"),
-            "n3": ("N3", "หลับลึก", "รูปแบบ BCG/HR/RR ที่สอดคล้องกับ N3; ตามสรีรวิทยาการนอน N3 เชื่อมโยงกับการฟื้นฟู แต่ ZEEP ไม่ได้วัดการซ่อมแซมโดยตรง"),
-            "rem": ("REM", "ระยะ REM", "รูปแบบ BCG/HR/RR ที่สอดคล้องกับ REM; ตามสรีรวิทยา REM สัมพันธ์กับความฝันและความจำ แต่ ZEEP ไม่ได้วัดความฝันหรือความจำโดยตรง"),
+            "n3": ("N3", "หลับลึก", "ช่วงหลับลึกที่ร่างกายได้พักอย่างต่อเนื่อง"),
+            "rem": ("REM", "ระยะ REM / หลับฝัน", "ช่วงหลับที่สมองยังทำงานมากขึ้นและมักมีความฝัน"),
         }
         ui = (PI5_ROOT / "static" / "index.html").read_text(encoding="utf-8")
         snapshot = policy.sleep_policy_snapshot()
@@ -335,7 +335,7 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertIn("function identityLabel(user,fallback='ผู้ใช้งาน')", ui)
         self.assertIn("if(email)return email", ui)
         self.assertIn("if(accountKey.includes('@'))return accountKey", ui)
-        self.assertIn("ผลการใช้งาน · ${identityLabel(rec,'')}", ui)
+        self.assertIn("${adminView?'ผลการใช้งาน':'ผลการพัก'} · ${identityLabel(rec,'')}", ui)
         self.assertIn("topUserName.textContent=shownAccount", ui)
 
     def test_admin_history_users_are_ordered_by_latest_session(self):

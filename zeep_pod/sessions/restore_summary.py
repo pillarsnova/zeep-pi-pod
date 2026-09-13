@@ -21,6 +21,10 @@ from sleep_system_policy import (
     SLEEP_SCORE_FORMULA_VERSION,
     rest_mode_group,
 )
+from zeep_pod.product_language import (
+    user_confidence_level,
+    user_environment_finding_copy,
+)
 from zeep_pod.sessions.restore_summary_baseline import (
     build_baseline_summary,
     build_trend_summary,
@@ -45,12 +49,7 @@ def _mode_group(
 ) -> str:
     source = mode if mode is not None else quality.get("rest_mode")
     selected = dict(source) if isinstance(source, Mapping) else {}
-    raw_mode = (
-        selected.get("group")
-        or selected.get("requested")
-        or selected.get("resolved")
-        or source
-    )
+    raw_mode = selected.get("group") or selected.get("requested") or selected.get("resolved") or source
     group = rest_mode_group(raw_mode)
     if group == "sleep" or quality.get("quality_type") == "sleep":
         return "sleep"
@@ -67,32 +66,11 @@ def _source_score(quality: Mapping[str, Any], group: str) -> dict[str, Any]:
     is_sleep = group == "sleep"
     is_recovery = group == "nap_recovery"
     return {
-        "type": (
-            "sleep_score"
-            if is_sleep
-            else "recovery_score"
-            if is_recovery
-            else "unresolved_score"
-        ),
-        "title": (
-            "Sleep Score"
-            if is_sleep
-            else "Recovery Score"
-            if is_recovery
-            else "Session Score"
-        ),
+        "type": ("sleep_score" if is_sleep else "recovery_score" if is_recovery else "unresolved_score"),
+        "title": ("Sleep Score" if is_sleep else "Recovery Score" if is_recovery else "Session Score"),
         "value": int(round(score)) if score is not None else None,
         "available": bool(score is not None and group != "unknown"),
-        "formula_version": (
-            quality.get("formula_version")
-            or (
-                SLEEP_SCORE_FORMULA_VERSION
-                if is_sleep
-                else RECOVERY_SCORE_FORMULA_VERSION
-                if is_recovery
-                else None
-            )
-        ),
+        "formula_version": (quality.get("formula_version") or (SLEEP_SCORE_FORMULA_VERSION if is_sleep else RECOVERY_SCORE_FORMULA_VERSION if is_recovery else None)),
         "copied_without_recalculation": True,
     }
 
@@ -101,14 +79,10 @@ def _status(group: str, score: float | None) -> dict[str, Any]:
     if score is None or group == "unknown":
         return {
             "key": "unavailable",
-            "label": "ยังสรุปไม่ได้",
+            "label": "กำลังเตรียมผลสรุป",
             "min_score": None,
             "max_score": None,
-            "meaning": (
-                "ยังไม่ทราบรูปแบบการพัก จึงไม่อนุมานชนิดคะแนน"
-                if group == "unknown"
-                else "หลักฐานยังไม่พอสำหรับปล่อยคะแนนหลักของ Session นี้"
-            ),
+            "meaning": ("เลือกรูปแบบการพักเพื่อให้ ZEEP แสดงผลได้เหมาะสม" if group == "unknown" else "ZEEP กำลังรวบรวมข้อมูลสำหรับสรุปผลการพักครั้งนี้"),
             "version": RESTORE_ACTION_BANDS_VERSION,
         }
     bands = ACTION_BANDS[group]
@@ -167,6 +141,19 @@ def _component_drivers(
     return positive, attention
 
 
+def _environment_driver_copy(
+    finding: Mapping[str, Any],
+    severity: str,
+    decision: str,
+) -> tuple[str, str, str | None, bool]:
+    return user_environment_finding_copy(
+        finding.get("title"),
+        severity,
+        decision,
+        finding.get("metric_key") or finding.get("key"),
+    )
+
+
 def _environment_drivers(
     findings: Iterable[Mapping[str, Any]],
     group: str,
@@ -199,26 +186,37 @@ def _environment_drivers(
             else "positive"
         )
         affects_source_score = bool(finding.get("contributes_to_primary_score"))
+        label, message, action, safety_review = _environment_driver_copy(
+            finding,
+            severity,
+            decision,
+        )
         item = {
             "key": f"environment_{finding.get('key') or 'unknown'}",
             "category": "environment",
-            "label": str(finding.get("title") or "สภาพแวดล้อม"),
-            "message": str(
-                finding.get("detail") or "ประเมินจาก Sensor สภาพแวดล้อมของ Session นี้"
-            ),
+            "label": label,
+            "message": message,
             "direction": direction,
             "severity": severity,
-            "action": finding.get("action"),
+            "decision": decision,
+            "action": action,
             "affects_source_score": affects_source_score,
-            "relationship": (
-                "recovery_score_component_and_session_context"
-                if group == "nap_recovery" and affects_source_score
-                else "session_context_only"
-            ),
+            "relationship": ("recovery_score_component_and_session_context" if group == "nap_recovery" and affects_source_score else "session_context_only"),
             "causal_claim": False,
         }
-        if decision == "safety_review":
+        if safety_review:
             item["priority"] = "safety_review"
+            for field in (
+                "threshold",
+                "critical_below",
+                "critical_above",
+                "minimum",
+                "maximum",
+                "sample_count",
+                "sample_pct",
+            ):
+                if finding.get(field) is not None:
+                    item[field] = finding[field]
         (attention if direction == "attention" else positive).append(item)
     priority = {
         "safety_review": 0,
@@ -227,13 +225,7 @@ def _environment_drivers(
         "unavailable": 3,
         "fair": 4,
     }
-    attention.sort(
-        key=lambda item: (
-            0
-            if item.get("priority") == "safety_review"
-            else priority.get(str(item.get("severity")), 5)
-        )
-    )
+    attention.sort(key=lambda item: (0 if item.get("priority") == "safety_review" else priority.get(str(item.get("severity")), 5)))
     return positive, attention
 
 
@@ -243,20 +235,13 @@ def _merge_drivers(
     group: str,
 ) -> dict[str, Any]:
     component_positive, component_attention = _component_drivers(quality, group)
-    environment_positive, environment_attention = _environment_drivers(
-        list(findings), group
-    )
+    environment_positive, environment_attention = _environment_drivers(list(findings), group)
 
     # A concrete environmental issue is more useful than repeating the generic
     # Environment component. Keep the point-bearing generic component only when
     # there is no metric-level issue to show.
-    if any(
-        item.get("affects_source_score")
-        for item in environment_attention
-    ):
-        component_attention = [
-            item for item in component_attention if item["key"] != "environment_support"
-        ]
+    if any(item.get("affects_source_score") for item in environment_attention):
+        component_attention = [item for item in component_attention if item["key"] != "environment_support"]
     attention = (environment_attention + component_attention)[:2]
     positive = (component_positive + environment_positive)[:2]
     return {
@@ -272,9 +257,10 @@ def _merge_drivers(
 
 def _confidence(quality: Mapping[str, Any]) -> dict[str, Any]:
     source = dict(quality.get("score_confidence") or {})
+    level = source.get("level") or "unknown"
     return {
-        "level": source.get("level") or "unknown",
-        "label": source.get("label") or "ยังไม่ระบุความครบของหลักฐาน",
+        "level": level,
+        "label": user_confidence_level(level),
         "session_coverage_pct": source.get("session_coverage_pct"),
         "paired_hr_rr_coverage_pct": source.get("paired_hr_rr_coverage_pct"),
         "changes_source_score": False,
@@ -291,14 +277,14 @@ def _subjective_outcome(
     }:
         return {
             "status": "not_measured",
-            "label": "ความรู้สึกหลังพัก · ไม่ได้วัด",
+            "label": "ยังไม่ได้บันทึกความรู้สึกหลังพัก",
             "freshness_delta": None,
             "activity_readiness": None,
             "sensor_inferred": False,
         }
     return {
         "status": "measured",
-        "label": "มีแบบประเมินก่อน–หลัง Session",
+        "label": "บันทึกความรู้สึกก่อน–หลังการพักแล้ว",
         "freshness_delta": outcome.get("freshness_delta"),
         "activity_readiness": outcome.get("activity_readiness"),
         "source": outcome.get("source") or "session_questionnaire",
@@ -313,17 +299,12 @@ def _recommendation(
 ) -> dict[str, Any]:
     attention = list(drivers.get("attention") or [])
     selected = attention[0] if attention else None
-    if score is None:
-        message = "ใช้ความรู้สึกหลังพักประกอบ และตรวจความพร้อมของ Sensor ก่อนครั้งถัดไป"
-    elif selected and selected.get("priority") == "safety_review":
-        message = str(
-            selected.get("action")
-            or "ตรวจเหตุการณ์ Safety และการตอบสนองของระบบก่อนใช้งานครั้งถัดไป"
-        )
+    if selected and selected.get("priority") == "safety_review":
+        message = str(selected.get("action") or "ตรวจเหตุการณ์ Safety และการตอบสนองของระบบก่อนใช้งานครั้งถัดไป")
+    elif score is None:
+        message = "บอกความรู้สึกหลังพักได้ตามจริง และลองใช้งานตามปกติอีกครั้ง"
     elif selected and selected.get("category") == "environment":
-        message = str(
-            selected.get("action") or "ปรับปัจจัยแวดล้อมที่ระบบระบุ แล้วเปรียบเทียบ Session ถัดไป"
-        )
+        message = str(selected.get("action") or "ปรับปัจจัยแวดล้อมที่ระบบระบุ แล้วเปรียบเทียบ Session ถัดไป")
     elif selected:
         message = RECOMMENDATIONS.get(group, {}).get(
             str(selected.get("key")),
@@ -334,7 +315,7 @@ def _recommendation(
     elif group == "nap_recovery":
         message = "รักษารูปแบบการพักที่ได้ผลและบันทึกความรู้สึกหลังพัก"
     else:
-        message = "ระบุรูปแบบการพักก่อน จึงจะสรุปคำแนะนำเฉพาะโหมดได้"
+        message = "เลือกรูปแบบการพักเพื่อรับคำแนะนำที่เหมาะกับครั้งนี้"
     return {
         "primary": message,
         "source_driver_key": selected.get("key") if selected else None,
@@ -381,20 +362,8 @@ def build_restore_summary(
         "status": _status(group, score),
         "session_scope": {
             "mode": group,
-            "label": (
-                "Overnight Recovery"
-                if is_sleep
-                else "Nap & Refresh"
-                if is_recovery
-                else "ยังไม่ทราบรูปแบบการพัก"
-            ),
-            "question": (
-                "การนอนครั้งนี้สนับสนุนการฟื้นตัวได้ดีเพียงใด"
-                if is_sleep
-                else "ช่วงพักนี้ร่างกายสงบและพักได้ตามเป้าหมายเพียงใด"
-                if is_recovery
-                else "ต้องระบุรูปแบบการพักก่อนจึงสรุปผลได้"
-            ),
+            "label": ("Overnight Recovery" if is_sleep else "Nap & Refresh" if is_recovery else "ผลการพักครั้งนี้"),
+            "question": ("การนอนครั้งนี้สนับสนุนการฟื้นตัวได้ดีเพียงใด" if is_sleep else "ช่วงพักนี้ร่างกายสงบและพักได้ตามเป้าหมายเพียงใด" if is_recovery else "เลือกรูปแบบการพักเพื่อดูผลสรุปที่เหมาะสม"),
             "whole_day_readiness": False,
             "clinical_readiness": False,
             "updates_during_day": False,

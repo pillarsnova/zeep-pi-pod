@@ -10,6 +10,7 @@ from sleep_system_policy import (
     NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
     PRE_CONTINUITY_SESSION_REPORT_VERSION,
     PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
+    PRE_RESPIRATORY_SESSION_REPORT_VERSION,
     PRE_RESTORE_SESSION_REPORT_VERSION,
     SESSION_REPORT_VERSION,
     SLEEP_QUALITY_VERSION,
@@ -54,6 +55,14 @@ def _compatible_versioned_quality(
         and report.get("version") == SESSION_REPORT_VERSION
     ):
         return quality
+    if (
+        quality.get("version") == SLEEP_QUALITY_VERSION
+        and report.get("version") == PRE_RESPIRATORY_SESSION_REPORT_VERSION
+    ):
+        return {
+            **quality,
+            "compatible_pre_respiratory_result": True,
+        }
     if (
         quality.get("version") == PRE_CONTINUITY_SLEEP_QUALITY_VERSION
         and report.get("version") == PRE_CONTINUITY_SESSION_REPORT_VERSION
@@ -155,16 +164,16 @@ def released_historical_quality(
         "score_scope": (
             "ค่าประเมินการนอนจาก Sensor"
             if sleep_mode
-            else "คะแนนสนับสนุนการฟื้นตัวจาก Sensor"
+            else "Recovery Score จากช่วงพักและข้อมูล Sensor"
             if not unresolved_mode
-            else "ต้องยืนยันว่าเป็น Overnight หรือ Nap & Refresh ก่อน"
+            else "เลือกว่าเป็น Overnight หรือ Nap & Refresh เพื่อแสดงผล"
         ),
-        "level": "รอตรวจคุณภาพข้อมูล",
+        "level": "กำลังเตรียมผลสรุป",
         "level_key": "unavailable",
         "reason": (
-            "Session เดิมไม่ได้บันทึกรูปแบบการพัก จึงไม่อนุมานจากเวลา"
+            "ข้อมูลเดิมยังไม่ได้ระบุรูปแบบการพัก จึงพักการแสดงคะแนนไว้"
             if unresolved_mode
-            else "ผลเดิมยังไม่ผ่าน Gate ของรุ่นปัจจุบัน จึงไม่เผยแพร่คะแนน"
+            else "ZEEP กำลังตรวจความครบถ้วนของข้อมูลเดิมก่อนแสดงคะแนน"
         ),
         "version": SLEEP_QUALITY_VERSION,
         "validation_status": "pending_current_pipeline_review",

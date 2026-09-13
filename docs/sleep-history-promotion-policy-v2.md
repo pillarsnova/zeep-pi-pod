@@ -113,12 +113,12 @@ release gate ของตนเองตาม Rest Mode และ coverage:
 - `Overnight Recovery` ใช้ `Sleep Score`
 - `Nap & Refresh` ใช้ `Recovery Score`; ไม่บังคับว่าต้องหลับ
 - หากคะแนนไม่ผ่าน release gate จะเก็บ engineering shadow score สำหรับ Admin
-  แต่ค่าที่ผู้ใช้เห็นเป็น “ข้อมูลยังไม่พอ” ไม่ใช่ศูนย์
+  แต่ค่าที่ผู้ใช้เห็นเป็น “กำลังเตรียมผลสรุป” ไม่ใช่ศูนย์
 - รายงานต้องแสดง Recording, BCG, HR/RR และ Sleep State coverage พร้อมสัดส่วน
   Confidence สูง/ปานกลาง/ต่ำ เพื่อแยก “ผลที่คำนวณได้” จาก “ความมั่นใจของหลักฐาน”
 
 ก่อน Apply ผู้อนุมัติต้องตรวจ Session ที่คะแนนเดิมเคยมี แต่คะแนนรุ่นใหม่ถูกระงับ เพราะ
-การเขียนรายงานใหม่อาจเปลี่ยนค่าที่เผยแพร่แล้วเป็น “ข้อมูลยังไม่พอ”
+การเขียนรายงานใหม่อาจเปลี่ยนค่าที่เผยแพร่แล้วเป็น “กำลังเตรียมผลสรุป”
 
 ## 7. Workflow ที่บังคับใช้
 
@@ -142,7 +142,8 @@ release gate ของตนเองตาม Rest Mode และ coverage:
 6. Review Warning ไม่ปิดกั้นการเขียนโดยอัตโนมัติ
 7. Hard Block ใช้กับฐานเสีย, Raw หาย, Session ไม่จบ หรือ invariant ผิด
 8. Overnight ใช้ Sleep Score; Nap & Refresh ใช้ Recovery Score
-9. แสดง coverage และ confidence ประกอบทุกผล
+9. เก็บ coverage และ confidence ประกอบทุกผลใน Structured Result; แสดงค่ารายละเอียด
+   ใน Admin/Audit ส่วนหน้าผู้ใช้ใช้คำอธิบายสั้นและเปิดดูรายละเอียดเพิ่มได้
 10. Raw ไม่เปลี่ยน และต้องเก็บผลเดิม/backup/audit สำหรับย้อนกลับ
 
 การเปลี่ยนนโยบายนี้ไม่ใช่การยืนยัน clinical accuracy; G2 paired PSG/AASM validation

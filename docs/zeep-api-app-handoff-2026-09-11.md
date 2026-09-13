@@ -350,19 +350,22 @@ Sleep Stage แบบ PSG
   จาก Server; ห้าม hard-code ทุก Session เป็น Sleep Score
 - [ ] `sleep_score` แสดงเฉพาะ Overnight; `recovery_score` แสดงเฉพาะ Nap
 - [ ] ห้ามรวม Average ของสองคะแนน
-- [ ] เมื่อ `available=false` แสดง `—`, “ข้อมูลไม่พอ” และ `reason`
+- [ ] เมื่อ `available=false` แสดง `—` และ “กำลังเตรียมผลสรุป”; แสดง `reason`
+  ทางเทคนิคเฉพาะมุมมอง Admin
 - [ ] ห้าม fallback เป็นเลข 82 หรือข้อมูล Stage/Environment จำลอง
 - [ ] ใช้ `level`/`level_key` จาก Server ไม่คำนวณ threshold ซ้ำใน Client
 - [ ] แสดง `protocol_status` แยกจาก Score
 - [ ] Nap ไม่หลับยังแสดง Recovery Score ได้; ห้ามบังคับวงแหวน N1/N2/N3/REM
-- [ ] แสดง `WAIT · กำลังยืนยัน` เฉพาะ `waiting_bed` ก่อน Recording; เมื่อ Recording
-  เริ่มต้องแสดง W ทันทีและทุก non-OFF-BED epoch ต้องมี State/คะแนน
+- [ ] ใช้ key `WAIT` เฉพาะ `waiting_bed` ก่อน Recording แต่หน้าผู้ใช้แสดง
+  “กำลังประเมินการพัก”; เมื่อ Recording เริ่มต้องแสดง W ทันทีและทุก
+  non-OFF-BED epoch ต้องมี State/คะแนน
 - [ ] `provisional` เป็น diagnostic metadata เท่านั้น; แสดง State เดิมและนับเวลา/
   คะแนนให้ State เดิมทั้งหมดจนผู้ท้าชิงยืนยันสำเร็จ
 - [ ] อย่านับ `pending_state` เป็น Stage/Score จน
   `challenger_counted_as_new_state=true`; ระหว่างนั้น prior State ยังคงรับคะแนน
-- [ ] หลักฐาน missing/stale/restart แสดง State เดิมพร้อม low-confidence/data-quality
-  และกันออกจาก Personal Baseline; confirmed `OFF BED` เท่านั้นที่มีสิทธิ์ตัด carry
+- [ ] หลักฐาน missing/stale/restart แสดง State เดิมต่อเนื่องแก่ผู้ใช้; เก็บ
+  low-confidence/data-quality ไว้ใน Admin และกันออกจาก Personal Baseline;
+  confirmed `OFF BED` เท่านั้นที่มีสิทธิ์ตัด carry
 - [ ] ห้ามแสดงหรือสร้าง bucket ชื่อ `Unclassified`
 - [ ] Restore Summary เป็นคำอธิบาย ไม่ใช่ Restore Score ใหม่
 - [ ] ห้ามแสดง Whole-day readiness, ความพร้อมขับรถ หรือ “สดชื่นขึ้น”

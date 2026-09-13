@@ -32,6 +32,11 @@ class SessionCheckpointStoreTests(unittest.TestCase):
                 "access_token": "must-not-be-persisted",
                 "password": "also-secret",
             },
+            "safety_context": {
+                "armed": True,
+                "latched": True,
+                "last_action": {"private": "must-not-be-persisted"},
+            },
             "record": {
                 "session_id": "session-1",
                 "username": "person@example.test",
@@ -67,19 +72,38 @@ class SessionCheckpointStoreTests(unittest.TestCase):
         self.assertNotIn("private_note", serialized)
         self.assertEqual(payload, store.load())
         self.assertLessEqual(payload["onbed_elapsed_s"], 20)
-        self.assertEqual(
-            payload["sleep_context"]["awake_hr_reference"], 74.0
-        )
-        self.assertEqual(
-            len(payload["sleep_context"]["awake_vital_pairs"]), 6
-        )
+        self.assertEqual(payload["sleep_context"]["awake_hr_reference"], 74.0)
+        self.assertEqual(len(payload["sleep_context"]["awake_vital_pairs"]), 6)
         self.assertEqual(payload["record"]["target_duration_s"], 25_200)
         self.assertIs(payload["sleep_context"]["off_bed_latched"], True)
+        self.assertEqual(
+            payload["safety_context"],
+            {"armed": True, "latched": True},
+        )
+        self.assertNotIn("last_action", payload["safety_context"])
+
+    def test_safety_checkpoint_never_persists_reduced_protection(self) -> None:
+        store = SessionCheckpointStore(self.path, bed_start_seconds=20)
+        active = self.active_session()
+        active["safety_context"] = {"armed": False, "latched": False}
+
+        payload = store.save(active)
+
+        self.assertNotIn("safety_context", payload)
+        self.assertEqual(payload, store.load())
+
+    def test_legacy_checkpoint_without_safety_context_still_loads(self) -> None:
+        store = SessionCheckpointStore(self.path, bed_start_seconds=20)
+        active = self.active_session()
+        active.pop("safety_context")
+
+        payload = store.save(active)
+
+        self.assertNotIn("safety_context", payload)
+        self.assertEqual(payload, store.load())
 
     def test_resume_continuity_is_scoreable_but_not_baseline_training(self) -> None:
-        event = service_resume_event(
-            "session-1", "2026-09-13T00:00:00+00:00"
-        )
+        event = service_resume_event("session-1", "2026-09-13T00:00:00+00:00")
 
         value = event["value"]
         self.assertTrue(value["score_eligible"])

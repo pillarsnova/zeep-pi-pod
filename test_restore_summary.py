@@ -11,6 +11,7 @@ from sleep_system_policy import (
     APPROVED_SLEEP_RESULT_VERSION_PAIRS,
     PRE_CONTINUITY_SESSION_REPORT_VERSION,
     PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
+    PRE_RESPIRATORY_SESSION_REPORT_VERSION,
     PRE_RESTORE_SESSION_REPORT_VERSION,
     RECOVERY_SCORE_FORMULA_VERSION,
     RESTORE_SUMMARY_VERSION,
@@ -115,10 +116,8 @@ class RestoreSummaryTests(unittest.TestCase):
 
         self.assertIn("restore_context = baselines.behaviour_context(", source)
         self.assertIn('"restore_context": restore_context', source)
-        self.assertIn(
-            "personal_context=restore_context, trend_context=restore_context",
-            source,
-        )
+        self.assertIn("personal_context=restore_context", source)
+        self.assertIn("trend_context=restore_context", source)
 
     def test_overnight_wraps_sleep_score_without_third_score(self):
         summary = build_restore_summary(_sleep_quality())
@@ -132,7 +131,7 @@ class RestoreSummaryTests(unittest.TestCase):
             summary["source_score"]["formula_version"],
             SLEEP_SCORE_FORMULA_VERSION,
         )
-        self.assertEqual(summary["status"]["label"], "ฟื้นตัวจากการนอนดี")
+        self.assertEqual(summary["status"]["label"], "ภาพรวมการนอนคืนนี้ดี")
         self.assertNotIn(
             "data_coverage",
             {item["key"] for item in summary["drivers"]["positive"]},
@@ -169,7 +168,7 @@ class RestoreSummaryTests(unittest.TestCase):
 
         self.assertEqual(summary["source_score"]["type"], "recovery_score")
         self.assertEqual(summary["source_score"]["value"], 74)
-        self.assertEqual(summary["status"]["label"], "พักได้ดี")
+        self.assertEqual(summary["status"]["label"], "ช่วงพักนี้เป็นไปได้ดี")
         self.assertEqual(summary["session_scope"]["mode"], "nap_recovery")
         self.assertEqual(summary["subjective_outcome"]["status"], "not_measured")
         self.assertIsNone(summary["subjective_outcome"]["activity_readiness"])
@@ -217,12 +216,11 @@ class RestoreSummaryTests(unittest.TestCase):
         attention_keys = {item["key"] for item in summary["drivers"]["attention"]}
         self.assertNotIn("environment_sound", positive_keys)
         self.assertIn("environment_sound", attention_keys)
-        driver = next(
-            item
-            for item in summary["drivers"]["attention"]
-            if item["key"] == "environment_sound"
-        )
+        driver = next(item for item in summary["drivers"]["attention"] if item["key"] == "environment_sound")
         self.assertFalse(driver["affects_source_score"])
+        self.assertEqual(driver["label"], "เสียง · กำลังรวบรวมข้อมูล")
+        self.assertEqual(driver["message"], "ZEEP กำลังรวบรวมข้อมูลส่วนนี้")
+        self.assertNotIn("SPH0645", driver["message"])
 
     def test_safety_review_is_first_attention_driver(self):
         quality = _sleep_quality()
@@ -238,15 +236,27 @@ class RestoreSummaryTests(unittest.TestCase):
                 },
                 {
                     "key": "co2_safety_excursion",
+                    "metric_key": "co2",
                     "severity": "critical",
                     "decision": "safety_review",
                     "title": "CO₂ · พบ Safety excursion",
+                    "threshold": 1300.0,
+                    "minimum": 850.0,
+                    "maximum": 1400.0,
+                    "sample_count": 2,
+                    "sample_pct": 10.0,
                 },
             ],
         )
 
         attention = summary["drivers"]["attention"]
         self.assertEqual(attention[0]["key"], "environment_co2_safety_excursion")
+        self.assertEqual(attention[0]["label"], "CO₂ · ควรให้ทีมตรวจสอบ")
+        self.assertEqual(attention[0]["action"], "กรุณาแจ้งทีมงาน")
+        self.assertEqual(attention[0]["decision"], "safety_review")
+        self.assertEqual(attention[0]["threshold"], 1300.0)
+        self.assertEqual(attention[0]["maximum"], 1400.0)
+        self.assertEqual(attention[0]["sample_count"], 2)
 
     def test_explicit_not_measured_subjective_payload_stays_unmeasured(self):
         summary = build_restore_summary(
@@ -336,10 +346,7 @@ class RestoreSummaryTests(unittest.TestCase):
         recovery_environment = quality["environment_support"]
         self.assertTrue(recovery_environment["contributes_to_primary_score"])
         self.assertEqual(recovery_environment["max_points"], 10.0)
-        self.assertTrue(all(
-            finding["contributes_to_primary_score"] is False
-            for finding in report["findings"]
-        ))
+        self.assertTrue(all(finding["contributes_to_primary_score"] is False for finding in report["findings"]))
 
     def test_missing_nap_sensor_is_qa_not_a_score_penalty(self):
         samples = [
@@ -377,25 +384,23 @@ class RestoreSummaryTests(unittest.TestCase):
             target_duration_s=30 * 60,
         )
 
-        sound = next(
-            finding for finding in report["findings"] if finding["key"] == "sound"
-        )
+        sound = next(finding for finding in report["findings"] if finding["key"] == "sound")
         self.assertEqual(sound["severity"], "unavailable")
         self.assertFalse(sound["contributes_to_primary_score"])
-        driver = next(
-            item
-            for item in report["restore_summary"]["drivers"]["attention"]
-            if item["key"] == "environment_sound"
-        )
+        driver = next(item for item in report["restore_summary"]["drivers"]["attention"] if item["key"] == "environment_sound")
         self.assertFalse(driver["affects_source_score"])
 
     def test_report_version_bump_preserves_previous_approved_pair(self):
         self.assertEqual(
             SESSION_REPORT_VERSION,
-            "zeep-session-report-v10.7-complete-occupied-epochs",
+            "zeep-session-report-v10.8-respiratory-wellness",
         )
         self.assertIn(
             (SESSION_REPORT_VERSION, SLEEP_QUALITY_VERSION),
+            APPROVED_SLEEP_RESULT_VERSION_PAIRS,
+        )
+        self.assertIn(
+            (PRE_RESPIRATORY_SESSION_REPORT_VERSION, SLEEP_QUALITY_VERSION),
             APPROVED_SLEEP_RESULT_VERSION_PAIRS,
         )
         self.assertIn(

@@ -18,6 +18,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from database import DatabaseManager
 from sleep_system_policy import APPROVED_SLEEP_RESULT_VERSION_PAIRS
+from zeep_pod.sessions.history_detail_support import (
+    canonical_history_rest_metadata,
+)
 
 QualityRelease = Callable[[dict[str, Any], Any], dict[str, Any]]
 HealthReference = Callable[[dict[str, Any]], dict[str, Any]]
@@ -234,6 +237,10 @@ class SessionHistoryService:
             final_summary = {}
         if not isinstance(final_summary, dict):
             final_summary = {}
+        rest_mode, target_duration_s = canonical_history_rest_metadata(
+            record,
+            final_summary,
+        )
         night_summary = final_summary.get("night_summary") or {}
         quality = self.release_quality(
             final_summary,
@@ -258,12 +265,8 @@ class SessionHistoryService:
             "ended_at_utc": record.get("end_time"),
             "duration_s": record.get("duration"),
             "end_reason": record.get("end_reason"),
-            "rest_mode": final_summary.get("rest_mode") or record.get("rest_mode"),
-            "target_duration_s": (
-                final_summary.get("target_duration_s")
-                if final_summary.get("target_duration_s") is not None
-                else record.get("target_duration_s")
-            ),
+            "rest_mode": rest_mode,
+            "target_duration_s": target_duration_s,
             "sample_count": int(record.get("sample_count") or 0),
             "sleep_estimator": final_summary.get("sleep_estimator"),
             "sleep_estimator_versions": final_summary.get("sleep_estimator_versions")
@@ -371,7 +374,7 @@ class SessionHistoryService:
                         if quality.get("quality_type") == "rest_goal"
                         else "Sleep Score"
                     ),
-                    "level": quality.get("level") or "ข้อมูลไม่พอ",
+                    "level": quality.get("level") or "กำลังเตรียมผลสรุป",
                     "available": bool(quality.get("available")),
                 }
             )

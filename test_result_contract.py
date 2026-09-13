@@ -15,6 +15,7 @@ class SessionResultContractTests(unittest.TestCase):
             "score_title": "Sleep Score",
             "version": "sleep-quality-test",
             "data_coverage": {"pct": 80, "points": 4, "max_points": 5},
+            "score_confidence": {"level": "low", "label": "หลักฐานจำกัด"},
             "rest_mode": {"group": "sleep", "label": "Overnight Recovery"},
         }
         result = build_result_contract(
@@ -22,6 +23,12 @@ class SessionResultContractTests(unittest.TestCase):
                 "ended_at_utc": "2026-09-11T00:00:00+00:00",
                 "rest_mode": "sleep",
                 "sleep_quality": quality,
+                "session_report": {
+                    "data_quality": {
+                        "level": "low",
+                        "label": "ความครอบคลุมจำกัด",
+                    }
+                },
             }
         )
 
@@ -29,6 +36,14 @@ class SessionResultContractTests(unittest.TestCase):
         self.assertTrue(result["data_quality"]["coverage_contributes_points"])
         self.assertEqual(result["data_quality"]["coverage_points"], 4)
         self.assertFalse(result["data_quality"]["coverage_can_hide_score"])
+        self.assertEqual(
+            result["data_quality"]["label"],
+            "กำลังรวบรวมข้อมูลเพิ่ม",
+        )
+        self.assertEqual(
+            result["data_quality"]["confidence"]["label"],
+            "กำลังรวบรวมข้อมูลเพิ่ม",
+        )
         self.assertEqual(
             result["score_revision_policy"],
             "versioned_recalculation_with_audit",
@@ -190,7 +205,7 @@ class SessionResultContractTests(unittest.TestCase):
         self.assertFalse(summary["session_scope"]["updates_during_day"])
         self.assertFalse(summary["claim_boundary"]["whole_day_readiness"])
         self.assertFalse(summary["claim_boundary"]["training_load_included"])
-        self.assertEqual(summary["status"]["label"], "ฟื้นตัวจากการนอนดี")
+        self.assertEqual(summary["status"]["label"], "ภาพรวมการนอนคืนนี้ดี")
         self.assertNotEqual(summary["status"]["label"], "ข้อความที่บันทึกไว้")
         self.assertNotEqual(summary["confidence"], {"label": "ข้อมูลเดิมที่ปลอดภัย"})
         self.assertFalse(summary["provenance"]["persisted_source_score_matched"])
@@ -251,6 +266,33 @@ class SessionResultContractTests(unittest.TestCase):
         self.assertEqual(result["mode"]["key"], "sleep")
         self.assertFalse(result["score"]["available"])
         self.assertTrue(result["score"]["review_required"])
+
+    def test_canonical_session_target_wins_over_stale_quality_target(self) -> None:
+        result = build_result_contract(
+            {
+                "ended_at_utc": "2026-09-11T00:00:00+00:00",
+                "rest_mode": "nap_recovery",
+                "target_duration_s": 5400,
+                "sleep_quality": {
+                    "available": True,
+                    "score": 80,
+                    "quality_type": "rest_goal",
+                    "rest_mode": {"group": "nap_recovery"},
+                    "duration_target": {
+                        "key": "nap_30",
+                        "seconds": 1800,
+                    },
+                },
+                "session_report": {
+                    "rest_mode": {"group": "nap_recovery"},
+                },
+            }
+        )
+
+        self.assertEqual(result["mode"]["target"]["seconds"], 5400)
+        self.assertEqual(result["mode"]["target"]["minutes"], 90)
+        self.assertEqual(result["mode"]["target"]["key"], "nap_90")
+        self.assertNotEqual(result["mode"]["target"]["key"], "nap_30")
 
     def test_persisted_context_is_canonical_and_subjective_needs_provenance(
         self,

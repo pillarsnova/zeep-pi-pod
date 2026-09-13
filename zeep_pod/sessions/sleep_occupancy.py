@@ -13,7 +13,6 @@ from sleep_system_policy import (
 
 from .sleep_event_data import finite_number
 
-
 SLEEP_STATES = frozenset({"wake", "n1", "n2", "n3", "rem"})
 DEFAULT_HEART_RATE_RANGE = (25.0, 220.0)
 DEFAULT_RESPIRATION_RATE_RANGE = (2.0, 60.0)

@@ -3843,6 +3843,35 @@ body[data-view="sessions"] .hist-row > .hist-quality {
     rgba(7, 27, 28, .92);
 }
 
+.respiratory-wellness-card {
+  border-color: rgba(127, 233, 223, .28);
+  background:
+    radial-gradient(circle at 100% 0, rgba(127, 233, 223, .08), transparent 40%),
+    rgba(7, 22, 32, .94);
+}
+
+.respiratory-wellness-card .restore-summary-head span { color: #7fe9df; }
+
+.respiratory-wellness-card .respiratory-observation {
+  border-left: 3px solid #7fe9df;
+}
+
+.respiratory-wellness-card .respiratory-technical { margin-top: 0; }
+
+.respiratory-age-guidance {
+  margin: 0;
+  color: #93aeb7;
+  font-size: clamp(11px, .82vw, 13px);
+  line-height: 1.45;
+}
+
+.respiratory-age-guidance b { color: #c8dde2; }
+
+.respiratory-wellness-card .respiratory-technical
+.classification-accounting-detail {
+  padding: 0 10px 10px;
+}
+
 .restore-summary-head {
   display: flex;
   align-items: center;

@@ -251,9 +251,7 @@ class FakeHistory:
         }
 
     def account_history(self, account_key, _profile, *, window, limit, offset):
-        rows = [
-            row for row in self.sessions.values() if row["account_key"] == account_key
-        ]
+        rows = [row for row in self.sessions.values() if row["account_key"] == account_key]
         return self._listing(rows, limit, offset)
 
     def admin_history(
@@ -281,16 +279,8 @@ class FakeHistory:
 
     @staticmethod
     def _listing(rows, limit, offset):
-        sleep_scores = [
-            row["sleep_quality"]["score"]
-            for row in rows
-            if row["sleep_quality"]["quality_type"] == "sleep"
-        ]
-        recovery_scores = [
-            row["sleep_quality"]["score"]
-            for row in rows
-            if row["sleep_quality"]["quality_type"] == "rest_goal"
-        ]
+        sleep_scores = [row["sleep_quality"]["score"] for row in rows if row["sleep_quality"]["quality_type"] == "sleep"]
+        recovery_scores = [row["sleep_quality"]["score"] for row in rows if row["sleep_quality"]["quality_type"] == "rest_goal"]
         return {
             "sessions": rows[offset : offset + limit],
             "total": len(rows),
@@ -300,14 +290,8 @@ class FakeHistory:
                 "sleep_score_count": len(sleep_scores),
                 "recovery_score_count": len(recovery_scores),
                 "awaiting_score_count": 0,
-                "average_sleep_score": (
-                    sum(sleep_scores) / len(sleep_scores) if sleep_scores else None
-                ),
-                "average_recovery_score": (
-                    sum(recovery_scores) / len(recovery_scores)
-                    if recovery_scores
-                    else None
-                ),
+                "average_sleep_score": (sum(sleep_scores) / len(sleep_scores) if sleep_scores else None),
+                "average_recovery_score": (sum(recovery_scores) / len(recovery_scores) if recovery_scores else None),
             },
             "range": None,
             "history_start_utc": "2026-09-01T00:00:00+00:00",
@@ -409,12 +393,49 @@ class UsageSessionApiTests(unittest.TestCase):
             headers=self._headers("service", "admin"),
         )
         self.assertEqual(invalid.status_code, 422)
+        self.assertEqual(
+            invalid.json()["detail"]["code"],
+            "usage_history_filter_invalid",
+        )
         time_without_date = self.client.get(
             "/api/v1/usage-sessions",
             params={"time_from": "08:00"},
             headers=self._headers("service", "admin"),
         )
         self.assertEqual(time_without_date.status_code, 422)
+        self.assertEqual(
+            time_without_date.json()["detail"],
+            {
+                "code": "usage_history_filter_invalid",
+                "message": "กรุณาเลือกวันที่ก่อนกำหนดช่วงเวลา",
+            },
+        )
+
+    def test_usage_api_scope_and_not_found_errors_have_stable_shape(self) -> None:
+        forbidden = self.client.get(
+            "/api/v1/usage-sessions",
+            params={"account_key": "b@example.test"},
+            headers=self._headers("a@example.test"),
+        )
+        missing = self.client.get(
+            "/api/v1/usage-sessions/missing-session",
+            headers=self._headers("a@example.test"),
+        )
+
+        self.assertEqual(
+            forbidden.json()["detail"],
+            {
+                "code": "usage_history_scope_forbidden",
+                "message": "บัญชีนี้ดูได้เฉพาะประวัติการใช้งานของตนเอง",
+            },
+        )
+        self.assertEqual(
+            missing.json()["detail"],
+            {
+                "code": "usage_session_not_found",
+                "message": "ไม่พบผลการใช้งานนี้ หรือบัญชีนี้ไม่มีสิทธิ์เข้าถึง",
+            },
+        )
 
     def test_detail_whitelists_report_and_never_returns_raw_samples(self) -> None:
         response = self.client.get(
@@ -460,10 +481,7 @@ class UsageSessionApiTests(unittest.TestCase):
             50.0,
         )
         self.assertEqual(
-            sum(
-                stage["score_eligible_duration_s"]
-                for stage in payload["report"]["stages"]
-            ),
+            sum(stage["score_eligible_duration_s"] for stage in payload["report"]["stages"]),
             accounting["score_eligible_s"],
         )
         self.assertEqual(payload["report"]["environment"][0]["average"], 22.4)
@@ -471,13 +489,12 @@ class UsageSessionApiTests(unittest.TestCase):
             payload["report"]["environment_assessment"]["overall_level"],
             "good",
         )
-        self.assertEqual(payload["report"]["findings"][0]["title"], "อุณหภูมิคงที่")
         self.assertEqual(
-            payload["sleep_policy_versions"], {"evidence": "evidence-v-test"}
+            payload["report"]["findings"][0]["title"],
+            "อุณหภูมิ · กำลังรวบรวมข้อมูล",
         )
-        self.assertEqual(
-            payload["sleep_estimator_versions"], {"bcg-audio-bed-test": 840}
-        )
+        self.assertEqual(payload["sleep_policy_versions"], {"evidence": "evidence-v-test"})
+        self.assertEqual(payload["sleep_estimator_versions"], {"bcg-audio-bed-test": 840})
         rendered = str(payload).casefold()
         self.assertNotIn("must-not-leak", rendered)
         self.assertNotIn("bcg_base64", rendered)
@@ -511,13 +528,73 @@ class UsageSessionApiTests(unittest.TestCase):
         quality["available"] = False
         quality["score"] = 97
         quality["reason"] = "ข้อมูลยืนยันยังไม่พอ"
+        quality["environment_support"] = {
+            "quality_factor": 0.99,
+            "points": 15,
+            "safety_excursion_observed": True,
+            "safety_review_required": True,
+            "safety_excursions_change_score": False,
+            "metrics": [
+                {
+                    "key": "temperature",
+                    "status_key": "critical",
+                    "status": "วิกฤต",
+                    "safety_excursion_observed": True,
+                    "critical_below": 13.0,
+                    "critical_above": 32.0,
+                    "minimum": 12.0,
+                    "maximum": 33.0,
+                }
+            ],
+            "safety_excursions": [
+                {
+                    "key": "temperature",
+                    "label": "อุณหภูมิ",
+                    "critical_below": 13.0,
+                    "critical_above": 32.0,
+                    "minimum": 12.0,
+                    "maximum": 33.0,
+                    "sample_count": 2,
+                    "sample_pct": 10.0,
+                }
+            ],
+        }
         session["sleep_quality"] = quality
         session["session_report"].update(
             {
                 "headline": "ยอดเยี่ยม พร้อมเต็มที่",
                 "insight": "ฟื้นตัวสมบูรณ์แบบ",
                 "post_session_guidance": {"primary": "พร้อมแข่งขันเต็มกำลัง"},
-                "environment_assessment": {"headline": "ยอดเยี่ยม"},
+                "environment_assessment": {
+                    "overall_label": "ยอดเยี่ยม",
+                    "safety_excursion_observed": True,
+                    "safety_review_required": True,
+                    "safety_excursion_count": 1,
+                    "safety_excursions": quality["environment_support"]["safety_excursions"],
+                },
+                "findings": [
+                    {
+                        "key": "temperature_safety_excursion",
+                        "metric_key": "temperature",
+                        "severity": "critical",
+                        "decision": "safety_review",
+                        "title": "Temperature Gate · Safety excursion",
+                        "detail": "Timeline firmware critical",
+                        "action": "debug SHT3x-DIS",
+                        "critical_below": 13.0,
+                        "critical_above": 32.0,
+                        "minimum": 12.0,
+                        "maximum": 33.0,
+                        "sample_count": 2,
+                        "sample_pct": 10.0,
+                    },
+                    {
+                        "key": "sound",
+                        "severity": "poor",
+                        "decision": "required",
+                        "title": "เสียง · แย่",
+                    },
+                ],
             }
         )
 
@@ -536,12 +613,180 @@ class UsageSessionApiTests(unittest.TestCase):
         self.assertNotIn("engineering_shadow_score", rendered)
         self.assertNotIn("score_unrounded", rendered)
         self.assertNotIn("must-not-leak", rendered)
-        self.assertEqual(payload["report"]["headline"], "ยังสรุปคะแนนไม่ได้")
-        self.assertEqual(payload["report"]["insight"], "ข้อมูลยืนยันยังไม่พอ")
-        self.assertEqual(payload["report"]["findings"], [])
-        self.assertNotIn("environment_assessment", payload["report"])
+        self.assertEqual(payload["report"]["headline"], "กำลังเตรียมผลสรุป")
+        self.assertEqual(
+            payload["report"]["insight"],
+            "ZEEP กำลังรวบรวมข้อมูลสำหรับสรุปผลการพักครั้งนี้",
+        )
+        safety_finding = payload["report"]["findings"][0]
+        self.assertEqual(safety_finding["decision"], "safety_review")
+        self.assertEqual(safety_finding["title"], "อุณหภูมิ · ควรให้ทีมตรวจสอบ")
+        self.assertEqual(safety_finding["critical_below"], 13.0)
+        self.assertEqual(safety_finding["minimum"], 12.0)
+        self.assertEqual(safety_finding["maximum"], 33.0)
+        self.assertEqual(len(payload["report"]["findings"]), 1)
+        assessment = payload["report"]["environment_assessment"]
+        self.assertTrue(assessment["safety_review_required"])
+        self.assertEqual(assessment["safety_excursions"][0]["minimum"], 12.0)
+        support = payload["report"]["quality"]["environment_support"]
+        self.assertTrue(support["safety_review_required"])
+        self.assertNotIn("quality_factor", support)
+        self.assertNotIn("points", support)
+        summary_driver = payload["restore_summary"]["drivers"]["attention"][0]
+        self.assertEqual(summary_driver["decision"], "safety_review")
+        self.assertEqual(summary_driver["critical_above"], 32.0)
+        self.assertEqual(summary_driver["sample_count"], 2)
+        self.assertEqual(
+            payload["report"]["post_session_guidance"]["primary"],
+            "กรุณาแจ้งทีมงาน",
+        )
+        self.assertFalse(payload["report"]["post_session_guidance"]["medical_diagnosis"])
         self.assertNotIn("ยอดเยี่ยม", rendered)
         self.assertNotIn("พร้อมแข่งขัน", rendered)
+        self.assertNotIn("SHT3x", rendered)
+        self.assertNotIn("Timeline", rendered)
+
+    def test_available_score_rebuilds_all_user_copy_from_stable_keys(self) -> None:
+        session = self.history.sessions["a-session"]
+        quality = session["sleep_quality"]
+        quality.update(
+            {
+                "level_key": "future_level",
+                "level": "แย่มาก",
+                "insight": "Gate ไม่ผ่าน",
+                "outcome_interpretation": "ควรหยุดกิจกรรมทั้งหมด",
+                "score_scope": "internal firmware result",
+                "component_labels": {
+                    "sleep_opportunity": "Sleep onset Gate",
+                    "restorative_architecture": "N2/N3/REM architecture",
+                    "data_coverage": "BCG paired coverage",
+                },
+                "disclaimer": "BCG Sensor result using AASM PSG proxy",
+            }
+        )
+        quality["score_confidence"]["label"] = "ข้อมูลไม่พอ"
+        session["session_report"].update(
+            {
+                "headline": "แย่มาก",
+                "insight": "Gate ไม่ผ่าน",
+                "reason": "Timeline SHT3x-DIS error",
+                "disclaimer": "BCG/AASM/PSG internal report note",
+                "environment_assessment": {
+                    "mode": "sleep",
+                    "mode_label": "BCG Overnight Gate",
+                    "acceptable_min_level": "fair",
+                    "acceptable_min_label": "firmware threshold",
+                    "overall_level": "poor",
+                    "overall_label": "แย่",
+                },
+                "findings": [
+                    {
+                        "key": "temperature",
+                        "severity": "poor",
+                        "decision": "required",
+                        "title": "Timeline Gate SHT3x-DIS · แย่",
+                        "detail": "firmware freshness fail",
+                        "action": "debug sensor",
+                    },
+                    {
+                        "key": "acoustic_corroborated",
+                        "severity": "fair",
+                        "decision": "investigate",
+                        "title": "SPH0645 / BCG / Bed Status",
+                        "detail": "Timeline Gate matched 4 Epochs",
+                        "action": "debug firmware",
+                    },
+                    {
+                        "key": "future_backend_finding",
+                        "severity": "poor",
+                        "decision": "investigate",
+                        "title": "UNKNOWN GATE FAILED",
+                        "detail": "raw backend wording",
+                        "action": "inspect payload",
+                    },
+                ],
+                "data_quality": {
+                    "level": "future_level",
+                    "label": "ข้อมูลไม่พอ",
+                    "note": "BCG Gate firmware",
+                },
+                "post_session_guidance": {
+                    "primary": "พร้อมแข่งขันเต็มกำลัง",
+                    "medical_diagnosis": True,
+                    "score_released": True,
+                },
+            }
+        )
+
+        response = self.client.get(
+            "/api/v1/usage-sessions/a-session",
+            headers=self._headers("a@example.test"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()["data"]
+        self.assertEqual(payload["score"]["level"], "ผลการพักครั้งนี้")
+        self.assertEqual(
+            payload["report"]["quality"]["score_confidence"]["label"],
+            "ข้อมูลชัดเจน",
+        )
+        self.assertEqual(
+            payload["report"]["data_quality"]["label"],
+            "กำลังเตรียมผลสรุป",
+        )
+        self.assertIn(
+            "ความครบถ้วนของข้อมูล",
+            payload["report"]["data_quality"]["note"],
+        )
+        self.assertEqual(
+            payload["report"]["findings"][0]["title"],
+            "อุณหภูมิ · ควรปรับ",
+        )
+        findings = {
+            item["key"]: item
+            for item in payload["report"]["findings"]
+        }
+        self.assertEqual(
+            findings["acoustic_corroborated"]["title"],
+            "เสียงและการขยับบนเตียง · ลองสังเกตเพิ่มเติม",
+        )
+        self.assertEqual(
+            findings["future_backend_finding"]["title"],
+            "ข้อมูลประกอบ · ลองสังเกตเพิ่มเติม",
+        )
+        assessment = payload["report"]["environment_assessment"]
+        self.assertEqual(assessment["mode_label"], "Overnight Recovery")
+        self.assertEqual(assessment["acceptable_min_label"], "พอใช้")
+        labels = payload["report"]["quality"]["component_labels"]
+        self.assertEqual(labels["sleep_opportunity"], "เวลาและการเข้าสู่การพัก")
+        self.assertEqual(labels["restorative_architecture"], "รูปแบบการพัก")
+        self.assertEqual(labels["data_coverage"], "ความครบถ้วนของข้อมูล")
+        self.assertEqual(
+            payload["report"]["quality"]["disclaimer"],
+            "ผลประเมินเพื่อ Wellness · ไม่ใช่การวินิจฉัยหรือทดแทนผลตรวจทางการแพทย์",
+        )
+        self.assertEqual(
+            payload["report"]["disclaimer"],
+            "ผลประเมินเพื่อ Wellness · ไม่ใช่การวินิจฉัยหรือทดแทนผลตรวจทางการแพทย์",
+        )
+        self.assertFalse(payload["report"]["post_session_guidance"]["medical_diagnosis"])
+        rendered = str(payload)
+        for internal_copy in (
+            "แย่มาก",
+            "Gate",
+            "Timeline",
+            "SHT3x",
+            "SPH0645",
+            "Bed Status",
+            "Epochs",
+            "AASM",
+            "PSG",
+            "UNKNOWN",
+            "backend wording",
+            "firmware",
+            "พร้อมแข่งขันเต็มกำลัง",
+        ):
+            self.assertNotIn(internal_copy, rendered)
 
     def test_public_report_mode_is_canonical_and_mismatch_blocks_score(self) -> None:
         cases = (
@@ -570,7 +815,7 @@ class UsageSessionApiTests(unittest.TestCase):
                 self.assertFalse(payload["score"]["available"])
                 self.assertEqual(
                     payload["report"]["headline"],
-                    "ยังสรุปคะแนนไม่ได้",
+                    "กำลังเตรียมผลสรุป",
                 )
                 self.assertNotIn("ยอดเยี่ยม", str(payload))
 
@@ -735,16 +980,12 @@ class UsageSessionApiTests(unittest.TestCase):
         paths = document["paths"]
         expected = {
             "/api/v1/usage-sessions": "UsageSessionListResponse",
-            "/api/v1/usage-sessions/{session_id}/summary": (
-                "UsageSessionSummaryResponse"
-            ),
+            "/api/v1/usage-sessions/{session_id}/summary": ("UsageSessionSummaryResponse"),
             "/api/v1/usage-sessions/{session_id}": "UsageSessionDetailResponse",
         }
         for path, schema_name in expected.items():
             with self.subTest(path=path):
-                schema = paths[path]["get"]["responses"]["200"]["content"][
-                    "application/json"
-                ]["schema"]
+                schema = paths[path]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
                 self.assertEqual(
                     schema["$ref"],
                     f"#/components/schemas/{schema_name}",
@@ -772,9 +1013,7 @@ class UsageSessionApiTests(unittest.TestCase):
         self.assertEqual(parsed.data.summary.session_count, 2)
 
         document = self.client.app.openapi()
-        published_example = document["paths"]["/api/v1/usage-sessions"]["get"][
-            "responses"
-        ]["200"]["content"]["application/json"]["example"]
+        published_example = document["paths"]["/api/v1/usage-sessions"]["get"]["responses"]["200"]["content"]["application/json"]["example"]
         if validate:
             validate(published_example)
         else:  # pragma: no cover - Pydantic v1 deployment compatibility

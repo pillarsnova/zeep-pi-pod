@@ -60,17 +60,21 @@ ERROR_RESPONSES = {
 PRIVATE_NO_STORE = "private, no-store"
 
 
+def _usage_error(status_code: int, code: str, message: str) -> HTTPException:
+    """Build the stable error detail used by Usage Session clients."""
+    return HTTPException(
+        status_code,
+        {"code": code, "message": message},
+    )
+
+
 def _require_usage_browser_principal(principal: Any) -> Any:
     """Keep the broad legacy automation token outside health-result routes."""
     if getattr(principal, "auth_source", None) == "api_token":
-        raise HTTPException(
+        raise _usage_error(
             403,
-            {
-                "code": "usage_api_scoped_credential_required",
-                "message": (
-                    "X-API-Token ไม่มีสิทธิ์อ่านผลการใช้งาน; กรุณา Login ด้วยบัญชี User หรือ Admin"
-                ),
-            },
+            "usage_api_scoped_credential_required",
+            "กรุณาเข้าสู่ระบบด้วยบัญชีผู้ใช้หรือผู้ดูแลเพื่อดูผลการใช้งาน",
         )
     return principal
 
@@ -83,9 +87,10 @@ def _history_window(
     timezone_name: str,
 ):
     if not date_from and not date_to and (time_from != "00:00" or time_to != "23:59"):
-        raise HTTPException(
+        raise _usage_error(
             422,
-            "ต้องระบุ date_from หรือ date_to เมื่อกรองช่วงเวลา",
+            "usage_history_filter_invalid",
+            "กรุณาเลือกวันที่ก่อนกำหนดช่วงเวลา",
         )
     try:
         return resolve_history_window(
@@ -96,7 +101,11 @@ def _history_window(
             timezone_name=timezone_name,
         )
     except ValueError as exc:
-        raise HTTPException(422, str(exc)) from exc
+        raise _usage_error(
+            422,
+            "usage_history_filter_invalid",
+            "ช่วงวันที่หรือเวลาไม่ถูกต้อง กรุณาตรวจสอบแล้วลองอีกครั้ง",
+        ) from exc
 
 
 @dataclass(frozen=True)
@@ -172,12 +181,10 @@ def _build_list_endpoint(context: _UsageApiContext, principal_dependency: Any):
             requested = str(account_key or "").strip().casefold()
             own_key = str(principal.account_key or "").strip().casefold()
             if (requested and requested != own_key) or query:
-                raise HTTPException(
+                raise _usage_error(
                     403,
-                    {
-                        "code": "usage_history_scope_forbidden",
-                        "message": "ผู้ใช้ดูได้เฉพาะประวัติการใช้งานของตนเอง",
-                    },
+                    "usage_history_scope_forbidden",
+                    "บัญชีนี้ดูได้เฉพาะประวัติการใช้งานของตนเอง",
                 )
             data = service.list_for_account(
                 own_key,
@@ -221,7 +228,11 @@ def _build_detail_endpoint(
             account_key=account_key,
         )
         if data is None:
-            raise HTTPException(404, "ไม่พบ Session ในขอบเขตที่เข้าถึงได้")
+            raise _usage_error(
+                404,
+                "usage_session_not_found",
+                "ไม่พบผลการใช้งานนี้ หรือบัญชีนี้ไม่มีสิทธิ์เข้าถึง",
+            )
         kind = "usage_session_detail" if include_report else "usage_session_summary"
         return response_envelope(data, kind=kind)
 

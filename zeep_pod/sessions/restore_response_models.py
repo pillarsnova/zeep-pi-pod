@@ -158,6 +158,7 @@ class EnvironmentDriver(ContractModel):
     message: str
     direction: DriverDirection
     severity: EnvironmentSeverity
+    decision: str
     action: str | None = Field(...)
     affects_source_score: bool
     relationship: Literal[
@@ -166,6 +167,13 @@ class EnvironmentDriver(ContractModel):
     ]
     causal_claim: Literal[False]
     priority: Literal["safety_review"] | None = None
+    threshold: float | None = None
+    critical_below: float | None = None
+    critical_above: float | None = None
+    minimum: float | None = None
+    maximum: float | None = None
+    sample_count: int | None = Field(default=None, ge=0)
+    sample_pct: float | None = Field(default=None, ge=0, le=100)
 
     @validator("key")
     def public_environment_key(cls, value: str):

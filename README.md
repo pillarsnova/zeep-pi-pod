@@ -19,9 +19,10 @@ pi5/
 ├── qr_login.py             # QR login: registry ของ pollSecret + route ที่ Pi proxy ให้แท็บเล็ต
 ├── pod_occupancy.py        # Lease ป้องกัน login ซ้ำ และ coordinator สำหรับหลายตู้
 ├── api_history.py          # Raw history/export API สำหรับ Admin เท่านั้น
-├── static/index.html       # Runtime bundle ไฟล์เดียว (สร้างจาก template + Control partials)
-├── static/index.template.html
+├── static/index.html       # Runtime bundle ไฟล์เดียว (generated; ห้ามแก้โดยตรง)
+├── static/index.template.html # โครง HTML และ build-time partial markers
 ├── static/partials/control # Source ของการ์ดควบคุม 6 ส่วน
+├── static/partials/app     # Base CSS + ordered JavaScript source fragments
 ├── ui_composer.py          # Build/check bundle โดยไม่เพิ่ม browser-side fetch
 ├── sensor_contracts.py     # Datasheet/as-built/telemetry contract กลาง
 ├── sensor_calibration.py   # Calibration spec, validation และ atomic persistence
@@ -64,6 +65,15 @@ module ที่ import และทดสอบได้โดยไม่เ�
 แหล่งข้อมูล ลิงก์ทางการ วันที่ตรวจสอบ SHA-256 และ case note เรื่อง VOC จาก
 ผู้ใช้งาน/thirdhand smoke เอกสารเหล่านี้ไม่เปลี่ยน runtime threshold หรือ model
 อัตโนมัติ การนำหลักฐานใหม่มาใช้ต้องผ่าน policy version และ regression test เสมอ
+
+ขอบเขตการแปลผล RR จาก BCG, Direct evidence gate, บทบาทของช่วงอายุ,
+Personal Baseline และข้อห้ามด้านคำกล่าวสุขภาพ ดูที่
+[ZEEP Respiratory Wellness v1.0](docs/zeep-respiratory-wellness-v1.md)
+
+หลักการใช้ภาษาสำหรับผู้ใช้ ข้อความความปลอดภัย และรายละเอียดสำหรับผู้ดูแล
+แยกไว้ที่ [ZEEP Product Language Guideline v1.0](docs/zeep-product-language-guideline-v1.md)
+เพื่อให้ Dashboard, ประวัติการใช้งาน รายงาน และ Public API ใช้ความหมายเดียวกัน
+โดยไม่เปลี่ยน stable key, สูตรคะแนน หรือกฎความปลอดภัย
 
 Case study ภาคสนามที่ตัดข้อมูลระบุตัวบุคคลออกแล้ว:
 [CS-01 · การพักค้างคืนสองครั้งและ Wake lock-in](docs/zeep-case-study-cs-01-two-overnight-sessions.md)

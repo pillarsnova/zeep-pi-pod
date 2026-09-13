@@ -34,6 +34,7 @@ PUBLIC_REPORT_FIELDS = (
     "findings",
     "post_session_guidance",
     "restore_summary",
+    "respiratory_wellness",
     "data_quality",
     "disclaimer",
 )
@@ -134,11 +135,7 @@ def _email_first_identity(session: Mapping[str, Any]) -> dict[str, Any]:
 def _public_report_value(value: Any) -> Any:
     """Recursively reject raw, Profile and credential fields from old rows."""
     if isinstance(value, Mapping):
-        return {
-            str(key): _public_report_value(item)
-            for key, item in value.items()
-            if not _private_report_key(key)
-        }
+        return {str(key): _public_report_value(item) for key, item in value.items() if not _private_report_key(key)}
     if isinstance(value, (list, tuple)):
         return [_public_report_value(item) for item in value]
     return value
@@ -147,11 +144,7 @@ def _public_report_value(value: Any) -> Any:
 def _public_policy_versions(value: Any) -> dict[str, str | None]:
     source = _mapping(value)
     allowed = {"evidence", "baseline", "transition", "g2_ontology", "terminal_wake"}
-    return {
-        key: source[key]
-        for key in allowed
-        if key in source and (source[key] is None or isinstance(source[key], str))
-    }
+    return {key: source[key] for key in allowed if key in source and (source[key] is None or isinstance(source[key], str))}
 
 
 def _public_estimator_versions(value: Any) -> dict[str, int]:
@@ -176,13 +169,75 @@ def _private_report_key(key: Any) -> bool:
     normalized = re.sub(r"[^a-z0-9]+", "_", snake_case.casefold()).strip("_")
     segments = set(normalized.split("_"))
     compact = normalized.replace("_", "")
-    return (
-        normalized in PRIVATE_REPORT_FIELDS
-        or bool(segments & PRIVATE_REPORT_SEGMENTS)
-        or compact in PRIVATE_REPORT_COMPACT_FIELDS
-        or compact.startswith("raw")
-        or compact.endswith(("apikey", "password", "privatekey", "secret", "token"))
-    )
+    return normalized in PRIVATE_REPORT_FIELDS or bool(segments & PRIVATE_REPORT_SEGMENTS) or compact in PRIVATE_REPORT_COMPACT_FIELDS or compact.startswith("raw") or compact.endswith(("apikey", "password", "privatekey", "secret", "token"))
+
+
+def _safety_only_environment_support(value: Any) -> dict[str, Any] | None:
+    """Retain score-independent Safety provenance when score release is off."""
+    source = _mapping(value)
+    excursions = [dict(item) for item in source.get("safety_excursions") or [] if isinstance(item, Mapping)]
+    metrics = [dict(item) for item in source.get("metrics") or [] if isinstance(item, Mapping) and item.get("safety_excursion_observed") is True]
+    observed = bool(source.get("safety_excursion_observed") or source.get("safety_review_required") or excursions or metrics)
+    if not observed:
+        return None
+    return {
+        "safety_excursion_observed": True,
+        "safety_review_required": True,
+        "safety_excursions_change_score": False,
+        "sleep_stage_context_only": True,
+        "metrics": metrics,
+        "safety_excursions": excursions,
+    }
+
+
+def _safety_only_environment_assessment(value: Any) -> dict[str, Any] | None:
+    """Publish only Safety facts, never unavailable score-derived appraisal."""
+    source = _mapping(value)
+    excursions = [dict(item) for item in source.get("safety_excursions") or [] if isinstance(item, Mapping)]
+    if not (source.get("safety_excursion_observed") or source.get("safety_review_required") or excursions):
+        return None
+    return {
+        "safety_excursion_observed": True,
+        "safety_review_required": True,
+        "safety_excursion_count": int(source.get("safety_excursion_count") or len(excursions)),
+        "safety_excursions": excursions,
+        "safety_excursions_change_sustained_assessment": False,
+        "safety_excursions_change_score": False,
+        "safety_thresholds_unchanged": True,
+    }
+
+
+def _safety_findings(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [dict(item) for item in value if isinstance(item, Mapping) and item.get("decision") == "safety_review"]
+
+
+def _canonical_guidance(
+    result: Mapping[str, Any],
+    *,
+    score_available: bool,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    summary = _mapping(result.get("restore_summary"))
+    recommendation = _mapping(summary.get("recommendation"))
+    attention = _mapping(summary.get("drivers")).get("attention") or []
+    has_safety_review = any(isinstance(item, Mapping) and item.get("priority") == "safety_review" for item in attention)
+    public = {
+        "available": score_available,
+        "mode": _mapping(result.get("mode")).get("key"),
+        "score_used": (_mapping(result.get("score")).get("value") if score_available else None),
+        "score_released": score_available,
+        "basis": "zeep_restore_summary",
+        "medical_diagnosis": False,
+    }
+    if score_available or has_safety_review:
+        public["primary"] = recommendation.get("primary") or ("ดูผลสรุปครั้งนี้ แล้วเลือกหนึ่งสิ่งที่อยากปรับในครั้งถัดไป")
+    else:
+        public["reason"] = reason
+    if not score_available:
+        public["score_derived_claims_suppressed"] = True
+    return public
 
 
 def _public_quality(
@@ -198,12 +253,17 @@ def _public_quality(
     if not isinstance(source, Mapping):
         return {}
     public = public_quality_payload(source)
+    safety_support = _safety_only_environment_support(public.get("environment_support"))
+    for key in ("insight", "outcome_interpretation", "score_scope"):
+        public.pop(key, None)
     released_score = _mapping(result.get("score"))
     canonical_mode = _mapping(result.get("mode"))
     available = released_score.get("available") is True
     if not available:
         for key in BLOCKED_QUALITY_FIELDS:
             public.pop(key, None)
+        if safety_support is not None:
+            public["environment_support"] = safety_support
     public.update(
         {
             "available": available,
@@ -214,13 +274,7 @@ def _public_quality(
             "clinical_validated": released_score.get("clinical_validated") is True,
             "level": released_score.get("level"),
             "reason": released_score.get("reason"),
-            "quality_type": (
-                "sleep"
-                if canonical_mode.get("key") == "sleep"
-                else "rest_goal"
-                if canonical_mode.get("key") == "nap_recovery"
-                else None
-            ),
+            "quality_type": ("sleep" if canonical_mode.get("key") == "sleep" else "rest_goal" if canonical_mode.get("key") == "nap_recovery" else None),
             "rest_mode": canonical_mode,
         }
     )
@@ -247,18 +301,32 @@ def _public_report(
             public[key] = public_report_field(key, source[key])
     canonical_mode = _mapping(result.get("mode"))
     released_score = _mapping(result.get("score"))
+    restore_status = _mapping(_mapping(result.get("restore_summary")).get("status"))
+    if released_score.get("available") is True:
+        public["headline"] = restore_status.get("label") or released_score.get("level") or "ผลสรุปการพักครั้งนี้"
+        public["insight"] = restore_status.get("meaning") or "ภาพรวมจากข้อมูลที่ ZEEP บันทึกได้ใน Session นี้"
+        public.pop("reason", None)
+        public["post_session_guidance"] = _canonical_guidance(
+            result,
+            score_available=True,
+        )
     public["rest_mode"] = canonical_mode
     if released_score.get("available") is not True:
-        reason = released_score.get("reason") or "คะแนนหลักของ Session นี้ยังไม่พร้อม"
-        public["headline"] = "ยังสรุปคะแนนไม่ได้"
+        reason = released_score.get("reason") or ("ZEEP กำลังรวบรวมข้อมูลสำหรับสรุปคะแนนของการพักครั้งนี้")
+        public["headline"] = "กำลังเตรียมผลสรุป"
         public["insight"] = reason
-        public["findings"] = []
-        public.pop("environment_assessment", None)
-        public["post_session_guidance"] = {
-            "available": False,
-            "reason": reason,
-            "score_derived_claims_suppressed": True,
-        }
+        public["reason"] = reason
+        public["findings"] = _safety_findings(public.get("findings"))
+        safety_assessment = _safety_only_environment_assessment(public.get("environment_assessment"))
+        if safety_assessment is None:
+            public.pop("environment_assessment", None)
+        else:
+            public["environment_assessment"] = safety_assessment
+        public["post_session_guidance"] = _canonical_guidance(
+            result,
+            score_available=False,
+            reason=reason,
+        )
     return public
 
 
@@ -292,15 +360,9 @@ def _session_item(
             result,
         )
         if "restore_summary" in item["report"]:
-            item["report"]["restore_summary"] = _public_report_value(
-                result["restore_summary"]
-            )
-        item["sleep_policy_versions"] = _public_policy_versions(
-            session.get("sleep_policy_versions") or {}
-        )
-        item["sleep_estimator_versions"] = _public_estimator_versions(
-            session.get("sleep_estimator_versions") or {}
-        )
+            item["report"]["restore_summary"] = _public_report_value(result["restore_summary"])
+        item["sleep_policy_versions"] = _public_policy_versions(session.get("sleep_policy_versions") or {})
+        item["sleep_estimator_versions"] = _public_estimator_versions(session.get("sleep_estimator_versions") or {})
     return item
 
 
@@ -383,10 +445,7 @@ class UsageSessionService:
         limit: int,
         offset: int,
     ) -> dict[str, Any]:
-        sessions = [
-            _session_item(session, include_report=False)
-            for session in result.get("sessions") or []
-        ]
+        sessions = [_session_item(session, include_report=False) for session in result.get("sessions") or []]
         total = int(result.get("total") or 0)
         return {
             "contract_version": USAGE_SESSION_CONTRACT_VERSION,

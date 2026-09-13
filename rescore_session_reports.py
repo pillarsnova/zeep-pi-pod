@@ -138,6 +138,16 @@ def _timeline_projection(connection: sqlite3.Connection) -> str:
     optional = (
         "pm2_5" if "pm2_5" in columns else "NULL AS pm2_5",
         "voc_index" if "voc_index" in columns else "NULL AS voc_index",
+        (
+            "respiratory_evidence_valid"
+            if "respiratory_evidence_valid" in columns
+            else "NULL AS respiratory_evidence_valid"
+        ),
+        (
+            "respiratory_evidence_reason"
+            if "respiratory_evidence_reason" in columns
+            else "NULL AS respiratory_evidence_reason"
+        ),
     )
     return ",".join((*required, *optional))
 
@@ -231,6 +241,14 @@ def _sensor_samples(
             "bed": canonical_bed,
             "pm2_5": row["pm2_5"],
             "voc": row["voc_index"],
+            "respiratory_evidence_valid": (
+                row["respiratory_evidence_valid"] == 1
+                if row["respiratory_evidence_valid"] is not None
+                else None
+            ),
+            "respiratory_evidence_reason": row[
+                "respiratory_evidence_reason"
+            ],
         })
     return samples, raw_counts, canonical_counts
 
@@ -319,8 +337,8 @@ def _rebuild(
     )
     session_fields = set(session.keys())
     stored_mode = (
-        old_final.get("rest_mode")
-        or (session["rest_mode"] if "rest_mode" in session_fields else None)
+        (session["rest_mode"] if "rest_mode" in session_fields else None)
+        or old_final.get("rest_mode")
         or "auto"
     )
     mode = normalise_rest_mode(requested_mode or stored_mode)
@@ -329,9 +347,20 @@ def _rebuild(
             "unresolved_rest_mode",
             "Session เดิมไม่ได้เก็บ Mode; ห้ามอนุมาน Nap/Overnight จากเวลา",
         )
-    stored_target = old_final.get("target_duration_s")
-    if stored_target is None and "target_duration_s" in session_fields:
-        stored_target = session["target_duration_s"]
+    old_report = old_final.get("session_report") or {}
+    old_quality = old_report.get("quality") or {}
+    old_duration_target = old_quality.get("duration_target") or {}
+    legacy_target = old_final.get("target_duration_s")
+    if legacy_target is None:
+        legacy_target = old_duration_target.get("seconds")
+    stored_target = (
+        session["target_duration_s"]
+        if (
+            "target_duration_s" in session_fields
+            and session["target_duration_s"] is not None
+        )
+        else legacy_target
+    )
     target_seconds = (
         requested_target_minutes * 60
         if requested_target_minutes is not None
@@ -484,6 +513,21 @@ def _rebuild(
         completed=True,
         timeline_schema_version=int(old_final.get("timeline_schema_version") or 3),
         target_duration_s=target_seconds,
+        personal_context=(
+            old_final.get("restore_context")
+            if isinstance(old_final.get("restore_context"), dict)
+            else None
+        ),
+        trend_context=(
+            old_final.get("restore_context")
+            if isinstance(old_final.get("restore_context"), dict)
+            else None
+        ),
+        health_reference=(
+            old_final.get("health_reference")
+            if isinstance(old_final.get("health_reference"), dict)
+            else None
+        ),
         sleep_score_state_counts=score_counts,
     )
     if report_only and not is_approved_sleep_result_version(
@@ -632,22 +676,28 @@ def rescore(
     connection = sqlite3.connect(data_dir / "sessions.db", timeout=30)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA busy_timeout=30000")
-    if session_ids:
-        placeholders = ",".join("?" for _ in session_ids)
-        sessions = connection.execute(
-            f"SELECT * FROM sessions WHERE end_time IS NOT NULL AND session_id IN ({placeholders}) "
-            "ORDER BY start_time", session_ids,
-        ).fetchall()
-    else:
-        sessions = connection.execute(
-            "SELECT * FROM sessions WHERE end_time IS NOT NULL ORDER BY start_time"
-        ).fetchall()
-    if session_ids and len(sessions) != len(set(session_ids)):
-        found = {row["session_id"] for row in sessions}
-        raise ValueError(f"completed Session not found: {sorted(set(session_ids) - found)}")
-
     results = []
     try:
+        # One apply request owns one SQLite transaction. If any rebuild or write
+        # fails, every earlier Session in the selected cohort is rolled back.
+        if apply:
+            connection.execute("BEGIN IMMEDIATE")
+        if session_ids:
+            placeholders = ",".join("?" for _ in session_ids)
+            sessions = connection.execute(
+                f"SELECT * FROM sessions WHERE end_time IS NOT NULL AND session_id IN ({placeholders}) "
+                "ORDER BY start_time", session_ids,
+            ).fetchall()
+        else:
+            sessions = connection.execute(
+                "SELECT * FROM sessions WHERE end_time IS NOT NULL ORDER BY start_time"
+            ).fetchall()
+        if session_ids and len(sessions) != len(set(session_ids)):
+            found = {row["session_id"] for row in sessions}
+            raise ValueError(
+                f"completed Session not found: {sorted(set(session_ids) - found)}"
+            )
+
         for session in sessions:
             try:
                 rebuilt = _rebuild(
@@ -672,7 +722,6 @@ def rescore(
                 "quality", "report", "sleep_stage_annotations_used", "annotated_rounds")})
             if not apply:
                 continue
-            connection.execute("BEGIN IMMEDIATE")
             connection.execute(
                 "UPDATE events SET value=? WHERE id=?",
                 (json.dumps(rebuilt["final_summary"], ensure_ascii=False, separators=(",", ":")),
@@ -684,9 +733,11 @@ def rescore(
                  rebuilt["audit_event_type"],
                  json.dumps(rebuilt["audit"], ensure_ascii=False, separators=(",", ":"))),
             )
+        if apply:
             connection.commit()
     except Exception:
-        connection.rollback()
+        if connection.in_transaction:
+            connection.rollback()
         raise
     finally:
         connection.close()

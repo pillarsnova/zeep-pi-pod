@@ -30,17 +30,22 @@ SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
 SLEEP_HISTORY_BACKFILL_VERSION = (
     "zeep-sleep-history-reclass-v28-complete-occupied-epochs"
 )
-SESSION_REPORT_VERSION = "zeep-session-report-v10.7-complete-occupied-epochs"
+SESSION_REPORT_VERSION = "zeep-session-report-v10.8-respiratory-wellness"
 SLEEP_QUALITY_VERSION = (
     "zeep-rest-quality-v8.6-state-evidence-coverage-split"
 )
 SLEEP_SCORE_FORMULA_VERSION = (
     "zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage"
 )
-# v10.7 guarantees five-state attribution for every occupied recording
+# v10.8 adds a claim-bounded respiratory Wellness interpretation without
+# changing Sleep State or either score. v10.7 guarantees five-state attribution
+# for every occupied recording
 # interval and separates that coverage from measured HR/RR/BCG evidence.
 # Keep every reviewed predecessor readable, but never generate a current
 # report beside stale quality during a report-only rebuild.
+PRE_RESPIRATORY_SESSION_REPORT_VERSION = (
+    "zeep-session-report-v10.7-complete-occupied-epochs"
+)
 PRE_COMPLETE_SESSION_REPORT_VERSION = (
     "zeep-session-report-v10.6-continuity-accounting"
 )
@@ -60,6 +65,7 @@ PREVIOUS_SESSION_REPORT_VERSION = "zeep-session-report-v10.3-nap-goal-duration"
 PREVIOUS_SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.3-nap-goal-duration"
 APPROVED_SLEEP_RESULT_VERSION_PAIRS = frozenset({
     (SESSION_REPORT_VERSION, SLEEP_QUALITY_VERSION),
+    (PRE_RESPIRATORY_SESSION_REPORT_VERSION, SLEEP_QUALITY_VERSION),
     (
         PRE_COMPLETE_SESSION_REPORT_VERSION,
         PRE_COMPLETE_SLEEP_QUALITY_VERSION,
@@ -78,6 +84,7 @@ RECOVERY_SCORE_FORMULA_VERSION = (
     "zeep-recovery-score-v2.1-complete-rest-25-35-30-10"
 )
 RESTORE_SUMMARY_VERSION = "zeep-restore-summary-v1.0"
+RESPIRATORY_WELLNESS_VERSION = "zeep-respiratory-wellness-v1.1"
 RESTORE_ACTION_BANDS_VERSION = "zeep-restore-action-bands-v1.0"
 RESTORE_DRIVER_POLICY_VERSION = "zeep-restore-drivers-v1.0"
 RESTORE_BASELINE_COMPARISON_VERSION = (
@@ -219,12 +226,12 @@ SLEEP_STAGE_PRESENTATION = {
     "n3": {
         "code": "N3",
         "title": "หลับลึก",
-        "meaning": "รูปแบบ BCG/HR/RR ที่สอดคล้องกับ N3; ตามสรีรวิทยาการนอน N3 เชื่อมโยงกับการฟื้นฟู แต่ ZEEP ไม่ได้วัดการซ่อมแซมโดยตรง",
+        "meaning": "ช่วงหลับลึกที่ร่างกายได้พักอย่างต่อเนื่อง",
     },
     "rem": {
         "code": "REM",
-        "title": "ระยะ REM",
-        "meaning": "รูปแบบ BCG/HR/RR ที่สอดคล้องกับ REM; ตามสรีรวิทยา REM สัมพันธ์กับความฝันและความจำ แต่ ZEEP ไม่ได้วัดความฝันหรือความจำโดยตรง",
+        "title": "ระยะ REM / หลับฝัน",
+        "meaning": "ช่วงหลับที่สมองยังทำงานมากขึ้นและมักมีความฝัน",
     },
 }
 
@@ -693,24 +700,28 @@ def resolve_rest_target(
     }
 
 # Environment is an explanatory context layer, not Sleep-Stage evidence.  A
-# value passes the ZEEP operating expectation at ``fair`` or above.  Only
-# ``poor`` and ``critical`` require correction; ``fair`` is usable but worth
-# optimising, while ``good`` and ``excellent`` should simply be maintained.
+# value passes the ZEEP operating expectation at ``fair`` or above.  Internal
+# keys stay stable for scoring and audit, while labels use calm product copy.
+# Only ``poor`` and ``critical`` need action; ``critical`` here is a Wellness
+# operating band and must not be presented as a life-safety alarm by itself.
 # Independent life-safety alarms/clamps remain authoritative and are never
 # relaxed by these wellness-mode profiles.
 ENVIRONMENT_ACCEPTABLE_MIN_LEVEL = "fair"
 ENVIRONMENT_LEVELS = {
     "critical": {
-        "rank": 0, "label": "วิกฤต", "english": "Critical", "symbol": "!",
-        "decision": "required", "description": "ต้องตรวจสาเหตุและแก้ไขทันที",
+        "rank": 0, "label": "แนะนำให้ปรับตอนนี้", "english": "Critical", "symbol": "!",
+        "decision": "required",
+        "description": "พบค่าที่ควรตรวจและปรับสภาพแวดล้อมตอนนี้",
     },
     "poor": {
-        "rank": 1, "label": "แย่", "english": "Poor", "symbol": "↓",
-        "decision": "required", "description": "ต่ำกว่าระดับที่คาดหวัง ต้องแก้ไข",
+        "rank": 1, "label": "ควรปรับ", "english": "Poor", "symbol": "↓",
+        "decision": "required",
+        "description": "มีปัจจัยที่ควรปรับเพื่อให้พักสบายขึ้น",
     },
     "fair": {
         "rank": 2, "label": "พอใช้", "english": "Fair", "symbol": "–",
-        "decision": "optimise", "description": "ผ่านขั้นต่ำ ใช้งานได้และควรติดตามแนวโน้ม",
+        "decision": "optimise",
+        "description": "ใช้งานได้ และยังปรับให้สบายขึ้นได้",
     },
     "good": {
         "rank": 3, "label": "ดี", "english": "Good", "symbol": "✓",
@@ -790,6 +801,10 @@ ENVIRONMENT_CONTEXT_CRITERIA = {
         "device_key": "sht3x_dis", "source": "SHT3x-DIS",
         "label": "อุณหภูมิ", "unit": "°C", "digits": 1, "kind": "range",
         "bands": [[18.0, 27.0], [17.0, 28.0], [16.0, 29.0], [13.0, 32.0]],
+        # Keep Safety provenance separate from the four Wellness bands.  These
+        # values match the approved default Pi-local Safety Supervisor basis.
+        "critical_below": 13.0,
+        "critical_above": 32.0,
         "action_low": "เพิ่มอุณหภูมิที่เลือกหรือลดความเย็น",
         "action_high": "ลดอุณหภูมิที่เลือกหรือเปิดแอร์",
         "control": "เครื่องปรับอากาศ",
@@ -938,7 +953,7 @@ def environment_policy_snapshot(rest_mode: Any = "sleep") -> dict[str, Any]:
         criterion["bands_text"] = " · ".join(
             f"{ENVIRONMENT_LEVELS[level]['label']} {_environment_band_text(criterion, index)}"
             for index, level in enumerate(("excellent", "good", "fair", "poor"))
-        ) + " · วิกฤตนอกช่วง"
+        ) + " · แนะนำให้ปรับตอนนี้เมื่ออยู่นอกช่วง"
         criteria.append(criterion)
     return {
         "version": ENVIRONMENT_CONTEXT_POLICY_VERSION,
@@ -1109,7 +1124,7 @@ def assess_environment_values(
     else:
         summary = dict(level)
         summary["reason"] = (
-            f"ต้องแก้ {required[0]['name']} · {required[0]['recommendation']}"
+            f"แนะนำให้ปรับ {required[0]['name']} · {required[0]['recommendation']}"
             if required else
             f"ผ่านขั้นต่ำพอใช้ · ปรับเพิ่มได้ {optimise[0]['name']}"
             if optimise else
@@ -1175,6 +1190,7 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "sleep_score_formula": SLEEP_SCORE_FORMULA_VERSION,
             "session_report": SESSION_REPORT_VERSION,
             "restore_summary": RESTORE_SUMMARY_VERSION,
+            "respiratory_wellness": RESPIRATORY_WELLNESS_VERSION,
             "restore_action_bands": RESTORE_ACTION_BANDS_VERSION,
             "restore_driver_policy": RESTORE_DRIVER_POLICY_VERSION,
             "restore_baseline_comparison": (

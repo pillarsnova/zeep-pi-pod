@@ -217,7 +217,7 @@ Raw research data ยังอยู่ใน route Admin เดิมและ�
     "version": "zeep-restore-summary-v...",
     "creates_independent_score": false,
     "source_score": {"type": "recovery_score", "value": 78},
-    "status": {"key": "rest_good", "label": "พักได้ดี"},
+    "status": {"key": "rest_good", "label": "ช่วงพักนี้เป็นไปได้ดี"},
     "session_scope": {
       "mode": "nap_recovery",
       "whole_day_readiness": false

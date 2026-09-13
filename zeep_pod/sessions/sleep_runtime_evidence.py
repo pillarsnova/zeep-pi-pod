@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sleep_system_policy import assess_environment_values
@@ -234,11 +234,11 @@ def sleep_status_event(
     """
     data_status = str(sleep_result.get("data_status") or "no_data")
     state, label = _operational_state(data_status)
-    attribution_end = datetime.fromtimestamp(epoch_s, timezone.utc)
+    attribution_end = datetime.fromtimestamp(epoch_s, UTC)
     attribution_start = attribution_end - timedelta(seconds=evidence_epoch_s)
     return {
         "session_id": session_id,
-        "timestamp": (created_at or datetime.now(timezone.utc)).isoformat(),
+        "timestamp": (created_at or datetime.now(UTC)).isoformat(),
         "type": "sleep_stage_status",
         "value": {
             "state": state,

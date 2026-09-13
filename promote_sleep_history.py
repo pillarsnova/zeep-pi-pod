@@ -12,37 +12,40 @@ from __future__ import annotations
 
 import argparse
 import atexit
-from collections import Counter
-from datetime import datetime, timezone
 import hashlib
 import json
 import math
 import os
-from pathlib import Path
 import shutil
 import sqlite3
 import tempfile
+from collections import Counter
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from audit_sleep_history_shadow import (
-    epoch, private_write_bytes, raw_packet_quality, raw_packets,
+    epoch,
+    private_write_bytes,
+    raw_packet_quality,
+    raw_packets,
 )
 from personal import BaselineStore
 from rescore_session_reports import rescore
 from sleep_history_policy import promotion_ready, quality_tier
-from sleep_stage_scoring import align_probabilities_to_emitted_stage
 from sleep_signal_features import (
     HR_SANITY_RANGE_BPM,
     RR_SANITY_RANGE_PER_MIN,
     filter_vital_values,
 )
+from sleep_stage_scoring import align_probabilities_to_emitted_stage
 from sleep_system_policy import (
     PERSONAL_BASELINE_LEARNING_START_UTC,
     SLEEP_CONFIRMATION_SECONDS,
     SLEEP_CONTEXT_RESET_GAP_SECONDS,
+    SLEEP_ESTIMATOR_VERSION,
     SLEEP_EVIDENCE_EPOCH_SECONDS,
     SLEEP_EVIDENCE_VERSION,
-    SLEEP_ESTIMATOR_VERSION,
     SLEEP_G2_ONTOLOGY_VERSION,
     SLEEP_HISTORY_BACKFILL_VERSION,
     SLEEP_SENSOR_SAMPLE_SECONDS,
@@ -50,7 +53,6 @@ from sleep_system_policy import (
     ZEEP_SLEEP_BASELINE_VERSION,
     ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
 )
-
 
 MAINTENANCE_TOOL_NAME = "promote_sleep_history.py"
 
@@ -128,6 +130,65 @@ def object_sha256(value: Any) -> str:
     return hashlib.sha256(json.dumps(
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
     ).encode("utf-8")).hexdigest()
+
+
+def rebuild_affected_baselines(
+    store: BaselineStore,
+    account_keys: list[str],
+) -> dict[str, Any]:
+    """Rebuild only selected accounts and prove other records are unchanged.
+
+    A targeted historical promotion must not turn into a global Personal
+    Baseline migration.  ``BaselineStore.update_user`` already rebuilds one
+    account from approved reports, so retain the loaded store and call it only
+    for the account keys represented by the reviewed Session allowlist.
+
+    The file is JSON and is serialised atomically by ``BaselineStore``.  Record
+    preservation is therefore verified over canonical JSON bytes rather than
+    whitespace in the container file.
+    """
+    normalized_keys = [str(value or "").strip() for value in account_keys]
+    if any(not value for value in normalized_keys):
+        raise RuntimeError("selected Session has no Personal Baseline account key")
+    affected_keys = sorted(set(normalized_keys))
+    original_keys = set(store.data)
+    unrelated_keys = original_keys - set(affected_keys)
+    unrelated_before = {
+        key: store.data[key]
+        for key in sorted(unrelated_keys)
+    }
+    unrelated_sha256_before = object_sha256(unrelated_before)
+
+    for account_key in affected_keys:
+        store.update_user(account_key)
+
+    unrelated_after = {
+        key: store.data[key]
+        for key in sorted(unrelated_keys)
+        if key in store.data
+    }
+    unexpected_new_keys = set(store.data) - original_keys - set(affected_keys)
+    unexpected_removed_keys = unrelated_keys - set(store.data)
+    unrelated_sha256_after = object_sha256(unrelated_after)
+    if (
+        unexpected_new_keys
+        or unexpected_removed_keys
+        or unrelated_sha256_after != unrelated_sha256_before
+    ):
+        raise RuntimeError(
+            "Personal Baseline rebuild changed an unrelated account record"
+        )
+
+    return {
+        "scope": "selected_session_account_keys_only",
+        "affected_account_count": len(affected_keys),
+        "rebuilt_account_count": len(affected_keys),
+        "unrelated_account_count": len(unrelated_keys),
+        "unrelated_records_preserved": True,
+        "preservation_verification": "canonical_json_sha256",
+        "unrelated_records_sha256_before": unrelated_sha256_before,
+        "unrelated_records_sha256_after": unrelated_sha256_after,
+    }
 
 
 def validate_promotion_reconciliation(
@@ -280,7 +341,9 @@ def _quality_tier(
 
 
 def iso_utc(timestamp: float) -> str:
-    return datetime.fromtimestamp(float(timestamp), timezone.utc).isoformat()
+    return datetime.fromtimestamp(
+        float(timestamp), timezone.utc,  # noqa: UP017 -- Python 3.9 support
+    ).isoformat()
 
 
 def confidence(evidence: dict[str, Any]) -> str:
@@ -697,7 +760,9 @@ def main() -> int:
     # and immutable-Raw hashes have all passed.
     connection = sqlite3.connect(staged_sessions_db, timeout=30)
     connection.execute("PRAGMA busy_timeout=30000")
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(
+        timezone.utc,  # noqa: UP017 -- Python 3.9 support
+    ).isoformat()
     try:
         connection.execute("BEGIN IMMEDIATE")
         for session_id, item, events in selected:
@@ -847,20 +912,15 @@ def main() -> int:
             "reconciliation": None,
         } for session_id in mode_unresolved_sessions)
 
-        # Rebuild learned context only from current-version reports at/after
-        # the cutover. Historical Raw Sensor/BCG files are not involved.
+        # Rebuild learned context only for accounts changed by this reviewed
+        # promotion. Historical Raw Sensor/BCG files are not involved, and an
+        # allowlisted rerun must preserve every unrelated baseline record.
         reader = _DatabaseReader(staged_sessions_db)
         store = BaselineStore(reader, staging_dir)
-        store.data = {}
-        connection = sqlite3.connect(staged_sessions_db)
-        emails = [row[0] for row in connection.execute(
-            "SELECT DISTINCT username_key FROM sessions WHERE end_time IS NOT NULL "
-            "AND start_time>=? ORDER BY username_key",
-            (PERSONAL_BASELINE_LEARNING_START_UTC,),
-        )]
-        connection.close()
-        for email in emails:
-            store.update_user(email)
+        baseline_rebuild = rebuild_affected_baselines(
+            store,
+            [item.get("email") for _session_id, item, _events in selected],
+        )
 
         check = sqlite3.connect(staged_sessions_db)
         try:
@@ -915,7 +975,8 @@ def main() -> int:
         "baselines_backup": str(baseline_backup) if baseline_backup else None,
         "report_rescore": report_result,
         "reviewed_report_parity": parity,
-        "baselines_rebuilt": len(emails),
+        "baselines_rebuilt": baseline_rebuild["rebuilt_account_count"],
+        "baseline_rebuild": baseline_rebuild,
         "sessions_integrity_check": "ok",
         "raw_timeline_sha256_after": timeline_after,
         "raw_bcg_sha256_before": actual["bcg_db"],

@@ -9,6 +9,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from zeep_pod.product_language import (
+    USER_WELLNESS_DISCLAIMER,
+    user_confidence_level,
+    user_environment_level,
+    user_report_finding_copy,
+    user_rest_mode_label,
+)
 from zeep_pod.sessions.publication_values import (
     SCALAR_TYPES,
     copy_scalars,
@@ -20,6 +27,7 @@ from zeep_pod.sessions.quality_publication import (
     public_environment_metric,
     public_safety_excursion,
 )
+from zeep_pod.sessions.respiratory_publication import public_respiratory_wellness
 
 
 def _public_sleep_summary(value: Any) -> dict[str, Any]:
@@ -62,10 +70,8 @@ def _public_sleep_summary(value: Any) -> dict[str, Any]:
     elif "cycles" in source:
         public["cycles"] = public_cycle(source["cycles"])
     if "classification_accounting" in source:
-        public["classification_accounting"] = (
-            _public_classification_accounting(
-                source["classification_accounting"]
-            )
+        public["classification_accounting"] = _public_classification_accounting(
+            source["classification_accounting"]
         )
     return public
 
@@ -171,11 +177,23 @@ def _public_environment_assessment(value: Any) -> dict[str, Any]:
         public["safety_excursions"] = [
             public_safety_excursion(item) for item in source["safety_excursions"]
         ]
+    if "overall_level" in source or "overall_label" in source:
+        public["overall_label"] = user_environment_level(
+            source.get("overall_level"),
+            source.get("overall_label"),
+        )
+    if "mode" in source or "mode_label" in source:
+        public["mode_label"] = user_rest_mode_label(source.get("mode"))
+    if "acceptable_min_level" in source or "acceptable_min_label" in source:
+        public["acceptable_min_label"] = user_environment_level(
+            source.get("acceptable_min_level")
+        )
     return public
 
 
 def _public_finding(value: Any) -> dict[str, Any]:
-    return copy_scalars(
+    source = mapping(value)
+    public = copy_scalars(
         value,
         {
             "key",
@@ -197,15 +215,30 @@ def _public_finding(value: Any) -> dict[str, Any]:
             "changes_sustained_assessment",
             "changes_score",
             "threshold",
+            "critical_below",
+            "critical_above",
+            "minimum",
+            "maximum",
             "sample_count",
             "sample_pct",
         },
     )
+    title, detail, action = user_report_finding_copy(
+        source.get("metric_key") or source.get("key"),
+        source.get("severity"),
+        source.get("decision"),
+    )
+    public.update({"title": title, "detail": detail, "action": action})
+    return public
 
 
 def _public_report_data_quality(value: Any) -> dict[str, Any]:
     source = mapping(value)
-    public = copy_scalars(source, {"level", "label", "note"})
+    public = copy_scalars(source, {"level"})
+    if "level" in source or "label" in source:
+        public["label"] = user_confidence_level(source.get("level"))
+    if "note" in source:
+        public["note"] = "ความมั่นใจของผลครั้งนี้ดูจากความครบถ้วนของข้อมูลที่ ZEEP บันทึกได้"
     if "coverage" in source:
         public["coverage"] = scalar_map(
             source["coverage"],
@@ -226,22 +259,23 @@ def _public_report_data_quality(value: Any) -> dict[str, Any]:
 
 
 def _public_guidance(value: Any) -> dict[str, Any]:
-    return copy_scalars(
-        value,
+    source = mapping(value)
+    public = copy_scalars(
+        source,
         {
-            "primary",
-            "next_session",
-            "self_check",
             "mode",
             "score_used",
             "score_released",
             "basis",
-            "medical_diagnosis",
             "available",
-            "reason",
             "score_derived_claims_suppressed",
         },
     )
+    # User-facing guidance is rebuilt from the canonical Restore Summary by
+    # UsageSessionService.  Never pass stored advice or a medical claim through
+    # this low-level projector.
+    public["medical_diagnosis"] = False
+    return public
 
 
 def public_report_field(key: str, value: Any) -> Any:
@@ -255,11 +289,15 @@ def public_report_field(key: str, value: Any) -> Any:
         "estimator_version",
         "headline",
         "insight",
-        "reason",
-        "disclaimer",
     }
     if key in scalar_fields:
         return value if isinstance(value, SCALAR_TYPES) else None
+    if key == "disclaimer":
+        return USER_WELLNESS_DISCLAIMER
+    if key == "reason":
+        # The read service derives a current, mode-aware reason from the
+        # released result contract. Historical prose is Admin/Audit data.
+        return None
     if key == "sleep":
         return _public_sleep_summary(value)
     if key == "stages":
@@ -280,4 +318,6 @@ def public_report_field(key: str, value: Any) -> Any:
         return _public_guidance(value)
     if key == "data_quality":
         return _public_report_data_quality(value)
+    if key == "respiratory_wellness":
+        return public_respiratory_wellness(value)
     return None

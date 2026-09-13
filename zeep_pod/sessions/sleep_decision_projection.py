@@ -15,12 +15,16 @@ from sleep_system_policy import (
 from .sleep_event_data import decision_interval, event_value, finite_number
 from .sleep_occupancy import (
     CONFIRMED_RETURN_PROVENANCE as _CONFIRMED_RETURN_PROVENANCE,
+)
+from .sleep_occupancy import (
     DEFAULT_HEART_RATE_RANGE,
     DEFAULT_RESPIRATION_RATE_RANGE,
     SLEEP_STATES,
-    confirmed_bed_exit_evidence as _confirmed_bed_exit_evidence,
     sample_confirms_fresh_on_bed_return,
     sample_confirms_off_bed,
+)
+from .sleep_occupancy import (
+    confirmed_bed_exit_evidence as _confirmed_bed_exit_evidence,
 )
 
 INITIAL_CONFIRMATION_MAX_SECONDS = 120.0

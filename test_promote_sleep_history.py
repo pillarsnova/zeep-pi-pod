@@ -4,10 +4,66 @@ import unittest
 from promote_sleep_history import (
     _event_values,
     cohort_minimum_duration_seconds,
+    rebuild_affected_baselines,
     reviewed_mode_group,
     session_is_in_reviewed_cohort,
     validate_promotion_reconciliation,
 )
+
+
+class _BaselineStoreStub:
+    def __init__(self, data, *, mutate_unrelated=False):
+        self.data = data
+        self.mutate_unrelated = mutate_unrelated
+        self.updated = []
+
+    def update_user(self, account_key):
+        self.updated.append(account_key)
+        self.data[account_key] = {"rebuilt": account_key}
+        if self.mutate_unrelated:
+            self.data["unrelated@example.com"] = {"stable": False}
+
+
+class PromoteSleepHistoryBaselineScopeTests(unittest.TestCase):
+    def test_rebuilds_selected_accounts_and_preserves_unrelated_records(self):
+        unrelated = {"stable": True, "nested": {"nights": ["old"]}}
+        store = _BaselineStoreStub({
+            "selected@example.com": {"old": True},
+            "unrelated@example.com": unrelated,
+        })
+
+        result = rebuild_affected_baselines(
+            store,
+            ["selected@example.com", "selected@example.com"],
+        )
+
+        self.assertEqual(store.updated, ["selected@example.com"])
+        self.assertEqual(store.data["selected@example.com"], {
+            "rebuilt": "selected@example.com",
+        })
+        self.assertEqual(store.data["unrelated@example.com"], unrelated)
+        self.assertEqual(result["affected_account_count"], 1)
+        self.assertEqual(result["unrelated_account_count"], 1)
+        self.assertTrue(result["unrelated_records_preserved"])
+        self.assertEqual(
+            result["unrelated_records_sha256_before"],
+            result["unrelated_records_sha256_after"],
+        )
+
+    def test_fails_closed_if_rebuild_mutates_an_unrelated_record(self):
+        store = _BaselineStoreStub({
+            "selected@example.com": {"old": True},
+            "unrelated@example.com": {"stable": True},
+        }, mutate_unrelated=True)
+
+        with self.assertRaisesRegex(RuntimeError, "unrelated account"):
+            rebuild_affected_baselines(store, ["selected@example.com"])
+
+    def test_rejects_blank_selected_account_key(self):
+        store = _BaselineStoreStub({"unrelated@example.com": {"stable": True}})
+
+        with self.assertRaisesRegex(RuntimeError, "no Personal Baseline"):
+            rebuild_affected_baselines(store, [""])
 
 
 class PromoteSleepHistoryCohortTests(unittest.TestCase):

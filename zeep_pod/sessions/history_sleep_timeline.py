@@ -9,7 +9,7 @@ provide those streams after applying annotations.
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sleep_system_policy import (
@@ -20,7 +20,6 @@ from sleep_system_policy import (
 from .cadence import sample_interval_seconds
 from .report_projection import weighted_sleep_state_counts
 
-
 SLEEP_STATES = ("wake", "n1", "n2", "n3", "rem")
 
 
@@ -30,8 +29,8 @@ def _parse_datetime(value: Any) -> datetime | None:
     except (TypeError, ValueError, OverflowError):
         return None
     if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _decision_metadata(point: dict[str, Any], key: str) -> Any:

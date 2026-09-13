@@ -7,11 +7,11 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
-from sleep_system_policy import ZEEP_SLEEP_STATES
 from sleep_signal_features import (
     terminal_occupancy_timeline,
     terminal_wake_transition,
 )
+from sleep_system_policy import ZEEP_SLEEP_STATES
 
 from .cadence import sample_interval_seconds
 from .history_sleep_timeline import (
@@ -20,7 +20,6 @@ from .history_sleep_timeline import (
     history_sleep_timeline,
 )
 from .report_projection import project_report_samples
-
 
 AnnotationApplier = Callable[..., tuple[dict[str, Any], Any]]
 
@@ -35,6 +34,7 @@ def history_samples_from_rows(
     """Translate persisted Timeline rows to report Sensor names."""
     samples: list[dict[str, Any]] = []
     for row, bed_label in zip(rows, bed_labels, strict=False):
+        row_keys = set(row.keys())
         sample = {
             "t": datetime.fromisoformat(str(row["timestamp"])).timestamp(),
             "temp": row["temperature"], "hum": row["humidity"],
@@ -42,6 +42,17 @@ def history_samples_from_rows(
             "voc": row["voc_index"], "lux": row["lux"],
             "dba": row["sound"], "hr": row["heart_rate"],
             "rr": row["respiration_rate"], "bed": bed_label,
+            "respiratory_evidence_valid": (
+                row["respiratory_evidence_valid"] == 1
+                if "respiratory_evidence_valid" in row_keys
+                and row["respiratory_evidence_valid"] is not None
+                else None
+            ),
+            "respiratory_evidence_reason": (
+                row["respiratory_evidence_reason"]
+                if "respiratory_evidence_reason" in row_keys
+                else None
+            ),
             "sample_interval_s": sample_interval_s,
         }
         if include_raw_bed_status:
@@ -58,6 +69,31 @@ def latest_final_summary(
         if event["type"] == "final_summary":
             return _json_event_value(event)
     return {}
+
+
+def canonical_history_rest_metadata(
+    session: Mapping[str, Any],
+    final_summary: Mapping[str, Any],
+) -> tuple[Any, Any]:
+    """Resolve History Mode/target without letting a stale report win.
+
+    The normalized columns on ``sessions`` are the canonical correction
+    surface.  Older rows may not have either value, so their final summary is
+    retained only as a compatibility fallback.
+    """
+    session_mode = session.get("rest_mode")
+    rest_mode = (
+        session_mode
+        if session_mode is not None and str(session_mode).strip()
+        else final_summary.get("rest_mode") or "auto"
+    )
+    session_target = session.get("target_duration_s")
+    target_duration_s = (
+        session_target
+        if session_target is not None
+        else final_summary.get("target_duration_s")
+    )
+    return rest_mode, target_duration_s
 
 
 def parse_history_sleep_events(

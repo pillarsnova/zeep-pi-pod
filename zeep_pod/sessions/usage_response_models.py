@@ -34,6 +34,7 @@ from zeep_pod.sessions.report_response_models import (
     PublicSleepSummary,
     PublicStageSummary,
 )
+from zeep_pod.sessions.respiratory_response_models import RespiratoryWellness
 from zeep_pod.sessions.restore_response_models import (
     RestoreSummary,
     ScoreMode,
@@ -203,6 +204,7 @@ class UsageVersions(ContractModel):
     score_formula: str | None = Field(...)
     score_quality_model: str | None = Field(...)
     restore_summary: str
+    product_language: str
 
 
 class ResultProvenance(ContractModel):
@@ -282,6 +284,7 @@ class PublicSessionReport(ContractModel):
     findings: list[PublicFinding] | None = None
     post_session_guidance: PublicPostSessionGuidance | None = None
     restore_summary: RestoreSummary | None = None
+    respiratory_wellness: RespiratoryWellness | None = None
     data_quality: PublicReportDataQuality | None = None
     disclaimer: str | None = None
 

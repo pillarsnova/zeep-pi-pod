@@ -28,8 +28,8 @@ class HistoryReportProjectionTests(unittest.TestCase):
             "end_time": "1970-01-01T00:02:00+00:00",
             "duration": 120.0,
             "end_reason": "logout",
-            "rest_mode": "sleep",
-            "target_duration_s": None,
+            "rest_mode": "nap_recovery",
+            "target_duration_s": 1800,
         }
         timeline = [
             {
@@ -85,7 +85,10 @@ class HistoryReportProjectionTests(unittest.TestCase):
             "sample_interval_s": 10.0,
             "sensor_sample_interval_s": 10.0,
             "timeline_schema_version": 4,
+            # The normalized Session columns were corrected after this stale
+            # summary was written and must remain authoritative on reads.
             "rest_mode": "sleep",
+            "target_duration_s": 5400,
             # These deliberately stale aggregates must not leak into the
             # display-only current report.
             "sleep_state_counts": {"wake": 1},
@@ -146,6 +149,10 @@ class HistoryReportProjectionTests(unittest.TestCase):
             )
 
         report = detail["session_report"]
+        self.assertEqual(detail["rest_mode"], "nap_recovery")
+        self.assertEqual(detail["target_duration_s"], 1800)
+        self.assertEqual(report["rest_mode"]["group"], "nap_recovery")
+        self.assertEqual(report["rest_mode"]["target"]["seconds"], 1800)
         stages = {item["state"]: item for item in report["stages"]}
         self.assertTrue(report["display_recomputed"])
         self.assertEqual(stages["wake"]["duration_s"], 0.0)

@@ -27,10 +27,12 @@ from sleep_system_policy import (
     PERSONAL_BASELINE_LEARNING_START_LOCAL_DATE,
     PERSONAL_BASELINE_LEARNING_START_TIMEZONE,
     PERSONAL_BASELINE_LEARNING_START_UTC,
+    PRE_RESPIRATORY_SESSION_REPORT_VERSION,
     PRE_CONTINUITY_SESSION_REPORT_VERSION,
     PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
     PRE_RESTORE_SESSION_REPORT_VERSION,
     RECOVERY_SCORE_FORMULA_VERSION,
+    RESTORE_BASELINE_MIN_COMPARISON_SESSIONS,
     RESTORE_TREND_MAX_SESSIONS,
     SESSION_REPORT_VERSION,
     SLEEP_QUALITY_VERSION,
@@ -390,6 +392,10 @@ class BaselineStore:
             report.get("version") == SESSION_REPORT_VERSION
             and quality.get("version") == SLEEP_QUALITY_VERSION
         )
+        compatible_current_quality_versions = (
+            report.get("version") == PRE_RESPIRATORY_SESSION_REPORT_VERSION
+            and quality.get("version") == SLEEP_QUALITY_VERSION
+        )
         compatible_previous_versions = (
             report.get("version") in {
                 PRE_CONTINUITY_SESSION_REPORT_VERSION,
@@ -409,6 +415,7 @@ class BaselineStore:
             and quality.get("available") is True
             and (
                 current_versions
+                or compatible_current_quality_versions
                 or compatible_previous_versions
                 or approved_untouched_sleep
             )
@@ -431,6 +438,29 @@ class BaselineStore:
             detected_sleep_s = max(0.0, float(detected_sleep_s or 0.0))
         except (TypeError, ValueError, OverflowError):
             detected_sleep_s = 0.0
+        respiratory = report.get("respiratory_wellness") or {}
+        respiratory_observations = (
+            respiratory.get("observations") or {}
+            if isinstance(respiratory, dict)
+            else {}
+        )
+        respiratory_confidence = (
+            respiratory.get("confidence") or {}
+            if isinstance(respiratory, dict)
+            else {}
+        )
+        respiratory_status = (
+            respiratory.get("status") or {}
+            if isinstance(respiratory, dict)
+            else {}
+        )
+        respiratory_available = bool(
+            isinstance(respiratory, dict)
+            and respiratory.get("available") is True
+            and respiratory_confidence.get("level") == "high"
+            and respiratory_confidence.get("direct_measurements_only") is True
+            and respiratory_status.get("key") in {"supportive", "observe"}
+        )
         return {
             "session_id": session_id,
             "rest_mode": resolved,
@@ -451,6 +481,16 @@ class BaselineStore:
             "co2_median": median_field("co2"),
             "lux_median": median_field("lux"),
             "sound_median": median_field("sound"),
+            "respiratory_rr_median": (
+                respiratory_observations.get("median_rr_brpm")
+                if respiratory_available
+                else None
+            ),
+            "respiratory_regularity_factor": (
+                respiratory_observations.get("regularity_factor")
+                if respiratory_available
+                else None
+            ),
         }
 
     def update_user(self, username_key: str) -> dict:
@@ -555,6 +595,17 @@ class BaselineStore:
                 ]
                 if scores else None
             )
+            respiratory_rr_values = values("respiratory_rr_median")
+            respiratory_regularity_values = values(
+                "respiratory_regularity_factor"
+            )
+            respiratory_range = (
+                [
+                    round(_percentile(respiratory_rr_values, 0.25), 1),
+                    round(_percentile(respiratory_rr_values, 0.75), 1),
+                ]
+                if respiratory_rr_values else None
+            )
             behaviour_by_mode[group] = {
                 "status": (
                     "active"
@@ -604,6 +655,37 @@ class BaselineStore:
                         "temp_median", "humidity_median", "co2_median",
                         "lux_median", "sound_median",
                     )
+                },
+                "respiratory_reference": {
+                    "status": (
+                        "active"
+                        if len(respiratory_rr_values)
+                        >= RESTORE_BASELINE_MIN_COMPARISON_SESSIONS
+                        else "learning"
+                    ),
+                    "sessions_used": len(respiratory_rr_values),
+                    "minimum_sessions": (
+                        RESTORE_BASELINE_MIN_COMPARISON_SESSIONS
+                    ),
+                    "median_rr_brpm": (
+                        round(statistics.median(respiratory_rr_values), 1)
+                        if respiratory_rr_values else None
+                    ),
+                    "typical_range_rr_brpm": respiratory_range,
+                    "regularity_median": (
+                        round(
+                            statistics.median(
+                                respiratory_regularity_values
+                            ),
+                            3,
+                        )
+                        if respiratory_regularity_values else None
+                    ),
+                    "method": "median_and_interquartile_range",
+                    "same_mode_only": True,
+                    "prior_completed_sessions_only": True,
+                    "direct_stage_influence": False,
+                    "affects_score": False,
                 },
                 "direct_stage_influence": False,
                 "role": "expectation_report_and_confidence_context_only",
@@ -666,6 +748,21 @@ class BaselineStore:
                 "typical_duration_minutes": None,
                 "typical_start_local_hour": None,
                 "typical_environment": {},
+                "respiratory_reference": {
+                    "status": "no_data",
+                    "sessions_used": 0,
+                    "minimum_sessions": (
+                        RESTORE_BASELINE_MIN_COMPARISON_SESSIONS
+                    ),
+                    "median_rr_brpm": None,
+                    "typical_range_rr_brpm": None,
+                    "regularity_median": None,
+                    "method": "median_and_interquartile_range",
+                    "same_mode_only": True,
+                    "prior_completed_sessions_only": True,
+                    "direct_stage_influence": False,
+                    "affects_score": False,
+                },
                 "scores": [],
                 "score_median": None,
                 "score_typical_range": None,

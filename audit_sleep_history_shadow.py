@@ -290,6 +290,76 @@ def mode_and_score(value: dict[str, Any]) -> tuple[str, str, Optional[int]]:
     return resolved, group, score
 
 
+def resolve_replay_mode_context(
+    session: sqlite3.Row | dict[str, Any],
+    summary: dict[str, Any],
+) -> dict[str, Any]:
+    """Resolve scoring intent without guessing from elapsed time.
+
+    The canonical Session columns are authoritative when populated. Legacy
+    Final Summary values are used only when those columns were never recorded,
+    and the fallback is exposed as provenance in the replay artifact. An
+    invalid explicit canonical value stays unresolved instead of silently
+    borrowing a different legacy value.
+    """
+    fields = set(session.keys())
+    legacy_resolved, legacy_group, old_score = mode_and_score(summary)
+    canonical_mode = (
+        session["rest_mode"] if "rest_mode" in fields else None
+    )
+    canonical_text = str(canonical_mode or "").strip().lower()
+    canonical_is_missing = canonical_text in {
+        "", "auto", "unknown_legacy", "unresolved",
+    }
+
+    if not canonical_is_missing:
+        resolved_mode = canonical_text
+        group = rest_mode_group(canonical_text) or "unresolved"
+        mode_source = "sessions.rest_mode"
+    else:
+        resolved_mode = legacy_resolved
+        group = legacy_group
+        mode_source = (
+            "legacy_final_summary"
+            if legacy_group in {"sleep", "nap_recovery"}
+            else "unresolved"
+        )
+
+    report = summary.get("session_report") or {}
+    quality = report.get("quality") or {}
+    duration_target = quality.get("duration_target") or {}
+    legacy_target = summary.get("target_duration_s")
+    if legacy_target is None:
+        legacy_target = duration_target.get("seconds")
+
+    canonical_target_present = (
+        "target_duration_s" in fields
+        and session["target_duration_s"] is not None
+    )
+    if canonical_target_present:
+        target_duration_s = session["target_duration_s"]
+        target_source = "sessions.target_duration_s"
+    else:
+        target_duration_s = legacy_target
+        target_source = (
+            "legacy_final_summary_duration_target"
+            if target_duration_s is not None
+            else "unavailable"
+        )
+
+    return {
+        "resolved": resolved_mode,
+        "group": group,
+        "scoring_mode": (
+            group if group in {"sleep", "nap_recovery"} else "auto"
+        ),
+        "old_score": old_score,
+        "mode_source": mode_source,
+        "target_duration_s": target_duration_s,
+        "target_duration_source": target_source,
+    }
+
+
 def percentile(values: Iterable[float], quantile: float) -> Optional[float]:
     cleaned = sorted(float(value) for value in values if math.isfinite(float(value)))
     if not cleaned:
@@ -2029,9 +2099,12 @@ def main() -> int:
         ) for item in timeline)
         paired_coverage = paired / len(timeline) if timeline else 0.0
         summary = latest_summary(sessions, row["session_id"])
-        resolved_mode, group, old_score = mode_and_score(summary)
-        scoring_mode = group if group in {"sleep", "nap_recovery"} else "auto"
-        target_duration_s = summary.get("target_duration_s")
+        mode_context = resolve_replay_mode_context(row, summary)
+        resolved_mode = str(mode_context["resolved"])
+        group = str(mode_context["group"])
+        old_score = mode_context["old_score"]
+        scoring_mode = str(mode_context["scoring_mode"])
+        target_duration_s = mode_context["target_duration_s"]
         mode_counts[group] += 1
         email_counts[row["username_key"]] += 1
         packets = raw_packets(bcg, row["session_id"])
@@ -2233,7 +2306,14 @@ def main() -> int:
                 "start_time": row["start_time"],
                 "end_time": row["end_time"],
                 "duration": row["duration"],
-                "previous_mode": {"resolved": resolved_mode, "group": group},
+                "previous_mode": {
+                    "resolved": resolved_mode,
+                    "group": group,
+                    "source": mode_context["mode_source"],
+                },
+                "target_duration_source": mode_context[
+                    "target_duration_source"
+                ],
                 "mode": shadow_mode,
                 "quality_tier": tier,
                 "quality": quality,
@@ -2314,7 +2394,15 @@ def main() -> int:
             "email": row["username_key"],
             "start_time": row["start_time"],
             "duration_minutes": round(float(row["duration"]) / 60.0, 1),
-            "previous_mode": {"resolved": resolved_mode, "group": group},
+            "previous_mode": {
+                "resolved": resolved_mode,
+                "group": group,
+                "source": mode_context["mode_source"],
+            },
+            "target_duration_s": target_duration_s,
+            "target_duration_source": mode_context[
+                "target_duration_source"
+            ],
             "shadow_mode": (
                 dict((details.get(row["session_id"]) or {}).get("mode") or {})
                 if replay else None

@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS timeline (
     heart_rate REAL,
     respiration_rate REAL,
     bed_status TEXT,
+    respiratory_evidence_valid INTEGER,
+    respiratory_evidence_reason TEXT,
     FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
 );
 
@@ -55,4 +57,4 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user_start ON sessions(username_key, sta
 CREATE INDEX IF NOT EXISTS idx_timeline_session_timestamp ON timeline(session_id, timestamp);
 CREATE INDEX IF NOT EXISTS idx_events_session_timestamp ON events(session_id, timestamp);
 
-INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '5');
+INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '6');

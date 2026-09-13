@@ -5,7 +5,7 @@
 > **Status:** Wellness release candidate · guarded derived-result replay/promotion · G2 paired-PSG validation open
 > **Updated:** 2026-09-13
 > **Code manifest:** [`pi5/sleep_system_policy.py`](../pi5/sleep_system_policy.py)  
-> **Related:** [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.0.md) · [ZEEP Restore Summary v1](zeep-restore-summary-v1.md) · [Historical Promotion Policy v2](sleep-history-promotion-policy-v2.md) · [v1.23 Wellness Replay Review](sleep-estimator-v123-wellness-longitudinal-report-2026-09-05.md) · [AI Sleep-State](ai-sleep-state-and-assistant.md)
+> **Related:** [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.0.md) · [ZEEP Restore Summary v1](zeep-restore-summary-v1.md) · [Respiratory Wellness v1](zeep-respiratory-wellness-v1.md) · [Historical Promotion Policy v2](sleep-history-promotion-policy-v2.md) · [v1.23 Wellness Replay Review](sleep-estimator-v123-wellness-longitudinal-report-2026-09-05.md) · [AI Sleep-State](ai-sleep-state-and-assistant.md)
 
 ## TL;DR
 
@@ -19,11 +19,12 @@
 - เส้นทางหลักเริ่ม `Wake → N1 → N2`; ระบบเปิด `N1 → REM` แบบ SOREMP-like ที่ต้องผ่าน REM physiology gate, เปิด `N3 → REM` และเปิด `REM → Wake` เมื่อหลักฐานของ target ชนะ 2 epoch/60 วินาที
 - `Overnight Recovery` ใช้ `Sleep Score`; `Nap & Refresh` ใช้ `Recovery Score` ไม่ว่าจะหลับ พักสายตา หรือทำสมาธิ โดย Recovery Score ใช้ HR/RR ที่จับคู่กันอย่างน้อย 6 จุด ส่วน coverage เป็น QA/confidence แยกและไม่ให้หรือหักคะแนน
 - `ZEEP Restore Summary` อธิบายคะแนนหลักด้วยสถานะ ตัวขับคะแนน Personal Baseline และคำแนะนำหนึ่งข้อ โดยไม่สร้างคะแนนที่สามและไม่อ้าง Whole-day Readiness
+- `Respiratory Wellness` แสดงค่ากลาง HR/RR จากหน้าต่างหลักฐาน BCG คู่เดียวกัน พร้อมสรุปและคำแนะนำสั้นสำหรับผู้ใช้; รายละเอียดความสม่ำเสมอ, Personal Baseline, ช่วงอายุ และ Coverage อยู่ในมุมมองผู้ดูแล โดยไม่เปลี่ยน State/Score และไม่อ้างว่าเป็นการวัดสมรรถภาพปอด, SpO₂ หรือภาวะหยุดหายใจ
 - N3 ต่ำกว่า 3% ไม่ได้คะแนน N3, 3–10% ได้ตามสัดส่วน, ตั้งแต่ 10% ได้เต็มและ **ไม่หักเมื่อเกิน 20%**
 - Raw/Timeline เดิมไม่ถูกแก้โดยการคำนวณรายงานใหม่; Historical Replay และ Rescore มี version/audit แยก
 - ช่วงจบ Session แยก `Wake` ของมนุษย์ออกจาก `ไม่มีผู้ใช้งานบนเตียง → ออกจาก ZEEP → จบ Session`; สองสถานะหลังเป็น Occupancy และไม่ปนเปอร์เซ็นต์ Sleep Stage
 - รายงานต้องปิดบัญชีเวลาทุก epoch: Recording ที่ยังไม่ยืนยัน `OFF BED` ต้องอยู่ใน W/N1/N2/N3/REM และเข้าคะแนนทั้งหมด หลักฐานที่ก้ำกึ่ง ขาด ไม่สด หรือขาดช่วงจาก restart จะคง State ก่อนหน้าแบบ low-confidence โดยไม่แต่ง Evidence probability และไม่ใช้ epoch นั้นเรียนรู้ Personal Baseline; `WAIT` ใช้เฉพาะ `waiting_bed` ก่อน Recording, `NO DATA` เป็น evidence-quality/legacy label ไม่ใช่ State bucket และ confirmed `OFF BED` เป็น operational exception เพียงชนิดเดียวที่ไม่เข้า Stage%, Score หรือ Baseline
-- สิ่งแวดล้อมใช้ 5 ระดับ `วิกฤต / แย่ / พอใช้ / ดี / ยอดเยี่ยม`; **พอใช้ขึ้นไปผ่านขั้นต่ำ**, วิกฤต/แย่ต้องแก้ไข, ดี/ยอดเยี่ยมให้รักษาค่า และแสง/เสียงเปลี่ยนกรอบตาม Rest Mode
+- สิ่งแวดล้อมคง key ภายใน 5 ระดับ `critical / poor / fair / good / excellent` แต่หน้าผู้ใช้แสดง `แนะนำให้ปรับตอนนี้ / ควรปรับ / พอใช้ / ดี / ยอดเยี่ยม`; **พอใช้ขึ้นไปผ่านขั้นต่ำ** และแสง/เสียงเปลี่ยนกรอบตาม Rest Mode
 - ข้อมูลก่อน `2026-09-01 00:00 Asia/Bangkok` ถูกตัดออกจาก Product history, Baseline, Replay และ Score รุ่นใหม่ แต่ Raw/Audit ยังเก็บไว้โดยไม่แก้ไข; หลัง cutover ระบบประเมินหลักฐานเป็นราย Epoch, ใช้ Tier เป็น Admin QA เท่านั้น และเขียน Derived result ได้เฉพาะรายการที่ไม่มี integrity blocker หลัง Product Owner ตรวจ allowlist โดย replay manifest และ immutable-Raw hash guard ต้องผ่าน
 
 ## 1. เวอร์ชันที่ใช้งานปัจจุบัน
@@ -40,8 +41,9 @@
 | Sleep / Recovery quality | `zeep-rest-quality-v8.6-state-evidence-coverage-split` |
 | Sleep Score formula | `zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage` |
 | Recovery Score formula | `zeep-recovery-score-v2.1-complete-rest-25-35-30-10` |
-| Session report | `zeep-session-report-v10.7-complete-occupied-epochs` |
+| Session report | `zeep-session-report-v10.8-respiratory-wellness` |
 | Restore Summary | `zeep-restore-summary-v1.0` |
+| Respiratory Wellness | `zeep-respiratory-wellness-v1.1` |
 | Restore action bands | `zeep-restore-action-bands-v1.0` |
 | Restore driver policy | `zeep-restore-drivers-v1.0` |
 | Restore Personal Baseline | `zeep-restore-personal-baseline-v1.0` |
@@ -299,7 +301,7 @@ restart ไม่ถูกใช้สอน Baseline แม้ epoch นั้�
 
 ### 2.6 Environment Context — ระดับที่ต้องแก้ไขและระดับที่คาดหวัง
 
-หลักตัดสินใช้ค่าที่ต่ำที่สุดของเกณฑ์ที่มีข้อมูล เพื่อไม่ให้ค่าที่ดีบดบังค่าที่แย่
+หลักตัดสินใช้ค่าที่ต่ำที่สุดของเกณฑ์ที่มีข้อมูล เพื่อไม่ให้ค่าที่ดีบดบังค่าที่ควรดูแล
 โดยอุณหภูมิ ความชื้น แสง CO₂ PM2.5 และ VOC เป็นเกณฑ์หลัก ส่วนเสียงเป็น
 เกณฑ์เสริมที่รับจาก `sound_dba` ของ ESP32 โดยตรง:
 
@@ -310,15 +312,15 @@ restart ไม่ถูกใช้สอน Baseline แม้ epoch นั้�
 
 | ระดับ | การตัดสิน | สิ่งที่ระบบแสดง |
 |---|---|---|
-| วิกฤต | ต้องแก้ทันที | แจ้งเหตุและระบุอุปกรณ์/แหล่งที่ต้องตรวจ |
-| แย่ | ต้องแก้ | แสดงในการ์ด “ต้องแก้ไข” พร้อมค่าปัจจุบันและขั้นต่ำพอใช้ |
+| แนะนำให้ปรับตอนนี้ (`critical`) | แนะนำสิ่งที่ปรับได้ | ไม่เปิดเสียงฉุกเฉินจาก Wellness band เพียงอย่างเดียว |
+| ควรปรับ (`poor`) | ปรับเพื่อความสบาย | แสดงค่าปัจจุบันและข้อเสนอที่ทำต่อได้ |
 | พอใช้ | **ผ่านขั้นต่ำ** | ใช้งานได้ ไม่ขึ้นเป็นความผิดพลาด แต่แสดงคำแนะนำเพื่อยกระดับ |
 | ดี | ผ่าน | รักษาการตั้งค่าปัจจุบัน |
 | ยอดเยี่ยม | เป้าหมายสูงสุด | รักษาค่าและ freshness; ไม่ใช่เงื่อนไขบังคับให้เริ่ม Session |
 
 กรอบร่วมทุก Mode:
 
-| Sensor | ยอดเยี่ยม | ดี | พอใช้ (ขั้นต่ำที่คาดหวัง) | แย่ | วิกฤต |
+| Sensor | ยอดเยี่ยม | ดี | พอใช้ (ขั้นต่ำที่คาดหวัง) | ควรปรับ | แนะนำให้ปรับตอนนี้ |
 |---|---:|---:|---:|---:|---:|
 | อุณหภูมิ | 18–27°C | 17–28°C | 16–29°C | 13–32°C | นอกช่วง |
 | ความชื้น | 40–60%RH | 35–65%RH | 30–70%RH | 20–80%RH | นอกช่วง |
@@ -329,7 +331,7 @@ restart ไม่ถูกใช้สอน Baseline แม้ epoch นั้�
 แสงและเสียงเป็นประสบการณ์ตาม Mode จึงห้ามใช้กรอบ “ห้องนอนมืดและเงียบ” กับช่วง
 เตรียมพร้อมที่ตั้งใจใช้แสงสว่างหรือเสียง cue:
 
-| Mode | Lux: ยอดเยี่ยม / ดี / พอใช้ / แย่ | Sound dBA: ยอดเยี่ยม / ดี / พอใช้ / แย่ |
+| Mode | Lux: ยอดเยี่ยม / ดี / พอใช้ / ควรปรับ | Sound dBA: ยอดเยี่ยม / ดี / พอใช้ / ควรปรับ |
 |---|---|---|
 | Overnight Recovery | ≤5 / ≤10 / ≤30 / ≤100 | <40 / ≤45 / ≤50 / ≤60 |
 | Nap & Refresh | ≤10 / ≤30 / ≤100 / ≤300 | <40 / ≤45 / ≤50 / ≤60 |
@@ -342,6 +344,11 @@ transient โดยไม่เรียกทั้ง Session ว่า Critic
 ไม่ใช่ค่าปกติ กฎ aggregation นี้ไม่เปลี่ยน Safety Basis: CO₂ critical,
 temperature hard range, smoke/CO alarm และ Local Safety Supervisor ยังทำงานตาม
 threshold ที่อนุมัติแยกต่างหาก
+
+คำว่า `critical` ในย่อหน้านี้เป็น stable key สำหรับ Logic/API ส่วนหน้าผู้ใช้แสดง
+`แนะนำให้ปรับตอนนี้` ตาม
+[Product Language Guideline](zeep-product-language-guideline-v1.md) และเสียงเตือน
+ฉุกเฉินผูกกับเหตุ Critical ของ Local Safety Supervisor เท่านั้น
 
 ## 3. Transition policy ล่าสุด
 

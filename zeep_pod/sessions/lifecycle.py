@@ -51,6 +51,7 @@ CHECKPOINT_SLEEP_CONTEXT_FIELDS = frozenset(
         "off_bed_latched",
     }
 )
+CHECKPOINT_SAFETY_CONTEXT_FIELDS = frozenset({"armed", "latched"})
 RESTART_SAFE_PHASES = frozenset({"waiting_bed", "recording"})
 REQUIRED_IDENTITY_FIELDS = frozenset(
     {"session_id", "username", "username_key", "identity_subject", "pod_id"}
@@ -97,6 +98,9 @@ class SessionCheckpointStore:
         )
         if sleep_context is not None:
             payload["sleep_context"] = sleep_context
+        safety_context = self._safe_safety_context(active.get("safety_context"))
+        if safety_context is not None:
+            payload["safety_context"] = safety_context
         return payload
 
     def save(self, active: Mapping[str, Any]) -> dict[str, Any]:
@@ -164,6 +168,34 @@ class SessionCheckpointStore:
                 sleep_context,
                 session_id=record.get("session_id"),
             )
+        SessionCheckpointStore._safe_safety_context(payload.get("safety_context"))
+
+    @staticmethod
+    def _safe_safety_context(context: Any) -> dict[str, bool] | None:
+        """Return only the two Safety booleans needed across a restart.
+
+        This is an optional extension to checkpoint schema version 1 so older
+        checkpoints remain loadable.  Operational detail such as last_action
+        is deliberately excluded because it can contain device responses and
+        is not needed to preserve the fail-safe latch.
+        """
+        if context is None:
+            return None
+        if not isinstance(context, Mapping):
+            raise ValueError("checkpoint safety context is not an object")
+
+        safe: dict[str, bool] = {}
+        for key in CHECKPOINT_SAFETY_CONTEXT_FIELDS:
+            if key not in context:
+                continue
+            value = context[key]
+            if not isinstance(value, bool):
+                raise ValueError(f"checkpoint safety {key} is not boolean")
+            # Checkpoints may only preserve a safer condition.  A transient
+            # Admin disarm must never survive a process restart.
+            if value:
+                safe[key] = True
+        return safe or None
 
     @staticmethod
     def _safe_sleep_context(

@@ -114,14 +114,14 @@ def canonical_subjective_outcome(source: Any) -> dict[str, Any]:
     if not valid:
         return {
             "status": "not_measured",
-            "label": "ความรู้สึกหลังพัก · ไม่ได้วัด",
+            "label": "ยังไม่ได้บันทึกความรู้สึกหลังพัก",
             "freshness_delta": None,
             "activity_readiness": None,
             "sensor_inferred": False,
         }
     return {
         "status": "measured",
-        "label": "มีแบบประเมินก่อน–หลัง Session",
+        "label": "บันทึกความรู้สึกก่อน–หลังการพักแล้ว",
         "freshness_delta": freshness,
         "activity_readiness": readiness,
         "source": provenance,

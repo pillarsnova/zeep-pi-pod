@@ -1,6 +1,6 @@
 """Strict nested response contracts for public Session reports.
 
-Historical reports evolved between v10.3 and v10.7, so every field is
+Historical reports evolved between v10.3 and v10.8, so every field is
 optional.  When a section is present, however, undocumented nested keys are
 rejected.  This keeps legacy summaries readable without turning their JSON
 objects into an unbounded public API surface.
@@ -178,6 +178,8 @@ class PublicEnvironmentMetric(ContractModel):
     critical_sample_pct: float | None = Field(default=None, ge=0, le=100)
     transient_critical_observed: bool | None = None
     safety_threshold: float | None = None
+    critical_below: float | None = None
+    critical_above: float | None = None
     safety_excursion_observed: bool | None = None
     safety_excursion_sample_count: int | None = Field(default=None, ge=0)
     safety_excursion_sample_pct: float | None = Field(
@@ -192,6 +194,9 @@ class PublicSafetyExcursion(ContractModel):
     key: str | None = None
     label: str | None = None
     threshold: float | None = None
+    critical_below: float | None = None
+    critical_above: float | None = None
+    minimum: float | None = None
     maximum: float | None = None
     sample_count: int | None = Field(default=None, ge=0)
     sample_pct: float | None = Field(default=None, ge=0, le=100)
@@ -253,6 +258,10 @@ class PublicFinding(ContractModel):
     changes_sustained_assessment: bool | None = None
     changes_score: bool | None = None
     threshold: float | None = None
+    critical_below: float | None = None
+    critical_above: float | None = None
+    minimum: float | None = None
+    maximum: float | None = None
     sample_count: int | None = Field(default=None, ge=0)
     sample_pct: float | None = Field(default=None, ge=0, le=100)
 
@@ -265,7 +274,7 @@ class PublicPostSessionGuidance(ContractModel):
     score_used: float | None = Field(default=None, ge=0, le=100)
     score_released: bool | None = None
     basis: str | None = None
-    medical_diagnosis: bool | None = None
+    medical_diagnosis: Literal[False] | None = None
     available: bool | None = None
     reason: str | None = None
     score_derived_claims_suppressed: bool | None = None

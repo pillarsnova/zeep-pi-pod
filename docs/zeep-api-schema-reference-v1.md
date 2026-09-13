@@ -267,7 +267,7 @@ Admin จะมีหลายรายการ
 | Field | Type | Nullable | ค่า/กฎ |
 |---|---|---|---|
 | `key` | `enum<string>` | ไม่ได้ | `sleep`, `nap_recovery`, `unknown` |
-| `label` | `string` | ไม่ได้ | `Overnight Recovery`, `Nap & Refresh` หรือ `ยังไม่ทราบรูปแบบการพัก` |
+| `label` | `string` | ไม่ได้ | `Overnight Recovery`, `Nap & Refresh` หรือ `กำลังระบุรูปแบบการพัก` |
 | `requested` | `enum<string>` | ไม่ได้ | mode canonical ที่ request/session ระบุ: `sleep`, `nap_recovery` หรือ `unknown`; ต้องตรงกับ `key` |
 | `resolved` | `string` | nullable | mode ที่ quality policy ยืนยัน; อาจไม่มี |
 | `sleep_required` | `boolean` | ไม่ได้ | Overnight=true; Nap=false |
@@ -345,6 +345,7 @@ Client ต้องรองรับ subkey ที่อนุมัติแ�
 | `score_formula` | `string` | nullable |
 | `score_quality_model` | `string` | nullable |
 | `restore_summary` | `string` | ไม่ได้ |
+| `product_language` | `string` | ไม่ได้ |
 
 `result_provenance`:
 
@@ -573,27 +574,54 @@ Environment ไม่ได้กำหนด Sleep State และ event เป
 | `intended_use` | `string` | nullable |
 | `timeline_schema_version` | `integer\|string` | nullable | รองรับทั้งเลข schema และ legacy string |
 | `estimator_version` | `string` | nullable |
-| `headline` | `string` | nullable; unavailable จะถูกแทนด้วย “ยังสรุปคะแนนไม่ได้” |
+| `headline` | `string` | nullable; unavailable จะถูกแทนด้วย “กำลังเตรียมผลสรุป” |
 | `insight` | `string` | nullable |
 | `quality` | `PublicQuality` | nullable/อาจถูกละเว้น; ใช้ nested positive allowlist |
 | `rest_mode` | `Mode` | canonical report เป็น non-null; legacy report ที่ไม่ผ่าน release policy อาจไม่มี |
 | `sleep` | `object` | nullable/อาจถูกละเว้นตาม mode/data |
 | `stages` | `array<PublicStageSummary>` | nullable/อาจถูกละเว้น |
 | `environment` | `array<PublicEnvironmentMetric>` | nullable/อาจถูกละเว้น |
-| `environment_assessment` | `object` | nullable/อาจถูกละเว้น; unavailable ถูกระงับ |
-| `findings` | `array<PublicFinding>` | nullable/อาจถูกละเว้น; เมื่อ score unavailable จะเป็น `[]` |
+| `environment_assessment` | `object` | nullable/อาจถูกละเว้น; เมื่อคะแนน unavailable จะคงเฉพาะ Safety provenance หากมี |
+| `findings` | `array<PublicFinding>` | nullable/อาจถูกละเว้น; เมื่อคะแนน unavailable จะคงเฉพาะ `decision=safety_review` |
 | `post_session_guidance` | `object` | nullable; unavailable มี `available=false` |
 | `restore_summary` | `RestoreSummary` | nullable/อาจถูกละเว้นใน legacy report |
 | `data_quality` | `PublicReportDataQuality` | nullable/อาจถูกละเว้น |
 | `disclaimer` | `string` | nullable |
 
-เมื่อ `score.available=false` ระบบจะ override รายงานเพื่อความปลอดภัย:
-`headline="ยังสรุปคะแนนไม่ได้"`, `findings=[]`, ละเว้น
-`environment_assessment`, และ `post_session_guidance.available=false` พร้อม
-`score_derived_claims_suppressed=true` ห้าม client แสดงข้อความเชิงบวกจาก
-report เก่าหรือ field ภายใน
+เมื่อ `score.available=false` ระบบจะ override ข้อความและคำแนะนำที่อิงคะแนน:
+`headline="กำลังเตรียมผลสรุป"` และ
+`post_session_guidance.score_derived_claims_suppressed=true` ห้าม client แสดง
+ข้อความเชิงบวกจาก report เก่าหรือ field ภายใน อย่างไรก็ตาม Safety evidence
+เป็นคนละชั้นกับคะแนน จึงยังคง `safety_review`, directional threshold,
+ค่าต่ำสุด/สูงสุด และจำนวนรอบที่พบไว้เสมอ
 
-### 9.1 Continuity accounting และเวลาที่เข้าคะแนน
+### 9.1 Environment และ Safety provenance
+
+`PublicEnvironmentMetric` ใช้ stable `key`, `status_key`, `decision` และค่ารวม
+ของ Session โดย field ด้าน Safety ที่อาจปรากฏมีดังนี้:
+
+| Field | Type | Nullable | ความหมาย |
+|---|---|---|---|
+| `safety_threshold` | `number` | nullable | เกณฑ์ด้านเดียว เช่น CO₂; รุ่น legacy นับเหตุเมื่อค่า `>=` เกณฑ์ |
+| `critical_below` | `number` | nullable | ขอบล่างแบบ strict; เป็นเหตุเมื่อค่าจริง `< critical_below` |
+| `critical_above` | `number` | nullable | ขอบบนแบบ strict; เป็นเหตุเมื่อค่าจริง `> critical_above` |
+| `minimum` | `number` | nullable | ค่าต่ำสุดที่บันทึกใน Session |
+| `maximum` | `number` | nullable | ค่าสูงสุดที่บันทึกใน Session |
+| `safety_excursion_observed` | `boolean` | nullable | พบค่าแตะ/ข้ามเกณฑ์ Safety อย่างน้อยหนึ่งรอบ |
+| `safety_excursion_sample_count` | `integer` | nullable | จำนวนรอบที่เข้าเงื่อนไข |
+| `safety_excursion_sample_pct` | `number` | nullable | สัดส่วนรอบที่เข้าเงื่อนไข 0–100 |
+
+`environment_assessment.safety_excursions[]` ใช้ DTO
+`PublicSafetyExcursion` ซึ่งประกอบด้วย `key`, `label`, `threshold`,
+`critical_below`, `critical_above`, `minimum`, `maximum`, `sample_count` และ
+`sample_pct` ขอบล่าง/บนเป็น directional และ nullable; client ห้ามเดาขอบที่ไม่มี
+
+`PublicFinding` ที่ `decision="safety_review"` คง `key`, `metric_key`,
+`severity`, `decision`, ขอบ/ค่าที่พบ และจำนวนรอบเดียวกัน ข้อความ
+`title/detail/action` เป็น Product copy ที่ Server สร้างใหม่ ไม่ใช่ข้อความดิบ
+จาก report รุ่นเก่า
+
+### 9.2 Continuity accounting และเวลาที่เข้าคะแนน
 
 Detail endpoint เผยแพร่บัญชีเวลาที่ผ่าน positive allowlist ที่
 `report.sleep.classification_accounting` เพื่อให้ App อธิบายได้ว่าทุกวินาที
@@ -731,10 +759,10 @@ restart carry ต้องยังแสดง State ก่อนหน้า�
       },
       "status": {
         "key": "sleep_restore_good",
-        "label": "ฟื้นตัวจากการนอนดี",
+        "label": "ภาพรวมการนอนคืนนี้ดี",
         "min_score": 70,
         "max_score": 84,
-        "meaning": "ข้อมูลของ Session นี้สนับสนุนการฟื้นตัวจากการนอนในระดับดี",
+        "meaning": "เวลา ความต่อเนื่อง และรูปแบบการนอนที่ประเมินได้อยู่ในระดับดี",
         "version": "zeep-restore-action-bands-v1.0"
       },
       "session_scope": {
@@ -768,7 +796,7 @@ restart carry ต้องยังแสดง State ก่อนหน้า�
         "comparison": {
           "available": true,
           "key": "within_typical",
-          "label": "อยู่ในช่วงปกติส่วนบุคคล",
+          "label": "ใกล้รูปแบบที่พบเป็นประจำของคุณ",
           "current_score": 76,
           "baseline_median": 75,
           "delta_points": 1,
@@ -800,7 +828,7 @@ restart carry ต้องยังแสดง State ก่อนหน้า�
       },
       "confidence": {
         "level": "high",
-        "label": "หลักฐานสูง",
+        "label": "ข้อมูลชัดเจน",
         "session_coverage_pct": 96.2,
         "paired_hr_rr_coverage_pct": 94,
         "changes_source_score": false,
@@ -808,7 +836,7 @@ restart carry ต้องยังแสดง State ก่อนหน้า�
       },
       "subjective_outcome": {
         "status": "not_measured",
-        "label": "ความรู้สึกหลังพัก · ไม่ได้วัด",
+        "label": "ยังไม่ได้บันทึกความรู้สึกหลังพัก",
         "freshness_delta": null,
         "activity_readiness": null,
         "sensor_inferred": false
@@ -850,7 +878,8 @@ restart carry ต้องยังแสดง State ก่อนหน้า�
       "session_report": "report-v-test",
       "score_formula": "zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage",
       "score_quality_model": "zeep-sleep-quality-v1",
-      "restore_summary": "zeep-restore-summary-v1.0"
+      "restore_summary": "zeep-restore-summary-v1.0",
+      "product_language": "zeep-product-language-v1.0"
     },
     "result_provenance": {
       "source": "persisted_final_summary",
@@ -914,7 +943,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       "title": "Recovery Score",
       "value": 74,
       "available": true,
-      "level": "พักได้ดี",
+      "level": "ช่วงพักนี้เป็นไปได้ดี",
       "formula_version": "zeep-recovery-score-v2.1-complete-rest-25-35-30-10",
       "quality_model_version": "zeep-recovery-quality-v2",
       "validation_status": "preliminary_wellness_estimate",
@@ -937,10 +966,10 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       },
       "status": {
         "key": "rest_good",
-        "label": "พักได้ดี",
+        "label": "ช่วงพักนี้เป็นไปได้ดี",
         "min_score": 70,
         "max_score": 84,
-        "meaning": "ช่วงพักสนับสนุนการฟื้นตัวได้ดี",
+        "meaning": "ช่วงพักนี้สอดคล้องกับเป้าหมายในระดับดี",
         "version": "zeep-restore-action-bands-v1.0"
       },
       "session_scope": {
@@ -1004,7 +1033,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       },
       "confidence": {
         "level": "medium",
-        "label": "หลักฐานปานกลาง",
+        "label": "ข้อมูลเพียงพอ",
         "session_coverage_pct": 91.5,
         "paired_hr_rr_coverage_pct": 88.2,
         "changes_source_score": false,
@@ -1012,7 +1041,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       },
       "subjective_outcome": {
         "status": "measured",
-        "label": "มีแบบประเมินก่อน–หลัง Session",
+        "label": "บันทึกความรู้สึกก่อน–หลังการพักแล้ว",
         "freshness_delta": 2,
         "activity_readiness": 8,
         "source": "session_questionnaire",
@@ -1037,10 +1066,11 @@ Nap ไม่บังคับให้หลับและไม่ควร�
     },
     "data_quality": {
       "level": "medium",
-      "label": "หลักฐานปานกลาง",
+      "label": "ข้อมูลเพียงพอ",
       "coverage": {"recording_pct": 91.5, "bcg_pct": 88.2},
       "confidence": {
         "level": "medium",
+        "label": "ข้อมูลเพียงพอ",
         "session_coverage_pct": 91.5,
         "paired_hr_rr_coverage_pct": 88.2
       },
@@ -1055,7 +1085,8 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       "session_report": "report-v-test",
       "score_formula": "zeep-recovery-score-v2.1-complete-rest-25-35-30-10",
       "score_quality_model": "zeep-recovery-quality-v2",
-      "restore_summary": "zeep-restore-summary-v1.0"
+      "restore_summary": "zeep-restore-summary-v1.0",
+      "product_language": "zeep-product-language-v1.0"
     },
     "result_provenance": {
       "source": "persisted_final_summary",
@@ -1097,7 +1128,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
     "sample_count": 60,
     "mode": {
       "key": "unknown",
-      "label": "ยังไม่ทราบรูปแบบการพัก",
+      "label": "กำลังระบุรูปแบบการพัก",
       "requested": "unknown",
       "resolved": null,
       "sleep_required": false,
@@ -1116,7 +1147,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       "quality_model_version": null,
       "validation_status": "mode_unresolved",
       "clinical_validated": false,
-      "reason": "ยังไม่ทราบรูปแบบการพัก จึงไม่อนุมานชนิดคะแนน",
+      "reason": "กำลังระบุรูปแบบการพัก จึงยังไม่เลือกชนิดคะแนน",
       "review_required": true
     },
     "restore_summary": {
@@ -1134,16 +1165,16 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       },
       "status": {
         "key": "unavailable",
-        "label": "ยังสรุปไม่ได้",
+        "label": "กำลังเตรียมผลสรุป",
         "min_score": null,
         "max_score": null,
-        "meaning": "ยังไม่ทราบรูปแบบการพัก จึงไม่อนุมานชนิดคะแนน",
+        "meaning": "เลือกรูปแบบการพักเพื่อให้ ZEEP แสดงผลได้เหมาะสม",
         "version": "zeep-restore-action-bands-v1.0"
       },
       "session_scope": {
         "mode": "unknown",
-        "label": "ยังไม่ทราบรูปแบบการพัก",
-        "question": "ต้องระบุรูปแบบการพักก่อนจึงสรุปผลได้",
+        "label": "ผลการพักครั้งนี้",
+        "question": "เลือกรูปแบบการพักเพื่อดูผลสรุปที่เหมาะสม",
         "whole_day_readiness": false,
         "clinical_readiness": false,
         "updates_during_day": false
@@ -1184,7 +1215,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       },
       "confidence": {
         "level": "unknown",
-        "label": "ยังไม่ระบุความครบของหลักฐาน",
+        "label": "กำลังเตรียมผลสรุป",
         "session_coverage_pct": null,
         "paired_hr_rr_coverage_pct": null,
         "changes_source_score": false,
@@ -1192,7 +1223,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       },
       "subjective_outcome": {
         "status": "not_measured",
-        "label": "ความรู้สึกหลังพัก · ไม่ได้วัด",
+        "label": "ยังไม่ได้บันทึกความรู้สึกหลังพัก",
         "freshness_delta": null,
         "activity_readiness": null,
         "sensor_inferred": false
@@ -1230,7 +1261,8 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       "session_report": null,
       "score_formula": null,
       "score_quality_model": null,
-      "restore_summary": "zeep-restore-summary-v1.0"
+      "restore_summary": "zeep-restore-summary-v1.0",
+      "product_language": "zeep-product-language-v1.0"
     },
     "result_provenance": {
       "source": "persisted_final_summary",

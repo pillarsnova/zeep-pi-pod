@@ -6,6 +6,7 @@ from sleep_session_report import (
     build_sleep_quality,
     normalise_rest_mode,
 )
+from zeep_pod.sessions.report_publication import public_report_field
 
 
 class SleepSessionReportTests(unittest.TestCase):
@@ -1101,6 +1102,72 @@ class SleepSessionReportTests(unittest.TestCase):
         self.assertEqual(assessment["safety_excursion_count"], 1)
         self.assertFalse(assessment["safety_excursions_change_score"])
         self.assertIn("Timeline", report["post_session_guidance"]["next_session"])
+
+    def test_temperature_safety_excursions_cover_both_approved_boundaries(self):
+        base = {
+            "bed": "On bed", "hr": 62.0, "rr": 14.0,
+            "temp": 24.0, "hum": 50.0, "co2": 750.0,
+            "lux": 1.0, "dba": 38.0, "pm2_5": 8.0,
+            "voc": 100.0, "sleep": "wake",
+        }
+        for excursion in (12.0, 33.0):
+            with self.subTest(temperature=excursion):
+                samples = [dict(base) for _ in range(239)]
+                samples.append({**base, "temp": excursion})
+                quality = build_sleep_quality(
+                    20 * 60,
+                    {},
+                    {"wake": 240},
+                    rest_mode="nap_recovery",
+                    sensor_samples=samples,
+                    target_duration_s=30 * 60,
+                )
+                report = build_session_report(
+                    20 * 60,
+                    samples,
+                    {},
+                    {"wake": 240},
+                    quality,
+                    rest_mode="nap_recovery",
+                    target_duration_s=30 * 60,
+                )
+
+                metric = next(
+                    item
+                    for item in report["environment"]
+                    if item["key"] == "temperature"
+                )
+                finding = next(
+                    item
+                    for item in report["findings"]
+                    if item["key"] == "temperature_safety_excursion"
+                )
+                public_findings = public_report_field(
+                    "findings",
+                    report["findings"],
+                )
+                public_finding = next(
+                    item
+                    for item in public_findings
+                    if item["key"] == "temperature_safety_excursion"
+                )
+
+                self.assertTrue(metric["safety_excursion_observed"])
+                self.assertEqual(metric["critical_below"], 13.0)
+                self.assertEqual(metric["critical_above"], 32.0)
+                self.assertEqual(finding["decision"], "safety_review")
+                self.assertIn("อยู่นอกช่วง 13–32", finding["detail"])
+                self.assertTrue(
+                    report["environment_assessment"]["safety_review_required"]
+                )
+                self.assertTrue(
+                    quality["environment_support"]["safety_review_required"]
+                )
+                self.assertEqual(
+                    public_finding["title"],
+                    "อุณหภูมิ · ควรให้ทีมตรวจสอบ",
+                )
+                self.assertIn("เกณฑ์ความปลอดภัย", public_finding["detail"])
 
     def test_two_mode_protocol_windows_are_reported(self):
         samples = [{

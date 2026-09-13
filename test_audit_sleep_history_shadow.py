@@ -14,6 +14,7 @@ from audit_sleep_history_shadow import (
     project_replay_decisions_to_report_rows,
     replay_session,
     report_state_rows_with_annotations,
+    resolve_replay_mode_context,
     select_session_rows,
 )
 from sleep_session_report import build_session_report, build_sleep_quality
@@ -734,6 +735,87 @@ class ShadowPathParityTests(unittest.TestCase):
         self.assertTrue(accounting["display_stage_total_reconciles"])
         self.assertTrue(accounting["score_stage_total_reconciles"])
         self.assertTrue(accounting["arithmetic_invariant"]["holds"])
+
+
+class ReplayModeContextTests(unittest.TestCase):
+    @staticmethod
+    def legacy_summary(*, mode="sleep", group="sleep", target=25_200):
+        return {
+            "target_duration_s": target,
+            "session_report": {
+                "rest_mode": {"resolved": mode, "group": group},
+                "quality": {"score": 81},
+            },
+        }
+
+    def test_canonical_mode_and_target_override_conflicting_legacy_summary(self):
+        context = resolve_replay_mode_context(
+            {"rest_mode": "nap_recovery", "target_duration_s": 1_800},
+            self.legacy_summary(),
+        )
+
+        self.assertEqual(context["resolved"], "nap_recovery")
+        self.assertEqual(context["group"], "nap_recovery")
+        self.assertEqual(context["scoring_mode"], "nap_recovery")
+        self.assertEqual(context["mode_source"], "sessions.rest_mode")
+        self.assertEqual(context["target_duration_s"], 1_800)
+        self.assertEqual(
+            context["target_duration_source"],
+            "sessions.target_duration_s",
+        )
+        self.assertEqual(context["old_score"], 81)
+
+    def test_missing_canonical_values_use_auditable_legacy_fallback(self):
+        context = resolve_replay_mode_context(
+            {"rest_mode": None, "target_duration_s": None},
+            self.legacy_summary(
+                mode="short_nap", group="nap_recovery", target=5_400,
+            ),
+        )
+
+        self.assertEqual(context["resolved"], "short_nap")
+        self.assertEqual(context["group"], "nap_recovery")
+        self.assertEqual(context["mode_source"], "legacy_final_summary")
+        self.assertEqual(context["target_duration_s"], 5_400)
+        self.assertEqual(
+            context["target_duration_source"],
+            "legacy_final_summary_duration_target",
+        )
+
+    def test_legacy_nested_duration_target_is_not_replaced_by_a_guess(self):
+        summary = self.legacy_summary(
+            mode="short_nap", group="nap_recovery", target=None,
+        )
+        summary["session_report"]["quality"]["duration_target"] = {
+            "seconds": 5_400,
+        }
+
+        context = resolve_replay_mode_context(
+            {"rest_mode": None, "target_duration_s": None},
+            summary,
+        )
+
+        self.assertEqual(context["target_duration_s"], 5_400)
+        self.assertEqual(
+            context["target_duration_source"],
+            "legacy_final_summary_duration_target",
+        )
+
+    def test_invalid_explicit_mode_stays_unresolved_instead_of_falling_back(self):
+        context = resolve_replay_mode_context(
+            {"rest_mode": "not-a-mode", "target_duration_s": 0},
+            self.legacy_summary(),
+        )
+
+        self.assertEqual(context["resolved"], "not-a-mode")
+        self.assertEqual(context["group"], "unresolved")
+        self.assertEqual(context["scoring_mode"], "auto")
+        self.assertEqual(context["mode_source"], "sessions.rest_mode")
+        self.assertEqual(context["target_duration_s"], 0)
+        self.assertEqual(
+            context["target_duration_source"],
+            "sessions.target_duration_s",
+        )
 
 
 class TargetedSessionSelectionTests(unittest.TestCase):

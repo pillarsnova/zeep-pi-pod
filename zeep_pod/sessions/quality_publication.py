@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from zeep_pod.product_language import (
+    USER_WELLNESS_DISCLAIMER,
+    user_confidence_level,
+    user_environment_level,
+    user_score_component_label,
+)
 from zeep_pod.sessions.publication_values import (
     COMPONENT_KEYS,
     ENVIRONMENT_LEVEL_KEYS,
@@ -105,6 +111,8 @@ def public_environment_metric(value: Any) -> dict[str, Any]:
             "critical_sample_pct",
             "transient_critical_observed",
             "safety_threshold",
+            "critical_below",
+            "critical_above",
             "safety_excursion_observed",
             "safety_excursion_sample_count",
             "safety_excursion_sample_pct",
@@ -114,13 +122,28 @@ def public_environment_metric(value: Any) -> dict[str, Any]:
     for key in ("level_distribution_pct", "level_counts"):
         if key in source:
             public[key] = scalar_map(source[key], ENVIRONMENT_LEVEL_KEYS)
+    if "status_key" in source or "status" in source:
+        public["status"] = user_environment_level(
+            source.get("status_key"),
+            source.get("status"),
+        )
     return public
 
 
 def public_safety_excursion(value: Any) -> dict[str, Any]:
     return copy_scalars(
         value,
-        {"key", "label", "threshold", "maximum", "sample_count", "sample_pct"},
+        {
+            "key",
+            "label",
+            "threshold",
+            "critical_below",
+            "critical_above",
+            "minimum",
+            "maximum",
+            "sample_count",
+            "sample_pct",
+        },
     )
 
 
@@ -165,6 +188,11 @@ def _public_environment_support(value: Any) -> dict[str, Any]:
         public["safety_excursions"] = [
             public_safety_excursion(item) for item in source["safety_excursions"]
         ]
+    if "overall_level" in source or "overall_label" in source:
+        public["overall_label"] = user_environment_level(
+            source.get("overall_level"),
+            source.get("overall_label"),
+        )
     return public
 
 
@@ -236,7 +264,6 @@ def _public_scalar_maps(source: dict[str, Any]) -> dict[str, Any]:
         "stage_pct_of_sleep": STAGE_KEYS,
         "component_points": COMPONENT_KEYS,
         "component_max_points": COMPONENT_KEYS,
-        "component_labels": COMPONENT_KEYS,
         "data_coverage": {
             "ratio",
             "pct",
@@ -287,6 +314,17 @@ def _public_scalar_maps(source: dict[str, Any]) -> dict[str, Any]:
     for key, fields in specifications.items():
         if key in source:
             public[key] = scalar_map(source[key], fields)
+    if "component_labels" in source:
+        labels = mapping(source["component_labels"])
+        public["component_labels"] = {
+            key: user_score_component_label(key)
+            for key in COMPONENT_KEYS
+            if key in labels
+        }
+    confidence = mapping(public.get("score_confidence"))
+    if confidence:
+        confidence["label"] = user_confidence_level(confidence.get("level"))
+        public["score_confidence"] = confidence
     return public
 
 
@@ -326,6 +364,8 @@ def public_quality_payload(value: Any) -> dict[str, Any]:
         },
     )
     public.update(_public_scalar_maps(source))
+    if "disclaimer" in source:
+        public["disclaimer"] = USER_WELLNESS_DISCLAIMER
     if "component_order" in source:
         public["component_order"] = [
             item

@@ -1,12 +1,14 @@
 import json
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from unittest.mock import patch
 
 from pydantic import ValidationError
 
+import rescore_session_reports
 from api_models import AuthLoginCommand
 from rescore_session_reports import rescore
 from sleep_session_report import build_sleep_quality
@@ -345,6 +347,144 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
             ).fetchone()[0])
             connection.close()
             self.assertEqual(final["night_summary"]["sleep_quality"], original)
+
+    def test_canonical_session_intent_overrides_stale_final_summary(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            data_dir = Path(temporary)
+            self._database(
+                data_dir,
+                duration_s=20 * 60,
+                target_duration_s=30 * 60,
+            )
+            connection = sqlite3.connect(data_dir / "sessions.db")
+            final_id, final_value = connection.execute(
+                "SELECT id,value FROM events WHERE type='final_summary'"
+            ).fetchone()
+            stale_final = json.loads(final_value)
+            stale_final["rest_mode"] = "sleep"
+            stale_final["target_duration_s"] = 90 * 60
+            connection.execute(
+                "UPDATE events SET value=? WHERE id=?",
+                (json.dumps(stale_final), final_id),
+            )
+            connection.commit()
+            connection.close()
+
+            result = rescore(
+                data_dir,
+                ["nap-1"],
+                requested_mode=None,
+                apply=True,
+            )
+
+            item = result["sessions"][0]
+            self.assertEqual(item["rest_mode"]["group"], "nap_recovery")
+            self.assertEqual(
+                item["quality"]["rest_mode"]["target"]["seconds"],
+                30 * 60,
+            )
+            connection = sqlite3.connect(data_dir / "sessions.db")
+            persisted = json.loads(connection.execute(
+                "SELECT value FROM events WHERE type='final_summary'"
+            ).fetchone()[0])
+            connection.close()
+            self.assertEqual(persisted["rest_mode"], "nap_recovery")
+            self.assertEqual(persisted["target_duration_s"], 30 * 60)
+
+    def test_nested_legacy_target_is_reused_without_duration_inference(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            data_dir = Path(temporary)
+            self._database(data_dir, duration_s=20 * 60)
+            connection = sqlite3.connect(data_dir / "sessions.db")
+            final_id, final_value = connection.execute(
+                "SELECT id,value FROM events WHERE type='final_summary'"
+            ).fetchone()
+            final = json.loads(final_value)
+            final["target_duration_s"] = None
+            final["session_report"]["quality"]["duration_target"] = {
+                "seconds": 30 * 60,
+            }
+            connection.execute(
+                "UPDATE events SET value=? WHERE id=?",
+                (json.dumps(final), final_id),
+            )
+            connection.commit()
+            connection.close()
+
+            result = rescore(
+                data_dir,
+                ["nap-1"],
+                requested_mode=None,
+                apply=False,
+            )
+
+            item = result["sessions"][0]
+            self.assertEqual(item["status"], "rescored")
+            self.assertEqual(
+                item["quality"]["rest_mode"]["target"]["seconds"],
+                30 * 60,
+            )
+
+    def test_apply_rolls_back_every_session_when_later_rebuild_fails(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            data_dir = Path(temporary)
+            self._database(
+                data_dir,
+                duration_s=20 * 60,
+                target_duration_s=30 * 60,
+            )
+            connection = sqlite3.connect(data_dir / "sessions.db")
+            first_final = connection.execute(
+                "SELECT value FROM events WHERE session_id='nap-1' "
+                "AND type='final_summary'"
+            ).fetchone()[0]
+            connection.execute(
+                "INSERT INTO sessions "
+                "SELECT 'nap-2',user,username_key,datetime(start_time, '+1 day'),"
+                "datetime(end_time, '+1 day'),duration,gender,rest_mode,"
+                "target_duration_s FROM sessions WHERE session_id='nap-1'"
+            )
+            connection.commit()
+            connection.close()
+
+            original_rebuild = rescore_session_reports._rebuild
+            rebuilt_sessions = []
+
+            def fail_second(connection, session, *args, **kwargs):
+                rebuilt_sessions.append(session["session_id"])
+                if session["session_id"] == "nap-2":
+                    raise RuntimeError("forced second Session failure")
+                return original_rebuild(connection, session, *args, **kwargs)
+
+            with patch.object(
+                rescore_session_reports,
+                "_rebuild",
+                side_effect=fail_second,
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "forced second Session failure",
+                ):
+                    rescore(
+                        data_dir,
+                        ["nap-1", "nap-2"],
+                        requested_mode=None,
+                        apply=True,
+                    )
+
+            self.assertEqual(rebuilt_sessions, ["nap-1", "nap-2"])
+            connection = sqlite3.connect(data_dir / "sessions.db")
+            after_final = connection.execute(
+                "SELECT value FROM events WHERE session_id='nap-1' "
+                "AND type='final_summary'"
+            ).fetchone()[0]
+            audit_count = connection.execute(
+                "SELECT COUNT(*) FROM events "
+                "WHERE type='session_report_rescored'"
+            ).fetchone()[0]
+            connection.close()
+            self.assertEqual(after_final, first_final)
+            self.assertEqual(audit_count, 0)
 
     def test_hard_short_session_withholds_score_even_without_target(self):
         with tempfile.TemporaryDirectory() as temporary:

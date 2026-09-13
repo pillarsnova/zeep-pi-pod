@@ -31,7 +31,7 @@
 | Personal baseline | `personal.py` | Adaptive baseline รายบุคคลแบบ versioned |
 | Final report | `sleep_session_report.py` | Mode-aware Sleep/Rest score และรายงานหลังจบ Session |
 | Storage | `database.py`, `bcg_storage.py`, `backup.py` | SQLite writer, raw BCG และ Daily backup |
-| UI source | `static/index.template.html`, `static/partials/control/*` | App shell และการ์ดควบคุมที่แก้ไขได้ |
+| UI source | `static/index.template.html`, `static/partials/control/*`, `static/partials/app/*` | App shell, Control cards, Base CSS และ ordered JavaScript fragments |
 | UI bundle | `ui_composer.py`, `static/index.html` | ประกอบและตรวจ runtime HTML โดยไม่ fetch partial ตอนใช้งาน |
 | User History availability | `zeep_pod/sessions/history.py` | นับ Session จาก SQLite ที่จบแล้วและมี Timeline ให้ตรงกับรายการที่เปิดดูได้ |
 | Wake lock-in QA | `audit_wake_lock_in.py`, `zeep_pod/sessions/wake_lock_audit.py` | Shadow audit แบบ read-only; ไม่แก้ State, Score หรือ Raw data |
@@ -99,9 +99,10 @@ Dashboard, Session และ Safety ต้องอ่านค่าจาก *
 
 ### Control UI
 
-แก้ source ที่ `static/index.template.html` และ
-`static/partials/control/*.html` แล้วรัน `python ui_composer.py build` ห้ามแก้เฉพาะ
-`static/index.html` เพราะ runtime bundle จะไม่ตรงกับ source
+แก้ source ที่ `static/index.template.html`, `static/partials/control/*.html` หรือ
+`static/partials/app/*` แล้วรัน `python ui_composer.py build` ห้ามแก้เฉพาะ
+`static/index.html` เพราะ runtime bundle จะไม่ตรงกับ source ลำดับ JavaScript ใน
+`ui_composer.SCRIPT_PARTIALS` และลำดับ CSS cascade เป็น runtime contract
 
 ## 5. Definition of done
 

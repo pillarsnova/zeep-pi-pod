@@ -876,7 +876,15 @@ def main() -> int:
                 mode_unresolved_sessions.append(session_id)
                 continue
             one_result = rescore(
-                staging_dir, [session_id], requested_mode=reviewed_mode, apply=True,
+                staging_dir,
+                [session_id],
+                requested_mode=reviewed_mode,
+                apply=True,
+                # The signed replay artifact already records the explicit
+                # Mode/target review. Persist an unavailable result for an
+                # out-of-protocol Recovery Session instead of retaining its
+                # stale legacy score. This does not make the score releasable.
+                allow_reviewed_protocol_withhold=True,
             )
             report_sessions.extend(one_result.get("sessions") or [])
         report_result = {

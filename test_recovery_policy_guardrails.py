@@ -532,6 +532,54 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
             connection.close()
             self.assertEqual(final["night_summary"]["sleep_quality"], original)
 
+    def test_reviewed_promotion_persists_unavailable_out_of_protocol_result(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            data_dir = Path(temporary)
+            original, _, _ = self._database(
+                data_dir,
+                duration_s=46 * 60,
+                target_duration_s=30 * 60,
+            )
+
+            result = rescore(
+                data_dir,
+                ["nap-1"],
+                requested_mode="nap_recovery",
+                apply=True,
+                allow_reviewed_protocol_withhold=True,
+            )
+
+            item = result["sessions"][0]
+            self.assertEqual(item["status"], "rescored")
+            self.assertIsNone(item["new_score"])
+            self.assertFalse(item["quality"]["score_releasable"])
+            self.assertEqual(
+                item["quality"]["rest_mode"]["protocol_status"]["status"],
+                "out_of_protocol",
+            )
+            self.assertTrue(
+                item["report"]["sleep"]["classification_accounting"][
+                    "arithmetic_invariant"
+                ]["holds"]
+            )
+            connection = sqlite3.connect(data_dir / "sessions.db")
+            final = json.loads(connection.execute(
+                "SELECT value FROM events WHERE type='final_summary'"
+            ).fetchone()[0])
+            audit_count = connection.execute(
+                "SELECT COUNT(*) FROM events "
+                "WHERE type='session_report_rescored'"
+            ).fetchone()[0]
+            connection.close()
+            self.assertNotEqual(
+                final["night_summary"]["sleep_quality"],
+                original,
+            )
+            self.assertIsNone(
+                final["night_summary"]["sleep_quality"]["score"]
+            )
+            self.assertEqual(audit_count, 1)
+
     def test_report_only_refreshes_environment_and_preserves_quality(self):
         with tempfile.TemporaryDirectory() as temporary:
             data_dir = Path(temporary)

@@ -286,6 +286,7 @@ def _rebuild(
     requested_target_minutes: int | None = None,
     *,
     report_only: bool = False,
+    allow_reviewed_protocol_withhold: bool = False,
 ) -> Dict[str, Any]:
     session_id = session["session_id"]
     final_row = connection.execute(
@@ -468,6 +469,7 @@ def _rebuild(
         if (
             timing.get("review_required")
             and duration_s <= NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS
+            and not allow_reviewed_protocol_withhold
         ):
             raise HistoricalModeReviewRequired(
                 "recovery_timing_review",
@@ -636,6 +638,7 @@ def rescore(
     apply: bool,
     requested_target_minutes: int | None = None,
     report_only: bool = False,
+    allow_reviewed_protocol_withhold: bool = False,
 ) -> Dict[str, Any]:
     if report_only and not session_ids:
         raise ValueError("--report-only requires one or more --session-id values")
@@ -678,6 +681,9 @@ def rescore(
                     requested_mode,
                     requested_target_minutes,
                     report_only=report_only,
+                    allow_reviewed_protocol_withhold=(
+                        allow_reviewed_protocol_withhold
+                    ),
                 )
             except HistoricalModeReviewRequired as exc:
                 results.append({

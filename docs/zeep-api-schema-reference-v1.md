@@ -4,7 +4,7 @@
 
 **สถานะ:** Integration contract v1 (read-only, raw-free)
 
-**ปรับปรุงล่าสุด:** 2026-09-11
+**ปรับปรุงล่าสุด:** 2026-09-13
 **ฐานข้อมูล:** ผล Session ที่ Finalize แล้วเท่านั้น
 
 เอกสารนี้เป็นคู่มืออ้างอิงสำหรับทีม Backend, Mobile, Web และ QA ของ
@@ -12,7 +12,8 @@
 ชนิดข้อมูล, enum, nullable rules และกฎการแสดงผล `restore_summary` อย่างเป็น
 ทางการ หาก implementation และเอกสารขัดกัน ให้ยึด Pydantic models ใน
 [`restore_response_models.py`](../zeep_pod/sessions/restore_response_models.py)
-และ [`usage_response_models.py`](../zeep_pod/sessions/usage_response_models.py)
+[`usage_response_models.py`](../zeep_pod/sessions/usage_response_models.py) และ
+[`presentation_response_models.py`](../zeep_pod/sessions/presentation_response_models.py)
 ร่วมกับ OpenAPI ของ API ที่ deploy จริงเป็น source of truth แล้วแก้เอกสารนี้
 ตามโมเดลใน release เดียวกัน
 
@@ -42,6 +43,8 @@ Base path คือ `/api/v1/usage-sessions` และทุก endpoint ใช�
 |---|---|---|
 | `GET /api/v1/usage-sessions` | รายการประวัติแบบแบ่งหน้า | `usage_session_list` |
 | `GET /api/v1/usage-sessions/{session_id}/summary` | สรุปหนึ่ง Session สำหรับหน้าแรก | `usage_session_summary` |
+| `GET /api/v1/usage-sessions/{session_id}/presentation` | ลำดับผลแบบไม่ซ้ำสำหรับ User/App | `usage_session_presentation` |
+| `GET /api/v1/usage-sessions/{session_id}/development` | QA aggregate สำหรับ Admin เท่านั้น | `usage_session_development` |
 | `GET /api/v1/usage-sessions/{session_id}` | รายงานหนึ่ง Session แบบละเอียดแต่ไม่มี raw | `usage_session_detail` |
 
 `session_id` เป็น path string ความยาว 1–160 ตัวอักษร และต้อง URL-encode
@@ -98,8 +101,8 @@ environment) การส่ง cookie เป็นหน้าที่ขอ�
 
 | Principal | สิทธิ์ |
 |---|---|
-| User cookie | อ่านรายการและรายละเอียดของ `principal.account_key` เท่านั้น |
-| Admin cookie | อ่านทุกบัญชีและใช้ `account_key`/`query` filter ได้ |
+| User cookie | อ่านรายการ รายละเอียด และ Presentation ของ `principal.account_key` เท่านั้น |
+| Admin cookie | อ่านทุกบัญชี ใช้ `account_key`/`query` filter และอ่าน Development view ได้ |
 | `X-API-Token` รุ่นเดิม (`auth_source=api_token`) | ถูกปฏิเสธด้วย `403` โดยตั้งใจ |
 | ไม่มี Login หรือ cookie หมดอายุ | `401` |
 
@@ -157,7 +160,7 @@ Session เพื่อให้เป็น payload ที่ตรวจสอ
 |---|---|---|---|
 | `schema` | `string` | ไม่ได้ | ต้องเป็น `zeep.api.response` |
 | `api_version` | `string` | ไม่ได้ | ปัจจุบัน `1.0` |
-| `kind` | `enum<string>` | ไม่ได้ | `usage_session_list`, `usage_session_summary`, `usage_session_detail` |
+| `kind` | `enum<string>` | ไม่ได้ | `usage_session_list`, `usage_session_summary`, `usage_session_detail`, `usage_session_presentation`, `usage_session_development` |
 | `generated_at` | `string` (RFC 3339 timestamp) | ไม่ได้ | เวลา server สร้าง response; มี timezone/offset |
 | `request_id` | `string` (UUID) | ไม่ได้ | ใช้อ้างอิงใน log/support ticket; ไม่ใช่ Session ID |
 | `data` | `object` | ไม่ได้ | รูปตาม `kind` |
@@ -1277,6 +1280,25 @@ Nap ไม่บังคับให้หลับและไม่ควร�
 }
 ```
 
+### 10.4 Presentation และ Development views
+
+`usage_session_presentation` เป็น DTO สำหรับวาดหน้าผลโดยตรง โดยมี
+`primary_result` เพียงตำแหน่งเดียว และจัดกลุ่มข้อมูลเป็น `overview_metrics`,
+`positive_drivers`, `attention_drivers`, `personal_baseline`, `trend`,
+`subjective_outcome`, `environment`, `vital_signals` และ `recommendation`
+ตามลำดับที่ผู้ใช้ควรอ่าน สำหรับ Nap ค่า `sleep_stages` ต้องเป็น `null` ส่วน
+Overnight จึงจะแสดง W/N1/N2/N3/REM ได้ สำหรับ Nap ใช้ `rest_profile`
+สามกลุ่ม ได้แก่ `awake_rest`, `drowsy` และ `estimated_sleep` โดยไม่บังคับ
+ว่าผู้ใช้ต้องหลับ และ Driver ไม่มี action แยกแข่งกับ `recommendation`
+
+`usage_session_development` ฝัง `user_summary` ชุดเดียวกันและเพิ่มเฉพาะข้อมูล
+Admin ได้แก่ `score_release`, `data_quality`, `score_components`,
+`classification_accounting`, `environment_assessment`, Version และ
+`review_flags` โดยต้องมี `raw_data_included=false` เสมอ
+
+รายละเอียดลำดับหน้า ถ้อยคำ และเงื่อนไข Rerun ดูที่
+[ZEEP Session Result Presentation v1](zeep-session-result-presentation-v1.md)
+
 ## 11. Client rendering rules
 
 1. ตรวจ `schema`, `api_version`, `kind` และ `contract_version` ก่อนอ่านข้อมูล
@@ -1352,7 +1374,7 @@ Restore Summary และ public report แล้วในโมดูลต่�
 - `zeep_pod/sessions/usage_response_models.py`
 - `zeep_pod/sessions/response_models.py` สำหรับ public re-export
 
-FastAPI ผูก model เหล่านี้เป็น `response_model` ของ Usage Session ทั้งสาม
+FastAPI ผูก model เหล่านี้เป็น `response_model` ของ Usage Session ทั้งห้า
 endpoint และสร้าง machine-readable schema ที่ `/openapi.json` อัตโนมัติ
 
 หลักที่ models บังคับใช้:

@@ -6385,6 +6385,7 @@ app.include_router(
 app.include_router(
     create_usage_sessions_router(
         require_user=require_user,
+        require_admin=require_admin,
         history_service=lambda: _session_history_service(),
         profiles_snapshot=lambda: _load_profiles(),
         profiles_lock=profile_lock,

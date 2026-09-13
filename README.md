@@ -163,13 +163,18 @@ G2 primary ontology แก้เป็น `W / N1 / N2 / N3 / REM` แบบ one
 [Usage Session Schema Reference](docs/zeep-api-schema-reference-v1.md):
 `GET /api/v1/state`,
 `GET /api/v1/usage-sessions` และผลสรุปราย Session ที่
-`/api/v1/usage-sessions/{session_id}/summary` ทุก route ใช้ envelope ที่มี
+`/api/v1/usage-sessions/{session_id}/summary` ส่วนรูปแบบแสดงผลที่ไม่ซ้ำสำหรับ
+App อยู่ที่ `/api/v1/usage-sessions/{session_id}/presentation` และรายละเอียด QA
+สำหรับ Admin อยู่ที่ `/api/v1/usage-sessions/{session_id}/development`
+ทุก route ใช้ envelope ที่มี
 schema/version/request-id โดย Usage Session response ถูกตรวจด้วย Pydantic และ
 เผยแพร่ชนิดข้อมูล/enum ผ่าน OpenAPI ส่วน endpoint เดิมด้านล่างยังคงรองรับ
 Tablet ที่ติดตั้งอยู่
 
 บันทึกการส่งมอบระหว่างทีมพร้อมผล Deploy/Rerun ล่าสุดดูที่
 [API & App Handoff — 2026-09-11](docs/zeep-api-app-handoff-2026-09-11.md)
+และหลักการจัดหน้าอ่านผลดูที่
+[ZEEP Session Result Presentation v1](docs/zeep-session-result-presentation-v1.md)
 
 | กลุ่ม | Endpoint |
 |---|---|
@@ -178,7 +183,8 @@ Tablet ที่ติดตั้งอยู่
 | เสียง | `GET /api/music` · `POST /api/music/{play,stop,pause,volume}` |
 | ป้ายชื่อ | `POST /api/labels/{aroma1..4}` |
 | Session | `POST /api/session/{login,logout}` · `GET /api/users` · `GET /api/history/{user}[/{id}]` · `DELETE /api/users/{user}` |
-| ประวัติการใช้งาน v1 | `GET /api/v1/usage-sessions` · `GET /api/v1/usage-sessions/{id}/summary` · `GET /api/v1/usage-sessions/{id}` |
+| ประวัติการใช้งาน v1 | `GET /api/v1/usage-sessions` · `GET /api/v1/usage-sessions/{id}/summary` · `GET /api/v1/usage-sessions/{id}/presentation` · `GET /api/v1/usage-sessions/{id}` |
+| วิเคราะห์ผลสำหรับ Admin | `GET /api/v1/usage-sessions/{id}/development` |
 
 ทุก API ส่วนบุคคล/ควบคุมตรวจ Auth Session และ RBAC ที่ Backend ส่วน `POST`/`DELETE`
 ตรวจ CSRF เพิ่มอีกชั้น คำสั่ง door/pulse มี lock + cooldown และดึงขากลับ LOW เสมอ

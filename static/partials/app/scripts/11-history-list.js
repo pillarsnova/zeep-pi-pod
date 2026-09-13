@@ -57,30 +57,58 @@ function sleepQualityTone(q){
   return ['very_good','good','fair','low'].includes(q?.level_key) ? q.level_key : 'unavailable';
 }
 
+function resultScoreTitle(q,presentation,adminView=false){
+  if(presentation==='recovery')return 'Recovery Score';
+  if(presentation==='sleep')return 'Sleep Score';
+  return adminView?(q?.score_title||'คะแนน Session'):'ผลการพักครั้งนี้';
+}
+
+function userUnavailableScoreReason(q,presentation){
+  const validation=String(
+    q?.validation_status||q?.target_status||q?.rest_mode?.protocol_status?.status||'',
+  ).toLowerCase();
+  const reason=String(q?.reason||'').toLowerCase();
+  if(presentation==='unknown'){
+    return 'ยังยืนยันรูปแบบการพักครั้งนี้ไม่ได้ จึงไม่สรุปเป็นคะแนน';
+  }
+  if(validation.includes('short')||reason.includes('short')||reason.includes('10 นาที')){
+    return 'ระยะเวลาครั้งนี้สั้นเกินกว่าจะสรุปเป็นคะแนนได้อย่างเหมาะสม';
+  }
+  if(
+    validation.includes('out_of_protocol')||validation.includes('implausible')
+    ||reason.includes('protocol')||reason.includes('target')
+  ){
+    return 'ระยะเวลาครั้งนี้ต่างจากรูปแบบที่เลือก จึงแสดงรายละเอียดโดยไม่สรุปเป็นคะแนน';
+  }
+  if(validation.includes('unresolved')||reason.includes('mode')){
+    return 'ยังยืนยันรูปแบบการพักครั้งนี้ไม่ได้ จึงไม่สรุปเป็นคะแนน';
+  }
+  return presentation==='recovery'
+    ?'ข้อมูลสำคัญสำหรับ Recovery Score ครั้งนี้ยังไม่ครบ'
+    :'ข้อมูลสำคัญสำหรับ Sleep Score ครั้งนี้ยังไม่ครบ';
+}
+
 function sleepQualityCompact(q, ended, presentationOverride){
   if (!ended) return `<span class="hist-quality quality-unavailable"><strong>LIVE</strong><span><b>กำลังบันทึก</b><small>${currentPrincipal?.role==='admin'?'คุณภาพหลังจบ Session':'ผลจะแสดงเมื่อจบการพัก'}</small></span></span>`;
   const presentation=presentationOverride||reportPresentationMode(q);
   const adminView=currentPrincipal?.role==='admin';
-  const title=presentation==='recovery'
-    ?'Recovery Score'
-    :presentation==='sleep'?'Sleep Score':adminView?(q?.score_title||'คะแนน'):'ผลการพัก';
-  if (!q?.available) return `<span class="hist-quality quality-unavailable"><strong>—</strong><span><b>${adminView?'รอข้อมูลสำหรับคะแนน':'กำลังเตรียมผล'}</b><small>${title}</small></span></span>`;
+  const title=resultScoreTitle(q,presentation,adminView);
+  if (!q?.available||presentation==='unknown') return `<span class="hist-quality quality-unavailable"><strong>—</strong><span><b>${adminView?'ไม่มีคะแนน':'ยังไม่มีคะแนน'}</b><small>${title}</small></span></span>`;
   return `<span class="hist-quality quality-${sleepQualityTone(q)}"><strong>${q.score}</strong><span><b>${historyEscape(userScoreLevelLabel(q))}</b><small>${title}</small></span></span>`;
 }
 
 function renderSleepQuality(q, ended, presentationOverride){
   const adminView=currentPrincipal?.role==='admin';
   const presentation=presentationOverride||reportPresentationMode(q);
-  const scoreTitle=presentation==='recovery'
-    ?'Recovery Score'
-    :presentation==='sleep'?'Sleep Score':adminView?(q?.score_title||'คะแนน Session'):'ผลการพักครั้งนี้';
-  if (!ended || !q?.available){
-    const reason = !ended
+  const scoreTitle=resultScoreTitle(q,presentation,adminView);
+  if (!ended || !q?.available||presentation==='unknown'){
+    const title=!ended?'กำลังบันทึกการพัก':'ครั้งนี้ยังไม่มีคะแนน';
+    const reason=!ended
       ?'คะแนนจะแสดงเมื่อจบการพัก'
-      :'ZEEP กำลังรวบรวมข้อมูลต่อเนื่องเพื่อสรุปคะแนนครั้งนี้';
+      :userUnavailableScoreReason(q,presentation);
     const adminReason=currentPrincipal?.role==='admin'&&q?.reason
       ?`<small>สำหรับผู้ดูแล · ${historyEscape(q.reason)}</small>`:'';
-    return `<section class="sleep-quality-card quality-unavailable mode-${presentation}"><div class="sleep-quality-ring"><strong>—</strong><small>/100</small></div><div class="sleep-quality-copy"><span class="sleep-quality-eyebrow">${scoreTitle}</span><h3>กำลังเตรียมผลสรุป</h3><p>${reason}</p><small>เมื่อข้อมูลต่อเนื่องเพียงพอ ZEEP จะสรุปให้โดยอัตโนมัติ</small>${adminReason}</div></section>`;
+    return `<section class="sleep-quality-card quality-unavailable mode-${presentation}"><div class="sleep-quality-ring"><strong>—</strong><small>/100</small></div><div class="sleep-quality-copy"><span class="sleep-quality-eyebrow">${scoreTitle}</span><h3>${title}</h3><p>${reason}</p><small>${!ended?'ผลจะอัปเดตหลังจบการพัก':'ยังดูรายละเอียดการพักครั้งนี้ได้ตามปกติ'}</small>${adminReason}</div></section>`;
   }
   const components=q.component_points||{},componentMax=q.component_max_points||{};
   const arousal=q.continuity?.arousal_proxy||{};
@@ -295,7 +323,7 @@ function userRestoreDriverText(value,tone){
 }
 
 function userRestoreMeaning(statusKey,presentation,unavailable){
-  if(unavailable)return 'ZEEP กำลังรวบรวมข้อมูลเพื่ออธิบายผลการพักครั้งนี้';
+  if(unavailable)return 'ครั้งนี้ยังไม่มีคะแนน แต่ยังดูรายละเอียดการพักที่บันทึกไว้ได้';
   const meanings={
     sleep_restore_very_good:'ภาพรวมการนอนคืนนี้เป็นไปได้ดีมาก',sleep_restore_good:'ภาพรวมการนอนคืนนี้เป็นไปได้ดี',
     pace_morning:'คืนนี้ได้พักในระดับหนึ่ง',prioritise_rest:'ครั้งนี้ยังมีบางจุดที่ช่วยให้การพักสบายขึ้นได้',
@@ -318,13 +346,57 @@ function restoreSummaryTone(status){
   return 'neutral';
 }
 
-function renderRestoreSummary(source,presentation){
+function adminResultEvidence(report,quality,summary,presentation){
+  const coverage=report.data_quality?.coverage||{};
+  const confidence=report.data_quality?.confidence_pct||{};
+  const componentPoints=quality.component_points||{};
+  const componentMax=quality.component_max_points||{};
+  const componentLabels=quality.component_labels||{};
+  const componentRows=(quality.component_order||Object.keys(componentPoints)).map(key=>{
+    const value=Number(componentPoints[key]);
+    const maximum=Number(componentMax[key]);
+    if(!Number.isFinite(value))return '';
+    const points=Number.isFinite(maximum)
+      ?`${value.toFixed(1)} / ${maximum.toFixed(0)}`:value.toFixed(1);
+    return `<span><small>${historyEscape(componentLabels[key]||key)}</small><b>${points}</b></span>`;
+  }).join('');
+  const coverageValue=value=>Number.isFinite(Number(value))?`${Number(value).toFixed(0)}%`:'—';
+  const baseline=summary.personal_baseline||{};
+  const maturity=baseline.maturity||baseline;
+  const sessions=Number(maturity.sessions_used??baseline.sessions_used);
+  const baselineLabel=Number.isFinite(sessions)&&sessions>0
+    ?`${Math.round(sessions)} Sessions`:'กำลังสะสมข้อมูล';
+  const version=report.version||quality.formula_version||summary.version||'—';
+  return `<details class="report-details result-evidence-details">
+    <summary>หลักฐานและคุณภาพข้อมูลสำหรับผู้ดูแล</summary>
+    <div class="result-evidence-section">
+      <div class="result-evidence-grid">
+        <span><small>Recording</small><b>${coverageValue(coverage.recording_pct)}</b></span>
+        <span><small>BCG</small><b>${coverageValue(coverage.bcg_pct)}</b></span>
+        <span><small>Sleep State</small><b>${coverageValue(coverage.sleep_stage_pct)}</b></span>
+        <span><small>Environment</small><b>${coverageValue(coverage.environment_pct)}</b></span>
+        <span><small>Confidence H / M / L</small><b>${Number(confidence.high)||0} / ${Number(confidence.medium)||0} / ${Number(confidence.low)||0}%</b></span>
+        <span><small>Personal Baseline</small><b>${historyEscape(baselineLabel)}</b></span>
+        <span><small>Mode</small><b>${presentation==='recovery'?'Nap & Refresh':presentation==='sleep'?'Overnight Recovery':'รอยืนยัน'}</b></span>
+        <span><small>Version</small><b>${historyEscape(version)}</b></span>
+      </div>
+      ${componentRows?`<div class="result-component-grid">${componentRows}</div>`:''}
+      <div class="result-development-note"><b>ใช้พัฒนาระบบต่ออย่างไร</b><p>ใช้ตรวจความครบของ Sensor, ความสอดคล้องของ State, ปัจจัยที่สัมพันธ์ใกล้เวลากับการพัก และผลของ Personal Baseline โดยไม่แก้ข้อมูล Raw</p></div>
+      <div class="restore-claim-note">ปัจจัยเป็นความสัมพันธ์ใกล้เวลา ไม่ยืนยันเหตุ–ผล · ผลนี้เป็น ZEEP Wellness ไม่ใช่การวินิจฉัยและไม่ใช่ความพร้อมตลอดทั้งวัน</div>
+    </div>
+  </details>`;
+}
+
+function renderRestoreSummary(source,presentation,ended=true){
   const payload=source?.data||source||{};
   const report=payload.session_report||payload;
-  const summary=restoreSummarySource(source);
-  if(!summary)return '';
+  const summary=restoreSummarySource(source)||{};
+  const quality=payload.sleep_quality||report.quality||{};
   const adminView=currentPrincipal?.role==='admin';
-  const unavailable=summary.available===false;
+  const scoreAvailable=Boolean(
+    ended&&presentation!=='unknown'&&quality.available&&quality.score!=null,
+  );
+  const scoreTitle=resultScoreTitle(quality,presentation,adminView);
   const status=summary.status||{};
   const statusKey=String(status?.key||status||'').toLowerCase();
   const statusLabels={
@@ -335,13 +407,21 @@ function renderRestoreSummary(source,presentation){
     rest_good:'ช่วงพักเป็นไปได้ดี',rest_partial:'ได้พักในระดับหนึ่ง',
     rest_more:'ลองปรับให้สบายขึ้น',
   };
-  const statusLabel=(adminView
-    ?restorePlainText(status?.label||status?.title):statusLabels[statusKey])
-    ||statusLabels[statusKey]
-    ||(unavailable?'กำลังเตรียมผลสรุป':'สรุปผลแล้ว');
-  const statusMeaning=adminView
-    ?restorePlainText(status?.meaning||status?.description)
-    :userRestoreMeaning(statusKey,presentation,unavailable);
+  const statusLabel=scoreAvailable
+    ?(
+      (adminView
+        ?restorePlainText(status?.label||status?.title):statusLabels[statusKey])
+      ||statusLabels[statusKey]
+      ||(adminView?(quality.level||userScoreLevelLabel(quality)):userScoreLevelLabel(quality))
+    )
+    :!ended?'กำลังบันทึกการพัก':'ครั้งนี้ยังไม่มีคะแนน';
+  const statusMeaning=scoreAvailable
+    ?(adminView
+      ?restorePlainText(status?.meaning||status?.description)
+      :userRestoreMeaning(statusKey,presentation,false))
+    :!ended
+      ?'ZEEP กำลังบันทึกข้อมูลระหว่างการพัก'
+      :userUnavailableScoreReason(quality,presentation);
   const drivers=summary.drivers||{};
   const positives=Array.isArray(drivers.positive)
     ?drivers.positive:Array.isArray(summary.positive_drivers)?summary.positive_drivers:[];
@@ -352,13 +432,17 @@ function renderRestoreSummary(source,presentation){
     if(!rows.length)return '';
     return `<div class="restore-driver-group ${tone}"><b>${title}</b><ul>${rows.map(row=>`<li>${row}</li>`).join('')}</ul></div>`;
   };
-  const driverMarkup=unavailable
-    ?'<div class="restore-summary-empty">ZEEP กำลังรวบรวมข้อมูลเพื่ออธิบายผลการพักครั้งนี้</div>'
+  const driverMarkup=presentation==='unknown'
+    ?'<div class="restore-summary-empty">แสดงเฉพาะข้อมูลที่บันทึก โดยยังไม่ตีความเป็น Overnight หรือ Nap & Refresh</div>'
+    :summary.available===false||!Object.keys(summary).length
+    ?`<div class="restore-summary-empty">${!ended?'รายละเอียดจะพร้อมหลังจบการพัก':'ยังดูข้อมูลการพักและ Sensor ที่บันทึกไว้ได้ตามปกติ'}</div>`
     :[
       driverGroup('สิ่งที่ทำได้ดี',positives,'positive'),
       driverGroup('สิ่งที่ลองปรับได้',attentions,'attention'),
     ].join('')||'<div class="restore-summary-empty">ยังไม่มีปัจจัยที่ต้องดูแลเป็นพิเศษ</div>';
-  const recommendation=adminView
+  const recommendation=presentation==='unknown'
+    ?'ตรวจสอบรูปแบบการพักก่อนนำผลครั้งนี้ไปเปรียบเทียบ'
+    :adminView
     ?restorePlainText(summary.recommendation,['primary'])||restorePlainText(report.post_session_guidance,['primary'])
     :presentation==='recovery'
       ?'ครั้งถัดไปเลือกเวลาที่สบาย แล้วปล่อยให้ร่างกายพักโดยไม่ต้องบังคับให้หลับ'
@@ -378,18 +462,28 @@ function renderRestoreSummary(source,presentation){
   const confidence=summary.confidence||payload.data_quality?.confidence
     ||report.data_quality?.confidence||{};
   const confidenceLabel=restorePlainText(confidence)||'ยังไม่ระบุ';
-  const confidenceDisplay=adminView
-    ?confidenceLabel:userConfidenceLevelLabel(confidence.level);
+  const confidenceDisplay=scoreAvailable
+    ?(adminView?confidenceLabel:userConfidenceLevelLabel(confidence.level))
+    :!ended?'กำลังบันทึกข้อมูล':'ข้อมูลยังไม่พอสรุปคะแนน';
   const scope=summary.session_scope||summary.scope||{};
   const scopeLabel=adminView
     ?restorePlainText(scope)||(presentation==='recovery'?'Nap & Refresh':'Overnight Recovery')
     :presentation==='recovery'?'Nap & Refresh':presentation==='sleep'?'Overnight Recovery':'การพักครั้งนี้';
-  return `<section class="restore-summary-card mode-${presentation}">
-    <div class="restore-summary-head"><div><span>RESTORE SUMMARY</span><h3>สรุปผลหลังใช้งาน</h3><small>${historyEscape(scopeLabel)} · ${adminView?'ประเมินเฉพาะ Session นี้':'สรุปเฉพาะการพักครั้งนี้'}</small></div><strong class="restore-status ${restoreSummaryTone(status)}">${historyEscape(statusLabel)}</strong></div>
-    ${statusMeaning?`<p class="restore-status-meaning">${historyEscape(statusMeaning)}</p>`:''}
-    <div class="restore-summary-grid"><div class="restore-drivers">${driverMarkup}</div><div class="restore-recommendation"><b>ลองทำครั้งถัดไป</b><p>${recommendation?historyEscape(recommendation):'ใช้งานตามปกติและสังเกตความรู้สึกหลังพัก'}</p></div></div>
+  const scoreTone=scoreAvailable?sleepQualityTone(quality):'unavailable';
+  return `<section class="restore-summary-card result-summary-card mode-${presentation} quality-${scoreTone}" style="--quality-score:${scoreAvailable?Number(quality.score)||0:0}">
+    <div class="result-summary-primary">
+      <div class="sleep-quality-ring"><strong>${scoreAvailable?historyEscape(quality.score):'—'}</strong><small>/100</small></div>
+      <div class="result-summary-copy">
+        <span class="sleep-quality-eyebrow">${historyEscape(scoreTitle)} · ZEEP WELLNESS</span>
+        <h3>${historyEscape(statusLabel)}</h3>
+        ${statusMeaning?`<p>${historyEscape(statusMeaning)}</p>`:''}
+        <small>${historyEscape(scopeLabel)} · ${adminView?'ประเมินเฉพาะ Session นี้':'สรุปเฉพาะการพักครั้งนี้'}</small>
+      </div>
+    </div>
+    <div class="result-summary-actions"><div class="restore-drivers">${driverMarkup}</div><div class="restore-recommendation"><b>คำแนะนำครั้งถัดไป</b><p>${recommendation?historyEscape(recommendation):'ใช้งานตามปกติและสังเกตความรู้สึกหลังพัก'}</p></div></div>
     <div class="restore-summary-meta"><span><b>รูปแบบของคุณ</b>${historyEscape(baselineText)}</span><span><b>${adminView?'ความมั่นใจ':'ความชัดเจนของข้อมูล'}</b>${historyEscape(confidenceDisplay)}</span></div>
-    <div class="restore-claim-note">${adminView?'ปัจจัยเป็นความสัมพันธ์ใกล้เวลา ไม่ยืนยันเหตุ–ผล และไม่ใช่ความพร้อมตลอดทั้งวัน':'ผลนี้สะท้อนเฉพาะการพักครั้งนี้ และควรดูร่วมกับความรู้สึกของคุณ'}</div>
+    ${adminView?adminResultEvidence(report,quality,summary,presentation):''}
+    <div class="restore-claim-note">${adminView?'ผลสรุปสำหรับตรวจสอบระบบและพัฒนาต่อ':'ผล Wellness เฉพาะการพักครั้งนี้ · ดูร่วมกับความรู้สึกของคุณ · ไม่ใช่การวินิจฉัย'}</div>
   </section>`;
 }
 
@@ -416,7 +510,7 @@ function renderHistorySummary(d){
       <div><span>${adminView?'Session':'การพัก'}</span><b>${summary.session_count||0}</b></div>
       <div><span>Sleep Score</span><b>${summary.sleep_score_count||0}</b><small>${summary.average_sleep_score==null?'—':`เฉลี่ย ${historyEscape(summary.average_sleep_score)}`}</small></div>
       <div><span>Recovery Score</span><b>${summary.recovery_score_count||0}</b><small>${summary.average_recovery_score==null?'—':`เฉลี่ย ${historyEscape(summary.average_recovery_score)}`}</small></div>
-      <div><span>${adminView?'รอคะแนน':'กำลังเตรียมผล'}</span><b>${summary.awaiting_score_count||0}</b></div>
+      <div><span>${adminView?'ไม่มีคะแนน':'ยังไม่มีคะแนน'}</span><b>${summary.awaiting_score_count||0}</b></div>
     </div>`;
 }
 

@@ -13,6 +13,8 @@ from zeep_pod.sessions.quality_publication import (
 )
 from zeep_pod.sessions.report_publication import public_report_field
 from zeep_pod.sessions.result_contract import build_result_contract
+from zeep_pod.sessions.usage_development import build_usage_development
+from zeep_pod.sessions.usage_presentation import build_usage_presentation
 
 USAGE_SESSION_CONTRACT_VERSION = "zeep.usage-session.v1"
 PUBLIC_REPORT_FIELDS = (
@@ -437,6 +439,34 @@ class UsageSessionService:
             account_key=account_key,
         )
         return _session_item(session, include_report=True) if session else None
+
+    def presentation_by_id(
+        self,
+        session_id: str,
+        profiles: dict[str, dict[str, Any]],
+        *,
+        account_key: str | None,
+    ) -> dict[str, Any] | None:
+        """Return one compact result with every display fact represented once."""
+        detail = self.detail_by_id(
+            session_id,
+            profiles,
+            account_key=account_key,
+        )
+        return build_usage_presentation(detail) if detail else None
+
+    def development_by_id(
+        self,
+        session_id: str,
+        profiles: dict[str, dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        """Return aggregate Admin QA context without any Raw Sensor payload."""
+        detail = self.detail_by_id(
+            session_id,
+            profiles,
+            account_key=None,
+        )
+        return build_usage_development(detail) if detail else None
 
     @staticmethod
     def _list_contract(

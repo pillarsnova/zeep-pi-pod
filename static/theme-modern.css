@@ -3632,7 +3632,8 @@ body[data-view="sessions"] .hist-row > span {
  * fabricated score; it stays in the neutral unavailable state.
  */
 .hist-quality,
-.sleep-quality-card {
+.sleep-quality-card,
+.result-summary-card {
   --quality-color: #748996;
   --quality-soft: rgba(116, 137, 150, .14);
 }
@@ -4030,6 +4031,219 @@ body[data-view="sessions"] .hist-row > .hist-quality {
   line-height: 1.4;
 }
 
+/* Result summary ---------------------------------------------------------
+ * One clear participant-facing hierarchy: score, meaning, observed drivers
+ * and one next action.  Evidence and implementation metadata remain
+ * available to Admin without competing with the result itself. */
+.result-summary-card {
+  gap: 12px;
+  padding: 16px;
+}
+
+.result-summary-primary {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+}
+
+.result-summary-copy {
+  min-width: 0;
+}
+
+.result-summary-copy h3 {
+  margin: 5px 0 2px;
+  color: #f2fbfd;
+  font-size: clamp(20px, 1.8vw, 27px);
+  line-height: 1.15;
+}
+
+.result-summary-copy p {
+  max-width: 70ch;
+  margin: 0;
+  color: #adc1ca;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.result-summary-copy > small {
+  display: block;
+  margin-top: 7px;
+  color: #6f8a96;
+  font-size: 8.5px;
+}
+
+.result-summary-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(220px, .65fr);
+  gap: 8px;
+}
+
+.result-summary-card > .restore-claim-note {
+  padding-top: 2px;
+  border-top: 1px solid rgba(91, 129, 145, .13);
+}
+
+.result-evidence-details,
+.admin-report-details,
+.user-result-details {
+  margin-top: 10px;
+}
+
+.result-evidence-section,
+.admin-report-details-body {
+  display: grid;
+  gap: 10px;
+  padding: 0 11px 12px;
+}
+
+.result-evidence-grid,
+.result-component-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.result-evidence-grid > span,
+.result-component-grid > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid rgba(76, 123, 142, .2);
+  border-radius: 9px;
+  background: rgba(6, 20, 30, .68);
+}
+
+.result-evidence-grid small,
+.result-component-grid small {
+  overflow: hidden;
+  color: #708d99;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-evidence-grid b,
+.result-component-grid b {
+  overflow: hidden;
+  color: #d9ebf0;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-development-note {
+  padding: 10px 11px;
+  border-left: 3px solid #56d7eb;
+  border-radius: 9px;
+  color: #8fa8b3;
+  background: rgba(29, 95, 115, .1);
+}
+
+.result-development-note b {
+  color: #d8edf2;
+  font-size: 10px;
+}
+
+.result-development-note p {
+  margin: 4px 0 0;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.report-result-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.report-result-head .section-title {
+  margin: 0;
+}
+
+.report-result-meta {
+  color: #78939f;
+  font-size: 9px;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.user-result-details > summary,
+.admin-report-details > summary {
+  min-height: 42px;
+  color: #aac2cb;
+  font-size: 10px;
+}
+
+.user-result-details > .session-report-overview {
+  margin: 0 10px 10px;
+}
+
+.user-vitals-compact {
+  display: grid;
+  grid-template-columns: minmax(230px, .85fr) minmax(0, 1.15fr);
+  gap: 10px;
+  align-items: center;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(127, 233, 223, .18);
+  border-radius: 11px;
+  background: rgba(8, 31, 39, .58);
+}
+
+.user-vitals-values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.user-vitals-values > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding-right: 7px;
+  border-right: 1px solid rgba(104, 166, 178, .16);
+}
+
+.user-vitals-values > span:last-child {
+  padding-right: 0;
+  border-right: 0;
+}
+
+.user-vitals-values small {
+  color: #6f929d;
+  font-size: 8px;
+}
+
+.user-vitals-values b {
+  overflow: hidden;
+  color: #dff7f7;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-vitals-compact p {
+  margin: 0;
+  color: #91aab3;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.user-vitals-compact p b {
+  display: block;
+  margin-bottom: 2px;
+  color: #cce2e5;
+  font-size: 9.5px;
+}
+
+.user-off-bed-note {
+  margin-top: 10px;
+}
+
 .user-sleep-period {
   grid-template-columns: minmax(130px, .8fr) minmax(120px, .55fr) minmax(0, 1.65fr);
   align-items: center;
@@ -4201,12 +4415,50 @@ body[data-view="sessions"] .hist-row > .hist-quality {
     grid-template-columns: 1fr;
   }
 
+  .result-summary-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .result-evidence-grid,
+  .result-component-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .report-result-head {
+    display: grid;
+    align-items: start;
+  }
+
+  .report-result-meta {
+    text-align: left;
+  }
+
   .user-sleep-period {
     grid-template-columns: minmax(0, 1fr) minmax(105px, .65fr);
   }
 
   .user-sleep-period .user-period-summary {
     grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 520px) {
+  .result-summary-primary {
+    grid-template-columns: 78px minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .result-summary-card .sleep-quality-ring {
+    width: 76px;
+    height: 76px;
+  }
+
+  .result-summary-card .sleep-quality-ring strong {
+    font-size: 24px;
+  }
+
+  .user-vitals-compact {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

@@ -125,19 +125,27 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("ชีพจรและการหายใจ", renderer)
         self.assertIn("vital.heart_rate_bpm", renderer)
         self.assertIn("vital.respiration_rate_brpm", renderer)
-        self.assertIn("ชีพจรโดยประมาณ", renderer)
-        self.assertIn("หายใจโดยประมาณ", renderer)
+        self.assertIn('class="user-vitals-compact"', renderer)
+        self.assertIn('class="user-vitals-values"', renderer)
+        self.assertIn("<small>ชีพจร</small>", renderer)
+        self.assertIn("<small>การหายใจ</small>", renderer)
         self.assertIn("value!==null&&value!==undefined&&value!==''", renderer)
-        self.assertIn("<b>สรุป</b>", renderer)
-        self.assertIn("<b>คำแนะนำ</b>", renderer)
-        self.assertIn("ไม่ใช่การวินิจฉัย", renderer)
+        self.assertIn("<b>แนวโน้มระหว่างพัก</b>", renderer)
+        user_branch = renderer.split("if(!adminView){", 1)[1].split("const range=", 1)[0]
+        self.assertNotIn("คำแนะนำตามช่วงอายุ", user_branch)
+        self.assertNotIn("Personal Baseline", user_branch)
+        self.assertNotIn("Coverage", user_branch)
         self.assertNotIn("quality.physiology?.heart_rate_average", renderer)
         self.assertNotIn("summary.interpretation", renderer.split("if(!adminView){", 1)[1].split("return `<section", 1)[0])
         self.assertIn(
             "!adminView||q.physiology?.heart_rate_average==null",
             template,
         )
-        self.assertIn("adminView||!hasCompactVitals?statBlock", template)
+        self.assertIn('class="admin-report-details-body"', template)
+        self.assertIn(
+            "statBlock('HR (Heart Rate) เฉลี่ย'",
+            template,
+        )
         for prohibited in ("ร่างกายแข็งแรง", "ปอดแข็งแรง", "ความฟิต", "ฟิตมาก"):
             with self.subTest(prohibited=prohibited):
                 self.assertNotIn(prohibited, renderer)
@@ -177,7 +185,11 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("'รูปแบบการพักที่ตรวจพบ'", template)
         self.assertIn("awake_rest:{label:'พักขณะตื่น'", template)
         self.assertIn("drowsy:{label:'เคลิ้ม · N1'", template)
-        self.assertIn("short_sleep:{label:'พบช่วงหลับ · N2/N3/REM'", template)
+        self.assertIn("short_sleep:{label:'ช่วงหลับที่ประเมินได้'", template)
+        self.assertIn(
+            "sleepItem.label='ช่วงหลับที่ประเมินได้ · N2/N3/REM'",
+            template,
+        )
         self.assertNotIn("unconfirmed:{label:'ยังยืนยันไม่ได้", template)
         self.assertIn(
             "ทุกช่วงที่อยู่บนเตียงถูกนำมาประเมินอย่างต่อเนื่อง",
@@ -246,19 +258,67 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("สิ่งที่ทำได้ดี", template)
         self.assertIn("ไม่ยืนยันเหตุ–ผล", template)
         self.assertIn("ไม่ใช่ความพร้อมตลอดทั้งวัน", template)
-        self.assertIn("กำลังรวบรวมข้อมูลเพื่ออธิบายผลการพักครั้งนี้", template)
+        self.assertIn(
+            "ครั้งนี้ยังไม่มีคะแนน แต่ยังดูรายละเอียดการพักที่บันทึกไว้ได้",
+            template,
+        )
         self.assertIn("sleep_restore_very_good", template)
         self.assertIn("pace_morning", template)
         self.assertIn("prioritise_rest", template)
         self.assertIn("rest_goal_full", template)
         self.assertIn("rest_partial", template)
         self.assertIn("rest_more", template)
-        self.assertIn("renderRestoreSummary(payload,presentation)", template)
-        self.assertIn("renderRestoreSummary(rec,presentation)", template)
+        self.assertGreaterEqual(template.count("renderRestoreSummary("), 3)
         self.assertIn(".restore-summary-card", css)
         self.assertIn(".restore-summary-grid", css)
         self.assertNotIn("whole_day_readiness", template)
         self.assertNotIn("freshness_delta", template)
+
+    def test_result_summary_has_one_user_hierarchy_and_admin_evidence(self):
+        template = ui_composer.render()
+        css = (ui_composer.STATIC / "theme-modern.css").read_text(encoding="utf-8")
+
+        self.assertIn('class="restore-summary-card result-summary-card', template)
+        self.assertIn('class="result-summary-primary"', template)
+        self.assertIn('class="result-summary-actions"', template)
+        self.assertIn("คำแนะนำครั้งถัดไป", template)
+        self.assertIn("ครั้งนี้ยังไม่มีคะแนน", template)
+        self.assertIn("ยังดูรายละเอียดการพักครั้งนี้ได้ตามปกติ", template)
+        self.assertIn("ข้อมูลยังไม่พอสรุปคะแนน", template)
+        self.assertNotIn(
+            "เมื่อข้อมูลต่อเนื่องเพียงพอ ZEEP จะสรุปให้โดยอัตโนมัติ",
+            template,
+        )
+        self.assertIn("หลักฐานและคุณภาพข้อมูลสำหรับผู้ดูแล", template)
+        self.assertIn("ใช้พัฒนาระบบต่ออย่างไร", template)
+        self.assertIn('class="report-details user-result-details"', template)
+        self.assertIn('class="report-details admin-report-details"', template)
+        self.assertIn("ไม่ใช่การวินิจฉัย", template)
+        self.assertIn(".result-summary-card", css)
+        self.assertIn(".result-evidence-grid", css)
+        self.assertIn(".user-vitals-compact", css)
+        self.assertIn("const dataBadge=adminView", template)
+        neutral_rule = css.index(".result-summary-card {", css.index(".hist-quality,"))
+        quality_rule = css.index(".quality-very_good")
+        visual_rule = css.index(".result-summary-card {", quality_rule)
+        self.assertLess(neutral_rule, quality_rule)
+        self.assertNotIn("--quality-color", css[visual_rule:visual_rule + 180])
+
+    def test_dashboard_keeps_user_sensors_compact_and_admin_diagnostics_separate(self):
+        template = ui_composer.render()
+        css = (ui_composer.STATIC / "theme-modern.css").read_text(encoding="utf-8")
+
+        self.assertEqual(template.count('class="dash-sensor-grid"'), 1)
+        self.assertEqual(template.count('id="dashAtmosphereCard"'), 1)
+        self.assertIn('id="adminLiveExplanation" data-admin-panel', template)
+        self.assertIn('id="dashSleepBaseline" data-admin-panel', template)
+        self.assertIn('id="rawMonitorCard" data-pages="monitor"', template)
+        self.assertIn(
+            'body:not([data-role="admin"]) [data-admin-panel]',
+            css,
+        )
+        self.assertIn("currentPrincipal?.role==='admin'", template)
+        self.assertIn("'ข้อมูลพร้อม':'กำลังรวบรวมข้อมูล'", template)
 
     def test_user_report_hides_raw_diagnostics_and_mobile_filters_fit(self):
         template = ui_composer.render()
@@ -437,6 +497,31 @@ class UiComposerTests(unittest.TestCase):
         self.assertNotIn("item.detail", template[finding_start:finding_end])
         self.assertNotIn("Coverage:", template[png_start:png_end])
         self.assertIn("เป็นข้อมูลเพื่อดูแลการพัก", template[png_start:png_end])
+
+    def test_unresolved_mode_never_leaks_sleep_or_recovery_results(self):
+        template = ui_composer.render()
+        profile_start = template.index("function reportProfileItems")
+        profile_end = template.index("function classificationAccountingMarkup", profile_start)
+        profile_renderer = template[profile_start:profile_end]
+        image_start = template.index("function drawReportHeader")
+        image_end = template.index("async function doLogout", image_start)
+        image_renderer = template[image_start:image_end]
+        summary_start = template.index("function renderRestoreSummary")
+        summary_end = template.index("function historyScoreMarkup", summary_start)
+        summary_renderer = template[summary_start:summary_end]
+
+        self.assertIn("else{\n    items=[];", profile_renderer)
+        self.assertIn("รูปแบบการพักยังไม่ยืนยัน", profile_renderer)
+        self.assertIn("ZEEP · SESSION REPORT", image_renderer)
+        self.assertIn("presentation!=='unknown'", image_renderer)
+        self.assertIn("drawReportHeader(ctx,payload,W,M,presentation)", image_renderer)
+        self.assertIn("drawReportScore(ctx,quality,y,W,M,presentation)", image_renderer)
+        self.assertIn("presentation==='unknown'", summary_renderer)
+        self.assertIn("mode_metadata_conflict", template)
+        self.assertIn("quality.validation_status||restMode.validation_status", template)
+        self.assertIn('alt="QR ผลการพัก"', template)
+        self.assertIn(".session-end-share{position:static;order:2}", template)
+        self.assertIn("ยังยืนยันรูปแบบการพักครั้งนี้ไม่ได้", template)
 
     def test_shared_report_image_prioritises_safety_review_before_truncation(self):
         template = ui_composer.render()

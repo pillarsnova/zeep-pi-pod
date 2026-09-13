@@ -4,6 +4,12 @@ Definitions live in focused modules to keep the Session package within its
 architecture size guardrails.
 """
 
+from zeep_pod.sessions.presentation_response_models import (
+    UsageSessionDevelopment,
+    UsageSessionDevelopmentResponse,
+    UsageSessionPresentation,
+    UsageSessionPresentationResponse,
+)
 from zeep_pod.sessions.respiratory_response_models import RespiratoryWellness
 from zeep_pod.sessions.restore_response_models import (
     RestoreSummary,
@@ -28,10 +34,14 @@ __all__ = [
     "RestoreSummary",
     "RestoreSummaryPayload",
     "RespiratoryWellness",
+    "UsageSessionDevelopment",
+    "UsageSessionDevelopmentResponse",
     "UsageSessionDetail",
     "UsageSessionDetailResponse",
     "UsageSessionList",
     "UsageSessionListResponse",
+    "UsageSessionPresentation",
+    "UsageSessionPresentationResponse",
     "UsageSessionSummary",
     "UsageSessionSummaryResponse",
 ]

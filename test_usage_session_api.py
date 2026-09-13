@@ -57,6 +57,22 @@ def _session(session_id: str, email: str, mode: str) -> dict:
             "label": "Nap & Refresh" if is_nap else "Overnight Recovery",
         },
     }
+    if is_nap:
+        quality["duration_target"] = {
+            "available": True,
+            "key": "nap_30m",
+            "label": "Nap & Refresh · 30 นาที",
+            "seconds": 1800,
+            "target_minutes": 30,
+            "completion_pct": 100,
+            "recommended_range_minutes": [20, 35],
+        }
+        quality["rest_mode"]["protocol_status"] = {
+            "available": True,
+            "canonical_mode": "nap_recovery",
+            "status": "recommended",
+            "score_releasable": True,
+        }
     return {
         "session_id": session_id,
         "account_key": email,
@@ -325,10 +341,25 @@ class UsageSessionApiTests(unittest.TestCase):
                 auth_source="cookie",
             )
 
+        def require_admin(
+            x_test_account: str | None = Header(default=None),
+            x_test_role: str = Header(default="user"),
+            x_api_token: str | None = Header(default=None),
+        ):
+            principal = require_user(
+                x_test_account=x_test_account,
+                x_test_role=x_test_role,
+                x_api_token=x_api_token,
+            )
+            if not principal.is_admin:
+                raise HTTPException(403, "admin required")
+            return principal
+
         app = FastAPI()
         app.include_router(
             create_usage_sessions_router(
                 require_user=require_user,
+                require_admin=require_admin,
                 history_service=lambda: self.history,
                 profiles_snapshot=lambda: self.profiles,
                 profiles_lock=threading.Lock(),
@@ -378,6 +409,257 @@ class UsageSessionApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["data"]["pagination"]["total"], 2)
+
+    def test_presentation_is_one_user_facing_hierarchy_without_duplicates(self) -> None:
+        response = self.client.get(
+            "/api/v1/usage-sessions/a-session/presentation",
+            headers=self._headers("a@example.test"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["cache-control"], "private, no-store")
+        self.assertEqual(response.json()["kind"], "usage_session_presentation")
+        data = response.json()["data"]
+        self.assertEqual(data["contract_version"], "zeep.usage-presentation.v1")
+        self.assertEqual(data["audience"], "user_summary")
+        self.assertEqual(data["primary_result"]["type"], "sleep_score")
+        self.assertEqual(data["primary_result"]["value"], 82)
+        self.assertEqual(data["primary_result"]["reason_code"], "available")
+        self.assertEqual(data["mode"]["key"], "sleep")
+        self.assertTrue(data["sleep_stages"]["available"])
+        self.assertEqual(data["sleep_stages"]["items"][0]["key"], "n2")
+        self.assertIsNone(data["rest_profile"])
+        self.assertNotIn("score", data)
+        self.assertNotIn("restore_summary", data)
+        self.assertNotIn("report", data)
+        self.assertNotIn("user", data)
+        self.assertNotIn("headline", data)
+        self.assertNotIn("recommendation", data["vital_signals"])
+        self.assertIsInstance(data["recommendation"], str)
+
+    def test_presentation_uses_nap_content_without_sleep_stage_chart(self) -> None:
+        response = self.client.get(
+            "/api/v1/usage-sessions/b-session/presentation",
+            headers=self._headers("b@example.test"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertEqual(data["primary_result"]["type"], "recovery_score")
+        self.assertEqual(data["mode"]["key"], "nap_recovery")
+        self.assertIsNone(data["sleep_stages"])
+        self.assertTrue(data["rest_profile"]["available"])
+        self.assertEqual(
+            [item["key"] for item in data["rest_profile"]["items"]],
+            ["awake_rest", "drowsy", "estimated_sleep"],
+        )
+        metrics = {item["key"]: item for item in data["overview_metrics"]}
+        self.assertEqual(data["timing"]["target_duration_s"], 1800)
+        self.assertEqual(metrics["target_completion"]["value"], 100)
+        self.assertIn("physiological_regularity", metrics)
+
+    def test_unresolved_mode_never_falls_back_to_nap_metrics(self) -> None:
+        self.history.sessions["a-session"]["rest_mode"] = "auto"
+        response = self.client.get(
+            "/api/v1/usage-sessions/a-session/presentation",
+            headers=self._headers("a@example.test"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertEqual(data["mode"]["key"], "unknown")
+        self.assertEqual(
+            [metric["key"] for metric in data["overview_metrics"]],
+            [],
+        )
+        self.assertNotEqual(
+            data["primary_result"]["type"],
+            "recovery_score",
+        )
+        self.assertFalse(data["primary_result"]["available"])
+        self.assertIsNone(data["rest_profile"])
+        self.assertIsNone(data["sleep_stages"])
+
+    def test_user_presentation_has_one_action_only(self) -> None:
+        response = self.client.get(
+            "/api/v1/usage-sessions/a-session/presentation",
+            headers=self._headers("a@example.test"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertIsInstance(data["recommendation"], str)
+        for driver in data["positive_drivers"] + data["attention_drivers"]:
+            self.assertNotIn("action", driver)
+
+    def test_open_session_cannot_publish_a_stale_score(self) -> None:
+        self.history.sessions["a-session"]["ended_at_utc"] = None
+        response = self.client.get(
+            "/api/v1/usage-sessions/a-session/presentation",
+            headers=self._headers("a@example.test"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        result = response.json()["data"]["primary_result"]
+        self.assertFalse(result["available"])
+        self.assertIsNone(result["value"])
+        self.assertEqual(result["reason_code"], "session_not_closed")
+        data = response.json()["data"]
+        self.assertEqual(data["positive_drivers"], [])
+        self.assertEqual(data["attention_drivers"], [])
+        self.assertFalse(data["personal_baseline"]["available"])
+        self.assertFalse(data["trend"]["available"])
+        self.assertEqual(
+            data["recommendation"],
+            "ดูผลสรุปหลังจบการพักครั้งนี้",
+        )
+        self.assertEqual(data["confidence_label"], "กำลังบันทึกข้อมูล")
+
+    def test_open_session_is_not_released_by_admin_development_view(self) -> None:
+        self.history.sessions["a-session"]["ended_at_utc"] = None
+        response = self.client.get(
+            "/api/v1/usage-sessions/a-session/development",
+            headers=self._headers("service", "admin"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertFalse(data["score_release"]["score_available"])
+        self.assertFalse(
+            data["user_summary"]["primary_result"]["available"]
+        )
+        self.assertIn(
+            "session_not_closed",
+            {flag["code"] for flag in data["review_flags"]},
+        )
+
+    def test_presentation_preserves_the_same_ownership_boundary(self) -> None:
+        response = self.client.get(
+            "/api/v1/usage-sessions/b-session/presentation",
+            headers=self._headers("a@example.test"),
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_completed_unavailable_result_has_final_reason_not_waiting_copy(self) -> None:
+        quality = self.history.sessions["b-session"]["sleep_quality"]
+        quality.update(available=False, score=None)
+        quality["rest_mode"]["protocol_status"] = {
+            "status": "insufficient",
+            "score_releasable": False,
+        }
+        response = self.client.get(
+            "/api/v1/usage-sessions/b-session/presentation",
+            headers=self._headers("b@example.test"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        result = response.json()["data"]["primary_result"]
+        self.assertFalse(result["available"])
+        self.assertEqual(result["reason_code"], "session_too_short")
+        self.assertEqual(result["status"], "ยังไม่มีคะแนนสำหรับครั้งนี้")
+        self.assertNotIn("กำลังรวบรวม", result["reason"])
+
+    def test_completed_presentation_uses_final_copy_when_optional_data_is_missing(
+        self,
+    ) -> None:
+        report = self.history.sessions["a-session"]["session_report"]
+        report["environment"] = [
+            {
+                "key": "temp",
+                "label": "อุณหภูมิ",
+                "available": False,
+                "status": "ดี",
+            }
+        ]
+        report["environment_assessment"] = {
+            "overall_label": "ยอดเยี่ยม",
+            "meets_expected": True,
+        }
+        report["respiratory_wellness"] = {
+            "vital_summary": {
+                "available": False,
+                "status_label": "ยอดเยี่ยม",
+                "summary": "กำลังรวบรวมข้อมูล",
+            }
+        }
+        response = self.client.get(
+            "/api/v1/usage-sessions/a-session/presentation",
+            headers=self._headers("a@example.test"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertFalse(data["environment"]["available"])
+        self.assertEqual(
+            data["environment"]["status"],
+            "ไม่มีข้อมูลสภาพแวดล้อมสำหรับครั้งนี้",
+        )
+        self.assertIsNone(data["environment"]["meets_expected"])
+        self.assertEqual(
+            data["environment"]["metrics"][0]["status"],
+            "ยังไม่มีข้อมูล",
+        )
+        self.assertFalse(data["vital_signals"]["available"])
+        self.assertEqual(
+            data["vital_signals"]["summary"],
+            "ข้อมูลชีพจรและการหายใจยังไม่พอสรุป",
+        )
+
+    def test_zero_duration_sleep_stages_are_not_marked_available(self) -> None:
+        report = self.history.sessions["a-session"]["session_report"]
+        for stage in report["stages"]:
+            stage["duration_s"] = 0
+        response = self.client.get(
+            "/api/v1/usage-sessions/a-session/presentation",
+            headers=self._headers("a@example.test"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        stages = response.json()["data"]["sleep_stages"]
+        self.assertFalse(stages["available"])
+
+    def test_development_view_is_admin_only_and_raw_free(self) -> None:
+        forbidden = self.client.get(
+            "/api/v1/usage-sessions/a-session/development",
+            headers=self._headers("a@example.test"),
+        )
+        response = self.client.get(
+            "/api/v1/usage-sessions/a-session/development",
+            headers=self._headers("service", "admin"),
+        )
+
+        self.assertEqual(forbidden.status_code, 403)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["cache-control"], "private, no-store")
+        data = response.json()["data"]
+        self.assertEqual(data["contract_version"], "zeep.usage-development.v1")
+        self.assertEqual(data["audience"], "admin_development")
+        self.assertEqual(data["user"]["email"], "a@example.test")
+        self.assertEqual(
+            data["score_components"]["earned_points"],
+            {"sleep_opportunity": 20.0},
+        )
+        self.assertTrue(
+            data["classification_accounting"]["arithmetic_invariant"]["holds"]
+        )
+        self.assertFalse(data["raw_data_included"])
+        rendered = str(data).casefold()
+        self.assertNotIn("must-not-leak", rendered)
+        self.assertNotIn("rawsamples", rendered)
+        self.assertNotIn("bcgbase64", rendered)
+
+    def test_legacy_api_token_cannot_read_development_results(self) -> None:
+        response = self.client.get(
+            "/api/v1/usage-sessions/a-session/development",
+            headers={"x-api-token": "legacy-full-admin"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.json()["detail"]["code"],
+            "usage_api_scoped_credential_required",
+        )
 
     def test_admin_pagination_and_date_validation_are_explicit(self) -> None:
         page = self.client.get(

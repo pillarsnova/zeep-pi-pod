@@ -8,7 +8,7 @@ const REPORT_STAGE_META={
 const RECOVERY_PROFILE_META={
   awake_rest:{label:'พักขณะตื่น',color:'#55dfa5'},
   drowsy:{label:'เคลิ้ม · N1',color:'#56d7eb'},
-  short_sleep:{label:'พบช่วงหลับ · N2/N3/REM',color:'#8f82ef'},
+  short_sleep:{label:'ช่วงหลับที่ประเมินได้',color:'#8f82ef'},
 };
 const TERMINAL_OCCUPANCY_META={
   no_user_on_bed:{label:'ไม่มีผู้ใช้งานบนเตียง',code:'OFF',color:'#7cc7d8'},
@@ -19,10 +19,13 @@ function reportPresentationMode(source){
   const report=source?.session_report||source||{};
   const quality=report.quality||report.sleep_quality||report;
   const restMode=report.rest_mode||quality.rest_mode||{};
-  const group=restMode.group||restMode.requested||restMode.resolved||'';
+  const group=restMode.group||restMode.key||restMode.requested||restMode.resolved||'';
   const title=String(quality.score_title||restMode.score_title||'').toLowerCase();
+  const validationStatus=quality.validation_status||restMode.validation_status;
   const unresolved=quality.rest_mode_unresolved
-    ||quality.validation_status==='legacy_mode_unresolved'
+    ||['legacy_mode_unresolved','mode_unresolved','mode_metadata_conflict'].includes(
+      validationStatus,
+    )
     ||['auto','unknown_legacy'].includes(group)
     ||(!group&&!quality.quality_type&&!title);
   if(unresolved)return 'unknown';
@@ -53,8 +56,14 @@ function reportProfileItems(report,presentation){
       {key:'drowsy',duration_s:durations.n1},
       {key:'short_sleep',duration_s:durations.n2+durations.n3+durations.rem},
     ].map(item=>({...RECOVERY_PROFILE_META[item.key],...item}));
-  }else{
+    if(currentPrincipal?.role==='admin'){
+      const sleepItem=items.find(item=>item.key==='short_sleep');
+      if(sleepItem)sleepItem.label='ช่วงหลับที่ประเมินได้ · N2/N3/REM';
+    }
+  }else if(presentation==='sleep'){
     items=Object.keys(durations).map(key=>({...REPORT_STAGE_META[key],key,duration_s:durations[key]}));
+  }else{
+    items=[];
   }
   return {
     stateSeconds:known,
@@ -65,6 +74,9 @@ function reportProfileItems(report,presentation){
 function reportProfileMarkup(report,presentation){
   const sleep=report.sleep||{},quality=report.quality||{};
   const adminView=currentPrincipal?.role==='admin';
+  if(presentation==='unknown'){
+    return `<div class="report-context-note"><b>รูปแบบการพักยังไม่ยืนยัน</b> · แสดงเฉพาะข้อมูลที่ Sensor บันทึก โดยยังไม่ตีความเป็น Overnight หรือ Nap & Refresh</div>`;
+  }
   const profile=reportProfileItems(report,presentation);
   const items=profile.items;
   let cursor=0;
@@ -120,13 +132,14 @@ function classificationAccountingMarkup(report,adminView,presentation){
       ?'พบบัญชีเวลาที่ต้องตรวจสอบ'
       :'กำลังตรวจบัญชีเวลา';
   if(!adminView){
-    const userTitle=invariant.holds===false
-      ?'กำลังตรวจสอบเวลาบางช่วง'
-      :'บันทึกช่วงเวลาการพักครบถ้วน';
-    const userStatus=invariant.holds===false?'กำลังตรวจสอบ':'เรียบร้อย';
     const offBed=Number(accounting.off_bed_s)||0;
+    if(invariant.holds!==false){
+      return offBed>0
+        ?`<div class="report-context-note user-off-bed-note"><b>ช่วงออกจากเตียง</b> · ${fmtDur(offBed)} · แยกจากเวลาพักที่ใช้สรุปผล</div>`
+        :'';
+    }
     return `<section class="classification-accounting-card user-time-summary">
-      <div class="classification-accounting-head"><div><span>ช่วงเวลาการพัก</span><h3>${userTitle}</h3></div><b class="accounting-status ${invariant.holds===false?'attention':'good'}">${userStatus}</b></div>
+      <div class="classification-accounting-head"><div><span>ช่วงเวลาการพัก</span><h3>กำลังตรวจสอบเวลาบางช่วง</h3></div><b class="accounting-status attention">กำลังตรวจสอบ</b></div>
       <div class="classification-accounting-metrics">
         <div><span>ระยะเวลาใช้งาน</span><b>${fmtDur(recording)}</b></div>
         <div><span>${recovery?'เวลาพักที่นับได้':'เวลาที่ใช้สรุปผล'}</span><b>${fmtDur(eligible)}</b></div>
@@ -180,13 +193,15 @@ function reportOverviewMetrics(report,presentation){
       ['♥',adminView?'ความนิ่ง HR/RR':'ความนิ่งของสัญญาณชีพ',regularity==null?'--':`${Math.round(100*Number(regularity))}%`],
       ['◇','ความนิ่งร่างกาย',movement==null?'--':`${Math.max(0,Math.round(100-Number(movement)))}%`],
     ];
-  }else{
+  }else if(presentation==='sleep'){
     values=[
       ['◷','เวลานอนโดยประมาณ',fmtDur(sleep.estimated_sleep_s)],
-      ['▣','ระยะเวลาใช้งาน',fmtDur(sleep.recording_s)],
+      ...(adminView?[['▣','ระยะเวลาใช้งาน',fmtDur(sleep.recording_s)]]:[]),
       ['◎',adminView?'ประสิทธิภาพ':'เวลาที่ประเมินว่าหลับ',sleep.sleep_efficiency_pct==null?'--':`${sleep.sleep_efficiency_pct}%`],
       ['☀','W · ตื่น',fmtDur(sleep.wake_s)],
     ];
+  }else{
+    values=adminView?[['▣','ระยะเวลาที่บันทึก',fmtDur(sleep.recording_s)]]:[];
   }
   return values.map(([icon,label,value])=>`<div class="session-key-metric"><i>${icon}</i><span><small>${label}</small><b>${value}</b></span></div>`).join('');
 }
@@ -248,23 +263,21 @@ function renderRespiratoryWellness(report,adminView=false){
     ?`${Number(observations.median_rr_brpm).toFixed(1)} ครั้ง/นาที`:'—';
   if(!adminView){
     const heartRate=finite(vital.heart_rate_bpm)
-      ?`${Number(vital.heart_rate_bpm).toFixed(1)} ครั้ง/นาที`:'กำลังรวบรวม';
+      ?`${Number(vital.heart_rate_bpm).toFixed(1)} ครั้ง/นาที`:'ไม่มีข้อมูลสำหรับครั้งนี้';
     const breathingRate=finite(vital.respiration_rate_brpm)
-      ?`${Number(vital.respiration_rate_brpm).toFixed(1)} ครั้ง/นาที`:'กำลังรวบรวม';
+      ?`${Number(vital.respiration_rate_brpm).toFixed(1)} ครั้ง/นาที`:'ไม่มีข้อมูลสำหรับครั้งนี้';
     const summaryText=typeof vital.summary==='string'&&vital.summary.trim()
       ?vital.summary:'ข้อมูลชีพจรและการหายใจยังไม่พอสรุป';
-    const advice=typeof vital.recommendation==='string'&&vital.recommendation.trim()
-      ?vital.recommendation:'พักตามปกติ เพื่อให้ ZEEP เรียนรู้เพิ่ม';
-    return `<section class="restore-summary-card respiratory-wellness-card user-vitals-summary">
-      <div class="restore-summary-head"><div><span>ระหว่างการพัก</span><h3>ชีพจรและการหายใจ</h3></div></div>
-      <div class="restore-summary-meta"><span><b>ชีพจรโดยประมาณ</b>${historyEscape(heartRate)}</span><span><b>หายใจโดยประมาณ</b>${historyEscape(breathingRate)}</span></div>
-      <p class="restore-status-meaning"><b>สรุป</b> · ${historyEscape(summaryText)}</p>
-      <p class="respiratory-age-guidance"><b>คำแนะนำ</b> · ${historyEscape(advice)}</p>
-      <div class="restore-claim-note">เป็นแนวโน้มเพื่อ Wellness จากการพักครั้งนี้ ไม่ใช่การวินิจฉัย</div>
+    return `<section class="user-vitals-compact" aria-label="ชีพจรและการหายใจระหว่างพัก">
+      <div class="user-vitals-values">
+        <span><small>ชีพจร</small><b>${historyEscape(heartRate)}</b></span>
+        <span><small>การหายใจ</small><b>${historyEscape(breathingRate)}</b></span>
+      </div>
+      <p><b>แนวโน้มระหว่างพัก</b>${historyEscape(summaryText)}</p>
     </section>`;
   }
   const range=finite(observations.p10_rr_brpm)&&finite(observations.p90_rr_brpm)
-    ?`${Number(observations.p10_rr_brpm).toFixed(1)}–${Number(observations.p90_rr_brpm).toFixed(1)} ครั้ง/นาที`:'กำลังรวบรวมข้อมูลเพิ่ม';
+    ?`${Number(observations.p10_rr_brpm).toFixed(1)}–${Number(observations.p90_rr_brpm).toFixed(1)} ครั้ง/นาที`:'ข้อมูลไม่พอสรุป';
   const regularity=({stable:'จังหวะค่อนข้างสม่ำเสมอ',mixed:'จังหวะเปลี่ยนแปลงบางช่วง',variable:'จังหวะเปลี่ยนแปลงระหว่างพัก',insufficient:'กำลังเรียนรู้รูปแบบของคุณ'})[
     observations.regularity_key
   ]||'กำลังเรียนรู้รูปแบบของคุณ';
@@ -283,8 +296,8 @@ function renderRespiratoryWellness(report,adminView=false){
     ?status.label||(summary.available?'สรุปผลแล้ว':'กำลังเรียนรู้รูปแบบของคุณ')
     :userStatusLabels[status.key]||(summary.available?'สรุปแนวโน้มแล้ว':'กำลังเรียนรู้รูปแบบของคุณ');
   const interpretation=adminView
-    ?summary.interpretation||'ZEEP กำลังรวบรวมข้อมูลเพื่อสรุปแนวโน้ม'
-    :summary.available?'แสดงแนวโน้มการหายใจที่พบระหว่างการพักครั้งนี้':'ZEEP กำลังรวบรวมข้อมูลเพื่อสรุปแนวโน้ม';
+    ?summary.interpretation||'ข้อมูลครั้งนี้ยังไม่พอสรุปแนวโน้ม'
+    :summary.available?'แสดงแนวโน้มการหายใจที่พบระหว่างการพักครั้งนี้':'ข้อมูลครั้งนี้ยังไม่พอสรุปแนวโน้ม';
   const confidenceLabel=adminView
     ?confidence.label||'หลักฐานจำกัด'
     :({high:'ชัดเจน',medium:'เพียงพอ',low:'กำลังสะสม'})[confidence.level]||'กำลังสะสม';
@@ -316,7 +329,7 @@ function renderSessionOverview(report,hasRestoreSummary=false){
   if(!report?.available)return '';
   const adminView=currentPrincipal?.role==='admin';
   const sleep=report.sleep||{},quality=report.quality||{};
-  const data=report.data_quality||{},coverage=data.coverage||{};
+  const data=report.data_quality||{};
   const presentation=reportPresentationMode(report);
   const findingIcon={critical:'!',poor:'↓',fair:'–',good:'✓',excellent:'★',unavailable:'?'};
   const allFindings=Array.isArray(report.findings)?report.findings:[];
@@ -350,17 +363,15 @@ function renderSessionOverview(report,hasRestoreSummary=false){
     findingTier(tierTitles[2],maintainFindings),
   ].join('');
   const environmentAssessment=report.environment_assessment||{};
-  const restMode=report.rest_mode||{},restModeGroup=restMode.group||restMode.resolved||'sleep';
+  const restMode=report.rest_mode||{};
   const profile=reportProfileMarkup(report,presentation);
   const disturbanceTitle=adminView
-    ?restModeGroup==='sleep'?'สิ่งที่อาจรบกวนการนอน':'สิ่งที่อาจรบกวนการพัก'
+    ?presentation==='sleep'?'สิ่งที่อาจรบกวนการนอน':'สิ่งที่อาจรบกวนการพัก'
     :'ปัจจัยระหว่างการพัก';
   const environmentStatus=adminView
     ?`คาดหวังพอใช้ขึ้นไป · ${environmentAssessment.mode_label||restMode.label||'ตาม Mode'} · ${environmentAssessment.context_only===false?'':'ไม่กำหนด Sleep State'}`
     :`เทียบกับเกณฑ์ของ ${environmentAssessment.mode_label||restMode.label||'รูปแบบการพักครั้งนี้'}`;
   const metrics=reportOverviewMetrics(report,presentation);
-  const confidence=data.confidence_pct;
-  const confidenceText=confidence?` · Confidence สูง ${confidence.high||0}% · กลาง ${confidence.medium||0}% · ต่ำ ${confidence.low||0}%`:'';
   const scoreConfidence=quality.score_confidence||{};
   const badgeLevel=presentation==='recovery'&&scoreConfidence.level?scoreConfidence.level:(data.level||'low');
   const badgeLabel=adminView
@@ -368,6 +379,8 @@ function renderSessionOverview(report,hasRestoreSummary=false){
     :userConfidenceLevelLabel(
       presentation==='recovery'&&scoreConfidence.level?scoreConfidence.level:data.level,
     );
+  const dataBadge=adminView
+    ?`<span class="report-data-badge ${badgeLevel}">${badgeLabel}</span>`:'';
   const protocolBadge=presentation==='recovery'
     ?recoveryProtocolBadge(report,adminView):null;
   const guidance=report.post_session_guidance||{};
@@ -377,19 +390,25 @@ function renderSessionOverview(report,hasRestoreSummary=false){
       :`<div class="report-context-note"><b>คำแนะนำหลังพัก</b> · ${presentation==='recovery'?'ค่อย ๆ กลับไปทำกิจกรรม และสังเกตว่ารู้สึกสดชื่นขึ้นเพียงใด':'เริ่มวันตามจังหวะที่สบาย และดูความรู้สึกของคุณร่วมกับผลคืนนี้'}</div>`
     :'';
   const headline=presentation==='recovery'
-    ?`พักใน ZEEP ${fmtDur(sleep.recording_s)} · การพักทุกแบบมีคุณค่า`
-    :`เวลานอนโดยประมาณ ${fmtDur(sleep.estimated_sleep_s)}`;
+    ?'ภาพรวมการพักตามเป้าหมายที่เลือก'
+    :presentation==='sleep'
+      ?'ภาพรวมการนอนที่ ZEEP ประเมินได้'
+      :'รายละเอียดที่ Sensor บันทึก';
   const footer=adminView
     ?(presentation==='recovery'
-      ?`Nap & Refresh ประเมินการพักและการตอบสนอง ไม่ใช้การหลับเป็นเงื่อนไข · HR/RR coverage ${quality.physiology?.paired_hr_rr_coverage_pct??'--'}% · Environment ${coverage.environment_pct||0}%`
-      :`ใช้เวลาก่อนเริ่มหลับ ${sleep.sleep_onset_proxy_s==null?'--':fmtDur(sleep.sleep_onset_proxy_s)} · เข้าสู่ W · ตื่น ${sleep.wake_entries ?? sleep.awakenings ?? 0} ครั้ง · ${data.note||''} · Coverage: Recording ${coverage.recording_pct||0}% · BCG ${coverage.bcg_pct||0}% · Sleep Stage ${coverage.sleep_stage_pct||0}% · Environment ${coverage.environment_pct||0}%${confidenceText}`)
+      ?'Nap & Refresh ประเมินคุณค่าของการพักและการตอบสนอง ไม่ใช้การหลับเป็นเงื่อนไข'
+      :presentation==='sleep'
+        ?`ใช้เวลาก่อนเริ่มหลับ ${sleep.sleep_onset_proxy_s==null?'--':fmtDur(sleep.sleep_onset_proxy_s)} · เข้าสู่ W · ตื่น ${sleep.wake_entries ?? sleep.awakenings ?? 0} ครั้ง`
+        :'ยังไม่ตีความเป็น Sleep Score หรือ Recovery Score จนกว่าจะยืนยันรูปแบบการพัก')
     :(presentation==='recovery'
       ?'Nap & Refresh นับคุณค่าของการพักทั้งขณะตื่นและหลับ'
-      :`ประเมินเฉพาะการพัก Overnight ครั้งนี้ · ตื่น ${sleep.wake_entries ?? sleep.awakenings ?? 0} ครั้ง`);
+      :presentation==='sleep'
+        ?`ประเมินเฉพาะการพัก Overnight ครั้งนี้ · ตื่น ${sleep.wake_entries ?? sleep.awakenings ?? 0} ครั้ง`
+        :'ยังไม่สรุปเป็น Overnight หรือ Nap & Refresh');
   const version=adminView&&report.version?` · ${historyEscape(report.version)}`:'';
   const respiratoryHtml=renderRespiratoryWellness(report,adminView);
-  return `<section class="session-report-overview mode-${presentation}">
-    <div class="session-report-head"><div><div class="sleep-quality-eyebrow">${presentation==='recovery'?'NAP & REFRESH SUMMARY':'OVERNIGHT SLEEP SUMMARY'}${version}</div><h3>${headline}</h3></div><div class="report-badge-group"><span class="report-data-badge ${badgeLevel}">${badgeLabel}</span>${protocolBadge?`<span class="report-protocol-badge ${protocolBadge.tone}">${protocolBadge.label}</span>`:''}</div></div>
+  const overview=`<section class="session-report-overview mode-${presentation}">
+    <div class="session-report-head"><div><div class="sleep-quality-eyebrow">${presentation==='recovery'?'NAP & REFRESH SUMMARY':presentation==='sleep'?'OVERNIGHT SLEEP SUMMARY':'SESSION DETAIL'}${version}</div><h3>${headline}</h3></div><div class="report-badge-group">${dataBadge}${protocolBadge?`<span class="report-protocol-badge ${protocolBadge.tone}">${protocolBadge.label}</span>`:''}</div></div>
     <div class="session-key-metrics">${metrics}</div>
     <div class="session-report-body">
       ${profile}
@@ -399,6 +418,9 @@ function renderSessionOverview(report,hasRestoreSummary=false){
     ${guidanceHtml}
     <div class="report-context-note">${footer}</div>
   </section>`;
+  return adminView
+    ?overview
+    :`<details class="report-details user-result-details"><summary>ดูรายละเอียดการพัก</summary>${overview}</details>`;
 }
 
 function renderReport(rec){
@@ -415,11 +437,10 @@ function renderReport(rec){
     ?presentation==='recovery'
       ?'ยังไม่มีข้อมูลยืนยันรูปแบบการพัก'
       :presentation==='sleep'?'ยังไม่มีข้อมูลสถานะการนอน':'ยังไม่พบข้อมูลที่ยืนยันได้'
-    :presentation==='sleep'?'กำลังเตรียมลำดับการนอน':'กำลังเตรียมลำดับการพัก';
+    :rec.ended_at_utc
+      ?presentation==='sleep'?'ไม่มีลำดับการนอนสำหรับครั้งนี้':'ไม่มีลำดับการพักสำหรับครั้งนี้'
+      :presentation==='sleep'?'กำลังเตรียมลำดับการนอน':'กำลังเตรียมลำดับการพัก';
   const su = rec.summary || {};
-  const hasCompactVitals=Boolean(
-    rec.session_report?.respiratory_wellness?.vital_summary
-  );
   const bed = su.bed_status_counts || {};
   const bedTotal = Object.values(bed).reduce((a,b)=>a+b, 0);
   const bedTxt = bedTotal
@@ -428,11 +449,6 @@ function renderReport(rec){
   const cnt = rec.counters || {};
   const cntTxt = [['door','ประตู'],['pulse','Aroma/ไอน้ำ'],['music','เปิดเพลง'],['output','สวิตช์']]
     .filter(([k])=>cnt[k]).map(([k,l])=>`${l} ${cnt[k]} ครั้ง`).join(' · ') || 'ไม่มีการสั่งงาน';
-  const slc = su.sleep_state_counts || {};
-  const slTotal = Object.values(slc).reduce((a,b)=>a+b, 0);
-  const slTxt = slTotal
-    ? Object.entries(slc).map(([k,v])=>`${historyEscape(adminView?(SLEEP_TH[k]?.label||k):userSleepStageLabel(k))} ${Math.round(v*100/slTotal)}%`).join(' · ')
-    : null;
   const hasChart = (rec.samples || []).length > 1;
   const confidenceTh={low:'ต่ำ',medium:'ปานกลาง',high:'สูง'};
   const averageTemperature=timelineMetricAverager(rec.samples,'temp');
@@ -448,7 +464,7 @@ function renderReport(rec){
       const time=start.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
       const source=period.confirmed_by==='confirmed_terminal_bed_exit'?'ก่อนออกจาก ZEEP':'ก่อนจบ Session';
       if(!adminView){
-        return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">จุดสิ้นสุดการพัก</div></div><div class="stage">W · ตื่น</div><div class="user-period-summary">${source}</div></div>`;
+        return '';
       }
       return `<div class="sleep-period terminal-wake-period"><div>${time}<div class="mini">เหตุการณ์เปลี่ยนสถานะ</div></div><div class="stage">W · ตื่น</div><div>${source}<div class="mini">ไม่นับเวลา/สัดส่วน Sleep Stage</div></div><div class="reason"><div class="sleep-period-note">${period.reason||'สิ้นสุดลำดับการนอนก่อนจบ Session'} · เป็น Operational marker ไม่ใช่ผล AASM/PSG</div></div></div>`;
     }
@@ -501,55 +517,68 @@ function renderReport(rec){
     const meta=registeredMeta||{label:period.label||period.state,code:'—'};
     const start=new Date(period.start_time),end=new Date(period.end_time);
     const time=`${start.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}–${end.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`;
-    if(!adminView){
-      return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)}</div></div><div class="stage">${registeredMeta?.label||'ออกจากเตียง'}</div><div class="user-period-summary">ช่วงนี้แยกจากเวลาพัก</div></div>`;
-    }
+    if(!adminView)return '';
     return `<div class="sleep-period terminal-occupancy-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)} · Occupancy</div></div><div class="stage">${meta.code} · ${meta.label}</div><div>HR — · RR —<div class="mini">ไม่นับเป็น Sleep Stage</div></div><div class="reason"><div class="sleep-period-note">${period.reason||'แยกสถานะผู้ใช้งานออกจากผลการนอน'}</div></div></div>`;
   }).join('');
   const sessionEnded=rec.ended_at_utc
     ?(adminView
       ? `<div class="sleep-period terminal-occupancy-period"><div>${new Date(rec.ended_at_utc).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}<div class="mini">เหตุการณ์สุดท้าย</div></div><div class="stage">END · จบ Session</div><div>${rec.end_reason==='logout'?'ผู้ใช้กดจบ':'ผู้ดูแล/ระบบบันทึกการจบ'}</div><div class="reason"><div class="sleep-period-note">${terminalOccupancy?'Session จบหลังลำดับ Wake → ออกจาก ZEEP':'Session จบหลังบันทึก Terminal Wake boundary'}</div></div></div>`
       :`<div class="sleep-period user-sleep-period"><div>${new Date(rec.ended_at_utc).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}<div class="mini">สิ้นสุดการใช้งาน</div></div><div class="stage">สิ้นสุดการพัก</div><div class="user-period-summary">บันทึกผลเรียบร้อย</div></div>`):'';
-  const restoreSummaryHtml=renderRestoreSummary(rec,presentation);
+  const resultSummaryHtml=renderRestoreSummary(
+    rec,presentation,Boolean(rec.ended_at_utc),
+  );
   const timelineCount=`${rec.sleep_timeline?.length||0} ช่วง`;
   const decisionRounds=Number(rec.sleep_timeline_rounds||0)+Number(rec.sleep_status_timeline_rounds||0);
   const timelineMeta=adminView
     ?`${timelineCount} · จาก ${decisionRounds||rec.sleep_timeline?.length||0} รอบข้อมูล${rec.sleep_status_timeline_rounds?` · OFF BED ${rec.sleep_status_timeline_rounds} รอบ`:''}`
     :timelineCount;
-  const timelineDetails=adminView||sleepTimeline
-    ?`<details class="report-details"><summary>${timelineTitle} · ${timelineMeta}</summary>${sleepTimeline?`<div class="sleep-timeline">${sleepTimeline}</div>`:`<div class="mini" style="padding:0 12px 12px">${timelineEmpty}</div>`}</details>`
+  const primaryTimeline=adminView?sleepTimeline:`${sleepTimeline}${sessionEnded}`;
+  const timelineDetails=adminView||primaryTimeline
+    ?`<details class="report-details"><summary>${timelineTitle} · ${timelineMeta}</summary>${primaryTimeline?`<div class="sleep-timeline">${primaryTimeline}</div>`:`<div class="mini" style="padding:0 12px 12px">${timelineEmpty}</div>`}</details>`
     :'';
   const operationalNotes=adminView
     ?`<div class="mini">สถานะเตียง: ${bedTxt}</div><div class="mini">การสั่งงานระหว่าง Session: ${cntTxt}</div>`
     :'';
-  root.innerHTML = `
-    <div class="section-title report-mode-title mode-${presentation}" style="margin-top:18px">${adminView?'ผลการใช้งาน':'ผลการพัก'} · ${identityLabel(rec,'')} · ${reportTitle}</div>
-    <div class="mini" style="margin-top:0">${healthReferenceInline(rec)}</div>
-    <div class="mini" style="margin-top:3px">${adminView
-      ?`ข้อมูลอ้างอิงสุขภาพ · ${fmtDateTh(rec.started_at_utc)} → ${fmtDateTh(rec.ended_at_utc)} · Sensor บันทึก ${fmtDur(rec.duration_s)} · ไม่ใช่การวินิจฉัย`
-      :`${fmtDateTh(rec.started_at_utc)} → ${fmtDateTh(rec.ended_at_utc)} · ระยะเวลาการใช้งาน ${fmtDur(rec.duration_s)}`}</div>
-    ${renderSleepQuality(rec.sleep_quality, rec.ended_at_utc, presentation)}
-    ${restoreSummaryHtml}
-    ${renderSessionOverview(rec.session_report,Boolean(restoreSummaryHtml))}
-    ${classificationAccountingMarkup(rec.session_report,adminView,presentation)}
-    <div class="report-grid">
-      ${statBlock('อุณหภูมิเฉลี่ย', su.temperature_c, ' °C')}
-      ${statBlock('ความชื้นเฉลี่ย', su.humidity_rh, ' %RH')}
-      ${statBlock('เสียงเฉลี่ย', su.sound_dba_est, ' dBA')}
-      ${statBlock('แสงเฉลี่ย', su.lux, ' lx')}
-      ${adminView||!hasCompactVitals?statBlock(adminView?'HR (Heart Rate) เฉลี่ย':'ชีพจรเฉลี่ย', su.heart_rate_bpm, adminView?' ครั้ง/นาที (BPM)':' ครั้ง/นาที'):''}
-      ${adminView?statBlock('RR (Respiratory Rate) เฉลี่ย', su.respiration_rate, ' ครั้ง/นาที'):''}
+  const timeAccounting=classificationAccountingMarkup(
+    rec.session_report,adminView,presentation,
+  );
+  const adminDiagnostics=adminView?`<details class="report-details admin-report-details">
+    <summary>ข้อมูล Sensor, Timeline และรายการสำหรับพัฒนา</summary>
+    <div class="admin-report-details-body">
+      <div class="mini">${healthReferenceInline(rec)}</div>
+      ${timeAccounting}
+      <div class="report-grid">
+        ${statBlock('อุณหภูมิเฉลี่ย', su.temperature_c, ' °C')}
+        ${statBlock('ความชื้นเฉลี่ย', su.humidity_rh, ' %RH')}
+        ${statBlock('เสียงเฉลี่ย', su.sound_dba_est, ' dBA')}
+        ${statBlock('แสงเฉลี่ย', su.lux, ' lx')}
+        ${statBlock('HR (Heart Rate) เฉลี่ย', su.heart_rate_bpm, ' ครั้ง/นาที (BPM)')}
+        ${statBlock('RR (Respiratory Rate) เฉลี่ย', su.respiration_rate, ' ครั้ง/นาที')}
+      </div>
+      ${operationalNotes}
+      ${timelineDetails}
+      ${terminalOccupancy||sessionEnded?`<details class="report-details"><summary>ลำดับจบ Session · Occupancy แยกจาก Sleep State</summary><div class="sleep-timeline">${terminalOccupancy}${sessionEnded}</div></details>`:''}
+      ${hasChart?'<canvas id="histCanvas"></canvas><div class="legend-row"><span><i class="legend-dot" style="background:#19e3ff"></i>อุณหภูมิ</span><span><i class="legend-dot" style="background:#ffb02e"></i>ชีพจร</span></div>':''}
+      <div class="mini">ค่าชีพจรและการหายใจเป็นค่าประเมินจาก BCG · ใช้ตรวจสอบระบบ ไม่ใช่การวินิจฉัย</div>
     </div>
-    ${operationalNotes}
-    ${slTxt ? `<div class="mini">${adminView
-      ?presentation==='recovery'?'Sleep State ที่ตรวจพบ (ข้อมูลประกอบ)':'สถานะการนอน (ประเมิน)'
-      :presentation==='recovery'?'รูปแบบการพักโดยประมาณ':'สัดส่วนการนอนโดยประมาณ'}: ${slTxt}</div>` : ''}
-    ${timelineDetails}
-    ${terminalOccupancy||sessionEnded?`<details class="report-details" open><summary>${adminView?'ลำดับจบ Session · Occupancy แยกจาก Sleep Stage':'ช่วงสิ้นสุดการใช้งาน'}</summary><div class="sleep-timeline">${terminalOccupancy}${sessionEnded}</div></details>`:''}
-    ${adminView?'<div class="mini">ค่าชีพจรและการหายใจเป็นค่าประเมินจาก BCG</div>':''}
-    ${hasChart ? '<canvas id="histCanvas"></canvas><div class="legend-row"><span><i class="legend-dot" style="background:#19e3ff"></i>อุณหภูมิ</span><span><i class="legend-dot" style="background:#ffb02e"></i>ชีพจร</span></div>' : ''}
+  </details>`:'';
+  root.innerHTML = `
+    <div class="report-result-head">
+      <div class="section-title report-mode-title mode-${presentation}">${reportTitle}</div>
+      <div class="report-result-meta">${adminView?`${historyEscape(identityLabel(rec,''))} · `:''}${fmtDateTh(rec.started_at_utc)} → ${fmtDateTh(rec.ended_at_utc)} · ${fmtDur(rec.duration_s)}</div>
+    </div>
+    ${resultSummaryHtml}
+    ${renderSessionOverview(rec.session_report,Boolean(resultSummaryHtml))}
+    ${!adminView?timeAccounting:''}
+    ${!adminView?timelineDetails:''}
+    ${adminDiagnostics}
   `;
-  if (hasChart) drawHistory(rec.samples);
+  const diagnostics=root.querySelector('.admin-report-details');
+  if(hasChart&&diagnostics){
+    diagnostics.addEventListener('toggle',()=>{
+      if(diagnostics.open)requestAnimationFrame(()=>drawHistory(rec.samples));
+    });
+  }
 }
 
 function drawHistory(samples){

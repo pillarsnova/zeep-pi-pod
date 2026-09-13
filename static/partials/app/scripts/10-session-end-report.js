@@ -48,16 +48,17 @@ function showSessionEndScreen(payload){
 function renderSessionEndScreen(payload){
   const overlay=document.getElementById('sessionEndScreen');
   const presentation=reportPresentationMode(payload.session_report||payload);
-  const restoreSummaryHtml=renderRestoreSummary(payload,presentation);
+  const resultSummaryHtml=renderRestoreSummary(
+    payload,presentation,payload.ended_at_utc||true,
+  );
   document.getElementById('sessionEndMeta').textContent=[
     payload.display_name||payload.username||'ผู้ใช้งาน',
     sessionEndDateText(payload.ended_at_utc),
     `ระยะเวลา ${fmtDur(payload.duration_s)}`,
   ].filter(Boolean).join(' · ');
   document.getElementById('sessionEndSummary').innerHTML=
-    renderSleepQuality(payload.sleep_quality,payload.ended_at_utc||true,presentation)
-    +restoreSummaryHtml
-    +renderSessionOverview(payload.session_report,Boolean(restoreSummaryHtml));
+    resultSummaryHtml
+    +renderSessionOverview(payload.session_report,Boolean(resultSummaryHtml));
   overlay.classList.remove('hide');overlay.setAttribute('aria-hidden','false');
   const label=document.getElementById('sessionEndCountdown');
   sessionEndDeadline=Date.now()+SESSION_END_NO_QR_HOLD_MS;
@@ -101,13 +102,13 @@ async function runSessionEndShare(payload){
     return;
   }
   const minutes=Number(result.expires_in_minutes)||SESSION_END_QR_FALLBACK_MINUTES;
-  setSessionEndQr('','<img alt="QR ผลการนอน" src="'+result.qr_data_url+'">');
+  setSessionEndQr('','<img alt="QR ผลการพัก" src="'+result.qr_data_url+'">');
   if(note)note.textContent=`สแกนด้วยมือถือของคุณ · ลิงก์หมดอายุใน ${minutes} นาที`;
   // ยืดหน้าจอให้เท่าอายุลิงก์จริงที่ backend ตอบมา ไม่ใช่ค่าที่เดาไว้ฝั่งนี้
   sessionEndDeadline=Date.now()+minutes*60000;
 }
 
-/* ---- Canvas 2D: รูปผลการนอน 1080×1920 ที่ผู้ใช้เอากลับไปได้ ----
+/* ---- Canvas 2D: รูปผลการพัก 1080×1920 ที่ผู้ใช้เอากลับไปได้ ----
    เป็น layout ชุดที่สองที่ต้องดูแลคู่กับ renderSessionOverview() — ราคาที่จ่าย
    เพื่อให้สระ/วรรณยุกต์ไทยถูกต้องโดยไม่ต้องเพิ่ม dependency ฝั่ง Pi */
 function reportFont(weight,size){return `${weight} ${size}px ${REPORT_PNG_FONT}`;}
@@ -165,11 +166,13 @@ function drawWrapped(ctx,text,x,y,maxWidth,lineHeight,maxLines=99){
   return y+lines.length*lineHeight;
 }
 
-function drawReportHeader(ctx,payload,W,M){
+function drawReportHeader(ctx,payload,W,M,presentation){
   let y=M;
-  const presentation=reportPresentationMode(payload.session_report||payload.sleep_quality||payload);
+  const reportTitle=presentation==='recovery'
+    ?'ZEEP · RECOVERY REPORT'
+    :presentation==='sleep'?'ZEEP · SLEEP REPORT':'ZEEP · SESSION REPORT';
   ctx.fillStyle='#19e3ff';ctx.font=reportFont(800,32);
-  ctx.fillText(presentation==='recovery'?'ZEEP · RECOVERY REPORT':'ZEEP · SLEEP REPORT',M,y);y+=54;
+  ctx.fillText(reportTitle,M,y);y+=54;
   ctx.fillStyle='#eaf7fc';ctx.font=reportFont(800,54);
   y=drawWrapped(ctx,payload.display_name||payload.username||'ผู้ใช้งาน',M,y,W-2*M,66,2)+10;
   ctx.fillStyle='#7fa6b8';ctx.font=reportFont(600,26);
@@ -178,11 +181,12 @@ function drawReportHeader(ctx,payload,W,M){
   return y+62;
 }
 
-function drawReportScore(ctx,quality,y,W,M){
+function drawReportScore(ctx,quality,y,W,M,presentation){
   const h=250;
   reportRoundRect(ctx,M,y,W-2*M,h,24);
   ctx.fillStyle='#0b1e2e';ctx.fill();ctx.strokeStyle='#17394f';ctx.lineWidth=2;ctx.stroke();
-  const score=quality?.available?Number(quality.score)||0:null;
+  const score=quality?.available&&presentation!=='unknown'
+    ?Number(quality.score)||0:null;
   const cx=M+150,cy=y+h/2;
   ctx.lineWidth=18;ctx.strokeStyle='#123043';
   ctx.beginPath();ctx.arc(cx,cy,88,0,Math.PI*2);ctx.stroke();
@@ -195,35 +199,40 @@ function drawReportScore(ctx,quality,y,W,M){
   ctx.fillStyle='#7fa6b8';ctx.font=reportFont(600,24);ctx.fillText('/ 100',cx,cy+28);
   ctx.textAlign='left';
   const tx=M+290,tw=W-M-tx-30;
-  const presentation=reportPresentationMode(quality);
   const scoreTitle=presentation==='recovery'
     ?'Recovery Score'
     :presentation==='sleep'?'Sleep Score':'ผลการพักครั้งนี้';
   ctx.fillStyle='#9fd7e6';ctx.font=reportFont(700,24);
   ctx.fillText(scoreTitle,tx,y+50);
   ctx.fillStyle='#eaf7fc';ctx.font=reportFont(800,42);
-  drawWrapped(ctx,quality?.available?userScoreLevelLabel(quality):'กำลังเตรียมผลสรุป',tx,y+88,tw,50,1);
+  const scoreAvailable=score!==null;
+  drawWrapped(ctx,scoreAvailable?userScoreLevelLabel(quality):'ครั้งนี้ยังไม่มีคะแนน',tx,y+88,tw,50,1);
   ctx.fillStyle='#7fa6b8';ctx.font=reportFont(500,24);
-  drawWrapped(ctx,userScoreMeaning(quality),tx,y+150,tw,34,3);
+  const meaning=scoreAvailable
+    ?userScoreMeaning(quality):userUnavailableScoreReason(quality,presentation);
+  drawWrapped(ctx,meaning,tx,y+150,tw,34,3);
   return y+h+40;
 }
 
-function drawReportMetrics(ctx,report,quality,y,W,M){
-  const presentation=reportPresentationMode(report),sleep=report.sleep||{};
+function drawReportMetrics(ctx,report,quality,y,W,M,presentation){
+  const sleep=report.sleep||{};
   const target=quality.duration_target||{};
   const regularity=quality.physiology?.regularity_factor;
   const movement=quality.body_response?.movement_pct;
-  const boxes=presentation==='recovery' ? [
+  let boxes;
+  if(presentation==='recovery')boxes=[
     ['เวลาพักที่นับได้',fmtDur(target.eligible_rest_seconds==null?sleep.recording_s:target.eligible_rest_seconds)],
     ['เทียบเป้าหมาย',target.completion_pct==null?'--':`${Math.round(Number(target.completion_pct))}%`],
     ['ความสม่ำเสมอระหว่างพัก',regularity==null?'--':`${Math.round(100*Number(regularity))}%`],
     ['ความนิ่งร่างกาย',movement==null?'--':`${Math.max(0,Math.round(100-Number(movement)))}%`],
-  ] : [
+  ];
+  else if(presentation==='sleep')boxes=[
     ['เวลานอนโดยประมาณ',fmtDur(sleep.estimated_sleep_s)],
     ['ระยะเวลาการใช้งาน',fmtDur(sleep.recording_s)],
     ['ประสิทธิภาพ',sleep.sleep_efficiency_pct==null?'--':`${sleep.sleep_efficiency_pct}%`],
     ['W · ตื่น',fmtDur(sleep.wake_s)],
   ];
+  else boxes=[['ระยะเวลาที่บันทึก',fmtDur(sleep.recording_s)]];
   const bw=(W-2*M-20)/2,bh=140;
   boxes.forEach(([label,value],i)=>{
     const bx=M+(i%2)*(bw+20),by=y+Math.floor(i/2)*(bh+20);
@@ -234,12 +243,14 @@ function drawReportMetrics(ctx,report,quality,y,W,M){
     ctx.fillStyle='#eaf7fc';ctx.font=reportFont(800,40);
     drawWrapped(ctx,value,bx+26,by+72,bw-52,46,1);
   });
-  return y+2*bh+20+44;
+  const rows=Math.ceil(boxes.length/2);
+  return y+rows*bh+Math.max(0,rows-1)*20+44;
 }
 
-function drawReportStages(ctx,report,quality,y,W,M){
-  const presentation=reportPresentationMode(report);
-  const items=reportProfileItems(report,presentation);
+function drawReportStages(ctx,report,quality,y,W,M,presentation){
+  const profile=reportProfileItems(report,presentation);
+  const items=profile.items;
+  if(presentation==='unknown'||!items.length)return y;
   ctx.fillStyle='#9fd7e6';ctx.font=reportFont(700,28);
   ctx.fillText(presentation==='recovery'?'รูปแบบการพักโดยประมาณ':'สัดส่วนการนอนโดยประมาณ',M,y);y+=48;
   const barW=W-2*M,barH=44;
@@ -261,14 +272,15 @@ function drawReportStages(ctx,report,quality,y,W,M){
   return y+Math.ceil(items.length/2)*42+34;
 }
 
-function drawReportFindings(ctx,report,y,W,M,limit){
+function drawReportFindings(ctx,report,y,W,M,limit,presentation){
   const findingPriority=item=>item?.decision==='safety_review'?0:({critical:1,poor:2,fair:3}[item?.severity]??4);
   const findings=(Array.isArray(report.findings)?report.findings:[])
     .slice().sort((a,b)=>findingPriority(a)-findingPriority(b)).slice(0,5);
   if(!findings.length)return y;
-  const presentation=reportPresentationMode(report);
   ctx.fillStyle='#9fd7e6';ctx.font=reportFont(700,28);
-  ctx.fillText(presentation==='recovery'?'สิ่งที่ควรรู้จากการพักครั้งนี้':'สิ่งที่ควรรู้จากคืนนี้',M,y);y+=48;
+  const title=presentation==='sleep'
+    ?'สิ่งที่ควรรู้จากคืนนี้':'สิ่งที่ควรรู้จากการพักครั้งนี้';
+  ctx.fillText(title,M,y);y+=48;
   for(const item of findings){
     if(y>limit)break;
     const finding=userReportFinding(item);
@@ -295,15 +307,19 @@ async function drawSessionReportPng(payload){
   bg.addColorStop(0,'#061422');bg.addColorStop(1,'#020a13');
   ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
   ctx.textBaseline='top';ctx.textAlign='left';
-  let y=drawReportHeader(ctx,payload,W,M);
-  y=drawReportScore(ctx,quality,y,W,M);
-  y=drawReportMetrics(ctx,report,quality,y,W,M);
-  y=drawReportStages(ctx,report,quality,y,W,M);
-  drawReportFindings(ctx,report,y,W,M,H-M-190);
+  let y=drawReportHeader(ctx,payload,W,M,presentation);
+  y=drawReportScore(ctx,quality,y,W,M,presentation);
+  y=drawReportMetrics(ctx,report,quality,y,W,M,presentation);
+  if(presentation!=='unknown'){
+    y=drawReportStages(ctx,report,quality,y,W,M,presentation);
+  }
+  drawReportFindings(ctx,report,y,W,M,H-M-190,presentation);
   ctx.fillStyle='#5c8296';ctx.font=reportFont(500,22);
   const resultScope=presentation==='recovery'
     ?'Recovery Score สรุปช่วงพักตามเป้าหมายที่เลือก'
-    :'Sleep Score สรุปภาพรวมการนอนครั้งนี้';
+    :presentation==='sleep'
+      ?'Sleep Score สรุปภาพรวมการนอนครั้งนี้'
+      :'แสดงเฉพาะข้อมูลที่บันทึก โดยยังไม่สรุปเป็นคะแนน';
   drawWrapped(ctx,`${resultScope} · เป็นข้อมูลเพื่อดูแลการพัก ไม่ใช่การวินิจฉัยทางการแพทย์`,
     M,H-M-120,W-2*M,32,3);
   return canvas.toDataURL('image/png');

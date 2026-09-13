@@ -256,7 +256,6 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
             view = policy.environment_policy_snapshot(mode)
             self.assertEqual(view["mode"], mode)
             self.assertEqual(len(view["criteria"]), 7)
-        sleep_sound = policy.environment_criterion("sound", "sleep")
         nap_sound = policy.environment_criterion(
             "sound", "recovery_readiness")
         self.assertEqual(
@@ -335,7 +334,10 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertIn("function identityLabel(user,fallback='ผู้ใช้งาน')", ui)
         self.assertIn("if(email)return email", ui)
         self.assertIn("if(accountKey.includes('@'))return accountKey", ui)
-        self.assertIn("${adminView?'ผลการใช้งาน':'ผลการพัก'} · ${identityLabel(rec,'')}", ui)
+        self.assertIn(
+            "${adminView?`${historyEscape(identityLabel(rec,''))} · `:''}",
+            ui,
+        )
         self.assertIn("topUserName.textContent=shownAccount", ui)
 
     def test_admin_history_users_are_ordered_by_latest_session(self):

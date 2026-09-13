@@ -14,8 +14,10 @@ from zeep_pod.sessions.history_service import (
     resolve_history_window,
 )
 from zeep_pod.sessions.response_models import (
+    UsageSessionDevelopmentResponse,
     UsageSessionDetailResponse,
     UsageSessionListResponse,
+    UsageSessionPresentationResponse,
     UsageSessionSummaryResponse,
 )
 from zeep_pod.sessions.usage_service import UsageSessionService
@@ -239,9 +241,100 @@ def _build_detail_endpoint(
     return usage_session_result
 
 
+def _build_presentation_endpoint(
+    context: _UsageApiContext,
+    principal_dependency: Any,
+):
+    def usage_session_presentation(
+        response: Response,
+        session_id: str = Path(..., min_length=1, max_length=160),
+        principal: Any = principal_dependency,
+    ):
+        response.headers["Cache-Control"] = PRIVATE_NO_STORE
+        principal = _require_usage_browser_principal(principal)
+        account_key = None if principal.is_admin else principal.account_key
+        data = context.service().presentation_by_id(
+            session_id,
+            context.profiles(),
+            account_key=account_key,
+        )
+        if data is None:
+            raise _usage_error(
+                404,
+                "usage_session_not_found",
+                "ไม่พบผลการใช้งานนี้ หรือบัญชีนี้ไม่มีสิทธิ์เข้าถึง",
+            )
+        return response_envelope(data, kind="usage_session_presentation")
+
+    return usage_session_presentation
+
+
+def _build_development_endpoint(
+    context: _UsageApiContext,
+    admin_dependency: Any,
+):
+    def usage_session_development(
+        response: Response,
+        session_id: str = Path(..., min_length=1, max_length=160),
+        principal: Any = admin_dependency,
+    ):
+        response.headers["Cache-Control"] = PRIVATE_NO_STORE
+        _require_usage_browser_principal(principal)
+        data = context.service().development_by_id(
+            session_id,
+            context.profiles(),
+        )
+        if data is None:
+            raise _usage_error(
+                404,
+                "usage_session_not_found",
+                "ไม่พบผลการใช้งานนี้",
+            )
+        return response_envelope(data, kind="usage_session_development")
+
+    return usage_session_development
+
+
+def _add_presentation_routes(
+    router: APIRouter,
+    context: _UsageApiContext,
+    principal: Any,
+    admin: Any,
+) -> None:
+    router.add_api_route(
+        "/{session_id}/presentation",
+        _build_presentation_endpoint(context, principal),
+        methods=["GET"],
+        response_model=UsageSessionPresentationResponse,
+        response_model_exclude_unset=True,
+        summary="Get one concise user result",
+        description=(
+            "Canonical display hierarchy with one primary score, friendly "
+            "summary, key metrics, Baseline context and one recommendation. "
+            "It contains no repeated score block and no Raw Sensor data."
+        ),
+        responses=ERROR_RESPONSES,
+    )
+    router.add_api_route(
+        "/{session_id}/development",
+        _build_development_endpoint(context, admin),
+        methods=["GET"],
+        response_model=UsageSessionDevelopmentResponse,
+        response_model_exclude_unset=True,
+        summary="Get aggregate Admin development diagnostics",
+        description=(
+            "Administrator-only score release, accounting, environment, "
+            "version and review context. Raw Sensor data remains available "
+            "only through the separate protected research routes."
+        ),
+        responses=ERROR_RESPONSES,
+    )
+
+
 def create_usage_sessions_router(
     *,
     require_user: Callable[..., Any],
+    require_admin: Callable[..., Any],
     history_service: Callable[[], SessionHistoryService],
     profiles_snapshot: Callable[[], dict[str, dict[str, Any]]],
     profiles_lock: Any,
@@ -259,6 +352,7 @@ def create_usage_sessions_router(
         timezone_name,
     )
     principal = Depends(require_user)
+    admin = Depends(require_admin)
     router.add_api_route(
         "",
         _build_list_endpoint(context, principal),
@@ -305,4 +399,5 @@ def create_usage_sessions_router(
         ),
         responses=ERROR_RESPONSES,
     )
+    _add_presentation_routes(router, context, principal, admin)
     return router

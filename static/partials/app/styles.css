@@ -436,10 +436,10 @@
     .session-end-body{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:18px;align-items:start}
     /* renderSessionOverview เป็นสองคอลัมน์อยู่แล้ว บวกช่อง QR อีกช่องจะบีบ
        legend ของ Sleep Stage จนตัวเลขระยะเวลาถูกตัด — ต่ำกว่านี้ให้ซ้อนกัน
-       โดยเอา QR ขึ้นก่อน ผู้ใช้ต้องเห็น QR ทันทีไม่ต้องเลื่อนหา */
+       โดยคงผลสรุปไว้ก่อน QR เพื่อให้ลำดับการอ่านเหมือนทุกหน้าจอ */
     @media(max-width:1100px){
       .session-end-body{grid-template-columns:1fr}
-      .session-end-share{position:static;order:-1}
+      .session-end-share{position:static;order:2}
       .session-end-qr{max-width:300px;margin:0 auto}
     }
     .session-end-share{position:sticky;top:0;padding:18px;border:1px solid var(--line);border-radius:14px;

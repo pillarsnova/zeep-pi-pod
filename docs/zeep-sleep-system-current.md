@@ -491,13 +491,15 @@ Nap ที่มี **eligible rest ต่ำกว่า 10 นาที** ไ�
 wall-clock ของ Session จะถึง 10 นาทีแล้ว; จึงไม่สามารถใช้ช่วง confirmed OFF BED
 เติมขั้นต่ำเพื่อออกคะแนนได้ เป้าหมาย 30 นาทีแบ่งเป็น
 `partial=10–<25`, `recommended=25–35`, `extended=>35–45` และ
-`out_of_protocol=>45` ซึ่งต้อง review และไม่เขียนคะแนนใหม่อัตโนมัติ เป้าหมาย
-90 นาทีใช้ `recommended=75–105` และ `extended` ถึง 120 นาที; Session เกิน
-120 นาทีเป็น `implausible_outlier` และไม่เผยแพร่คะแนน
+`out_of_protocol=>45` ซึ่งต้อง review ในมุมมอง Admin แต่ยังคำนวณ Recovery
+Score จากเวลาพักจริงและหลักฐาน Sensor ได้ เป้าหมาย 90 นาทีใช้
+`recommended=75–105` และ `extended` ถึง 120 นาที; Session เกิน 120 นาทีเป็น
+`implausible_outlier` และไม่เผยแพร่คะแนน
 
 ข้อมูลเดิมที่ไม่มี target ไม่ถูกเดา: 10–45 นาทีแสดง `TARGET_UNKNOWN`, 45–120
-นาทีแสดง `TARGET_UNKNOWN/extended` และรักษาคะแนนเดิมไว้จนกว่าจะ review;
-มากกว่า 120 นาทีถือเป็น outlier ที่ปิดคะแนนได้
+นาทีแสดง `TARGET_UNKNOWN/extended`; ระบบไม่นับองค์ประกอบเวลา แต่ยังคำนวณจาก
+องค์ประกอบที่มีหลักฐานและเก็บธงให้ Admin ตรวจ มากกว่า 120 นาทีถือเป็น outlier
+ที่ปิดคะแนนได้
 
 คำว่า 7 ชั่วโมงในระบบหมายถึง AASM/SRS adult overnight recommendation threshold
 ไม่ใช่ “ZEEP target 7.5 ชั่วโมง” และไม่ใช้ลงโทษการงีบหรือการพักจากเข้าเวร

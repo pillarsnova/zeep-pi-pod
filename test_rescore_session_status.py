@@ -7,7 +7,12 @@ import unittest
 from unittest.mock import patch
 
 import rescore_session_reports
-from rescore_session_reports import _stage_cadence, rescore
+from rescore_session_reports import (
+    _annotated_stage_events,
+    _stage_cadence,
+    rescore,
+)
+from sleep_session_report import analyse_sleep_cycles
 
 
 class RescoreSessionStatusTests(unittest.TestCase):
@@ -161,6 +166,37 @@ class RescoreSessionStatusTests(unittest.TestCase):
         }
 
         self.assertEqual(_stage_cadence([value], 10), 30)
+
+    def test_stage_sequence_keeps_decision_duration_on_ten_second_report(
+        self,
+    ):
+        start = datetime(2026, 9, 11, tzinfo=timezone.utc)
+        values = []
+        rows = []
+        for index in range(91):
+            end_second = (index + 1) * 30
+            values.append({
+                "state": "n2" if index < 90 else "rem",
+                "sample_interval_s": 30,
+                "attribution_start": self._iso(start, end_second - 30),
+                "attribution_end": self._iso(start, end_second),
+                "metrics": {},
+            })
+            rows.append({"timestamp": self._iso(start, end_second)})
+
+        _events, sequence, *_rest = _annotated_stage_events(
+            rows,
+            values,
+            [],
+            fallback_interval_s=30,
+            fallback_estimator="test",
+        )
+        cycles = analyse_sleep_cycles(sequence, sample_interval_s=10)
+
+        self.assertTrue(all(
+            item["sample_interval_s"] == 30 for item in sequence
+        ))
+        self.assertEqual(cycles["completed_nrem_rem_cycles"], 1)
 
     def test_rescore_carries_legacy_no_data_but_preserves_off_bed(self):
         with tempfile.TemporaryDirectory() as temporary:

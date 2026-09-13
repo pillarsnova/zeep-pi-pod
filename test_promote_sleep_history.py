@@ -5,6 +5,7 @@ from promote_sleep_history import (
     _event_values,
     cohort_minimum_duration_seconds,
     rebuild_affected_baselines,
+    report_stage_seconds,
     reviewed_mode_group,
     session_is_in_reviewed_cohort,
     validate_promotion_reconciliation,
@@ -202,6 +203,37 @@ class PromoteSleepHistoryReconciliationTests(unittest.TestCase):
                     validate_promotion_reconciliation(
                         self._report(), {"actual_scored_s": value}
                     )
+
+
+class PromoteSleepHistoryStageParityTests(unittest.TestCase):
+    def test_compares_stage_time_independently_of_row_cadence(self):
+        thirty_second_report = {
+            "stages": [
+                {"state": "wake", "samples": 1, "duration_s": 30},
+                {"state": "n2", "samples": 2, "duration_s": 60},
+            ]
+        }
+        ten_second_report = {
+            "sleep": {
+                "stages": [
+                    {"state": "wake", "samples": 3, "duration_s": 30},
+                    {"state": "n2", "samples": 6, "duration_s": 60},
+                ]
+            }
+        }
+
+        self.assertEqual(
+            report_stage_seconds(thirty_second_report),
+            report_stage_seconds(ten_second_report),
+        )
+
+    def test_rejects_invalid_stage_duration(self):
+        report = {
+            "stages": [{"state": "wake", "duration_s": -1}]
+        }
+
+        with self.assertRaisesRegex(RuntimeError, "Stage duration"):
+            report_stage_seconds(report)
 
 
 if __name__ == "__main__":

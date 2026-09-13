@@ -315,14 +315,32 @@ def _report_grid_slot(
     split = next(
         (value for value in boundaries if value > cursor + 0.0005), None
     )
-    slot_end = min(
+    natural_end = min(
         end_epoch,
         cursor + nominal,
         segment_start if segment_start is not None else math.inf,
+    )
+    slot_end = min(
+        natural_end,
         split if split is not None else math.inf,
     )
-    ends_at_split = split is not None and abs(slot_end - split) <= 0.0005
-    return nominal, slot_end, 0.001 if ends_at_split else nominal * 0.45
+    # A canonical 30-second decision boundary often coincides with a regular
+    # 10-second acquisition endpoint.  Timeline timestamps contain normal
+    # scheduler/write jitter, so a sample nominally ending at that boundary
+    # may be a fraction of a second late.  Treat it like every other regular
+    # slot.  The strict upper bound is required only when an off-grid decision
+    # actually shortens the acquisition slot; otherwise every third Sensor row
+    # can be discarded and physiological coverage is understated.
+    truncated_by_split = (
+        split is not None
+        and abs(slot_end - split) <= 0.0005
+        and slot_end < natural_end - 0.0005
+    )
+    return (
+        nominal,
+        slot_end,
+        0.001 if truncated_by_split else nominal * 0.45,
+    )
 
 
 def _report_grid_candidate(

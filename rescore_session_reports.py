@@ -39,11 +39,15 @@ from sleep_stage_annotations import apply_annotations, load_annotations
 from sleep_signal_features import (
     HR_SANITY_RANGE_BPM,
     RR_SANITY_RANGE_PER_MIN,
-    debounced_bed_status_labels,
     terminal_occupancy_timeline,
 )
 from zeep_pod.sessions.cadence import timeline_sample_interval
 from zeep_pod.sessions.report_projection import project_report_samples
+from zeep_pod.sessions.report_timeline import (
+    sensor_samples as shared_sensor_samples,
+    timeline_projection as shared_timeline_projection,
+)
+from zeep_pod.sessions.sleep_event_data import decision_interval
 
 
 MAINTENANCE_TOOL_NAME = "rescore_session_reports.py"
@@ -124,32 +128,8 @@ def _stage_cadence(values: list[Dict[str, Any]], fallback: float) -> float:
 
 
 def _timeline_projection(connection: sqlite3.Connection) -> str:
-    """Read both current and pre-PM/VOC Timeline schemas without migration."""
-    columns = {
-        str(row[1]) for row in connection.execute("PRAGMA table_info(timeline)")
-    }
-    required = (
-        "timestamp", "temperature", "humidity", "co2", "lux", "sound",
-        "heart_rate", "respiration_rate", "bed_status",
-    )
-    missing = [column for column in required if column not in columns]
-    if missing:
-        raise ValueError(f"timeline schema missing required columns: {missing}")
-    optional = (
-        "pm2_5" if "pm2_5" in columns else "NULL AS pm2_5",
-        "voc_index" if "voc_index" in columns else "NULL AS voc_index",
-        (
-            "respiratory_evidence_valid"
-            if "respiratory_evidence_valid" in columns
-            else "NULL AS respiratory_evidence_valid"
-        ),
-        (
-            "respiratory_evidence_reason"
-            if "respiratory_evidence_reason" in columns
-            else "NULL AS respiratory_evidence_reason"
-        ),
-    )
-    return ",".join((*required, *optional))
+    """Compatibility wrapper for the shared immutable Timeline projection."""
+    return shared_timeline_projection(connection)
 
 
 def _annotated_stage_events(
@@ -188,11 +168,29 @@ def _annotated_stage_events(
         if stage not in STAGES:
             continue
         events.append({"timestamp": row["timestamp"], "value": value})
+        owned_interval = decision_interval(
+            {"timestamp": row["timestamp"], "value": value},
+            value,
+            fallback_interval_s=fallback_interval_s,
+        )
+        owned_seconds = (
+            owned_interval[1] - owned_interval[0]
+            if owned_interval is not None
+            else _positive_seconds(
+                value.get("sample_interval_s"), fallback_interval_s
+            )
+        )
         # A durable five-state event owns occupied time in the current
         # continuity contract. Legacy provisional/exclusion flags remain in
         # ``value`` for audit, but cannot reopen a scoring gap during rescore.
         sequence.append({
             "state": stage,
+            "timestamp": row["timestamp"],
+            # Stage analysis runs on the 30-second decision clock while the
+            # report rows normally run on the 10-second Sensor clock.  Keep
+            # each event's owned duration explicit so arousal/cycle scoring
+            # cannot silently shrink every State by threefold.
+            "sample_interval_s": owned_seconds,
             "metrics": value.get("metrics") or {},
             "score_eligible": True,
             "provisional": False,
@@ -214,43 +212,11 @@ def _annotated_stage_events(
 def _sensor_samples(
     timeline: list[sqlite3.Row],
 ) -> tuple[list[Dict[str, Any]], Dict[str, int], Dict[str, int]]:
-    """Translate immutable Timeline rows without deriving Sleep decisions."""
-    canonical_labels = debounced_bed_status_labels(
-        [row["bed_status"] for row in timeline]
+    """Translate Timeline rows through the shared Shadow/Rescore adapter."""
+    return shared_sensor_samples(
+        timeline,
+        timestamp_parser=lambda value: _timestamp(value).timestamp(),
     )
-    raw_counts: Dict[str, int] = {}
-    canonical_counts: Dict[str, int] = {}
-    samples: list[Dict[str, Any]] = []
-    for row, canonical_bed in zip(timeline, canonical_labels):
-        raw_bed = str(row["bed_status"] or "")
-        if raw_bed:
-            raw_counts[raw_bed] = raw_counts.get(raw_bed, 0) + 1
-        if canonical_bed:
-            canonical_counts[canonical_bed] = (
-                canonical_counts.get(canonical_bed, 0) + 1
-            )
-        samples.append({
-            "t": _timestamp(row["timestamp"]).timestamp(),
-            "temp": row["temperature"],
-            "hum": row["humidity"],
-            "co2": row["co2"],
-            "lux": row["lux"],
-            "dba": row["sound"],
-            "hr": row["heart_rate"],
-            "rr": row["respiration_rate"],
-            "bed": canonical_bed,
-            "pm2_5": row["pm2_5"],
-            "voc": row["voc_index"],
-            "respiratory_evidence_valid": (
-                row["respiratory_evidence_valid"] == 1
-                if row["respiratory_evidence_valid"] is not None
-                else None
-            ),
-            "respiratory_evidence_reason": row[
-                "respiratory_evidence_reason"
-            ],
-        })
-    return samples, raw_counts, canonical_counts
 
 
 def _projected_night_summary(
@@ -435,7 +401,13 @@ def _rebuild(
     projection = project_report_samples(
         raw_samples,
         start_at=start,
-        end_at=start.timestamp() + duration_s,
+        # ``duration`` is persisted at display precision and can differ from
+        # the authoritative Session boundary by a few milliseconds.  Using
+        # start + rounded duration makes a terminal attribution boundary look
+        # like an interior split and creates a synthetic sliver row.  Shadow
+        # replay is bounded by end_time, so Rescore must use the same boundary
+        # for exact coverage/report parity.
+        end_at=_timestamp(session["end_time"]),
         cadence_segments=old_final.get("sample_cadence_segments") or [],
         sensor_interval_s=sensor_sample_seconds,
         decision_interval_s=stage_sample_seconds,

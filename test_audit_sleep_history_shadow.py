@@ -12,6 +12,7 @@ from audit_sleep_history_shadow import (
     normalize_session_allowlist,
     private_write_bytes,
     project_replay_decisions_to_report_rows,
+    project_replay_report_samples,
     replay_session,
     report_state_rows_with_annotations,
     resolve_replay_mode_context,
@@ -248,6 +249,61 @@ class ShadowPathParityTests(unittest.TestCase):
         self.assertEqual(rows[-1]["sleep_data_status"], "confirmed_off_bed")
         self.assertEqual(sum(row["sample_interval_s"] for row in rows), 85.0)
         self.assertEqual(summary["requested_seconds"], 85.0)
+
+    def test_shared_report_projection_preserves_jittered_sensor_coverage(
+        self,
+    ):
+        sensor_rows = [
+            {
+                "t": second + 0.25,
+                "hr": 65.0,
+                "rr": 14.0,
+                "bed": "On bed",
+            }
+            for second in range(10, 91, 10)
+        ]
+        states = [
+            {
+                "t": second,
+                "attribution_start": second - 30.0,
+                "attribution_end": float(second),
+                "sample_interval_s": 30.0,
+                "state": "n2",
+                "score_eligible": True,
+            }
+            for second in (30, 60, 90)
+        ]
+
+        projection = project_replay_report_samples(
+            sensor_rows,
+            states,
+            [],
+            session_start=0.0,
+            session_end=90.0,
+            sensor_interval_s=10.0,
+        )
+        quality = build_sleep_quality(
+            90.0,
+            {"sleep_onset_proxy_s": 0.0},
+            projection["sleep_state_counts"],
+            completed=True,
+            rest_mode="sleep",
+            stage_sequence=states,
+            sensor_samples=projection["report_samples"],
+            sample_interval_s=projection["report_interval_s"],
+            score_state_counts=projection["sleep_score_state_counts"],
+        )
+
+        self.assertEqual(
+            projection["grid_summary"]["matched_source_rows"], 9
+        )
+        self.assertEqual(projection["sleep_state_counts"]["n2"], 9)
+        self.assertEqual(
+            quality["release_requirements"][
+                "paired_hr_rr_coverage_pct"
+            ],
+            100.0,
+        )
 
     def test_replay_never_pads_a_decision_beyond_session_end(self):
         replay = replay_session(

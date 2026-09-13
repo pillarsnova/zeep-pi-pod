@@ -33,7 +33,6 @@ from sleep_signal_features import (
     RR_SANITY_RANGE_PER_MIN,
     bed_exit_window_evidence,
     decode_bcg_samples,
-    debounced_bed_status_labels,
     filter_vital_values,
     movement_window_metrics,
     summary_features,
@@ -96,6 +95,7 @@ from sleep_system_policy import (
     SLEEP_ONSET_MIN_OBSERVATION_SECONDS,
     SLEEP_PROBABILITY_EMA_ALPHA,
     SLEEP_PROBABILITY_SWITCH_MARGIN,
+    SLEEP_SENSOR_SAMPLE_SECONDS,
     SLEEP_SCORE_SOFTMAX_TEMPERATURE,
     SLEEP_STAGE_CONFIRM_TICKS,
     SLEEP_STAGE_CONFIRMATION_SECONDS,
@@ -109,7 +109,15 @@ from sleep_system_policy import (
     gender_adjusted_baseline,
     rest_mode_group,
 )
-from zeep_pod.sessions.cadence import materialise_report_sample_grid
+from zeep_pod.sessions.cadence import (
+    materialise_report_sample_grid,
+    timeline_sample_interval,
+)
+from zeep_pod.sessions.report_projection import project_report_samples
+from zeep_pod.sessions.report_timeline import (
+    sensor_samples as shared_sensor_samples,
+    timeline_projection,
+)
 from zeep_pod.sessions.sleep_decision_projection import (
     apply_sleep_decisions_to_samples,
 )
@@ -140,6 +148,11 @@ REPLAY_SOURCE_FILES = (
     "sleep_stage_scoring.py",
     "sleep_system_policy.py",
     "sleep_session_report.py",
+    "zeep_pod/sessions/cadence.py",
+    "zeep_pod/sessions/report_projection.py",
+    "zeep_pod/sessions/report_timeline.py",
+    "zeep_pod/sessions/sleep_decision_projection.py",
+    "zeep_pod/sessions/sleep_event_data.py",
 )
 STAGES = tuple(ZEEP_SLEEP_STATES)
 SLEEP_STAGES = {"n1", "n2", "n3", "rem"}
@@ -429,64 +442,24 @@ def timeline_sensor_rows(
     end: float,
     interval_s: float = SLEEP_EVIDENCE_EPOCH_SECONDS,
 ) -> list[dict[str, Any]]:
-    """Resample canonical Timeline values onto the report's 30-second clock."""
+    """Return immutable Timeline samples on their acquisition clock.
+
+    ``interval_s`` remains accepted for compatibility with older callers, but
+    resampling here would make Shadow score a different Sensor stream from the
+    post-promotion report rebuild.  The shared projection layer owns cadence
+    normalisation after durable 30-second State events are applied.
+    """
+    del start, end, interval_s
     rows = connection.execute(
-        "SELECT timestamp,temperature,humidity,co2,lux,sound,heart_rate,"
-        "respiration_rate,bed_status,pm2_5,voc_index FROM timeline "
+        f"SELECT {timeline_projection(connection)} FROM timeline "
         "WHERE session_id=? ORDER BY timestamp",
         (session_id,),
     ).fetchall()
-    canonical_bed_labels = debounced_bed_status_labels(
-        [row["bed_status"] for row in rows]
+    samples, _raw_counts, _canonical_counts = shared_sensor_samples(
+        rows,
+        timestamp_parser=epoch,
     )
-    grouped: dict[int, list[tuple[sqlite3.Row, str]]] = defaultdict(list)
-    for row, canonical_bed in zip(rows, canonical_bed_labels):
-        position = epoch(row["timestamp"])
-        if start <= position <= end:
-            grouped[int((position - start) // interval_s)].append(
-                (row, canonical_bed)
-            )
-
-    numeric = {
-        "temp": "temperature", "hum": "humidity", "co2": "co2",
-        "lux": "lux", "dba": "sound", "hr": "heart_rate",
-        "rr": "respiration_rate", "pm2_5": "pm2_5", "voc": "voc_index",
-    }
-    output = []
-    for index in sorted(grouped):
-        selected = grouped[index]
-        paired_rows = sum(
-            bool(
-                filter_vital_values(
-                    [row["heart_rate"]], HR_SANITY_RANGE_BPM
-                )
-                and filter_vital_values(
-                    [row["respiration_rate"]],
-                    RR_SANITY_RANGE_PER_MIN,
-                )
-            )
-            for row, _ in selected
-        )
-        item: dict[str, Any] = {
-            "t": start + (index + 1) * interval_s,
-            "_bucket_index": index,
-            "_source_rows": len(selected),
-            "_paired_hr_rr_rows": paired_rows,
-            "bcg_analysis_valid": paired_rows > 0,
-            "bed": next(
-                (bed for _, bed in reversed(selected) if bed),
-                None,
-            ),
-        }
-        for target, source in numeric.items():
-            values = [
-                float(row[source]) for row, _ in selected
-                if isinstance(row[source], (int, float))
-                and math.isfinite(float(row[source]))
-            ]
-            item[target] = float(statistics.median(values)) if values else None
-        output.append(item)
-    return output
+    return samples
 
 
 def project_replay_decisions_to_report_rows(
@@ -525,35 +498,75 @@ def project_replay_decisions_to_report_rows(
         fallback_interval_s=interval_s,
     )
 
-    def event(row: dict[str, Any]) -> dict[str, Any]:
-        value = dict(row)
-        for key in ("attribution_start", "attribution_end"):
-            raw = value.get(key)
-            if isinstance(raw, (int, float)) and math.isfinite(float(raw)):
-                value[key] = datetime.fromtimestamp(
-                    float(raw), ZoneInfo("UTC")
-                ).isoformat()
-        timestamp = datetime.fromtimestamp(
-            float(row.get("t") or session_start), ZoneInfo("UTC")
-        ).isoformat()
-        value.setdefault("estimator_version", SLEEP_ESTIMATOR_VERSION)
-        value.setdefault("evidence_version", SLEEP_EVIDENCE_VERSION)
-        value.setdefault("baseline_version", ZEEP_SLEEP_BASELINE_VERSION)
-        value.setdefault(
-            "transition_policy_version",
-            ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
-        )
-        return {"timestamp": timestamp, "value": value}
-
     apply_sleep_decisions_to_samples(
         grid,
-        stage_events=[event(row) for row in states],
-        status_events=[event(row) for row in statuses],
+        stage_events=[
+            _replay_decision_event(row, session_start) for row in states
+        ],
+        status_events=[
+            _replay_decision_event(row, session_start) for row in statuses
+        ],
         fallback_interval_s=interval_s,
         heart_rate_range=HR_SANITY_RANGE_BPM,
         respiration_rate_range=RR_SANITY_RANGE_PER_MIN,
     )
     return grid, summary
+
+
+def _replay_decision_event(
+    row: dict[str, Any],
+    session_start: float,
+) -> dict[str, Any]:
+    """Convert one replay row to the durable event shape used by Rescore."""
+    value = dict(row)
+    for key in ("attribution_start", "attribution_end"):
+        raw = value.get(key)
+        if isinstance(raw, (int, float)) and math.isfinite(float(raw)):
+            value[key] = datetime.fromtimestamp(
+                float(raw), ZoneInfo("UTC")
+            ).isoformat()
+    timestamp = datetime.fromtimestamp(
+        float(row.get("t") or session_start), ZoneInfo("UTC")
+    ).isoformat()
+    value.setdefault("estimator_version", SLEEP_ESTIMATOR_VERSION)
+    value.setdefault("evidence_version", SLEEP_EVIDENCE_VERSION)
+    value.setdefault("baseline_version", ZEEP_SLEEP_BASELINE_VERSION)
+    value.setdefault(
+        "transition_policy_version",
+        ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
+    )
+    return {"timestamp": timestamp, "value": value}
+
+
+def project_replay_report_samples(
+    sensor_rows: list[dict[str, Any]],
+    state_rows: Iterable[dict[str, Any]],
+    status_rows: Iterable[dict[str, Any]],
+    *,
+    session_start: float,
+    session_end: float,
+    cadence_segments: Any = (),
+    sensor_interval_s: float,
+) -> dict[str, Any]:
+    """Run Shadow through the exact projection used by report Rescore."""
+    states = list(state_rows)
+    statuses = list(status_rows)
+    return project_report_samples(
+        sensor_rows,
+        start_at=session_start,
+        end_at=session_end,
+        cadence_segments=cadence_segments,
+        sensor_interval_s=sensor_interval_s,
+        decision_interval_s=SLEEP_EVIDENCE_EPOCH_SECONDS,
+        stage_events=[
+            _replay_decision_event(row, session_start) for row in states
+        ],
+        status_events=[
+            _replay_decision_event(row, session_start) for row in statuses
+        ],
+        heart_rate_range=HR_SANITY_RANGE_BPM,
+        respiration_rate_range=RR_SANITY_RANGE_PER_MIN,
+    )
 
 
 def raw_packet_quality(packets: list[sqlite3.Row], start: float, end: float) -> dict[str, Any]:
@@ -2185,12 +2198,56 @@ def main() -> int:
                     replay["state_rows"], replay["evidence_rows"], annotations
                 )
             )
-            counts = _duration_weighted_state_counts(report_state_rows)
             score_rows = [
                 item for item in report_state_rows
                 if item.get("score_eligible", True)
             ]
-            score_counts = _duration_weighted_state_counts(score_rows)
+            decision_counts = _duration_weighted_state_counts(
+                report_state_rows
+            )
+            raw_report_sensor_rows = timeline_sensor_rows(
+                sessions, row["session_id"], start=start, end=end,
+            )
+            sensor_interval_s = timeline_sample_interval(
+                [
+                    {
+                        "timestamp": datetime.fromtimestamp(
+                            float(item["t"]), ZoneInfo("UTC")
+                        ).isoformat()
+                    }
+                    for item in raw_report_sensor_rows
+                ],
+                summary.get("sensor_sample_interval_s")
+                or summary.get("sample_interval_s")
+                or SLEEP_SENSOR_SAMPLE_SECONDS,
+            )
+            projection = project_replay_report_samples(
+                raw_report_sensor_rows,
+                report_state_rows,
+                replay["status_rows"],
+                session_start=start,
+                session_end=end,
+                cadence_segments=(
+                    summary.get("sample_cadence_segments") or []
+                ),
+                sensor_interval_s=sensor_interval_s,
+            )
+            report_sensor_rows = projection["report_samples"]
+            report_interval_s = projection["report_interval_s"]
+            counts = Counter({
+                stage: projection["sleep_state_counts"].get(stage, 0.0)
+                for stage in STAGES
+            })
+            score_counts = Counter({
+                stage: projection["sleep_score_state_counts"].get(
+                    stage, 0.0
+                )
+                for stage in STAGES
+            })
+            replay["report_sample_grid"] = projection["grid_summary"]
+            replay["report_cadence_summary"] = projection[
+                "cadence_summary"
+            ]
             total_sleep = sum(counts[stage] for stage in SLEEP_STAGES)
             stage_pct = {
                 stage: round(counts[stage] * 100.0 / total_sleep, 1) if total_sleep else 0.0
@@ -2201,7 +2258,12 @@ def main() -> int:
                 float(replay["evaluation_epoch_equivalents"]),
             )
             stage_pct_of_occupied_evidence = {
-                stage: round(counts[stage] * 100.0 / evidence_denominator, 1)
+                stage: round(
+                    decision_counts[stage]
+                    * 100.0
+                    / evidence_denominator,
+                    1,
+                )
                 for stage in ("wake", "n1", "n2", "n3", "rem")
             }
             sequence = [
@@ -2219,6 +2281,10 @@ def main() -> int:
                     "score_eligible": bool(
                         item.get("score_eligible", True)
                     ),
+                    "sample_interval_s": float(
+                        item.get("sample_interval_s")
+                        or SLEEP_EVIDENCE_EPOCH_SECONDS
+                    ),
                 }
                 for item in report_state_rows
             ]
@@ -2235,19 +2301,6 @@ def main() -> int:
                 )
             )
             waso_seconds = _duration_weighted_waso_seconds(score_rows)
-            raw_report_sensor_rows = timeline_sensor_rows(
-                sessions, row["session_id"], start=start, end=end,
-            )
-            report_sensor_rows, report_grid_summary = (
-                project_replay_decisions_to_report_rows(
-                    raw_report_sensor_rows,
-                    report_state_rows,
-                    replay["status_rows"],
-                    session_start=start,
-                    session_end=end,
-                )
-            )
-            replay["report_sample_grid"] = report_grid_summary
             total_score_sleep = sum(
                 score_counts[stage] for stage in SLEEP_STAGES
             )
@@ -2261,7 +2314,7 @@ def main() -> int:
                 "awakenings": awakenings,
                 "waso_proxy_s": round(waso_seconds, 1),
                 "estimated_sleep_s": (
-                    total_score_sleep * SLEEP_EVIDENCE_EPOCH_SECONDS
+                    total_score_sleep * report_interval_s
                 ),
                 "sleep_efficiency": (
                     round(total_score_sleep / total_scored, 3)
@@ -2280,7 +2333,7 @@ def main() -> int:
                 row["duration"], night_summary, counts, completed=True,
                 rest_mode=scoring_mode, stage_sequence=sequence,
                 sensor_samples=report_sensor_rows,
-                sample_interval_s=SLEEP_EVIDENCE_EPOCH_SECONDS,
+                sample_interval_s=report_interval_s,
                 target_duration_s=target_duration_s,
                 score_state_counts=score_counts,
             )
@@ -2289,13 +2342,28 @@ def main() -> int:
             report = build_session_report(
                 row["duration"], report_sensor_rows, night_summary, counts, quality,
                 rest_mode=scoring_mode,
-                sample_interval_s=SLEEP_EVIDENCE_EPOCH_SECONDS,
+                sample_interval_s=report_interval_s,
                 estimator_version=SLEEP_ESTIMATOR_VERSION,
                 completed=True,
                 timeline_schema_version=int(
                     summary.get("timeline_schema_version") or 3
                 ),
                 target_duration_s=target_duration_s,
+                personal_context=(
+                    summary.get("restore_context")
+                    if isinstance(summary.get("restore_context"), dict)
+                    else None
+                ),
+                trend_context=(
+                    summary.get("restore_context")
+                    if isinstance(summary.get("restore_context"), dict)
+                    else None
+                ),
+                health_reference=(
+                    summary.get("health_reference")
+                    if isinstance(summary.get("health_reference"), dict)
+                    else None
+                ),
                 sleep_score_state_counts=score_counts,
             )
             if not quality.get("available"):

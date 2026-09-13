@@ -125,6 +125,45 @@ class ReportSampleGridTests(unittest.TestCase):
         self.assertTrue(rows[2]["synthetic_sleep_gap"])
         self.assertFalse(rows[3]["synthetic_sleep_gap"])
 
+    def test_aligned_decision_boundary_keeps_normal_timestamp_jitter(
+        self,
+    ) -> None:
+        rows, summary = materialise_report_sample_grid(
+            [
+                {"t": 10.25, "hr": 70.0, "rr": 15.0},
+                {"t": 20.25, "hr": 69.0, "rr": 15.0},
+                {"t": 30.25, "hr": 68.0, "rr": 14.0},
+            ],
+            start_at=0.0,
+            end_at=30.0,
+            split_boundaries=[30.0],
+            fallback_interval_s=10.0,
+        )
+
+        self.assertEqual(summary["matched_source_rows"], 3)
+        self.assertEqual(summary["unmatched_source_rows"], 0)
+        self.assertEqual(summary["synthetic_rows"], 0)
+        self.assertEqual(
+            [row["source_t"] for row in rows],
+            [10.25, 20.25, 30.25],
+        )
+
+    def test_off_grid_boundary_does_not_pull_future_sensor_row_backward(
+        self,
+    ) -> None:
+        rows, summary = materialise_report_sample_grid(
+            [{"t": 76.0, "hr": 68.0, "rr": 14.0}],
+            start_at=60.0,
+            end_at=85.0,
+            split_boundaries=[75.0],
+            fallback_interval_s=30.0,
+        )
+
+        self.assertTrue(rows[0]["synthetic_sleep_gap"])
+        self.assertEqual(rows[0]["t"], 75.0)
+        self.assertEqual(rows[1]["source_t"], 76.0)
+        self.assertEqual(summary["matched_source_rows"], 1)
+
     def test_synthetic_gap_after_off_bed_cannot_turn_into_wake(self) -> None:
         source = [
             {

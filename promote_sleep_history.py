@@ -132,6 +132,33 @@ def object_sha256(value: Any) -> str:
     ).encode("utf-8")).hexdigest()
 
 
+def report_stage_seconds(report: dict[str, Any]) -> dict[str, float]:
+    """Return cadence-independent Stage durations from a Session report."""
+    stages = (
+        report.get("stages")
+        or (report.get("sleep") or {}).get("stages")
+        or []
+    )
+    indexed = {
+        str(item.get("state")): item.get("duration_s")
+        for item in stages
+        if isinstance(item, dict)
+    }
+    result: dict[str, float] = {}
+    for stage in ("wake", "n1", "n2", "n3", "rem"):
+        try:
+            seconds = float(indexed.get(stage) or 0.0)
+        except (TypeError, ValueError):
+            seconds = math.nan
+        if not math.isfinite(seconds) or seconds < 0:
+            raise RuntimeError(
+                f"invalid report Stage duration for {stage}: "
+                f"{indexed.get(stage)!r}"
+            )
+        result[stage] = round(seconds, 3)
+    return result
+
+
 def rebuild_affected_baselines(
     store: BaselineStore,
     account_keys: list[str],
@@ -872,24 +899,19 @@ def main() -> int:
             reconciliation = validate_promotion_reconciliation(
                 rebuilt.get("report") or {}, rebuilt.get("quality") or {}
             )
-            expected_counts = Counter(
-                str(row.get("state"))
-                for row in (
-                    expected_item.get("report_state_rows")
-                    or expected_item.get("state_rows")
-                    or []
-                )
-            )
+            rebuilt_report = rebuilt.get("report") or {}
             checks = {
                 "quality": (expected_quality, rebuilt.get("quality") or {}),
-                "report": (expected_report, rebuilt.get("report") or {}),
+                "report": (expected_report, rebuilt_report),
                 "rest_mode": (
                     expected_item.get("mode") or {}, rebuilt.get("rest_mode") or {},
                 ),
-                "state_counts": (
-                    {stage: int(expected_counts.get(stage, 0))
-                     for stage in ("wake", "n1", "n2", "n3", "rem")},
-                    rebuilt.get("counts") or {},
+                # A 30-second decision becomes three 10-second report rows.
+                # Row counts are therefore not a stable parity unit; compare
+                # owned seconds, which remain invariant across cadences.
+                "state_seconds": (
+                    report_stage_seconds(expected_report),
+                    report_stage_seconds(rebuilt_report),
                 ),
             }
             failures = {

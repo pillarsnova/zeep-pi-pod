@@ -27,6 +27,7 @@ from zeep_pod.sessions.result_context import (
     persisted_restore_matches,
 )
 from zeep_pod.sessions.result_privacy import public_result_value
+from zeep_pod.sessions.score_identity import assess_score_identity
 
 RESULT_CONTRACT_VERSION = "zeep.session-result.v1"
 PUBLIC_RESTORE_SUMMARY_FIELDS = (
@@ -176,13 +177,29 @@ def _released_score(
     """Expose only a valid score released by the persisted quality result."""
     score_type = _score_type(group)
     score_value = _number(quality.get("score"))
-    available = bool(quality.get("available") is True and score_value is not None and 0.0 <= score_value <= 100.0 and score_type != "unresolved_score" and not mode_conflict)
+    release_candidate = bool(
+        quality.get("available") is True
+        and score_value is not None
+        and 0.0 <= score_value <= 100.0
+        and score_type != "unresolved_score"
+        and not mode_conflict
+    )
+    score_identity = (
+        assess_score_identity(quality, group) if release_candidate else None
+    )
+    provenance_issue = bool(
+        score_identity is not None and not score_identity.get("valid")
+    )
+    available = bool(release_candidate and not provenance_issue)
     validation_status = quality.get("validation_status")
     if available:
         reason = None
     elif mode_conflict:
         reason = "พบข้อมูลรูปแบบการพักไม่ตรงกัน ระบบจึงพักการแสดงคะแนนไว้เพื่อตรวจสอบ"
         validation_status = "mode_metadata_conflict"
+    elif provenance_issue and score_identity is not None:
+        reason = score_identity.get("reason")
+        validation_status = score_identity.get("validation_status")
     elif group == "unknown":
         reason = "เลือกรูปแบบการพักเพื่อให้ ZEEP แสดงผลได้เหมาะสม"
     else:
@@ -193,12 +210,14 @@ def _released_score(
         "value": score_value if available else None,
         "available": available,
         "level": (user_score_level(quality.get("level_key"), quality.get("level")) if available else None),
-        "formula_version": (quality.get("formula_version") or quality.get("version")),
+        "formula_version": quality.get("formula_version"),
         "quality_model_version": quality.get("version"),
         "validation_status": validation_status,
         "clinical_validated": bool(available and quality.get("clinical_validated") is True),
         "reason": reason,
-        "review_required": bool(mode_conflict or group == "unknown"),
+        "review_required": bool(
+            mode_conflict or group == "unknown" or provenance_issue
+        ),
     }
 
 

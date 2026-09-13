@@ -41,6 +41,7 @@ from sleep_system_policy import (
     is_approved_sleep_result_version,
     rest_mode_group,
 )
+from zeep_pod.sessions.score_identity import assess_score_identity
 
 # เกณฑ์กลาง (population default) — ใช้จนกว่าจะเรียนรู้ครบขั้นต่ำ
 DEFAULT_THRESHOLDS = {"cv_deep": 0.025, "cv_rem": 0.06}
@@ -116,7 +117,11 @@ class BaselineStore:
         return changed
 
     # ---------- learning ----------
-    def _night_metrics(self, session_id: str) -> Optional[dict]:
+    def _night_metrics(
+        self,
+        session_id: str,
+        session_mode: Any = None,
+    ) -> Optional[dict]:
         """สกัดตัวชี้วัดของ 1 คืนจาก timeline + final_summary
 
         ครอบคลุมสิ่งที่ engine ต้องใช้: awake baseline, sleeping median,
@@ -140,7 +145,32 @@ class BaselineStore:
         night = final_summary.get("night_summary") or {}
         report = final_summary.get("session_report") or {}
         quality = night.get("sleep_quality") or report.get("quality") or {}
-        mode = report.get("rest_mode") or quality.get("rest_mode") or {}
+        explicit_mode = final_summary.get("rest_mode")
+        report_mode = report.get("rest_mode")
+        session_mode_present = (
+            session_mode is not None and bool(str(session_mode).strip())
+        )
+        explicit_mode_present = (
+            explicit_mode is not None and bool(str(explicit_mode).strip())
+        )
+        mode = (
+            session_mode
+            if session_mode_present
+            else explicit_mode
+            if explicit_mode_present
+            else report_mode or "auto"
+        )
+        related_modes = []
+        if session_mode_present:
+            related_modes.append(("final_summary.rest_mode", explicit_mode))
+            related_modes.append(("session_report.rest_mode", report_mode))
+        elif explicit_mode_present:
+            related_modes.append(("session_report.rest_mode", report_mode))
+        score_identity = assess_score_identity(
+            quality,
+            mode,
+            related_modes=related_modes,
+        )
         resolved_mode = (
             mode.get("group") or mode.get("requested") or mode.get("resolved")
             if isinstance(mode, dict) else mode
@@ -150,6 +180,7 @@ class BaselineStore:
         )
         if not (
             rest_mode_group(resolved_mode) == "sleep"
+            and score_identity["valid"]
             and approved_versions
             and quality.get("available") is True
         ):
@@ -351,7 +382,12 @@ class BaselineStore:
             metrics["cycle_seconds"] = cycles
         return metrics
 
-    def _behaviour_metrics(self, session_id: str, duration_s: float) -> Optional[dict]:
+    def _behaviour_metrics(
+        self,
+        session_id: str,
+        duration_s: float,
+        session_mode: Any = None,
+    ) -> Optional[dict]:
         """Extract mode-aware behaviour without requiring detected sleep.
 
         Nap & Refresh may be useful while the participant remains awake.  Its
@@ -373,11 +409,31 @@ class BaselineStore:
         night = final_summary.get("night_summary") or {}
         report = final_summary.get("session_report") or {}
         quality = night.get("sleep_quality") or report.get("quality") or {}
+        explicit_mode = final_summary.get("rest_mode")
+        report_mode = report.get("rest_mode")
+        session_mode_present = (
+            session_mode is not None and bool(str(session_mode).strip())
+        )
+        explicit_mode_present = (
+            explicit_mode is not None and bool(str(explicit_mode).strip())
+        )
         mode = (
-            report.get("rest_mode")
-            or quality.get("rest_mode")
-            or final_summary.get("rest_mode")
-            or {}
+            session_mode
+            if session_mode_present
+            else explicit_mode
+            if explicit_mode_present
+            else report_mode or "auto"
+        )
+        related_modes = []
+        if session_mode_present:
+            related_modes.append(("final_summary.rest_mode", explicit_mode))
+            related_modes.append(("session_report.rest_mode", report_mode))
+        elif explicit_mode_present:
+            related_modes.append(("session_report.rest_mode", report_mode))
+        score_identity = assess_score_identity(
+            quality,
+            mode,
+            related_modes=related_modes,
         )
         resolved = (
             str(mode.get("resolved") or mode.get("requested") or "auto")
@@ -412,6 +468,7 @@ class BaselineStore:
         )
         if not (
             group is not None
+            and score_identity["valid"]
             and quality.get("available") is True
             and (
                 current_versions
@@ -496,7 +553,7 @@ class BaselineStore:
     def update_user(self, username_key: str) -> dict:
         """Rebuild physiology and behaviour from the approved cutover onward."""
         sessions = self.database.read_sessions(
-            "SELECT session_id,duration,start_time FROM sessions "
+            "SELECT session_id,duration,start_time,rest_mode FROM sessions "
             "WHERE username_key=? AND end_time IS NOT NULL AND duration>=? "
             "AND julianday(start_time)>=julianday(?) "
             "ORDER BY julianday(start_time) DESC LIMIT ?",
@@ -512,12 +569,21 @@ class BaselineStore:
         nights = []
         behaviour_sessions = []
         for row in sessions:
-            behaviour = self._behaviour_metrics(row["session_id"], row["duration"])
+            row_mode = (
+                row.get("rest_mode")
+                if hasattr(row, "get")
+                else row["rest_mode"]
+            )
+            behaviour = self._behaviour_metrics(
+                row["session_id"],
+                row["duration"],
+                row_mode,
+            )
             if behaviour:
                 behaviour_sessions.append(behaviour)
             duration = max(0.0, float(row["duration"] or 0.0))
             m = (
-                self._night_metrics(row["session_id"])
+                self._night_metrics(row["session_id"], row_mode)
                 if duration >= MIN_SESSION_SECONDS
                 else None
             )

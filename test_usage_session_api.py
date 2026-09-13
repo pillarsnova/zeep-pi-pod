@@ -7,8 +7,13 @@ from types import SimpleNamespace
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.testclient import TestClient
 
+from sleep_system_policy import (
+    RECOVERY_SCORE_FORMULA_VERSION,
+    SLEEP_SCORE_FORMULA_VERSION,
+)
 from zeep_pod.sessions.response_models import UsageSessionListResponse
 from zeep_pod.sessions.usage_api import USAGE_LIST_EXAMPLE, create_usage_sessions_router
+from zeep_pod.sessions.usage_service import UsageSessionService
 
 
 def _session(session_id: str, email: str, mode: str) -> dict:
@@ -18,7 +23,9 @@ def _session(session_id: str, email: str, mode: str) -> dict:
         "score": 78 if is_nap else 82,
         "quality_type": "rest_goal" if is_nap else "sleep",
         "score_title": "Recovery Score" if is_nap else "Sleep Score",
-        "formula_version": "recovery-v-test" if is_nap else "sleep-v-test",
+        "formula_version": (
+            RECOVERY_SCORE_FORMULA_VERSION if is_nap else SLEEP_SCORE_FORMULA_VERSION
+        ),
         "version": "quality-v-test",
         "engineering_shadow_score": 99,
         "score_unrounded": 98.75,
@@ -383,6 +390,57 @@ class UsageSessionApiTests(unittest.TestCase):
         self.assertEqual(data["items"][0]["user"]["email"], "a@example.test")
         self.assertNotIn("username", data["items"][0]["user"])
 
+    def test_list_summary_uses_canonical_score_not_raw_quality_type(self) -> None:
+        session = self.history.sessions["a-session"]
+        session["sleep_quality"]["quality_type"] = "rest_goal"
+
+        response = self.client.get(
+            "/api/v1/usage-sessions",
+            headers=self._headers("a@example.test"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertFalse(data["items"][0]["score"]["available"])
+        self.assertEqual(data["summary"]["sleep_score_count"], 0)
+        self.assertEqual(data["summary"]["recovery_score_count"], 0)
+        self.assertEqual(data["summary"]["awaiting_score_count"], 1)
+        self.assertEqual(
+            data["summary"]["sleep_score_count"]
+            + data["summary"]["recovery_score_count"]
+            + data["summary"]["awaiting_score_count"],
+            data["summary"]["session_count"],
+        )
+
+    def test_paginated_summary_fails_closed_when_count_invariant_is_invalid(
+        self,
+    ) -> None:
+        result = UsageSessionService._list_contract(
+            {
+                "sessions": [],
+                "total": 2,
+                "summary": {
+                    "people_count": 2,
+                    "session_count": 2,
+                    "sleep_score_count": 2,
+                    "recovery_score_count": 1,
+                    "awaiting_score_count": 0,
+                    "average_sleep_score": 82,
+                    "average_recovery_score": 78,
+                },
+                "range": None,
+                "history_start_utc": "2026-09-01T00:00:00+00:00",
+            },
+            limit=1,
+            offset=2,
+        )
+
+        self.assertEqual(result["summary"]["sleep_score_count"], 0)
+        self.assertEqual(result["summary"]["recovery_score_count"], 0)
+        self.assertEqual(result["summary"]["awaiting_score_count"], 2)
+        self.assertIsNone(result["summary"]["average_sleep_score"])
+        self.assertIsNone(result["summary"]["average_recovery_score"])
+
     def test_user_cannot_select_or_search_another_account(self) -> None:
         for params in (
             {"account_key": "b@example.test"},
@@ -729,7 +787,7 @@ class UsageSessionApiTests(unittest.TestCase):
         self.assertNotIn("samples", payload["report"])
         self.assertEqual(
             payload["report"]["quality"]["formula_version"],
-            "sleep-v-test",
+            SLEEP_SCORE_FORMULA_VERSION,
         )
         self.assertEqual(
             payload["report"]["quality"]["component_points"],

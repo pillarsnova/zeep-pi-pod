@@ -15,7 +15,10 @@ from uuid import uuid4
 from pydantic import ValidationError
 
 from sleep_session_report import build_session_report, build_sleep_quality
-from sleep_system_policy import SLEEP_SCORE_FORMULA_VERSION
+from sleep_system_policy import (
+    RECOVERY_SCORE_FORMULA_VERSION,
+    SLEEP_SCORE_FORMULA_VERSION,
+)
 from zeep_pod.sessions._response_model_base import ContractModel
 from zeep_pod.sessions.quality_publication import public_quality_payload
 from zeep_pod.sessions.response_models import (
@@ -178,7 +181,7 @@ class UsageResponseModelTests(unittest.TestCase):
             "available": True,
             "score": 74,
             "quality_type": "rest_goal",
-            "formula_version": "recovery-v-test",
+            "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
             "rest_mode": {
                 "group": "nap_recovery",
                 "requested": "nap_recovery",

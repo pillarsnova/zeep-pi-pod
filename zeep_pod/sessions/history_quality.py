@@ -4,34 +4,83 @@ from __future__ import annotations
 
 from typing import Any
 
-from sleep_session_report import normalise_rest_mode
 from sleep_system_policy import (
     NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS,
     NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
     PRE_CONTINUITY_SESSION_REPORT_VERSION,
     PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
+    PRE_RECOVERY_TIMING_SESSION_REPORT_VERSION,
+    PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION,
     PRE_RESPIRATORY_SESSION_REPORT_VERSION,
     PRE_RESTORE_SESSION_REPORT_VERSION,
     SESSION_REPORT_VERSION,
     SLEEP_QUALITY_VERSION,
     is_approved_sleep_result_version,
-    rest_mode_group,
 )
+from zeep_pod.sessions.score_identity import assess_score_identity, mode_groups
 
 
-def _stored_mode(final_summary: dict[str, Any], report: Any) -> str:
+def _stored_mode(final_summary: dict[str, Any], report: Any) -> Any:
     value: Any = final_summary.get("rest_mode")
-    if not value and isinstance(report, dict):
-        report_mode = report.get("rest_mode") or {}
-        if isinstance(report_mode, dict):
-            value = (
-                report_mode.get("group")
-                or report_mode.get("requested")
-                or report_mode.get("resolved")
+    if value is None or not str(value).strip():
+        value = report.get("rest_mode") if isinstance(report, dict) else None
+    return value or "auto"
+
+
+def _stored_mode_group(value: Any) -> str | None:
+    groups = mode_groups(value)
+    return next(iter(groups)) if len(groups) == 1 else None
+
+
+def _score_release_attempted(quality: Any) -> bool:
+    return bool(
+        isinstance(quality, dict)
+        and (
+            quality.get("available") is True
+            or (
+                not isinstance(quality.get("score"), bool)
+                and isinstance(quality.get("score"), (int, float))
             )
-        else:
-            value = report_mode
-    return normalise_rest_mode(value or "auto")
+        )
+    )
+
+
+def _identity_unavailable_quality(
+    quality: Any,
+    identity: dict[str, Any],
+) -> dict[str, Any]:
+    group = identity.get("group")
+    sleep_mode = group == "sleep"
+    recovery_mode = group == "nap_recovery"
+    return {
+        **(quality if isinstance(quality, dict) else {}),
+        "available": False,
+        "score": None,
+        "score_releasable": False,
+        "score_title": (
+            "Sleep Score"
+            if sleep_mode
+            else "Recovery Score"
+            if recovery_mode
+            else "รูปแบบการพักยังไม่ยืนยัน"
+        ),
+        "score_scope": (
+            "ค่าประเมินการนอนจาก Sensor"
+            if sleep_mode
+            else "Recovery Score จากช่วงพักและข้อมูล Sensor"
+            if recovery_mode
+            else "เลือกว่าเป็น Overnight หรือ Nap & Refresh เพื่อแสดงผล"
+        ),
+        "formula_version": None,
+        "level": "กำลังเตรียมผลสรุป",
+        "level_key": "unavailable",
+        "reason": identity["reason"],
+        "validation_status": identity["validation_status"],
+        "clinical_validated": False,
+        "legacy_result_hidden": True,
+        "rest_mode_unresolved": group is None,
+        "review_required": True,
+    }
 
 
 def _recording_seconds(report: Any) -> float | None:
@@ -56,7 +105,16 @@ def _compatible_versioned_quality(
     ):
         return quality
     if (
-        quality.get("version") == SLEEP_QUALITY_VERSION
+        quality.get("version") == PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION
+        and report.get("version")
+        == PRE_RECOVERY_TIMING_SESSION_REPORT_VERSION
+    ):
+        return {
+            **quality,
+            "compatible_pre_recovery_timing_result": True,
+        }
+    if (
+        quality.get("version") == PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION
         and report.get("version") == PRE_RESPIRATORY_SESSION_REPORT_VERSION
     ):
         return {
@@ -122,11 +180,22 @@ def released_historical_quality(
 ) -> dict[str, Any]:
     """Return current quality or a narrowly preserved legacy Recovery score."""
     report = final_summary.get("session_report") or {}
+    requested = _stored_mode(final_summary, report)
+    mode_group = _stored_mode_group(requested)
+    related_modes = []
+    if final_summary.get("rest_mode") is not None and isinstance(report, dict):
+        related_modes.append(("session_report.rest_mode", report.get("rest_mode")))
+    identity = assess_score_identity(
+        quality,
+        requested,
+        related_modes=related_modes,
+    )
+    release_attempted = _score_release_attempted(quality)
     compatible_quality = _compatible_versioned_quality(report, quality)
     if compatible_quality is not None:
-        return compatible_quality
-    requested = _stored_mode(final_summary, report)
-    mode_group = rest_mode_group(requested)
+        if not release_attempted or identity["valid"]:
+            return compatible_quality
+        return _identity_unavailable_quality(compatible_quality, identity)
     approved_untouched_sleep = (
         mode_group == "sleep"
         and isinstance(quality, dict)
@@ -136,10 +205,13 @@ def released_historical_quality(
         )
     )
     if approved_untouched_sleep:
-        return {
+        compatible_sleep = {
             **quality,
             "compatible_untouched_sleep_result": True,
         }
+        if not release_attempted or identity["valid"]:
+            return compatible_sleep
+        return _identity_unavailable_quality(compatible_sleep, identity)
     legacy_recovery = _preserved_legacy_recovery(
         final_summary,
         report,
@@ -147,7 +219,11 @@ def released_historical_quality(
         mode_group,
     )
     if legacy_recovery is not None:
-        return legacy_recovery
+        if not release_attempted or identity["valid"]:
+            return legacy_recovery
+        return _identity_unavailable_quality(legacy_recovery, identity)
+    if release_attempted and not identity["valid"]:
+        return _identity_unavailable_quality(quality, identity)
     sleep_mode = mode_group == "sleep"
     unresolved_mode = mode_group is None
     return {

@@ -3,7 +3,10 @@ import math
 import unittest
 
 from sleep_session_report import build_session_report
-from sleep_system_policy import RESPIRATORY_WELLNESS_VERSION
+from sleep_system_policy import (
+    RESPIRATORY_WELLNESS_VERSION,
+    SLEEP_SCORE_FORMULA_VERSION,
+)
 from zeep_pod.sessions.report_publication import public_report_field
 from zeep_pod.sessions.respiratory_response_models import RespiratoryWellness
 from zeep_pod.sessions.respiratory_wellness import (
@@ -461,6 +464,8 @@ class RespiratoryWellnessTests(unittest.TestCase):
             "available": True,
             "score": 82,
             "score_title": "Sleep Score",
+            "quality_type": "sleep",
+            "formula_version": SLEEP_SCORE_FORMULA_VERSION,
             "level": "ดี",
             "level_key": "good",
             "sleep_efficiency_pct": 85,

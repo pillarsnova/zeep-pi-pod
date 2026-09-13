@@ -201,8 +201,8 @@ Success response ใช้ envelope:
 | Transition policy | `zeep-semimarkov-30s-v1.18-scoreable-continuity` |
 | Personal/population baseline | `zeep-sleep-state-baseline-v1.8-sep1-cutover` |
 | Historical replay | `zeep-sleep-history-reclass-v28-complete-occupied-epochs` |
-| Session report | `zeep-session-report-v10.7-complete-occupied-epochs` |
-| Quality | `zeep-rest-quality-v8.6-state-evidence-coverage-split` |
+| Session report | `zeep-session-report-v10.9-recovery-timing-advisory` |
+| Quality | `zeep-rest-quality-v8.7-recovery-timing-advisory` |
 | Sleep Score formula | `zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage` |
 | Recovery Score formula | `zeep-recovery-score-v2.1-complete-rest-25-35-30-10` |
 | Restore Summary | `zeep-restore-summary-v1.0` |

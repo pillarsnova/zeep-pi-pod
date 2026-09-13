@@ -11,6 +11,8 @@ from sleep_system_policy import (
     APPROVED_SLEEP_RESULT_VERSION_PAIRS,
     PRE_CONTINUITY_SESSION_REPORT_VERSION,
     PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
+    PRE_RECOVERY_TIMING_SESSION_REPORT_VERSION,
+    PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION,
     PRE_RESPIRATORY_SESSION_REPORT_VERSION,
     PRE_RESTORE_SESSION_REPORT_VERSION,
     RECOVERY_SCORE_FORMULA_VERSION,
@@ -74,6 +76,7 @@ class _BehaviourDatabase:
                         "available": True,
                         "score": 70 + index,
                         "quality_type": "rest_goal",
+                        "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
                         "version": SLEEP_QUALITY_VERSION,
                     },
                 },
@@ -187,15 +190,103 @@ class RestoreSummaryTests(unittest.TestCase):
         self.assertIsNone(summary["source_score"]["formula_version"])
         self.assertEqual(summary["session_scope"]["mode"], "unknown")
 
+    def test_explicit_mode_wins_and_conflicting_score_identity_fails_closed(self):
+        quality = {
+            **_sleep_quality(),
+            "quality_type": "rest_goal",
+            "score_title": "Recovery Score",
+            "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
+            "rest_mode": {
+                "group": "nap_recovery",
+                "requested": "nap_recovery",
+            },
+        }
+        context = {
+            "sessions_used": 9,
+            "score_median": 75,
+            "scores": [70, 71, 72, 73, 74, 75, 76, 77, 78],
+        }
+
+        summary = build_restore_summary(
+            quality,
+            mode={"group": "sleep", "requested": "sleep"},
+            personal_context=context,
+            trend_context=context,
+        )
+
+        self.assertEqual(summary["session_scope"]["mode"], "sleep")
+        self.assertEqual(summary["source_score"]["type"], "sleep_score")
+        self.assertFalse(summary["source_score"]["available"])
+        self.assertIsNone(summary["source_score"]["value"])
+        self.assertIsNone(summary["source_score"]["formula_version"])
+        self.assertEqual(
+            summary["personal_baseline"]["maturity"]["sessions_used"], 0
+        )
+        self.assertFalse(summary["trend"]["available"])
+
+    def test_untyped_or_cross_family_score_provenance_is_unavailable(self):
+        cases = {}
+        untyped = _sleep_quality()
+        untyped.pop("quality_type")
+        cases["missing_quality_type"] = untyped
+        missing_formula = _sleep_quality()
+        missing_formula.pop("formula_version")
+        cases["missing_formula"] = missing_formula
+        wrong_formula = _sleep_quality()
+        wrong_formula["formula_version"] = RECOVERY_SCORE_FORMULA_VERSION
+        cases["wrong_formula_family"] = wrong_formula
+
+        for name, quality in cases.items():
+            with self.subTest(name=name):
+                summary = build_restore_summary(quality)
+                self.assertFalse(summary["available"])
+                self.assertIsNone(summary["source_score"]["value"])
+                self.assertIsNone(summary["source_score"]["formula_version"])
+
     def test_legacy_string_mode_is_normalised_without_crashing(self):
         quality = _sleep_quality()
-        quality.pop("quality_type")
         quality["rest_mode"] = "overnight"
 
         summary = build_restore_summary(quality)
 
         self.assertTrue(summary["available"])
         self.assertEqual(summary["source_score"]["type"], "sleep_score")
+
+    def test_report_builder_keeps_explicit_mode_and_withholds_conflicting_score(self):
+        quality = {
+            **_sleep_quality(),
+            "quality_type": "rest_goal",
+            "score_title": "Recovery Score",
+            "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
+            "rest_mode": {
+                "group": "nap_recovery",
+                "requested": "nap_recovery",
+                "resolved": "short_nap",
+            },
+        }
+
+        report = build_session_report(
+            30,
+            [{"bed": "On bed", "hr": 62, "rr": 14, "sleep": "n2"}],
+            {"estimated_sleep_s": 30},
+            {"n2": 1},
+            quality,
+            rest_mode="sleep",
+            sample_interval_s=30,
+        )
+
+        self.assertEqual(report["rest_mode"]["group"], "sleep")
+        self.assertEqual(report["quality"]["rest_mode"], report["rest_mode"])
+        self.assertEqual(report["quality"]["score_title"], "Sleep Score")
+        self.assertFalse(report["quality"]["available"])
+        self.assertIsNone(report["quality"]["score"])
+        self.assertEqual(
+            report["quality"]["validation_status"], "mode_metadata_conflict"
+        )
+        self.assertEqual(
+            report["restore_summary"]["source_score"]["type"], "sleep_score"
+        )
+        self.assertFalse(report["restore_summary"]["available"])
 
     def test_missing_sensor_is_attention_never_a_positive_driver(self):
         summary = build_restore_summary(
@@ -393,14 +484,24 @@ class RestoreSummaryTests(unittest.TestCase):
     def test_report_version_bump_preserves_previous_approved_pair(self):
         self.assertEqual(
             SESSION_REPORT_VERSION,
-            "zeep-session-report-v10.8-respiratory-wellness",
+            "zeep-session-report-v10.9-recovery-timing-advisory",
         )
         self.assertIn(
             (SESSION_REPORT_VERSION, SLEEP_QUALITY_VERSION),
             APPROVED_SLEEP_RESULT_VERSION_PAIRS,
         )
         self.assertIn(
-            (PRE_RESPIRATORY_SESSION_REPORT_VERSION, SLEEP_QUALITY_VERSION),
+            (
+                PRE_RECOVERY_TIMING_SESSION_REPORT_VERSION,
+                PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION,
+            ),
+            APPROVED_SLEEP_RESULT_VERSION_PAIRS,
+        )
+        self.assertIn(
+            (
+                PRE_RESPIRATORY_SESSION_REPORT_VERSION,
+                PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION,
+            ),
             APPROVED_SLEEP_RESULT_VERSION_PAIRS,
         )
         self.assertIn(
@@ -423,6 +524,7 @@ class RestoreSummaryTests(unittest.TestCase):
             "available": True,
             "score": 74,
             "quality_type": "rest_goal",
+            "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
             "version": PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
         }
         final_summary = {
@@ -443,6 +545,7 @@ class RestoreSummaryTests(unittest.TestCase):
             "available": True,
             "score": 76,
             "quality_type": "rest_goal",
+            "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
             "version": PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
         }
         final_summary = {
@@ -457,6 +560,68 @@ class RestoreSummaryTests(unittest.TestCase):
 
         self.assertEqual(released["score"], 76)
         self.assertTrue(released["compatible_pre_continuity_result"])
+
+    def test_history_release_withholds_mode_conflict_under_authoritative_mode(self):
+        quality = {
+            "available": True,
+            "score": 84,
+            "score_title": "Sleep Score",
+            "quality_type": "sleep",
+            "formula_version": SLEEP_SCORE_FORMULA_VERSION,
+            "version": SLEEP_QUALITY_VERSION,
+            "rest_mode": {"group": "sleep", "requested": "sleep"},
+        }
+        final_summary = {
+            "rest_mode": "sleep",
+            "session_report": {
+                "version": SESSION_REPORT_VERSION,
+                "rest_mode": {"group": "nap_recovery"},
+            },
+        }
+
+        released = released_historical_quality(final_summary, quality)
+
+        self.assertFalse(released["available"])
+        self.assertIsNone(released["score"])
+        self.assertEqual(released["score_title"], "Sleep Score")
+        self.assertEqual(
+            released["validation_status"], "mode_metadata_conflict"
+        )
+
+    def test_history_release_withholds_untyped_and_wrong_formula_scores(self):
+        base = {
+            "available": True,
+            "score": 84,
+            "score_title": "Sleep Score",
+            "quality_type": "sleep",
+            "formula_version": SLEEP_SCORE_FORMULA_VERSION,
+            "version": SLEEP_QUALITY_VERSION,
+            "rest_mode": {"group": "sleep"},
+        }
+        final_summary = {
+            "rest_mode": "sleep",
+            "session_report": {
+                "version": SESSION_REPORT_VERSION,
+                "rest_mode": {"group": "sleep"},
+            },
+        }
+        cases = {}
+        missing_type = dict(base)
+        missing_type.pop("quality_type")
+        cases["score_identity_untyped"] = missing_type
+        missing_formula = dict(base)
+        missing_formula.pop("formula_version")
+        cases["score_formula_untyped"] = missing_formula
+        wrong_formula = dict(base)
+        wrong_formula["formula_version"] = RECOVERY_SCORE_FORMULA_VERSION
+        cases["score_formula_mismatch"] = wrong_formula
+
+        for expected_status, quality in cases.items():
+            with self.subTest(expected_status=expected_status):
+                released = released_historical_quality(final_summary, quality)
+                self.assertFalse(released["available"])
+                self.assertIsNone(released["score"])
+                self.assertEqual(released["validation_status"], expected_status)
 
     def test_baseline_store_keeps_same_mode_score_reference_and_trend(self):
         temporary = tempfile.TemporaryDirectory()
@@ -480,6 +645,43 @@ class RestoreSummaryTests(unittest.TestCase):
             context["score_formula_versions"],
             [RECOVERY_SCORE_FORMULA_VERSION],
         )
+
+    def test_personal_aggregation_excludes_mode_conflict(self):
+        database = _BehaviourDatabase()
+        database.sessions.insert(0, {
+            "session_id": "conflicting-session",
+            "duration": 30 * 60,
+            "start_time": "2026-09-09T06:00:00+00:00",
+            "rest_mode": "sleep",
+        })
+        database.summaries["conflicting-session"] = {
+            "rest_mode": "sleep",
+            "night_summary": {
+                "estimated_sleep_s": 0,
+                "sleep_quality": {
+                    "available": True,
+                    "score": 99,
+                    "quality_type": "rest_goal",
+                    "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
+                    "version": SLEEP_QUALITY_VERSION,
+                    "rest_mode": {"group": "nap_recovery"},
+                },
+            },
+            "session_report": {
+                "version": SESSION_REPORT_VERSION,
+                "rest_mode": {"group": "nap_recovery"},
+            },
+        }
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        store = BaselineStore(database, Path(temporary.name))
+
+        record = store.update_user("person@example.com")
+
+        context = record["behaviour_by_mode"]["nap_recovery"]
+        self.assertEqual(context["sessions_used"], 8)
+        self.assertNotIn("conflicting-session", context["session_ids"])
+        self.assertNotIn(99.0, context["scores"])
 
 
 if __name__ == "__main__":

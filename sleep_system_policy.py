@@ -30,13 +30,19 @@ SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
 SLEEP_HISTORY_BACKFILL_VERSION = (
     "zeep-sleep-history-reclass-v28-complete-occupied-epochs"
 )
-SESSION_REPORT_VERSION = "zeep-session-report-v10.8-respiratory-wellness"
-SLEEP_QUALITY_VERSION = (
+SESSION_REPORT_VERSION = "zeep-session-report-v10.9-recovery-timing-advisory"
+SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.7-recovery-timing-advisory"
+PRE_RECOVERY_TIMING_SESSION_REPORT_VERSION = (
+    "zeep-session-report-v10.8-respiratory-wellness"
+)
+PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION = (
     "zeep-rest-quality-v8.6-state-evidence-coverage-split"
 )
 SLEEP_SCORE_FORMULA_VERSION = (
     "zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage"
 )
+# v10.9 keeps Nap timing deviations as Admin QA instead of withholding an
+# otherwise supported Recovery Score. The point formula itself is unchanged.
 # v10.8 adds a claim-bounded respiratory Wellness interpretation without
 # changing Sleep State or either score. v10.7 guarantees five-state attribution
 # for every occupied recording
@@ -65,7 +71,14 @@ PREVIOUS_SESSION_REPORT_VERSION = "zeep-session-report-v10.3-nap-goal-duration"
 PREVIOUS_SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.3-nap-goal-duration"
 APPROVED_SLEEP_RESULT_VERSION_PAIRS = frozenset({
     (SESSION_REPORT_VERSION, SLEEP_QUALITY_VERSION),
-    (PRE_RESPIRATORY_SESSION_REPORT_VERSION, SLEEP_QUALITY_VERSION),
+    (
+        PRE_RECOVERY_TIMING_SESSION_REPORT_VERSION,
+        PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION,
+    ),
+    (
+        PRE_RESPIRATORY_SESSION_REPORT_VERSION,
+        PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION,
+    ),
     (
         PRE_COMPLETE_SESSION_REPORT_VERSION,
         PRE_COMPLETE_SLEEP_QUALITY_VERSION,
@@ -475,11 +488,11 @@ REST_MODE_DURATION_TARGETS_S = {
     "overnight": 7 * 3600,
 }
 
-# Nap & Refresh has two deliberately selected opportunities.  The target is
+# Nap & Refresh has two deliberately selected opportunities. The target is
 # persisted when the Session starts; elapsed time must never silently turn a
-# 30-minute Session into a 90-minute Session (or the reverse).  Historical
-# records without this field remain reviewable, but are not assigned a target
-# by inference.
+# 30-minute Session into a 90-minute Session (or the reverse). Timing drift or
+# a missing legacy target remains visible to Admin QA, but does not by itself
+# withhold a Recovery Score supported by sufficient duration and HR/RR.
 NAP_RECOVERY_TARGET_OPTIONS = {
     30 * 60: {
         "key": "nap_30",
@@ -552,6 +565,7 @@ REST_MODE_PROTOCOLS = {
         "supported_target_seconds": sorted(NAP_RECOVERY_TARGET_OPTIONS),
         "target_required_for_new_sessions": True,
         "legacy_missing_target_requires_review": True,
+        "timing_review_blocks_score": False,
         "phases": ["settle", "rest_or_nap", "gentle_close"],
         "primary_outcomes": [
             "rest_continuity", "hr_rr_settling", "stillness",

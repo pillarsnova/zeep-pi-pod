@@ -11,8 +11,10 @@ from sleep_system_policy import (
     PERSONAL_BASELINE_LEARNING_START_UTC,
     PREVIOUS_SESSION_REPORT_VERSION,
     PREVIOUS_SLEEP_QUALITY_VERSION,
+    RECOVERY_SCORE_FORMULA_VERSION,
     SESSION_REPORT_VERSION,
     SLEEP_QUALITY_VERSION,
+    SLEEP_SCORE_FORMULA_VERSION,
 )
 
 
@@ -78,6 +80,11 @@ def _behaviour_summary(*, mode_group, resolved, rr, confidence="high"):
                 "available": True,
                 "version": SLEEP_QUALITY_VERSION,
                 "quality_type": quality_type,
+                "formula_version": (
+                    SLEEP_SCORE_FORMULA_VERSION
+                    if mode_group == "sleep"
+                    else RECOVERY_SCORE_FORMULA_VERSION
+                ),
                 "score": 80,
                 "sleep_detected": False,
                 "estimated_sleep_s": 0,
@@ -124,6 +131,37 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
         ))
         self.assertIsNone(store._night_metrics("micro-sleep-session"))
 
+    def test_mode_conflict_never_trains_physiology_or_score_trend(self):
+        summary = {
+            "rest_mode": "sleep",
+            "night_summary": {
+                "estimated_sleep_s": MIN_DETECTED_SLEEP_SECONDS,
+                "sleep_quality": {
+                    "available": True,
+                    "score": 88,
+                    "quality_type": "sleep",
+                    "sleep_detected": True,
+                    "estimated_sleep_s": MIN_DETECTED_SLEEP_SECONDS,
+                    "formula_version": SLEEP_SCORE_FORMULA_VERSION,
+                    "version": PREVIOUS_SLEEP_QUALITY_VERSION,
+                    "rest_mode": {"group": "nap_recovery"},
+                },
+            },
+            "session_report": {
+                "version": PREVIOUS_SESSION_REPORT_VERSION,
+                "rest_mode": {"group": "nap_recovery"},
+            },
+        }
+        store = self._store(summary)
+
+        self.assertIsNone(store._night_metrics("conflicting-session"))
+        self.assertIsNone(
+            store._behaviour_metrics(
+                "conflicting-session",
+                MIN_DETECTED_SLEEP_SECONDS,
+            )
+        )
+
     def test_previous_approved_overnight_still_trains_baseline(self):
         summary = {
             "night_summary": {
@@ -133,6 +171,7 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
                     "quality_type": "sleep",
                     "sleep_detected": True,
                     "estimated_sleep_s": MIN_DETECTED_SLEEP_SECONDS,
+                    "formula_version": SLEEP_SCORE_FORMULA_VERSION,
                     "version": PREVIOUS_SLEEP_QUALITY_VERSION,
                 },
             },
@@ -172,6 +211,7 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
                     "quality_type": "sleep",
                     "sleep_detected": True,
                     "estimated_sleep_s": MIN_DETECTED_SLEEP_SECONDS,
+                    "formula_version": SLEEP_SCORE_FORMULA_VERSION,
                     "version": PREVIOUS_SLEEP_QUALITY_VERSION,
                 },
             },

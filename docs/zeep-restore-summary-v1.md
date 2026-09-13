@@ -205,7 +205,7 @@ Historical `auto/unknown_legacy` ต้องส่ง `unresolved_score` แล
 
 | ชั้น | Version |
 |---|---|
-| Session report | `zeep-session-report-v10.7-complete-occupied-epochs` |
+| Session report | `zeep-session-report-v10.9-recovery-timing-advisory` |
 | Restore Summary | `zeep-restore-summary-v1.0` |
 | Action bands | `zeep-restore-action-bands-v1.0` |
 | Driver policy | `zeep-restore-drivers-v1.0` |

@@ -26,14 +26,12 @@ from sleep_session_report import (
 )
 from sleep_system_policy import (
     NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS,
-    NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
     SLEEP_EVIDENCE_VERSION,
     SLEEP_G2_ONTOLOGY_VERSION,
     ZEEP_SLEEP_BASELINE_VERSION,
     ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
     is_approved_sleep_result_version,
     resolve_rest_target,
-    rest_mode_group,
 )
 from sleep_stage_annotations import apply_annotations, load_annotations
 from sleep_signal_features import (
@@ -335,21 +333,6 @@ def _rebuild(
     )
     target = resolve_rest_target(mode, target_seconds)
     duration_s = max(0.0, float(session["duration"] or 0.0))
-    hard_timing_guard = (
-        duration_s < NAP_RECOVERY_MINIMUM_SCORE_SECONDS
-        or duration_s > NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS
-    )
-    if (
-        rest_mode_group(mode) == "nap_recovery"
-        and not target.get("available")
-        and not hard_timing_guard
-        and not report_only
-    ):
-        raise HistoricalModeReviewRequired(
-            "missing_recovery_target",
-            "Session เดิมไม่ได้เก็บเป้าหมาย Nap 30/90 นาที; รักษาผลเดิมไว้รอตรวจ",
-        )
-
     stage_rows = connection.execute(
         "SELECT timestamp,value FROM events WHERE session_id=? AND type='sleep_stage' "
         "ORDER BY timestamp,id", (session_id,),
@@ -468,6 +451,7 @@ def _rebuild(
         )
         if (
             timing.get("review_required")
+            and not timing.get("score_releasable")
             and duration_s <= NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS
             and not allow_reviewed_protocol_withhold
         ):

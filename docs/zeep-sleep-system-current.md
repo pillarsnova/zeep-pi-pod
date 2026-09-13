@@ -38,10 +38,10 @@
 | Semi-Markov transition | `zeep-semimarkov-30s-v1.18-scoreable-continuity` |
 | G2 ontology | `g2-aasm-5class-v1.0` |
 | Historical replay | `zeep-sleep-history-reclass-v28-complete-occupied-epochs` |
-| Sleep / Recovery quality | `zeep-rest-quality-v8.6-state-evidence-coverage-split` |
+| Sleep / Recovery quality | `zeep-rest-quality-v8.7-recovery-timing-advisory` |
 | Sleep Score formula | `zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage` |
 | Recovery Score formula | `zeep-recovery-score-v2.1-complete-rest-25-35-30-10` |
-| Session report | `zeep-session-report-v10.8-respiratory-wellness` |
+| Session report | `zeep-session-report-v10.9-recovery-timing-advisory` |
 | Restore Summary | `zeep-restore-summary-v1.0` |
 | Respiratory Wellness | `zeep-respiratory-wellness-v1.1` |
 | Restore action bands | `zeep-restore-action-bands-v1.0` |
@@ -423,7 +423,7 @@ stateDiagram-v2
 physiology evidence ก่อนเสมอ การอนุญาต graph นี้ไม่ได้หมายความว่า BCG เทียบเท่า PSG
 ซึ่งยังต้องใช้ EEG/EOG/chin EMG จริง
 
-## 4. Sleep / Recovery Quality v8.6
+## 4. Sleep / Recovery Quality v8.7
 
 ### 4.1 สมการภาพรวม
 
@@ -436,8 +436,9 @@ physiology evidence ก่อนเสมอ การอนุญาต graph �
 เท่านั้น ไม่ว่าจะพบการหลับหรือยังตื่นพักอยู่ การไม่มีข้อมูล Sensor เพียงพอจะไม่เผยแพร่
 คะแนนจาก duration เพียงอย่างเดียว
 
-สำหรับ Recovery Score เมื่อมีหลักฐาน HR/RR ที่จับคู่กันอย่างน้อย 6 จุดและผ่าน
-กติกาเวลา ระบบจะแสดงคะแนนพร้อมระดับความมั่นใจ `high / medium / low` โดย
+สำหรับ Recovery Score เมื่อมีหลักฐาน HR/RR ที่จับคู่กันอย่างน้อย 6 จุดและมีเวลา
+พักที่นับได้อย่างน้อย 10 นาที ระบบจะแสดงคะแนนพร้อมระดับความมั่นใจ
+`high / medium / low` โดย
 Coverage/Tier เป็น Admin QA เท่านั้น มีน้ำหนัก 0 คะแนนและไม่หักคะแนนสุขภาพ
 การขาด paired HR/RR ยังปิดคะแนนได้เพราะไม่มีหลักฐานสรีรวิทยาขั้นต่ำ ไม่ใช่เพราะ
 Coverage ทั้ง Session ต่ำกว่า Tier ใด Tier หนึ่ง
@@ -464,8 +465,10 @@ HR/RR, Movement หรือ Environment ใหม่; Raw `Get out of bed` ช�
 มีเพียง confirmed OFF BED เท่านั้นที่ไม่นับ หากข้อมูลเก่าไม่มี State attribution
 จะใช้ On bed/Moving/Weak
 breathing/Snoring หรือ HR/RR คู่ที่ผ่าน sanity range เป็น fallback เมื่อครบเป้าหมาย
-ได้เต็ม 25 และไม่หักคะแนนเพียงเพราะพักนานกว่าเป้าหมาย ตราบใดที่ยังอยู่ในกรอบ
-protocol ของเป้าหมายที่เลือก
+ได้เต็ม 25 และไม่หักคะแนนเพียงเพราะพักนานกว่าเป้าหมาย หากยังไม่เกิน lifecycle
+guard 120 นาที ความต่างจากเป้าหมาย 30/90 นาทีจะเป็น Admin QA flag แต่ไม่ปิด
+Recovery Score; หากข้อมูลเดิมไม่มีเป้าหมาย ระบบจะไม่เดาเป้าหมายและไม่นับ
+องค์ประกอบเวลา โดยคำนวณจากองค์ประกอบที่มีหลักฐานแทน
 
 คำอธิบายสองรูปแบบ แผนที่หลักฐาน และข้อห้ามในการเปรียบเทียบคะแนนอยู่ที่
 [`TWO_MODE_SCORE_EVIDENCE.md`](../research/evidence-library/TWO_MODE_SCORE_EVIDENCE.md)

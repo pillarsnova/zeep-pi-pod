@@ -7,7 +7,9 @@ from pathlib import Path
 from database import DatabaseManager
 from sleep_system_policy import (
     PRE_RESTORE_SESSION_REPORT_VERSION,
+    RECOVERY_SCORE_FORMULA_VERSION,
     SESSION_REPORT_VERSION,
+    SLEEP_SCORE_FORMULA_VERSION,
 )
 from zeep_pod.sessions.history import (
     apply_session_availability,
@@ -171,17 +173,33 @@ class SessionAvailabilityTests(unittest.TestCase):
             "UPDATE sessions SET end_time=? WHERE session_id=?",
             ("2026-09-05T06:30:00+00:00", "nap"),
         )
-        for session_id, score, quality_type, title in (
-            ("overnight", 88, "sleep", "Sleep Score"),
-            ("nap", 81, "rest_goal", "Recovery Score"),
+        for session_id, score, quality_type, title, formula in (
+            (
+                "overnight",
+                88,
+                "sleep",
+                "Sleep Score",
+                SLEEP_SCORE_FORMULA_VERSION,
+            ),
+            (
+                "nap",
+                81,
+                "rest_goal",
+                "Recovery Score",
+                RECOVERY_SCORE_FORMULA_VERSION,
+            ),
         ):
             final_summary = {
+                "rest_mode": (
+                    "sleep" if quality_type == "sleep" else "nap_recovery"
+                ),
                 "night_summary": {
                     "sleep_quality": {
                         "available": True,
                         "score": score,
                         "quality_type": quality_type,
                         "score_title": title,
+                        "formula_version": formula,
                         "level": "ดีมาก",
                     },
                 },
@@ -224,6 +242,72 @@ class SessionAvailabilityTests(unittest.TestCase):
         self.assertEqual(result["summary"]["average_sleep_score"], 88.0)
         self.assertEqual(result["summary"]["average_recovery_score"], 81.0)
         self.assertEqual(len(result["participants"]), 2)
+
+    def test_history_never_counts_or_publishes_a_cross_mode_score(self) -> None:
+        sessions = [
+            {
+                "session_id": "sleep-valid",
+                "account_key": "first@example.test",
+                "ended_at_utc": "2026-09-05T01:00:00+00:00",
+                "rest_mode": "sleep",
+                "sleep_quality": {
+                    "available": True,
+                    "score": 88,
+                    "quality_type": "sleep",
+                    "score_title": "Sleep Score",
+                    "formula_version": SLEEP_SCORE_FORMULA_VERSION,
+                },
+            },
+            {
+                "session_id": "recovery-valid",
+                "account_key": "second@example.test",
+                "ended_at_utc": "2026-09-05T02:00:00+00:00",
+                "rest_mode": "nap_recovery",
+                "sleep_quality": {
+                    "available": True,
+                    "score": 81,
+                    "quality_type": "rest_goal",
+                    "score_title": "Recovery Score",
+                    "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
+                },
+            },
+            {
+                "session_id": "nap-with-sleep-score",
+                "account_key": "third@example.test",
+                "ended_at_utc": "2026-09-05T03:00:00+00:00",
+                "rest_mode": "nap_recovery",
+                "sleep_quality": {
+                    "available": True,
+                    "score": 91,
+                    "quality_type": "sleep",
+                    "score_title": "Sleep Score",
+                    "formula_version": SLEEP_SCORE_FORMULA_VERSION,
+                },
+            },
+        ]
+
+        summary = SessionHistoryService._summary(sessions)
+        participants = SessionHistoryService._participants(sessions)
+
+        self.assertEqual(summary["sleep_score_count"], 1)
+        self.assertEqual(summary["recovery_score_count"], 1)
+        self.assertEqual(summary["awaiting_score_count"], 1)
+        self.assertEqual(
+            summary["sleep_score_count"]
+            + summary["recovery_score_count"]
+            + summary["awaiting_score_count"],
+            summary["session_count"],
+        )
+        conflicting = next(
+            score
+            for participant in participants
+            for score in participant["scores"]
+            if score["session_id"] == "nap-with-sleep-score"
+        )
+        self.assertFalse(conflicting["available"])
+        self.assertIsNone(conflicting["score"])
+        self.assertEqual(conflicting["score_type"], "recovery_score")
+        self.assertEqual(conflicting["score_title"], "Recovery Score")
 
     def test_name_filter_is_admin_presentation_only(self) -> None:
         account = "search@example.test"

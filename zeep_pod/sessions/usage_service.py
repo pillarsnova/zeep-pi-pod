@@ -6,6 +6,7 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from zeep_pod.sessions import score_summary
 from zeep_pod.sessions.history_service import HistoryWindow, SessionHistoryService
 from zeep_pod.sessions.quality_publication import (
     public_quality_payload,
@@ -121,17 +122,6 @@ PRIVATE_REPORT_COMPACT_FIELDS = {
 
 def _mapping(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _email_first_identity(session: Mapping[str, Any]) -> dict[str, Any]:
-    email = str(session.get("email") or "").strip().casefold() or None
-    account_key = str(session.get("account_key") or "").strip().casefold()
-    return {
-        "email": email,
-        "display_name": session.get("display_name") or email,
-        "canonical_identifier": email or account_key or None,
-        "identity_type": "email" if email else "legacy_account_key",
-    }
 
 
 def _public_report_value(value: Any) -> Any:
@@ -341,7 +331,7 @@ def _session_item(
     item = {
         "contract_version": USAGE_SESSION_CONTRACT_VERSION,
         "session_id": session.get("session_id"),
-        "user": _email_first_identity(session),
+        "user": score_summary.email_first_identity(session),
         "started_at_utc": session.get("started_at_utc"),
         "ended_at_utc": session.get("ended_at_utc"),
         "duration_s": session.get("duration_s"),
@@ -477,11 +467,20 @@ class UsageSessionService:
     ) -> dict[str, Any]:
         sessions = [_session_item(session, include_report=False) for session in result.get("sessions") or []]
         total = int(result.get("total") or 0)
+        summary = (
+            score_summary.usage_page_summary(sessions)
+            if int(offset) == 0 and len(sessions) == total
+            else score_summary.validated_range_summary(
+                result.get("summary"),
+                total=total,
+                visible_items=sessions,
+            )
+        )
         return {
             "contract_version": USAGE_SESSION_CONTRACT_VERSION,
             "history_name": "usage_history",
             "items": sessions,
-            "summary": result.get("summary") or {},
+            "summary": summary,
             "pagination": {
                 "limit": int(limit),
                 "offset": int(offset),

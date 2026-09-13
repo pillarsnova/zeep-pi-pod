@@ -9,7 +9,6 @@ remains at the FastAPI route boundary; this module only reads and shapes data.
 from __future__ import annotations
 
 import json
-from collections import OrderedDict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
@@ -18,6 +17,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from database import DatabaseManager
 from sleep_system_policy import APPROVED_SLEEP_RESULT_VERSION_PAIRS
+from zeep_pod.sessions import score_summary
 from zeep_pod.sessions.history_detail_support import (
     canonical_history_rest_metadata,
 )
@@ -307,78 +307,34 @@ class SessionHistoryService:
         }
 
     @staticmethod
-    def _summary(sessions: list[dict[str, Any]]) -> dict[str, Any]:
-        people = {
-            session.get("account_key")
-            for session in sessions
-            if session.get("account_key")
-        }
-        sleep_scores: list[float] = []
-        recovery_scores: list[float] = []
-        awaiting_score = 0
-        for session in sessions:
-            quality = session.get("sleep_quality") or {}
-            if not quality.get("available") or quality.get("score") is None:
-                awaiting_score += 1
-                continue
-            score = float(quality["score"])
-            if quality.get("quality_type") == "rest_goal":
-                recovery_scores.append(score)
-            else:
-                sleep_scores.append(score)
-        return {
-            "people_count": len(people),
-            "session_count": len(sessions),
-            "sleep_score_count": len(sleep_scores),
-            "recovery_score_count": len(recovery_scores),
-            "awaiting_score_count": awaiting_score,
-            "average_sleep_score": (
-                round(sum(sleep_scores) / len(sleep_scores), 1)
-                if sleep_scores
-                else None
-            ),
-            "average_recovery_score": (
-                round(sum(recovery_scores) / len(recovery_scores), 1)
-                if recovery_scores
-                else None
-            ),
-        }
-
-    @staticmethod
-    def _participants(
+    def _canonical_results(
         sessions: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
-        grouped: OrderedDict[str, dict[str, Any]] = OrderedDict()
-        for session in sessions:
-            key = str(session.get("account_key") or "")
-            participant = grouped.setdefault(
-                key,
-                {
-                    "account_key": key,
-                    "email": session.get("email"),
-                    "display_name": session.get("display_name"),
-                    "session_count": 0,
-                    "scores": [],
-                },
-            )
-            participant["session_count"] += 1
-            quality = session.get("sleep_quality") or {}
-            participant["scores"].append(
-                {
-                    "session_id": session.get("session_id"),
-                    "ended_at_utc": session.get("ended_at_utc"),
-                    "score": quality.get("score") if quality.get("available") else None,
-                    "score_title": quality.get("score_title")
-                    or (
-                        "Recovery Score"
-                        if quality.get("quality_type") == "rest_goal"
-                        else "Sleep Score"
-                    ),
-                    "level": quality.get("level") or "กำลังเตรียมผลสรุป",
-                    "available": bool(quality.get("available")),
-                }
-            )
-        return list(grouped.values())
+        return score_summary.canonical_results(sessions)
+
+    @classmethod
+    def _summary(
+        cls,
+        sessions: list[dict[str, Any]],
+        *,
+        canonical_results: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        return score_summary.history_summary(
+            sessions,
+            canonical=canonical_results,
+        )
+
+    @classmethod
+    def _participants(
+        cls,
+        sessions: list[dict[str, Any]],
+        *,
+        canonical_results: list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
+        return score_summary.history_participants(
+            sessions,
+            canonical=canonical_results,
+        )
 
     def account_history(
         self,
@@ -396,12 +352,19 @@ class SessionHistoryService:
         start = max(0, int(offset))
         size = max(1, min(500, int(limit)))
         sessions = all_sessions[start : start + size]
+        canonical_results = self._canonical_results(all_sessions)
         return {
             **_identity(profile, key),
             "health_reference": self.health_reference(profile),
             "sessions": sessions,
-            "participants": self._participants(all_sessions),
-            "summary": self._summary(all_sessions),
+            "participants": self._participants(
+                all_sessions,
+                canonical_results=canonical_results,
+            ),
+            "summary": self._summary(
+                all_sessions,
+                canonical_results=canonical_results,
+            ),
             "total": len(all_sessions),
             "range": window.public_snapshot() if window else None,
             "history_start_utc": self.history_start_utc,
@@ -433,10 +396,17 @@ class SessionHistoryService:
         start = max(0, int(offset))
         size = max(1, min(1000, int(limit)))
         visible_sessions = sessions[start : start + size]
+        canonical_results = self._canonical_results(sessions)
         return {
             "sessions": visible_sessions,
-            "participants": self._participants(sessions),
-            "summary": self._summary(sessions),
+            "participants": self._participants(
+                sessions,
+                canonical_results=canonical_results,
+            ),
+            "summary": self._summary(
+                sessions,
+                canonical_results=canonical_results,
+            ),
             "total": total,
             "range": window.public_snapshot() if window else None,
             "history_start_utc": self.history_start_utc,

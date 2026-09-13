@@ -18,6 +18,7 @@ from sleep_system_policy import (
     RECOVERY_SCORE_COMPONENT_MAX_POINTS,
     SESSION_REPORT_VERSION,
     SLEEP_QUALITY_VERSION,
+    SLEEP_SCORE_FORMULA_VERSION,
     resolve_rest_target,
     summarize_environment_session_levels,
 )
@@ -94,6 +95,7 @@ class RecoveryPolicyUnitTests(unittest.TestCase):
             "available": True,
             "score": 88,
             "quality_type": "sleep",
+            "formula_version": SLEEP_SCORE_FORMULA_VERSION,
             "version": PREVIOUS_SLEEP_QUALITY_VERSION,
         }
         final_summary = {
@@ -326,7 +328,7 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
         connection.close()
         return quality, before_stage_count, before_timeline_count
 
-    def test_missing_legacy_target_is_skipped_and_preserves_score(self):
+    def test_missing_legacy_target_is_scored_with_admin_review(self):
         with tempfile.TemporaryDirectory() as temporary:
             data_dir = Path(temporary)
             original, _, _ = self._database(data_dir, duration_s=60 * 60)
@@ -339,14 +341,23 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
             )
 
             item = result["sessions"][0]
-            self.assertEqual(item["status"], "skipped_review_required")
-            self.assertEqual(item["reason_code"], "missing_recovery_target")
+            self.assertEqual(item["status"], "rescored")
+            self.assertEqual(item["score_title"], "Recovery Score")
+            self.assertIsInstance(item["new_score"], int)
+            self.assertTrue(item["quality"]["score_releasable"])
+            self.assertTrue(
+                item["quality"]["rest_mode"]["protocol_status"][
+                    "review_required"
+                ]
+            )
             connection = sqlite3.connect(data_dir / "sessions.db")
             final = json.loads(connection.execute(
                 "SELECT value FROM events WHERE type='final_summary'"
             ).fetchone()[0])
             connection.close()
-            self.assertEqual(final["night_summary"]["sleep_quality"], original)
+            self.assertNotEqual(
+                final["night_summary"]["sleep_quality"], original
+            )
 
     def test_reviewed_target_rebuilds_legacy_session_without_stored_target(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -532,7 +543,7 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
                 "insufficient",
             )
 
-    def test_target_30_session_over_45_minutes_is_review_only(self):
+    def test_target_30_session_over_45_minutes_scores_with_admin_review(self):
         with tempfile.TemporaryDirectory() as temporary:
             data_dir = Path(temporary)
             original, _, _ = self._database(
@@ -549,16 +560,24 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
             )
 
             item = result["sessions"][0]
-            self.assertEqual(item["status"], "skipped_review_required")
-            self.assertEqual(item["reason_code"], "recovery_timing_review")
+            self.assertEqual(item["status"], "rescored")
+            self.assertIsInstance(item["new_score"], int)
+            self.assertTrue(item["quality"]["score_releasable"])
+            self.assertTrue(
+                item["quality"]["rest_mode"]["protocol_status"][
+                    "review_required"
+                ]
+            )
             connection = sqlite3.connect(data_dir / "sessions.db")
             final = json.loads(connection.execute(
                 "SELECT value FROM events WHERE type='final_summary'"
             ).fetchone()[0])
             connection.close()
-            self.assertEqual(final["night_summary"]["sleep_quality"], original)
+            self.assertNotEqual(
+                final["night_summary"]["sleep_quality"], original
+            )
 
-    def test_reviewed_promotion_persists_unavailable_out_of_protocol_result(self):
+    def test_reviewed_promotion_persists_available_out_of_protocol_result(self):
         with tempfile.TemporaryDirectory() as temporary:
             data_dir = Path(temporary)
             original, _, _ = self._database(
@@ -577,8 +596,8 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
 
             item = result["sessions"][0]
             self.assertEqual(item["status"], "rescored")
-            self.assertIsNone(item["new_score"])
-            self.assertFalse(item["quality"]["score_releasable"])
+            self.assertIsInstance(item["new_score"], int)
+            self.assertTrue(item["quality"]["score_releasable"])
             self.assertEqual(
                 item["quality"]["rest_mode"]["protocol_status"]["status"],
                 "out_of_protocol",
@@ -601,8 +620,8 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
                 final["night_summary"]["sleep_quality"],
                 original,
             )
-            self.assertIsNone(
-                final["night_summary"]["sleep_quality"]["score"]
+            self.assertIsInstance(
+                final["night_summary"]["sleep_quality"]["score"], int
             )
             self.assertEqual(audit_count, 1)
 

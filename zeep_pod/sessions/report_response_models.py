@@ -1,6 +1,6 @@
 """Strict nested response contracts for public Session reports.
 
-Historical reports evolved between v10.3 and v10.8, so every field is
+Historical reports evolved between v10.3 and v10.9, so every field is
 optional.  When a section is present, however, undocumented nested keys are
 rejected.  This keeps legacy summaries readable without turning their JSON
 objects into an unbounded public API surface.

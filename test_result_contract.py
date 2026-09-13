@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import unittest
 
-from sleep_system_policy import RESTORE_SUMMARY_VERSION, SLEEP_SCORE_FORMULA_VERSION
+from sleep_system_policy import (
+    RECOVERY_SCORE_FORMULA_VERSION,
+    RESTORE_SUMMARY_VERSION,
+    SLEEP_SCORE_FORMULA_VERSION,
+)
 from zeep_pod.sessions.result_contract import build_result_contract
 
 
@@ -13,6 +17,7 @@ class SessionResultContractTests(unittest.TestCase):
             "score": 81,
             "quality_type": "sleep",
             "score_title": "Sleep Score",
+            "formula_version": SLEEP_SCORE_FORMULA_VERSION,
             "version": "sleep-quality-test",
             "data_coverage": {"pct": 80, "points": 4, "max_points": 5},
             "score_confidence": {"level": "low", "label": "หลักฐานจำกัด"},
@@ -55,7 +60,7 @@ class SessionResultContractTests(unittest.TestCase):
             "score": 76,
             "quality_type": "rest_goal",
             "score_title": "Recovery Score",
-            "formula_version": "recovery-test",
+            "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
             "version": "sleep-quality-test",
             "data_coverage": {"pct": 60, "score_component": False},
             "rest_mode": {
@@ -175,8 +180,8 @@ class SessionResultContractTests(unittest.TestCase):
                     "available": True,
                     "score": 81,
                     "quality_type": "sleep",
-                    "score_title": "Invented Restore Score",
-                    "formula_version": "sleep-formula-test",
+                    "score_title": "Sleep Score",
+                    "formula_version": SLEEP_SCORE_FORMULA_VERSION,
                 },
                 "session_report": {
                     "rest_mode": {
@@ -197,7 +202,7 @@ class SessionResultContractTests(unittest.TestCase):
         self.assertTrue(summary["source_score"]["available"])
         self.assertEqual(
             summary["source_score"]["formula_version"],
-            "sleep-formula-test",
+            SLEEP_SCORE_FORMULA_VERSION,
         )
         self.assertEqual(summary["session_scope"]["mode"], "sleep")
         self.assertFalse(summary["session_scope"]["whole_day_readiness"])
@@ -485,6 +490,115 @@ class SessionResultContractTests(unittest.TestCase):
         self.assertFalse(result["score"]["available"])
         self.assertIsNone(result["score"]["value"])
         self.assertFalse(result["score"]["clinical_validated"])
+
+    def test_score_identity_provenance_never_relabels_between_modes(self) -> None:
+        cases = (
+            (
+                "nap_recovery",
+                {
+                    "score_title": "Sleep Score",
+                    "formula_version": SLEEP_SCORE_FORMULA_VERSION,
+                },
+                "recovery_score",
+                "Recovery Score",
+            ),
+            (
+                "sleep",
+                {
+                    "quality_type": "sleep",
+                    "score_title": "Recovery Score",
+                    "formula_version": SLEEP_SCORE_FORMULA_VERSION,
+                },
+                "sleep_score",
+                "Sleep Score",
+            ),
+            (
+                "nap_recovery",
+                {
+                    "quality_type": "rest_goal",
+                    "score_title": "Recovery Score",
+                    "formula_version": SLEEP_SCORE_FORMULA_VERSION,
+                },
+                "recovery_score",
+                "Recovery Score",
+            ),
+            (
+                "sleep",
+                {
+                    "quality_type": "sleep",
+                    "score_title": "Sleep Score",
+                    "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
+                },
+                "sleep_score",
+                "Sleep Score",
+            ),
+            (
+                "sleep",
+                {
+                    "quality_type": "sleep",
+                    "score_title": "Sleep Score",
+                },
+                "sleep_score",
+                "Sleep Score",
+            ),
+        )
+        for mode, identity, expected_type, expected_title in cases:
+            with self.subTest(mode=mode, identity=identity):
+                result = build_result_contract(
+                    {
+                        "ended_at_utc": "2026-09-11T00:00:00+00:00",
+                        "rest_mode": mode,
+                        "sleep_quality": {
+                            "available": True,
+                            "score": 91,
+                            **identity,
+                        },
+                    }
+                )
+
+                self.assertEqual(result["score"]["type"], expected_type)
+                self.assertEqual(result["score"]["title"], expected_title)
+                self.assertFalse(result["score"]["available"])
+                self.assertIsNone(result["score"]["value"])
+                self.assertTrue(result["score"]["review_required"])
+                self.assertTrue(result["score"]["validation_status"])
+
+    def test_approved_historical_formula_family_remains_releasable(self) -> None:
+        cases = (
+            (
+                "sleep",
+                "sleep",
+                "Sleep Score",
+                "zeep-sleep-score-v1.0-reviewed",
+                "sleep_score",
+            ),
+            (
+                "nap_recovery",
+                "rest_goal",
+                "Recovery Score",
+                "zeep-recovery-score-v2.0-reviewed",
+                "recovery_score",
+            ),
+        )
+        for mode, quality_type, title, formula, expected_type in cases:
+            with self.subTest(mode=mode):
+                result = build_result_contract(
+                    {
+                        "ended_at_utc": "2026-09-11T00:00:00+00:00",
+                        "rest_mode": mode,
+                        "sleep_quality": {
+                            "available": True,
+                            "score": 79,
+                            "quality_type": quality_type,
+                            "score_title": title,
+                            "formula_version": formula,
+                        },
+                    }
+                )
+
+                self.assertTrue(result["score"]["available"])
+                self.assertEqual(result["score"]["type"], expected_type)
+                self.assertEqual(result["score"]["value"], 79.0)
 
 
 if __name__ == "__main__":

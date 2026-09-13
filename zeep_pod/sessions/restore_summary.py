@@ -13,13 +13,10 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from sleep_system_policy import (
-    RECOVERY_SCORE_FORMULA_VERSION,
     RESTORE_ACTION_BANDS_VERSION,
     RESTORE_DRIVER_POLICY_VERSION,
     RESTORE_RECOMMENDATION_VERSION,
     RESTORE_SUMMARY_VERSION,
-    SLEEP_SCORE_FORMULA_VERSION,
-    rest_mode_group,
 )
 from zeep_pod.product_language import (
     user_confidence_level,
@@ -35,6 +32,7 @@ from zeep_pod.sessions.restore_summary_policy import (
     RECOMMENDATIONS,
     STATUS_MEANINGS,
 )
+from zeep_pod.sessions.score_identity import assess_score_identity, mode_groups
 
 
 def _number(value: Any) -> float | None:
@@ -48,31 +46,40 @@ def _mode_group(
     mode: Any,
 ) -> str:
     source = mode if mode is not None else quality.get("rest_mode")
-    selected = dict(source) if isinstance(source, Mapping) else {}
-    raw_mode = selected.get("group") or selected.get("requested") or selected.get("resolved") or source
-    group = rest_mode_group(raw_mode)
-    if group == "sleep" or quality.get("quality_type") == "sleep":
-        return "sleep"
-    if group == "nap_recovery" or quality.get("quality_type") == "rest_goal":
-        return "nap_recovery"
+    groups = mode_groups(source)
+    if len(groups) == 1:
+        return next(iter(groups))
     return "unknown"
 
 
-def _source_score(quality: Mapping[str, Any], group: str) -> dict[str, Any]:
+def _source_score(
+    quality: Mapping[str, Any],
+    group: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    identity = assess_score_identity(quality, group)
     available = quality.get("available") is True
     score = _number(quality.get("score"))
-    if not available or score is None or not 0.0 <= score <= 100.0:
+    if (
+        not available
+        or score is None
+        or not 0.0 <= score <= 100.0
+        or not identity["valid"]
+    ):
         score = None
     is_sleep = group == "sleep"
     is_recovery = group == "nap_recovery"
-    return {
+    source_score = {
         "type": ("sleep_score" if is_sleep else "recovery_score" if is_recovery else "unresolved_score"),
         "title": ("Sleep Score" if is_sleep else "Recovery Score" if is_recovery else "Session Score"),
         "value": int(round(score)) if score is not None else None,
         "available": bool(score is not None and group != "unknown"),
-        "formula_version": (quality.get("formula_version") or (SLEEP_SCORE_FORMULA_VERSION if is_sleep else RECOVERY_SCORE_FORMULA_VERSION if is_recovery else None)),
+        "formula_version": (
+            quality.get("formula_version")
+            or identity.get("expected_formula_version")
+        ) if identity["valid"] else None,
         "copied_without_recalculation": True,
     }
+    return source_score, identity
 
 
 def _status(group: str, score: float | None) -> dict[str, Any]:
@@ -344,7 +351,7 @@ def build_restore_summary(
     score_quality = dict(quality or {})
     mode_source = mode if mode is not None else score_quality.get("rest_mode")
     group = _mode_group(score_quality, mode_source)
-    source_score = _source_score(score_quality, group)
+    source_score, score_identity = _source_score(score_quality, group)
     score = _number(source_score["value"])
     driver_summary = _merge_drivers(
         score_quality,
@@ -369,8 +376,14 @@ def build_restore_summary(
             "updates_during_day": False,
         },
         "drivers": driver_summary,
-        "personal_baseline": build_baseline_summary(personal_context, score, group),
-        "trend": build_trend_summary(trend_context),
+        "personal_baseline": build_baseline_summary(
+            personal_context if score_identity["valid"] else None,
+            score,
+            group,
+        ),
+        "trend": build_trend_summary(
+            trend_context if score_identity["valid"] else None
+        ),
         "recommendation": _recommendation(group, score, driver_summary),
         "confidence": _confidence(score_quality),
         "subjective_outcome": _subjective_outcome(subjective_outcome),

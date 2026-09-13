@@ -928,7 +928,7 @@ class SleepSessionReportTests(unittest.TestCase):
             (35, 30, "recommended", True),
             (36, 30, "extended", True),
             (45, 30, "extended", True),
-            (46, 30, "out_of_protocol", False),
+            (46, 30, "out_of_protocol", True),
             (90, 90, "recommended", True),
             (110, 90, "extended", True),
             (121, 90, "implausible_outlier", False),
@@ -960,10 +960,13 @@ class SleepSessionReportTests(unittest.TestCase):
         )
 
         timing = quality["rest_mode"]["protocol_status"]
-        self.assertFalse(quality["available"])
+        self.assertTrue(quality["available"])
+        self.assertIsInstance(quality["score"], int)
         self.assertEqual(timing["status"], "target_unknown")
         self.assertEqual(timing["display_status"], "TARGET_UNKNOWN/extended")
         self.assertTrue(timing["review_required"])
+        self.assertTrue(timing["score_releasable"])
+        self.assertIsNone(quality["component_points"]["goal_duration"])
 
     def test_recovery_v2_keeps_coverage_out_of_health_score(self):
         samples = [{
@@ -1182,7 +1185,8 @@ class SleepSessionReportTests(unittest.TestCase):
             over_limit["rest_mode"]["protocol_status"]["status"],
             "out_of_protocol",
         )
-        self.assertFalse(over_limit["available"])
+        self.assertTrue(over_limit["available"])
+        self.assertIsInstance(over_limit["score"], int)
         self.assertTrue(
             over_limit["rest_mode"]["protocol_status"]["review_required"]
         )

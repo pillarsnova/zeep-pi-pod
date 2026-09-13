@@ -60,6 +60,7 @@ from zeep_pod.sessions.respiratory_wellness import (
     build_respiratory_wellness,
 )
 from zeep_pod.sessions.restore_summary import build_restore_summary
+from zeep_pod.sessions.score_identity import assess_score_identity
 from zeep_pod.sessions.sleep_occupancy import sample_confirms_off_bed
 
 STAGE_ORDER = ("wake", "n1", "n2", "n3", "rem")
@@ -614,7 +615,13 @@ def _nap_protocol_status(
     observed_s: float,
     target: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """Classify Nap timing without guessing a missing 30/90-minute target."""
+    """Classify Nap timing while keeping review separate from score release.
+
+    A selected 30/90-minute target still shapes the duration component, but a
+    timing deviation is Admin QA rather than proof that the measured recovery
+    response is invalid. Only a recording below 10 minutes or above the
+    120-minute lifecycle guard withholds the score on timing alone.
+    """
     observed = max(0.0, observed_s)
     common = {
         "available": True,
@@ -654,8 +661,11 @@ def _nap_protocol_status(
             "within_operational_window": None,
             "within_recommended_range": None,
             "review_required": True,
-            "score_releasable": False,
-            "reason": "Session เดิมไม่ได้เก็บเป้าหมาย 30/90 นาที ห้ามเดาจากเวลาที่ผ่านไป",
+            "score_releasable": True,
+            "reason": (
+                "Session เดิมไม่ได้เก็บเป้าหมาย 30/90 นาที "
+                "จึงประเมินจากเวลาพักจริงและเก็บธงไว้ให้ผู้ดูแลตรวจ"
+            ),
         }
 
     recommended = target.get("recommended_range_seconds") or []
@@ -679,8 +689,13 @@ def _nap_protocol_status(
         "within_operational_window": not review_required,
         "within_recommended_range": status == "recommended",
         "review_required": review_required,
-        "score_releasable": not review_required,
-        "reason": ("ระยะเวลาอยู่นอกกรอบของเป้าหมายที่เลือก ต้องตรวจโดยผู้ดูแล" if review_required else None),
+        "score_releasable": True,
+        "reason": (
+            "ระยะเวลาต่างจากเป้าหมายที่เลือก; Recovery Score "
+            "ยังคำนวณจากการพักจริงและเก็บธงไว้ให้ผู้ดูแลตรวจ"
+            if review_required
+            else None
+        ),
     }
 
 
@@ -998,8 +1013,18 @@ def _build_awake_rest_quality(
     duration_goal_s = _rest_goal_seconds(target)
     presence_rows = _recovery_presence_rows(rows)
     eligible_rest_s = _eligible_rest_seconds(rows, interval, duration)
-    duration_factor = min(1.0, eligible_rest_s / duration_goal_s) if duration_goal_s is not None else 0.0
-    duration_points = 0.0 if no_sensor_evidence else round(25.0 * duration_factor, 1)
+    duration_factor = (
+        min(1.0, eligible_rest_s / duration_goal_s)
+        if duration_goal_s is not None
+        else None
+    )
+    duration_points = (
+        None
+        if duration_factor is None
+        else 0.0
+        if no_sensor_evidence
+        else round(25.0 * duration_factor, 1)
+    )
 
     physiology_rows = [row for row in presence_rows if _row_has_measured_paired_vitals(row)]
     hr = [value for value in _values(physiology_rows, "hr") if 30 <= value <= 220]
@@ -1113,6 +1138,22 @@ def _build_awake_rest_quality(
     timing_releasable = bool(protocol_status.get("score_releasable"))
     eligible_duration_releasable = eligible_rest_s >= NAP_RECOVERY_MINIMUM_SCORE_SECONDS
     score_available = bool(evidence_available and timing_releasable and eligible_duration_releasable)
+    if score_available:
+        unavailable_reason = None
+    elif not eligible_duration_releasable:
+        unavailable_reason = (
+            "เวลาพักที่ยืนยันได้ยังไม่ถึง 10 นาที "
+            "จึงยังไม่ออก Recovery Score"
+        )
+    elif not evidence_available:
+        unavailable_reason = (
+            "ข้อมูล HR/RR ที่จับคู่กันยังไม่พอสำหรับคำนวณ Recovery Score"
+        )
+    else:
+        unavailable_reason = (
+            protocol_status.get("reason")
+            or "ข้อมูลสำคัญยังไม่พอสำหรับคำนวณ Recovery Score"
+        )
     score_confidence = _score_confidence(
         recording_coverage_ratio,
         physiological_evidence_ratio,
@@ -1142,7 +1183,7 @@ def _build_awake_rest_quality(
             "review_required": bool(protocol_status.get("review_required")),
             "passed": score_available,
         },
-        "reason": (None if score_available else protocol_status.get("reason") or ("เวลาพักที่ยืนยันได้ยังไม่ถึง 10 นาที จึงยังไม่ออก Recovery Score" if not eligible_duration_releasable else None) or "ข้อมูล HR/RR ที่จับคู่กันยังไม่พอสำหรับคำนวณ Recovery Score"),
+        "reason": unavailable_reason,
         "score_title": policy["score_title"],
         "score_scope": policy.get("score_scope"),
         "validation_status": "preliminary_wellness_estimate",
@@ -1166,8 +1207,19 @@ def _build_awake_rest_quality(
             "recommended_range_minutes": [round(value / 60.0, 1) for value in target.get("recommended_range_seconds", [])],
             "eligible_rest_seconds": round(eligible_rest_s, 1),
             "eligible_rest_minutes": round(eligible_rest_s / 60.0, 1),
-            "completion_pct": round(100.0 * duration_factor, 1),
-            "basis": (f"เป้าหมาย {target.get('label') or policy['label']}; นับทุก State attribution ที่ไม่ใช่ confirmed OFF BED; Continuity แสดง confidence แยกและไม่หักเมื่อพักเกินเป้าหมาย"),
+            "completion_pct": (
+                round(100.0 * duration_factor, 1)
+                if duration_factor is not None
+                else None
+            ),
+            "basis": (
+                f"เป้าหมาย {target.get('label')}; นับทุก State attribution "
+                "ที่ไม่ใช่ confirmed OFF BED; เวลาที่ต่างจากเป้าหมายเป็น "
+                "Admin QA และไม่ปิด Recovery Score"
+                if target.get("available")
+                else "ไม่มีเป้าหมายเดิม 30/90 นาที; ไม่คิดคะแนนส่วนเวลา "
+                "และใช้เฉพาะองค์ประกอบที่มีหลักฐาน"
+            ),
         },
         "physiology": {
             "available": hr_regularity is not None and rr_regularity is not None,
@@ -2063,7 +2115,15 @@ def build_session_report(
     estimated_sleep = max(0.0, min(duration, estimated_sleep)) if duration else max(0.0, estimated_sleep)
     wake_s = counts["wake"] * sample_interval_s
     score_wake_s = score_counts["wake"] * sample_interval_s
-    quality_mode = dict(quality.get("rest_mode") or _resolve_rest_mode(rest_mode, scored_count * sample_interval_s, estimated_sleep))
+    # The Session intent is authoritative. Embedded quality metadata may
+    # corroborate it, but must never change Sleep Score into Recovery Score.
+    quality_mode = dict(
+        _resolve_rest_mode(
+            rest_mode,
+            scored_count * sample_interval_s,
+            estimated_sleep,
+        )
+    )
     if target_duration_s is not _TARGET_UNSET:
         quality_mode["target"] = resolve_rest_target(
             rest_mode,
@@ -2080,6 +2140,31 @@ def build_session_report(
         duration,
         quality_mode["target"],
     )
+    score_identity = assess_score_identity(quality, quality_mode)
+    attempted_score_release = bool(
+        quality.get("available") is True
+        or _number(quality.get("score")) is not None
+    )
+    quality["rest_mode"] = quality_mode
+    if attempted_score_release and not score_identity["valid"]:
+        quality.update({
+            "available": False,
+            "score": None,
+            "score_releasable": False,
+            "score_title": (
+                score_identity.get("expected_score_title") or "คุณภาพการพัก"
+            ),
+            "formula_version": None,
+            "level": "กำลังเตรียมผลสรุป",
+            "level_key": "unavailable",
+            "reason": score_identity["reason"],
+            "validation_status": score_identity["validation_status"],
+            "review_required": True,
+            "clinical_validated": False,
+        })
+        expected_quality_type = score_identity.get("expected_quality_type")
+        if expected_quality_type is not None:
+            quality["quality_type"] = expected_quality_type
     environment_mode = quality_mode.get("group") or quality_mode.get("resolved") or rest_mode
     # ``report.environment`` is the full-Session Sensor QA/context view.  The
     # only environment values allowed to affect Recovery Score live in
@@ -2335,8 +2420,16 @@ def build_session_report(
         quality,
         mode=quality_mode,
         findings=findings,
-        personal_context=effective_personal_context,
-        trend_context=effective_trend_context,
+        personal_context=(
+            effective_personal_context
+            if score_identity["valid"]
+            else None
+        ),
+        trend_context=(
+            effective_trend_context
+            if score_identity["valid"]
+            else None
+        ),
         subjective_outcome=effective_subjective_outcome,
     )
     return {

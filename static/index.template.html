@@ -534,6 +534,39 @@
         <p class="safety-case-note"><b>Critical:</b> GPIO ใช้ไม่ได้, ESP32 ขาดข้อมูลขณะมีผู้ใช้งาน, CO₂ ≥1,300 ppm หรืออุณหภูมินอก 13–32°C · <b>Blocking:</b> Basis ยังไม่อนุมัติ, CO₂ ไม่มีข้อมูลสด หรือ ESP32 ไม่พร้อมก่อนใช้งาน · ระบบไม่เปิดประตูและไม่สั่งแอร์อัตโนมัติ</p>
       </details>
     </div>
+    <section class="card adaptive-monitor" id="adaptiveMonitorCard" data-pages="monitor" data-admin-panel aria-labelledby="adaptiveMonitorTitle">
+      <div class="adaptive-monitor-head">
+        <div><div class="section-title" id="adaptiveMonitorTitle">Adaptive Learning · Live</div><p>เทียบข้อมูลสดกับ Baseline เพื่อเตรียม Model ควบคุมสภาพแวดล้อมแบบเฉพาะบุคคล</p></div>
+        <div class="adaptive-shadow-badge">SHADOW · NO AUTO CONTROL</div>
+      </div>
+      <div class="adaptive-status-grid" aria-live="polite">
+        <article><span>SESSION</span><b id="adaptiveSessionState">ยังไม่มี Session</b><small id="adaptiveSessionMeta">รอผู้ใช้งาน</small></article>
+        <article><span>SENSOR FRAME</span><b id="adaptiveFrameState">กำลังรอข้อมูล</b><small id="adaptiveFrameMeta">10 วินาทีต่อ Frame</small></article>
+        <article><span>BASELINE</span><b id="adaptiveBaselineState">ยังไม่มีข้อมูล</b><small id="adaptiveBaselineMeta">Prior · Same mode</small></article>
+        <article><span>DATA QUALITY</span><b id="adaptiveQualityState">กำลังตรวจ</b><small id="adaptiveQualityMeta">Sensor + HR/RR</small></article>
+      </div>
+      <div class="adaptive-monitor-layout">
+        <section class="adaptive-panel adaptive-feature-panel">
+          <div class="adaptive-panel-head"><div><b>Live เทียบ Personal Reference</b><span>คำว่า สูง/ต่ำ หมายถึงเทียบค่าของบุคคล ไม่ใช่การวินิจฉัย</span></div><em id="adaptiveWindowMeta">Rolling window · 5 นาที</em></div>
+          <div class="adaptive-feature-table" id="adaptiveFeatureRows"><div class="adaptive-empty">กำลังรอ Adaptive dataset</div></div>
+        </section>
+        <section class="adaptive-panel adaptive-decision-panel">
+          <div class="adaptive-panel-head"><div><b>Shadow Decision</b><span>แสดงสิ่งที่ระบบเสนอ โดยไม่มีคำสั่งถูกส่ง</span></div><em id="adaptiveEvaluationTime">--</em></div>
+          <div class="adaptive-decision-summary"><strong id="adaptiveDecisionSummary">กำลังรอข้อมูล</strong><span id="adaptiveSleepContext">Sleep State · --</span></div>
+          <div class="adaptive-recommendations" id="adaptiveRecommendations"><div class="adaptive-empty">ยังไม่มีคำแนะนำ</div></div>
+          <div class="adaptive-blockers" id="adaptiveBlockers"></div>
+        </section>
+        <section class="adaptive-panel adaptive-device-panel">
+          <div class="adaptive-panel-head"><div><b>Device Intent ล่าสุด</b><span>สถานะ ACK/คำสั่งล่าสุด ไม่ถือเป็นหลักฐานสถานะกายภาพ</span></div></div>
+          <div class="adaptive-device-grid" id="adaptiveDeviceState"><div class="adaptive-empty">กำลังรอข้อมูลอุปกรณ์</div></div>
+        </section>
+        <details class="adaptive-panel adaptive-version-panel">
+          <summary><span><b>Version &amp; Provenance</b><small>ตรวจรุ่นของข้อมูลและ Logic ที่กำลังทำงาน</small></span><em>เปิดรายละเอียด</em></summary>
+          <div class="adaptive-version-grid" id="adaptiveVersionRows"></div>
+          <div class="adaptive-guardrail" id="adaptiveGuardrails"></div>
+        </details>
+      </div>
+    </section>
     <section class="card admin-atmosphere-card" id="adminAtmosphereCard" data-pages="dashboard" data-admin-panel aria-label="แผนปรับสภาพแวดล้อมสำหรับผู้ดูแลระบบ">
       <div class="admin-atmosphere-head">
         <div><div class="section-title">แผนปรับสภาพแวดล้อม</div><p>พอใช้ขึ้นไปถือว่าผ่านขั้นต่ำ · แสดงเฉพาะจุดที่ควรดูแลหรือปรับเพิ่ม · เกณฑ์ฉบับเต็มเปิดดูได้ด้านล่าง</p></div>
@@ -1008,7 +1041,7 @@
   </div>
 </div>
 
-<script src="/static/app-shell.js?v=20260828-2"></script>
+<script src="/static/app-shell.js?v=20260915-3"></script>
 <script>
 /* ZEEP_PARTIAL:app/scripts/00-product-copy-alerts.js */
 /* ZEEP_PARTIAL:app/scripts/01-runtime-safety.js */

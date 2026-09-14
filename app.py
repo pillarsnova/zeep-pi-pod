@@ -82,6 +82,8 @@ from control_protocol import (
 )
 from database import DatabaseManager
 from api_v1 import create_api_v1_router
+from zeep_pod.adaptive_learning import build_adaptive_learning_snapshot
+from zeep_pod.api_state_projection import project_consumer_snapshot
 from zeep_pod.identity.profile_fields import (
     health_reference_from_profile as build_health_reference,
     normalise_blood_group as _normalise_blood_group,
@@ -200,7 +202,6 @@ from sensor_calibration import (
     resolve_biases,
     sound_inspector_channel,
 )
-from sound_observability import sanitize_consumer_sound
 from sensor_runtime import (
     compose_environment_snapshot,
     energy_average_db,
@@ -3788,39 +3789,25 @@ def snapshot_for(principal: Principal) -> Dict[str, Any]:
     result = snapshot()
     result["features"] = {"session_report_share": report_shares.enabled}
     if principal.is_admin:
+        with session_lock:
+            recent_samples = [
+                dict(item)
+                for item in ((_active_session or {}).get("samples") or [])[-30:]
+            ]
+        sleep = result.get("sleep") or {}
+        result["adaptive_learning"] = build_adaptive_learning_snapshot(
+            result,
+            baseline=sleep.get("personal_baseline"),
+            behaviour=sleep.get("personal_behaviour"),
+            recent_samples=recent_samples,
+        )
         result["auth"] = {
             "principal": principal.public_dict(),
             "session_store": auth_sessions.health(),
         }
         return result
 
-    # Consumer pages need health values and device state, never infrastructure
-    # addresses, GPIO mapping, raw BCG or internal event logs.
-    result.pop("events_tail", None)
-    system = result.get("system") or {}
-    result["system"] = {
-        key: system.get(key)
-        for key in (
-            "uptime_s",
-            "gpio_available",
-            "gpio_error",
-            "max_volume",
-            "player",
-            "session_sample_s",
-            "bed_start_s",
-            "pod_id",
-            "occupancy",
-        )
-    }
-    # Full PCM and firmware telemetry is available only in Admin inspector.
-    sanitize_consumer_sound(result.get("sensor") or {})
-    bcg = (result.get("sensor") or {}).get("bcg") or {}
-    bcg.pop("samples", None)
-    bcg.pop("raw_status_code", None)
-    bcg.pop("raw_status_text", None)
-    bcg.pop("bed_exit_evidence", None)
-    result["auth"] = {"principal": principal.public_dict()}
-    return result
+    return project_consumer_snapshot(result, principal.public_dict())
 
 
 def build_environment_snapshot(esp32: Dict[str, Any], hub2: Dict[str, Any], now: Optional[float] = None) -> Dict[str, Any]:
@@ -6429,9 +6416,10 @@ def api_baseline(username: str, principal: Principal = Depends(require_user)):
     }
 
 
-@app.get("/api/bcg/trend", dependencies=[Depends(require_user)])
-async def bcg_trend(minutes: int = 10):
+@app.get("/api/bcg/trend", dependencies=[Depends(require_admin)])
+async def bcg_trend(response: Response, minutes: int = 10):
     """แนวโน้ม HR/RR/การขยับ/บนเตียง แบบ bucket ละ 5 วิ"""
+    response.headers["Cache-Control"] = "private, no-store"
     minutes = max(1, min(10, int(minutes)))
     now = time.time()
     bucket_s = SLEEP_SAMPLE_SECONDS

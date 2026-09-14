@@ -262,6 +262,24 @@ class RbacApiTests(unittest.TestCase):
         self.assertEqual(health.json()["schema"], "zeep.api.response")
         self.assertEqual(health.json()["api_version"], "1.0")
         self.assertEqual(anonymous.get("/api/v1/admin/contracts/sensors").status_code, 401)
+        self.assertEqual(anonymous.get("/api/v1/admin/adaptive/live").status_code, 401)
+        self.assertEqual(anonymous.get("/api/bcg/trend").status_code, 401)
+
+        user = TestClient(pod_app.app)
+        token, _ = pod_app.auth_sessions.create(
+            subject="zeep:trend-user",
+            username="trend-user",
+            display_name="Trend User",
+            account_key="trend.user@example.test",
+            email="trend.user@example.test",
+            role="user",
+            auth_source="test",
+        )
+        user.cookies.set(pod_app.COOKIE_NAME, token)
+        try:
+            self.assertEqual(user.get("/api/bcg/trend").status_code, 403)
+        finally:
+            pod_app.auth_sessions.revoke(token)
 
         admin = TestClient(pod_app.app)
         login = admin.post(
@@ -278,6 +296,17 @@ class RbacApiTests(unittest.TestCase):
         maintenance = admin.get("/api/v1/admin/maintenance")
         self.assertEqual(maintenance.status_code, 200)
         self.assertFalse(maintenance.json()["data"]["browser_execution_enabled"])
+        adaptive = admin.get("/api/v1/admin/adaptive/live")
+        self.assertEqual(adaptive.status_code, 200)
+        self.assertEqual(adaptive.headers.get("cache-control"), "private, no-store")
+        self.assertEqual(adaptive.json()["kind"], "adaptive_learning_live")
+        self.assertEqual(adaptive.json()["data"]["mode"], "shadow")
+        self.assertFalse(
+            adaptive.json()["data"]["control_policy"]["automatic_actuation"]
+        )
+        trend = admin.get("/api/bcg/trend")
+        self.assertEqual(trend.status_code, 200)
+        self.assertEqual(trend.headers.get("cache-control"), "private, no-store")
 
     def test_session_start_gate_requires_fresh_hr_and_rr_packets(self) -> None:
         """Bed status or a display-held vital alone must never start recording."""

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 
 
 API_VERSION = "1.0"
@@ -56,6 +56,7 @@ def create_api_v1_router(
                 "sensor_contracts": "/api/v1/admin/contracts/sensors",
                 "sleep_policy": "/api/v1/admin/contracts/sleep",
                 "maintenance": "/api/v1/admin/maintenance",
+                "adaptive_learning_live": "/api/v1/admin/adaptive/live",
                 "usage_sessions": "/api/v1/usage-sessions",
             },
             "mutation_policy": {
@@ -85,5 +86,14 @@ def create_api_v1_router(
     @router.get("/admin/maintenance")
     def maintenance(_: Any = Depends(require_admin)):
         return _response(maintenance_contract_snapshot(), kind="maintenance_contract")
+
+    @router.get("/admin/adaptive/live")
+    def adaptive_live(
+        response: Response,
+        principal: Any = Depends(require_admin),
+    ):
+        response.headers["Cache-Control"] = "private, no-store"
+        data = snapshot_for(principal).get("adaptive_learning") or {}
+        return _response(data, kind="adaptive_learning_live")
 
     return router

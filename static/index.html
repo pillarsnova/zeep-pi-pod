@@ -657,10 +657,18 @@
     body[data-view="monitor"] .safety-card{order:0}
     body[data-view="monitor"] .sensor-integrity{order:1;grid-column:span 8}
     body[data-view="monitor"] .system{order:1;grid-column:span 4;align-self:stretch}
-    body[data-view="monitor"] .bcg{order:2;grid-column:1/-1}
-    body[data-view="monitor"] .raw-monitor{order:3;grid-column:1/-1}
+    body[data-view="monitor"] .adaptive-monitor{order:2;grid-column:1/-1}
+    body[data-view="monitor"] .bcg{order:3;grid-column:1/-1}
+    body[data-view="monitor"] .raw-monitor{order:4;grid-column:1/-1}
     .sensor-integrity{grid-column:span 8}.integrity-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;padding:11px 13px;border:1px solid var(--line-dim);border-radius:10px;background:#081520}.integrity-summary strong{font-size:13px}.integrity-summary span{color:var(--faint);font-size:10.5px}.integrity-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.integrity-row{display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 11px;border:1px solid var(--line-dim);border-radius:10px;background:#081520}.integrity-icon{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;background:#102534;color:var(--cyan);font-size:15px}.integrity-main{min-width:0}.integrity-main b{display:block;font-size:11.5px}.integrity-main span{display:block;margin-top:3px;color:var(--faint);font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.integrity-state{text-align:right}.integrity-state b{display:block;font:750 10px "SF Mono",ui-monospace,monospace;text-transform:uppercase}.integrity-state span{display:block;margin-top:3px;color:var(--faint);font-size:9px}.integrity-row.live .integrity-state b{color:var(--good)}.integrity-row.stale .integrity-state b,.integrity-row.held .integrity-state b,.integrity-row.warming .integrity-state b{color:var(--amber)}.integrity-row.fault .integrity-state b,.integrity-row.invalid .integrity-state b,.integrity-row.offline .integrity-state b{color:var(--bad)}
     .sysgrid{gap:10px}.sysitem{border-radius:10px;background:#081520}.event-list{max-height:280px;overflow:auto}.event-row{border-radius:7px}
+    .adaptive-monitor{border-color:#315b70;background:linear-gradient(145deg,#0d2231,#0a1724 56%,#12182b)}
+    .adaptive-monitor.contract-error{border-color:var(--bad)}.adaptive-monitor-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px}.adaptive-monitor-head .section-title{margin-bottom:4px}.adaptive-monitor-head p{margin:0;color:var(--faint);font-size:11px}.adaptive-shadow-badge{padding:7px 10px;border:1px solid #785e2d;border-radius:999px;background:#251b0d;color:var(--amber);font:800 9px "SF Mono",ui-monospace,monospace;white-space:nowrap}
+    .adaptive-status-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:10px}.adaptive-status-grid article{min-width:0;padding:10px 12px;border:1px solid #254356;border-radius:10px;background:#071520}.adaptive-status-grid span{display:block;color:#668291;font:700 8px "SF Mono",ui-monospace,monospace;letter-spacing:.08em}.adaptive-status-grid b{display:block;margin-top:5px;color:#edf9fd;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.adaptive-status-grid small{display:block;margin-top:3px;color:#7893a0;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .adaptive-monitor-layout{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(300px,1fr);gap:10px}.adaptive-panel{min-width:0;padding:12px;border:1px solid #223d4f;border-radius:11px;background:#07141f}.adaptive-feature-panel{grid-row:span 2}.adaptive-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:9px}.adaptive-panel-head b{display:block;color:#dcecf2;font-size:11px}.adaptive-panel-head span{display:block;margin-top:3px;color:#6f8997;font-size:9px}.adaptive-panel-head em{color:#6ed9e9;font:700 8.5px "SF Mono",ui-monospace,monospace;white-space:nowrap}
+    .adaptive-feature-table{display:grid;gap:5px}.adaptive-feature-row{display:grid;grid-template-columns:minmax(120px,1.3fr) repeat(3,minmax(72px,.72fr)) minmax(130px,1fr);align-items:center;gap:8px;padding:8px 9px;border:1px solid #1c3444;border-radius:8px;background:#091824}.adaptive-feature-row>div{min-width:0}.adaptive-feature-row>div b{display:block;font-size:10.5px}.adaptive-feature-row>div small{display:block;margin-top:2px;color:#5f7987;font-size:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.adaptive-feature-row>span em{display:block;color:#5e7988;font:700 7px "SF Mono",ui-monospace,monospace}.adaptive-feature-row>span strong{display:block;margin-top:2px;color:#cfe1e8;font:700 9px "SF Mono",ui-monospace,monospace;white-space:nowrap}.adaptive-feature-row mark{justify-self:end;padding:4px 6px;border-radius:999px;background:#172532;color:#95aab4;font-size:8px;white-space:nowrap}.adaptive-feature-row.near mark{background:#0e3025;color:var(--good)}.adaptive-feature-row.above mark,.adaptive-feature-row.below mark{background:#30250f;color:var(--amber)}.adaptive-feature-row.missing mark{background:#321923;color:#ef97a4}
+    .adaptive-decision-summary{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 9px;border-radius:8px;background:#0a1a27}.adaptive-decision-summary strong{font-size:10px}.adaptive-decision-summary span{color:#76919f;font-size:8.5px;text-align:right}.adaptive-recommendations{display:grid;gap:6px;margin-top:7px}.adaptive-recommendations article{padding:8px;border-left:3px solid var(--good);border-radius:7px;background:#0a1925}.adaptive-recommendations article.attention,.adaptive-recommendations article.watch{border-left-color:var(--amber)}.adaptive-recommendations article.critical,.adaptive-recommendations article.blocked{border-left-color:var(--bad)}.adaptive-recommendations b{display:block;font-size:9.5px}.adaptive-recommendations span,.adaptive-recommendations small{display:block;margin-top:3px;color:#78919e;font-size:8px;line-height:1.35}.adaptive-recommendations small{color:#bf9b57}.adaptive-blockers{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}.adaptive-blockers span{padding:4px 6px;border-radius:6px;background:#2d1820;color:#e69ca5;font-size:7.5px}
+    .adaptive-device-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.adaptive-device-grid article{padding:8px;border:1px solid #1d3646;border-radius:8px;background:#091824}.adaptive-device-grid span{display:block;color:#6f8997;font-size:8px}.adaptive-device-grid b{display:block;margin-top:3px;color:#dcebf0;font-size:10px}.adaptive-device-grid small{display:block;margin-top:3px;color:#68828e;font-size:7.8px}.adaptive-version-panel{grid-column:1/-1}.adaptive-version-panel summary{display:flex;align-items:center;justify-content:space-between;cursor:pointer}.adaptive-version-panel summary b,.adaptive-version-panel summary small{display:block}.adaptive-version-panel summary b{font-size:10.5px}.adaptive-version-panel summary small{margin-top:2px;color:#698391;font-size:8px}.adaptive-version-panel summary em{color:#75d7e7;font-size:8.5px}.adaptive-version-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:10px}.adaptive-version-grid div{min-width:0;padding:7px;border-radius:7px;background:#091925}.adaptive-version-grid span{display:block;color:#67818f;font-size:7.5px;text-transform:uppercase}.adaptive-version-grid b{display:block;margin-top:3px;color:#c9dce4;font:700 8px "SF Mono",ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.adaptive-guardrail{margin-top:8px;color:#78919e;font-size:8px;line-height:1.45}.adaptive-empty{padding:12px;color:#66818f;font-size:9px;text-align:center}
     .raw-packet{border-radius:10px;overflow:hidden}.raw-packet summary{background:#0b1925}.raw-fields>div,.analysis-item,.sample-grid span{border-radius:7px}
     .btn{min-height:44px;padding:10px 16px;border-radius:10px;clip-path:none;font-size:13px;letter-spacing:.02em;text-transform:none;box-shadow:none}
     .btn:hover{filter:brightness(1.12);box-shadow:none;transform:translateY(-1px)}.btn:active{transform:translateY(0)}
@@ -673,9 +681,9 @@
     #login{background:radial-gradient(720px 440px at 50% 35%,#15384d 0%,transparent 68%),#050d15f5;backdrop-filter:blur(8px)}
     .age-baseline-preview,.login-safety{border-radius:10px;background:#081520}.chip,.genders button{border-radius:9px;clip-path:none}
     .modal-card,.toast{border-radius:14px;clip-path:none}.modal-card{background:linear-gradient(180deg,#142635,#0b1722)}
-    @media(max-width:1100px){.sensor-groups{grid-template-columns:1fr}.sensor-device{min-height:172px}}
-    @media(max-width:980px){body{padding:16px}.top{align-items:flex-start}.pills{max-width:70%}body[data-view="monitor"] .sensor-integrity,body[data-view="monitor"] .bcg,body[data-view="monitor"] .system{grid-column:span 12}body[data-view="monitor"] .system{order:1}body[data-view="monitor"] .bcg{order:2}#outputs{grid-template-columns:repeat(2,minmax(220px,1fr))}}
-    @media(max-width:700px){body{padding:12px}.top{display:grid;grid-template-columns:1fr}.pills{max-width:none;justify-content:flex-start}.pill.user{max-width:100%;flex:1}.brand .reactor{width:34px;height:34px}h1{font-size:15px}.main-nav{grid-template-columns:repeat(2,1fr)}.page-heading{align-items:flex-start}.page-heading h2{font-size:21px}.page-context{display:none}.sensor{grid-column:span 6;min-height:122px;padding:16px}.value{font-size:27px}.card{padding:16px;border-radius:14px}.environment-card{padding:16px}.environment-head{display:block}.environment-head-meta{justify-content:flex-start;margin-top:11px}.sensor-group{padding:10px}.sensor-device-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sensor-device{min-height:176px}.integrity-grid{grid-template-columns:1fr}.bcg-metrics{grid-template-columns:1fr 1fr}.bcg-metric.bed{grid-column:1/-1}#outputs{grid-template-columns:1fr}.safety-actions .btn{flex:1 1 46%}.row>.btn.wide{flex-basis:100%}.track-list{max-height:260px}.page-heading p{font-size:12px}.flat-message{font-size:12px}}
+    @media(max-width:1100px){.sensor-groups{grid-template-columns:1fr}.sensor-device{min-height:172px}.adaptive-monitor-layout{grid-template-columns:1fr}.adaptive-feature-panel{grid-row:auto}.adaptive-version-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:980px){body{padding:16px}.top{align-items:flex-start}.pills{max-width:70%}body[data-view="monitor"] .sensor-integrity,body[data-view="monitor"] .adaptive-monitor,body[data-view="monitor"] .bcg,body[data-view="monitor"] .system{grid-column:span 12}body[data-view="monitor"] .system{order:1}body[data-view="monitor"] .bcg{order:3}#outputs{grid-template-columns:repeat(2,minmax(220px,1fr))}}
+    @media(max-width:700px){body{padding:12px}.top{display:grid;grid-template-columns:1fr}.pills{max-width:none;justify-content:flex-start}.pill.user{max-width:100%;flex:1}.brand .reactor{width:34px;height:34px}h1{font-size:15px}.main-nav{grid-template-columns:repeat(2,1fr)}.page-heading{align-items:flex-start}.page-heading h2{font-size:21px}.page-context{display:none}.sensor{grid-column:span 6;min-height:122px;padding:16px}.value{font-size:27px}.card{padding:16px;border-radius:14px}.environment-card{padding:16px}.environment-head{display:block}.environment-head-meta{justify-content:flex-start;margin-top:11px}.sensor-group{padding:10px}.sensor-device-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sensor-device{min-height:176px}.integrity-grid{grid-template-columns:1fr}.bcg-metrics{grid-template-columns:1fr 1fr}.bcg-metric.bed{grid-column:1/-1}#outputs{grid-template-columns:1fr}.safety-actions .btn{flex:1 1 46%}.row>.btn.wide{flex-basis:100%}.track-list{max-height:260px}.page-heading p{font-size:12px}.flat-message{font-size:12px}.adaptive-monitor-head{display:block}.adaptive-shadow-badge{display:inline-flex;margin-top:10px}.adaptive-status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.adaptive-feature-row{grid-template-columns:1fr 1fr}.adaptive-feature-row>div{grid-column:1/-1}.adaptive-feature-row>span:nth-of-type(3){display:none}.adaptive-feature-row mark{justify-self:start}.adaptive-device-grid,.adaptive-version-grid{grid-template-columns:1fr}.adaptive-decision-summary{align-items:flex-start;flex-direction:column}.adaptive-decision-summary span{text-align:left}}
     @media(max-width:460px){.sensor{grid-column:span 12}.main-nav a{font-size:11px;padding:8px}.genders{grid-template-columns:1fr 1fr}.login-card{padding:20px}.sensor-device-grid{grid-template-columns:1fr}.sensor-device{min-height:auto}.sensor-values.triple{grid-template-columns:repeat(3,minmax(0,1fr))}.sensor-group-head{align-items:flex-start}.sensor-group-source{display:none}}
 
     /* ---------- Control Center v2: simple, glanceable, touch-friendly ---------- */
@@ -1632,6 +1640,39 @@
         <p class="safety-case-note"><b>Critical:</b> GPIO ใช้ไม่ได้, ESP32 ขาดข้อมูลขณะมีผู้ใช้งาน, CO₂ ≥1,300 ppm หรืออุณหภูมินอก 13–32°C · <b>Blocking:</b> Basis ยังไม่อนุมัติ, CO₂ ไม่มีข้อมูลสด หรือ ESP32 ไม่พร้อมก่อนใช้งาน · ระบบไม่เปิดประตูและไม่สั่งแอร์อัตโนมัติ</p>
       </details>
     </div>
+    <section class="card adaptive-monitor" id="adaptiveMonitorCard" data-pages="monitor" data-admin-panel aria-labelledby="adaptiveMonitorTitle">
+      <div class="adaptive-monitor-head">
+        <div><div class="section-title" id="adaptiveMonitorTitle">Adaptive Learning · Live</div><p>เทียบข้อมูลสดกับ Baseline เพื่อเตรียม Model ควบคุมสภาพแวดล้อมแบบเฉพาะบุคคล</p></div>
+        <div class="adaptive-shadow-badge">SHADOW · NO AUTO CONTROL</div>
+      </div>
+      <div class="adaptive-status-grid" aria-live="polite">
+        <article><span>SESSION</span><b id="adaptiveSessionState">ยังไม่มี Session</b><small id="adaptiveSessionMeta">รอผู้ใช้งาน</small></article>
+        <article><span>SENSOR FRAME</span><b id="adaptiveFrameState">กำลังรอข้อมูล</b><small id="adaptiveFrameMeta">10 วินาทีต่อ Frame</small></article>
+        <article><span>BASELINE</span><b id="adaptiveBaselineState">ยังไม่มีข้อมูล</b><small id="adaptiveBaselineMeta">Prior · Same mode</small></article>
+        <article><span>DATA QUALITY</span><b id="adaptiveQualityState">กำลังตรวจ</b><small id="adaptiveQualityMeta">Sensor + HR/RR</small></article>
+      </div>
+      <div class="adaptive-monitor-layout">
+        <section class="adaptive-panel adaptive-feature-panel">
+          <div class="adaptive-panel-head"><div><b>Live เทียบ Personal Reference</b><span>คำว่า สูง/ต่ำ หมายถึงเทียบค่าของบุคคล ไม่ใช่การวินิจฉัย</span></div><em id="adaptiveWindowMeta">Rolling window · 5 นาที</em></div>
+          <div class="adaptive-feature-table" id="adaptiveFeatureRows"><div class="adaptive-empty">กำลังรอ Adaptive dataset</div></div>
+        </section>
+        <section class="adaptive-panel adaptive-decision-panel">
+          <div class="adaptive-panel-head"><div><b>Shadow Decision</b><span>แสดงสิ่งที่ระบบเสนอ โดยไม่มีคำสั่งถูกส่ง</span></div><em id="adaptiveEvaluationTime">--</em></div>
+          <div class="adaptive-decision-summary"><strong id="adaptiveDecisionSummary">กำลังรอข้อมูล</strong><span id="adaptiveSleepContext">Sleep State · --</span></div>
+          <div class="adaptive-recommendations" id="adaptiveRecommendations"><div class="adaptive-empty">ยังไม่มีคำแนะนำ</div></div>
+          <div class="adaptive-blockers" id="adaptiveBlockers"></div>
+        </section>
+        <section class="adaptive-panel adaptive-device-panel">
+          <div class="adaptive-panel-head"><div><b>Device Intent ล่าสุด</b><span>สถานะ ACK/คำสั่งล่าสุด ไม่ถือเป็นหลักฐานสถานะกายภาพ</span></div></div>
+          <div class="adaptive-device-grid" id="adaptiveDeviceState"><div class="adaptive-empty">กำลังรอข้อมูลอุปกรณ์</div></div>
+        </section>
+        <details class="adaptive-panel adaptive-version-panel">
+          <summary><span><b>Version &amp; Provenance</b><small>ตรวจรุ่นของข้อมูลและ Logic ที่กำลังทำงาน</small></span><em>เปิดรายละเอียด</em></summary>
+          <div class="adaptive-version-grid" id="adaptiveVersionRows"></div>
+          <div class="adaptive-guardrail" id="adaptiveGuardrails"></div>
+        </details>
+      </div>
+    </section>
     <section class="card admin-atmosphere-card" id="adminAtmosphereCard" data-pages="dashboard" data-admin-panel aria-label="แผนปรับสภาพแวดล้อมสำหรับผู้ดูแลระบบ">
       <div class="admin-atmosphere-head">
         <div><div class="section-title">แผนปรับสภาพแวดล้อม</div><p>พอใช้ขึ้นไปถือว่าผ่านขั้นต่ำ · แสดงเฉพาะจุดที่ควรดูแลหรือปรับเพิ่ม · เกณฑ์ฉบับเต็มเปิดดูได้ด้านล่าง</p></div>
@@ -2106,7 +2147,7 @@
   </div>
 </div>
 
-<script src="/static/app-shell.js?v=20260828-2"></script>
+<script src="/static/app-shell.js?v=20260915-3"></script>
 <script>
 const names = {led:'Lighting Room', star_light:'ไฟดาวบนท้องฟ้า', aroma1:'ลาเวนเดอร์', aroma2:'ยูคาลิปตัส', aroma3:'ส้ม', aroma4:'อากาศสดชื่น', steam:'ไอน้ำ'};
 const outputIcons = {led:'lamp', star_light:'star', aroma1:'flower', aroma2:'leaf', aroma3:'orange', aroma4:'air', steam:'steam'};
@@ -5293,6 +5334,91 @@ function escapeMarkup(value=''){
   return String(value).replace(/[&<>"']/g,character=>entities[character]);
 }
 
+function adaptiveValue(value,digits=1){
+  const number=Number(value);
+  return Number.isFinite(number)?number.toFixed(digits).replace(/\.0$/,''):'--';
+}
+
+function adaptiveComparison(metric={}){
+  const labels={near_reference:'ใกล้ค่าประจำตัว',above_reference:'สูงกว่าค่าประจำตัว',below_reference:'ต่ำกว่าค่าประจำตัว',no_reference:'กำลังสร้าง Baseline',no_live_value:'ไม่มีข้อมูลสด'};
+  const tone={near_reference:'near',above_reference:'above',below_reference:'below',no_reference:'unknown',no_live_value:'missing'}[metric.comparison]||'unknown';
+  const delta=metric.delta==null?Number.NaN:Number(metric.delta);
+  const suffix=Number.isFinite(delta)?` · ${delta>0?'+':''}${adaptiveValue(delta,1)} ${metric.unit||''}`:'';
+  return {label:`${labels[metric.comparison]||metric.comparison||'รอข้อมูล'}${suffix}`,tone};
+}
+
+function adaptiveModeLabel(mode){
+  return ({sleep:'Overnight Recovery',overnight:'Overnight Recovery',nap_recovery:'Nap & Refresh',short_nap:'Nap & Refresh',cycle_nap:'Nap & Refresh'})[mode]||mode||'ยังไม่เลือก Mode';
+}
+
+function adaptiveReferenceScope(scope){
+  return ({prior_completed_same_mode_sessions:'Ref: Session ก่อนหน้าในโหมดเดียวกัน',qualified_overnight_reference:'Ref: Overnight ที่ผ่านเกณฑ์',sensor_owned:'Ref: Baseline ภายใน Sensor',none:'ยังไม่มี Reference'})[scope]||`Ref: ${scope||'กำลังเรียนรู้'}`;
+}
+
+function renderAdaptiveFeatures(data={}){
+  const root=document.getElementById('adaptiveFeatureRows');if(!root)return;
+  const rows=Array.isArray(data.live_features)?data.live_features:[];
+  if(!rows.length){root.innerHTML='<div class="adaptive-empty">กำลังรอ Adaptive dataset</div>';return;}
+  root.innerHTML=rows.map(metric=>{
+    const comparison=adaptiveComparison(metric),window=metric.window||{};
+    const current=metric.value==null?'--':`${adaptiveValue(metric.value,metric.key==='co2'?0:1)} ${escapeMarkup(metric.unit||'')}`;
+    const reference=metric.reference==null?'กำลังเรียนรู้':`${adaptiveValue(metric.reference,metric.key==='co2'?0:1)} ${escapeMarkup(metric.unit||'')}`;
+    const mean=window.mean==null?'--':`${adaptiveValue(window.mean,metric.key==='co2'?0:1)} ${escapeMarkup(metric.unit||'')}`;
+    const coverage=window.coverage_pct==null?'':` · ${adaptiveValue(window.coverage_pct,0)}%`;
+    const provenance=`${metric.live_source||''} · ${adaptiveReferenceScope(metric.reference_scope)}`;
+    return `<article class="adaptive-feature-row ${comparison.tone}"><div><b>${escapeMarkup(metric.label)}</b><small title="${escapeMarkup(provenance)}">${escapeMarkup(provenance)}</small></div><span><em>LIVE</em><strong>${current}</strong></span><span><em>BASELINE</em><strong>${reference}</strong></span><span><em>5 MIN AVG</em><strong>${mean}${coverage}</strong></span><mark>${escapeMarkup(comparison.label)}</mark></article>`;
+  }).join('');
+}
+
+function renderAdaptiveDecision(data={}){
+  const recommendations=(data.candidate_recommendations||[]).filter(item=>item&&item.level!=='stable');
+  const shown=recommendations.length?recommendations:(data.candidate_recommendations||[]).slice(0,3);
+  const root=document.getElementById('adaptiveRecommendations');
+  root.innerHTML=shown.length?shown.slice(0,6).map(item=>`<article class="${escapeMarkup(item.level||'stable')}"><b>${escapeMarkup(item.title||item.domain||'ข้อเสนอ')}</b><span>${escapeMarkup(item.candidate||item.evidence||'คงค่าปัจจุบันและติดตาม')}</span><small>OBSERVE ONLY · ไม่ได้ส่งคำสั่ง</small></article>`).join(''):'<div class="adaptive-empty">ยังไม่มีคำแนะนำ</div>';
+  const blockers=Array.isArray(data.blockers)?data.blockers:[];
+  document.getElementById('adaptiveBlockers').innerHTML=blockers.map(item=>`<span>${escapeMarkup(item.message||item.code)}</span>`).join('');
+  const sleep=data.sleep_estimator||{};
+  document.getElementById('adaptiveSleepContext').textContent=`Sleep State · ${String(sleep.confirmed_state||sleep.state||'--').toUpperCase()} · ${sleep.provisional?'Provisional':sleep.confidence||'รอหลักฐาน'}`;
+}
+
+function renderAdaptiveDevices(data={}){
+  const root=document.getElementById('adaptiveDeviceState'),devices=data.device_intent||{};if(!root)return;
+  const air=devices.aircon||{},music=devices.music||{},bed=devices.bed||{};
+  const items=[
+    ['แอร์',air.connected?(air.power?'เปิด':'ปิด'):'Offline',`เป้าหมาย ${air.desired_temperature_c??'--'}°C · ลมอ้างอิง ${air.fan_level_reference??'--'}`],
+    ['เสียง',music.playing&&!music.paused?'กำลังเล่น':music.paused?'พัก':'หยุด',`${music.volume_pct??'--'}% · ${music.mode||'--'}`],
+    ['เตียง',bed.connected?(bed.active_command||'พร้อม'):'Offline',bed.adaptive_motion_allowed?'Adaptive allowed':'ผู้ใช้ควบคุมเท่านั้น'],
+    ['Safety',data.control_policy?.safety_supervisor_authoritative?'Authoritative':'ผิดปกติ','มีสิทธิ์เหนือ Model เสมอ'],
+  ];
+  root.innerHTML=items.map(item=>`<article><span>${escapeMarkup(item[0])}</span><b>${escapeMarkup(item[1])}</b><small>${escapeMarkup(item[2])}</small></article>`).join('');
+}
+
+function renderAdaptiveVersions(data={}){
+  const root=document.getElementById('adaptiveVersionRows');if(!root)return;
+  const versions=data.versions||{};
+  root.innerHTML=Object.entries(versions).map(([key,value])=>`<div><span>${escapeMarkup(key.replaceAll('_',' '))}</span><b>${escapeMarkup(value??'MISSING')}</b></div>`).join('');
+  document.getElementById('adaptiveGuardrails').textContent=(data.guardrails||[]).join(' · ');
+}
+
+function renderAdaptiveLearning(data={}){
+  const root=document.getElementById('adaptiveMonitorCard');if(!root)return;
+  const session=data.session||{},quality=data.data_quality||{},baseline=data.baseline||{},versions=data.versions||{};
+  const valid=data.schema_version&&data.mode==='shadow'&&data.control_policy?.automatic_actuation===false;
+  root.classList.toggle('contract-error',!valid);
+  document.getElementById('adaptiveSessionState').textContent=session.recording?'กำลังบันทึก':session.active?'รอเริ่มบันทึก':'ยังไม่มี Session';
+  document.getElementById('adaptiveSessionMeta').textContent=`${adaptiveModeLabel(session.rest_mode)}${session.session_id?` · ${String(session.session_id).slice(0,8)}`:''}`;
+  document.getElementById('adaptiveFrameState').textContent=quality.sensor_frame_stale?'STALE':versions.sensor_frame_sequence==null?'รอ Frame':`SEQ ${versions.sensor_frame_sequence}`;
+  document.getElementById('adaptiveFrameMeta').textContent=`อายุ ${quality.sensor_frame_age_s==null?'--':adaptiveValue(quality.sensor_frame_age_s,1)}s · ทุก ${data.cadence?.sensor_frame_s||10}s`;
+  document.getElementById('adaptiveBaselineState').textContent=baseline.comparison_ready?'พร้อมเทียบ':baseline.status==='learning'?'กำลังเรียนรู้':'ยังไม่มีข้อมูล';
+  document.getElementById('adaptiveBaselineMeta').textContent=`${baseline.sessions_used||0}/${baseline.minimum_sessions||3} Sessions · Stage ${baseline.active_stage_source||'age_gender'} · Personal influence ${baseline.personal_direct_stage_influence?'ON':'OFF'}`;
+  document.getElementById('adaptiveQualityState').textContent=quality.vital_pair_live?'HR/RR พร้อม':'HR/RR ไม่ครบ';
+  document.getElementById('adaptiveQualityMeta').textContent=`Environment ${quality.environment_live||0}/${quality.environment_total||6} · Window ${quality.window_coverage_pct??0}%`;
+  document.getElementById('adaptiveWindowMeta').textContent=`Rolling window · ${Math.round((data.cadence?.rolling_window_s||300)/60)} นาที · ${quality.window_samples||0} จุด`;
+  document.getElementById('adaptiveDecisionSummary').textContent=data.summary||'กำลังรอข้อมูล';
+  document.getElementById('adaptiveEvaluationTime').textContent=data.generated_at?new Date(data.generated_at).toLocaleTimeString('th-TH',{hour12:false}):'--';
+  renderAdaptiveFeatures(data);renderAdaptiveDecision(data);renderAdaptiveDevices(data);renderAdaptiveVersions(data);
+}
+
 function renderCalibrationInspector(data,{force=false}={}){
   calibrationInspectorState=data;
   const root=document.getElementById('calibrationInspector');
@@ -7647,6 +7773,7 @@ function render(s, source='ws'){
   const environment=renderEnvironmentSensors(s.sensor?.environment,e,h2,b);
   renderSystemHealth(sys);
   renderSafety(s.safety || {});
+  renderAdaptiveLearning(s.adaptive_learning||{});
   if(document.body.dataset.view==='monitor')evaluateMonitorAlerts(e,h2,environment,b,sys);
 
   // ---- per-person session: overlay, user pill, logout button ----

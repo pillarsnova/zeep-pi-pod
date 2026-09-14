@@ -53,6 +53,7 @@ function render(s, source='ws'){
   const environment=renderEnvironmentSensors(s.sensor?.environment,e,h2,b);
   renderSystemHealth(sys);
   renderSafety(s.safety || {});
+  renderAdaptiveLearning(s.adaptive_learning||{});
   if(document.body.dataset.view==='monitor')evaluateMonitorAlerts(e,h2,environment,b,sys);
 
   // ---- per-person session: overlay, user pill, logout button ----

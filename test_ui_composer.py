@@ -60,6 +60,17 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("if(!Number.isFinite(number))return '--';", template)
         self.assertNotIn("channel.engineering", template)
 
+    def test_adaptive_learning_monitor_is_admin_shadow_only(self):
+        template = ui_composer.render()
+        self.assertIn('id="adaptiveMonitorCard"', template)
+        self.assertIn('data-pages="monitor" data-admin-panel', template)
+        self.assertIn("SHADOW · NO AUTO CONTROL", template)
+        self.assertIn("function renderAdaptiveLearning(data={})", template)
+        self.assertIn("renderAdaptiveLearning(s.adaptive_learning||{})", template)
+        self.assertIn("personal_direct_stage_influence", template)
+        self.assertIn("metric.delta==null?Number.NaN:Number(metric.delta)", template)
+        self.assertIn("function adaptiveReferenceScope(scope)", template)
+
     def test_sound_ui_uses_direct_canonical_esp32_value(self):
         template = ui_composer.render()
         self.assertIn("const raw=environment.sound_dba_est;", template)

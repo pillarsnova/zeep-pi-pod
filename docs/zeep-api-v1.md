@@ -9,6 +9,11 @@
 [ZEEP Usage Session API Schema Reference v1](zeep-api-schema-reference-v1.md)
 โดย schema ที่เครื่องอ่านได้เผยแพร่ผ่าน `/openapi.json`
 
+Admin live observability สำหรับเตรียม Adaptive Control ใช้
+`GET /api/v1/admin/adaptive/live` ซึ่งคืนข้อมูลแบบ Shadow เท่านั้น
+(`automatic_actuation=false`) ตาม
+[Adaptive Control Data Foundation v1](adaptive-control-data-foundation-v1.md)
+
 ## TL;DR
 
 API ชุดนี้ใช้ส่งผลสรุปจาก Pi ไปให้แอป ZEEP หรือระบบภายในอ่าน โดยไม่ส่ง

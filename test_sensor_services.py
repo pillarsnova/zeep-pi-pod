@@ -553,7 +553,14 @@ class SmartResponseServiceTests(unittest.TestCase):
         )
         devices = {
             key: {"model": key, "status": "live"}
-            for key in ("mhz19c", "pms7003", "sgp40")
+            for key in (
+                "sht3x_dis",
+                "opt3001",
+                "sph0645",
+                "mhz19c",
+                "pms7003",
+                "sgp40",
+            )
         }
         result = evaluate_smart_response({
             "sensor": {"environment": {
@@ -574,6 +581,50 @@ class SmartResponseServiceTests(unittest.TestCase):
         self.assertEqual(air["level"], "critical")
         self.assertFalse(result["automatic_actuation"])
         self.assertFalse(result["sleep_stage_used"])
+
+    def test_shadow_evaluator_never_recommends_from_stale_held_values(self) -> None:
+        policy = SmartResponsePolicy(
+            version="test-policy",
+            temperature_min_c=18.0,
+            temperature_max_c=27.0,
+            co2_warn_ppm=1000.0,
+            co2_critical_ppm=1300.0,
+            sound_sleep_target_dba=35.0,
+        )
+        devices = {
+            key: {"model": key, "status": "live"}
+            for key in (
+                "opt3001",
+                "mhz19c",
+                "pms7003",
+                "sgp40",
+            )
+        }
+        devices["sht3x_dis"] = {"status": "stale"}
+        devices["sph0645"] = {"status": "invalid"}
+        result = evaluate_smart_response(
+            {
+                "sensor": {
+                    "environment": {
+                        "devices": devices,
+                        "temperature_c": 35.0,
+                        "humidity_rh": 90.0,
+                        "sound_dba_est": 90.0,
+                    }
+                },
+                "safety": {"ready": True, "armed": True},
+                "aircon": {"connected": True, "stale": False},
+                "session": {"active": True, "recording": True},
+            },
+            policy,
+            now=NOW,
+        )
+        by_domain = {
+            item["domain"]: item for item in result["recommendations"]
+        }
+        self.assertEqual(by_domain["temperature"]["level"], "blocked")
+        self.assertEqual(by_domain["humidity"]["level"], "blocked")
+        self.assertEqual(by_domain["sound"]["level"], "blocked")
 
 
 if __name__ == "__main__":

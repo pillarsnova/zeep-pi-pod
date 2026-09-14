@@ -25,6 +25,7 @@
 | Calibration | `sensor_calibration.py` | calibration spec, validation และ atomic JSON persistence |
 | Sensor runtime | `sensor_runtime.py` | normalize Hub 1, compose Hub 1/2, stale/hold และ Sound Leq |
 | Shadow guidance | `smart_response.py` | ประเมินคำแนะนำสภาพแวดล้อมโดยไม่สั่งอุปกรณ์ |
+| Adaptive learning monitor | `zeep_pod/adaptive_learning.py` | เทียบ Live กับ Baseline และรวม version/device intent ใน Shadow mode |
 | Sleep evidence | `sleep_signal_features.py` | Movement, Bed Exit, Arousal, HR/RR และ waveform features |
 | Sleep scoring | `sleep_stage_scoring.py` | หลักฐานและ probability ของ W/N1/N2/N3/REM |
 | Sleep policy | `sleep_system_policy.py` | version, gate, confirmation, transition และ environment context |
@@ -69,6 +70,7 @@ Dashboard, Session และ Safety ต้องอ่านค่าจาก *
 8. การ Restart/Deploy ห้ามสร้าง Logout หรือจบ Session; ต้อง restore atomic checkpoint
 9. Public endpoint และ JSON key เดิมยังคงใช้ได้จนมี versioned migration plan
 10. หนึ่งค่าจริงต่อ metric: UI ห้ามคำนวณ Sensor/Sleep score ซ้ำจาก Backend
+11. Adaptive Learning ต้องคง `automatic_actuation=false` จนผ่าน Gate และ Safety review
 
 ## 4. วิธีเพิ่มหรือแก้ความสามารถ
 

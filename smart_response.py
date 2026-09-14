@@ -68,7 +68,9 @@ def evaluate_smart_response(
             item["suggestion"] = suggestion
         recommendations.append(item)
 
-    def numeric(name: str) -> Optional[float]:
+    def numeric(name: str, device_key: Optional[str] = None) -> Optional[float]:
+        if device_key and (devices.get(device_key) or {}).get("status") != "live":
+            return None
         value = environment.get(name)
         if (
             not isinstance(value, (int, float))
@@ -92,7 +94,7 @@ def evaluate_smart_response(
     if not aircon.get("connected") or aircon.get("stale"):
         blockers.append({"code": "aircon_offline", "message": "Control Hub 1 ของแอร์ Offline"})
 
-    temperature = numeric("temperature_c")
+    temperature = numeric("temperature_c", "sht3x_dis")
     if temperature is None:
         recommend("temperature", "blocked", "ไม่มีข้อมูลอุณหภูมิสด", "คงสถานะเดิมและรอ SHT3x-DIS กลับมา")
     elif temperature > policy.temperature_max_c:
@@ -110,7 +112,7 @@ def evaluate_smart_response(
     else:
         recommend("temperature", "stable", "อุณหภูมิอยู่ในช่วงยอดเยี่ยม", f"{temperature:.1f}°C · คงค่าปัจจุบันและติดตามแนวโน้ม")
 
-    humidity = numeric("humidity_rh")
+    humidity = numeric("humidity_rh", "sht3x_dis")
     if humidity is None:
         recommend("humidity", "blocked", "ไม่มีข้อมูลความชื้นสด", "คงสถานะเดิมและรอ SHT3x-DIS กลับมา")
     elif humidity > 60.0:
@@ -152,7 +154,7 @@ def evaluate_smart_response(
     else:
         recommend("voc", "stable", "VOC ใกล้ Adaptive Baseline", f"VOC Index {voc:.0f} · ค่า 100 คือ Baseline ที่ SGP40 เรียนรู้")
 
-    sound = numeric("sound_dba_est")
+    sound = numeric("sound_dba_est", "sph0645")
     if sound is None:
         recommend("sound", "blocked", "ไม่มีข้อมูลเสียงสด", "คงระดับเสียงเดิมและรอ SPH0645 กลับมา")
     elif sound > policy.sound_sleep_target_dba:
@@ -164,7 +166,7 @@ def evaluate_smart_response(
     else:
         recommend("sound", "stable", "ระดับเสียงอยู่ในเป้าหมาย", f"{sound:.1f} dBA · เป้าหมาย ≤{policy.sound_sleep_target_dba:.0f} · คงระดับปัจจุบัน")
 
-    lux = numeric("lux")
+    lux = numeric("lux", "opt3001")
     lux_limit = 1.0 if phase == "sleep_session" else 10.0
     if lux is not None and phase != "standby" and lux > lux_limit:
         recommend("light", "attention", "แสงสูงกว่าช่วงของ Session", f"Photopic {lux:.2f} lux; เสนอหรี่ไฟ แต่ยังยืนยัน mEDI ไม่ได้หากไม่มี spectral sensor")

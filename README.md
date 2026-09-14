@@ -457,6 +457,10 @@ secondary robustness analysis ตาม [ZEEP Sleep-State Baseline v1.8](docs/ze
   ยังเข้าคะแนนแต่ไม่ถูกใช้สอน Baseline และการขาดข้อมูลบางช่วงไม่ทำให้ทิ้งทั้ง Session
 - แผง **AI Adaptive** ในการ์ดประวัติแสดงสถานะการเรียนรู้ (n/3 คืน) +
   คำแนะนำจากข้อมูลของเขาเอง · `GET /api/baseline/{username}`
+- หน้า Admin `/monitor` มี **Adaptive Learning · Live** สำหรับเทียบค่า Sensor,
+  HR/RR, Personal Baseline, Device intent และ version ใน Shadow mode ·
+  `GET /api/v1/admin/adaptive/live` · รายละเอียดที่
+  [Adaptive Control Data Foundation v1](docs/adaptive-control-data-foundation-v1.md)
 - Baseline อัปเดตอัตโนมัติหลัง logout ทุกครั้ง · เก็บที่ `data/baselines.json`
   (ข้อมูลส่วนบุคคล — gitignored)
 

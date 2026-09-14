@@ -257,6 +257,91 @@ function escapeMarkup(value=''){
   return String(value).replace(/[&<>"']/g,character=>entities[character]);
 }
 
+function adaptiveValue(value,digits=1){
+  const number=Number(value);
+  return Number.isFinite(number)?number.toFixed(digits).replace(/\.0$/,''):'--';
+}
+
+function adaptiveComparison(metric={}){
+  const labels={near_reference:'ใกล้ค่าประจำตัว',above_reference:'สูงกว่าค่าประจำตัว',below_reference:'ต่ำกว่าค่าประจำตัว',no_reference:'กำลังสร้าง Baseline',no_live_value:'ไม่มีข้อมูลสด'};
+  const tone={near_reference:'near',above_reference:'above',below_reference:'below',no_reference:'unknown',no_live_value:'missing'}[metric.comparison]||'unknown';
+  const delta=metric.delta==null?Number.NaN:Number(metric.delta);
+  const suffix=Number.isFinite(delta)?` · ${delta>0?'+':''}${adaptiveValue(delta,1)} ${metric.unit||''}`:'';
+  return {label:`${labels[metric.comparison]||metric.comparison||'รอข้อมูล'}${suffix}`,tone};
+}
+
+function adaptiveModeLabel(mode){
+  return ({sleep:'Overnight Recovery',overnight:'Overnight Recovery',nap_recovery:'Nap & Refresh',short_nap:'Nap & Refresh',cycle_nap:'Nap & Refresh'})[mode]||mode||'ยังไม่เลือก Mode';
+}
+
+function adaptiveReferenceScope(scope){
+  return ({prior_completed_same_mode_sessions:'Ref: Session ก่อนหน้าในโหมดเดียวกัน',qualified_overnight_reference:'Ref: Overnight ที่ผ่านเกณฑ์',sensor_owned:'Ref: Baseline ภายใน Sensor',none:'ยังไม่มี Reference'})[scope]||`Ref: ${scope||'กำลังเรียนรู้'}`;
+}
+
+function renderAdaptiveFeatures(data={}){
+  const root=document.getElementById('adaptiveFeatureRows');if(!root)return;
+  const rows=Array.isArray(data.live_features)?data.live_features:[];
+  if(!rows.length){root.innerHTML='<div class="adaptive-empty">กำลังรอ Adaptive dataset</div>';return;}
+  root.innerHTML=rows.map(metric=>{
+    const comparison=adaptiveComparison(metric),window=metric.window||{};
+    const current=metric.value==null?'--':`${adaptiveValue(metric.value,metric.key==='co2'?0:1)} ${escapeMarkup(metric.unit||'')}`;
+    const reference=metric.reference==null?'กำลังเรียนรู้':`${adaptiveValue(metric.reference,metric.key==='co2'?0:1)} ${escapeMarkup(metric.unit||'')}`;
+    const mean=window.mean==null?'--':`${adaptiveValue(window.mean,metric.key==='co2'?0:1)} ${escapeMarkup(metric.unit||'')}`;
+    const coverage=window.coverage_pct==null?'':` · ${adaptiveValue(window.coverage_pct,0)}%`;
+    const provenance=`${metric.live_source||''} · ${adaptiveReferenceScope(metric.reference_scope)}`;
+    return `<article class="adaptive-feature-row ${comparison.tone}"><div><b>${escapeMarkup(metric.label)}</b><small title="${escapeMarkup(provenance)}">${escapeMarkup(provenance)}</small></div><span><em>LIVE</em><strong>${current}</strong></span><span><em>BASELINE</em><strong>${reference}</strong></span><span><em>5 MIN AVG</em><strong>${mean}${coverage}</strong></span><mark>${escapeMarkup(comparison.label)}</mark></article>`;
+  }).join('');
+}
+
+function renderAdaptiveDecision(data={}){
+  const recommendations=(data.candidate_recommendations||[]).filter(item=>item&&item.level!=='stable');
+  const shown=recommendations.length?recommendations:(data.candidate_recommendations||[]).slice(0,3);
+  const root=document.getElementById('adaptiveRecommendations');
+  root.innerHTML=shown.length?shown.slice(0,6).map(item=>`<article class="${escapeMarkup(item.level||'stable')}"><b>${escapeMarkup(item.title||item.domain||'ข้อเสนอ')}</b><span>${escapeMarkup(item.candidate||item.evidence||'คงค่าปัจจุบันและติดตาม')}</span><small>OBSERVE ONLY · ไม่ได้ส่งคำสั่ง</small></article>`).join(''):'<div class="adaptive-empty">ยังไม่มีคำแนะนำ</div>';
+  const blockers=Array.isArray(data.blockers)?data.blockers:[];
+  document.getElementById('adaptiveBlockers').innerHTML=blockers.map(item=>`<span>${escapeMarkup(item.message||item.code)}</span>`).join('');
+  const sleep=data.sleep_estimator||{};
+  document.getElementById('adaptiveSleepContext').textContent=`Sleep State · ${String(sleep.confirmed_state||sleep.state||'--').toUpperCase()} · ${sleep.provisional?'Provisional':sleep.confidence||'รอหลักฐาน'}`;
+}
+
+function renderAdaptiveDevices(data={}){
+  const root=document.getElementById('adaptiveDeviceState'),devices=data.device_intent||{};if(!root)return;
+  const air=devices.aircon||{},music=devices.music||{},bed=devices.bed||{};
+  const items=[
+    ['แอร์',air.connected?(air.power?'เปิด':'ปิด'):'Offline',`เป้าหมาย ${air.desired_temperature_c??'--'}°C · ลมอ้างอิง ${air.fan_level_reference??'--'}`],
+    ['เสียง',music.playing&&!music.paused?'กำลังเล่น':music.paused?'พัก':'หยุด',`${music.volume_pct??'--'}% · ${music.mode||'--'}`],
+    ['เตียง',bed.connected?(bed.active_command||'พร้อม'):'Offline',bed.adaptive_motion_allowed?'Adaptive allowed':'ผู้ใช้ควบคุมเท่านั้น'],
+    ['Safety',data.control_policy?.safety_supervisor_authoritative?'Authoritative':'ผิดปกติ','มีสิทธิ์เหนือ Model เสมอ'],
+  ];
+  root.innerHTML=items.map(item=>`<article><span>${escapeMarkup(item[0])}</span><b>${escapeMarkup(item[1])}</b><small>${escapeMarkup(item[2])}</small></article>`).join('');
+}
+
+function renderAdaptiveVersions(data={}){
+  const root=document.getElementById('adaptiveVersionRows');if(!root)return;
+  const versions=data.versions||{};
+  root.innerHTML=Object.entries(versions).map(([key,value])=>`<div><span>${escapeMarkup(key.replaceAll('_',' '))}</span><b>${escapeMarkup(value??'MISSING')}</b></div>`).join('');
+  document.getElementById('adaptiveGuardrails').textContent=(data.guardrails||[]).join(' · ');
+}
+
+function renderAdaptiveLearning(data={}){
+  const root=document.getElementById('adaptiveMonitorCard');if(!root)return;
+  const session=data.session||{},quality=data.data_quality||{},baseline=data.baseline||{},versions=data.versions||{};
+  const valid=data.schema_version&&data.mode==='shadow'&&data.control_policy?.automatic_actuation===false;
+  root.classList.toggle('contract-error',!valid);
+  document.getElementById('adaptiveSessionState').textContent=session.recording?'กำลังบันทึก':session.active?'รอเริ่มบันทึก':'ยังไม่มี Session';
+  document.getElementById('adaptiveSessionMeta').textContent=`${adaptiveModeLabel(session.rest_mode)}${session.session_id?` · ${String(session.session_id).slice(0,8)}`:''}`;
+  document.getElementById('adaptiveFrameState').textContent=quality.sensor_frame_stale?'STALE':versions.sensor_frame_sequence==null?'รอ Frame':`SEQ ${versions.sensor_frame_sequence}`;
+  document.getElementById('adaptiveFrameMeta').textContent=`อายุ ${quality.sensor_frame_age_s==null?'--':adaptiveValue(quality.sensor_frame_age_s,1)}s · ทุก ${data.cadence?.sensor_frame_s||10}s`;
+  document.getElementById('adaptiveBaselineState').textContent=baseline.comparison_ready?'พร้อมเทียบ':baseline.status==='learning'?'กำลังเรียนรู้':'ยังไม่มีข้อมูล';
+  document.getElementById('adaptiveBaselineMeta').textContent=`${baseline.sessions_used||0}/${baseline.minimum_sessions||3} Sessions · Stage ${baseline.active_stage_source||'age_gender'} · Personal influence ${baseline.personal_direct_stage_influence?'ON':'OFF'}`;
+  document.getElementById('adaptiveQualityState').textContent=quality.vital_pair_live?'HR/RR พร้อม':'HR/RR ไม่ครบ';
+  document.getElementById('adaptiveQualityMeta').textContent=`Environment ${quality.environment_live||0}/${quality.environment_total||6} · Window ${quality.window_coverage_pct??0}%`;
+  document.getElementById('adaptiveWindowMeta').textContent=`Rolling window · ${Math.round((data.cadence?.rolling_window_s||300)/60)} นาที · ${quality.window_samples||0} จุด`;
+  document.getElementById('adaptiveDecisionSummary').textContent=data.summary||'กำลังรอข้อมูล';
+  document.getElementById('adaptiveEvaluationTime').textContent=data.generated_at?new Date(data.generated_at).toLocaleTimeString('th-TH',{hour12:false}):'--';
+  renderAdaptiveFeatures(data);renderAdaptiveDecision(data);renderAdaptiveDevices(data);renderAdaptiveVersions(data);
+}
+
 function renderCalibrationInspector(data,{force=false}={}){
   calibrationInspectorState=data;
   const root=document.getElementById('calibrationInspector');

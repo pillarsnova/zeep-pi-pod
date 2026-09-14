@@ -33,9 +33,9 @@
       document: 'Control Debug',
     },
     monitor: {
-      title: 'สถานะระบบ',
-      subtitle: 'ตรวจความพร้อมของระบบ Sensor และเหตุการณ์ผิดปกติ',
-      document: 'Monitor & Logs',
+      title: 'Live System & Adaptive Learning',
+      subtitle: 'ตรวจ Sensor, Baseline, Version และ Shadow Decision แบบสด',
+      document: 'Adaptive Learning Monitor',
     },
     sessions: {
       title: 'ประวัติการใช้งาน',

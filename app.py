@@ -5026,6 +5026,7 @@ def occupancy_lease_supervisor():
 # endpoints, so the payload is built as a fresh whitelist literal.  Copying
 # ``record`` and deleting keys would drag ``samples`` (one row per cadence tick,
 # ~1 MB a night) plus the frozen Profile context into every history request.
+# ``score_type`` names which of ``sleep_score``/``recovery_score`` is meaningful.
 # Pi scores AASM W/N1/N2/N3/REM. The backend tests ``stage != 0`` to
 # find sleep onset and ``stage == 0`` to count awakenings, so Wake keeps index 0
 # and ``stage_name`` carries the real meaning: the same jsonb column also holds

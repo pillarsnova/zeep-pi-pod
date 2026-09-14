@@ -18,6 +18,7 @@ configure_app_test_environment()
 
 import app  # noqa: E402  (must follow the environment setup)
 from sleep_session_report import build_session_report, build_sleep_quality  # noqa: E402
+from zeep_pod.sessions.ingest_payload import resolve_score_type  # noqa: E402
 
 # The upload is disabled unless both are configured. Another test module may
 # already have imported app, so override the resolved values rather than the
@@ -50,6 +51,7 @@ def build_record(
     interval_s: float = 5.0,
     *,
     awakenings: int = 0,
+    rest_mode: str = "sleep",
     zeep_public_id: Optional[str] = "11111111-2222-3333-4444-555555555555",
     persisted_interval_s: Any = "same",
 ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
@@ -95,12 +97,12 @@ def build_record(
         key: value for key, value in counts.items() if key != "off_bed"
     }
     quality = build_sleep_quality(
-        duration_s, night, counts, completed=True, rest_mode="sleep",
+        duration_s, night, counts, completed=True, rest_mode=rest_mode,
         stage_sequence=rows, sensor_samples=rows, sample_interval_s=interval_s,
         score_state_counts=score_counts)
     night["sleep_quality"] = quality
     report = build_session_report(
-        duration_s, rows, night, counts, quality, rest_mode="sleep",
+        duration_s, rows, night, counts, quality, rest_mode=rest_mode,
         sample_interval_s=interval_s, estimator_version="test", completed=True,
         timeline_schema_version=app.SESSION_TIMELINE_SCHEMA_VERSION,
         sleep_score_state_counts=score_counts)
@@ -109,6 +111,7 @@ def build_record(
         "username": "tester", "username_key": "tester@example.com",
         "zeep_public_id": zeep_public_id,
         "identity_subject": f"zeep:{zeep_public_id}", "pod_id": "test-pod-01",
+        "rest_mode": rest_mode,
         "started_at_utc": datetime.fromtimestamp(START_EPOCH, timezone.utc).isoformat(),
         "ended_at_utc": datetime.fromtimestamp(START_EPOCH + duration_s, timezone.utc).isoformat(),
         "duration_s": duration_s,
@@ -260,6 +263,74 @@ class IngestPayloadTests(unittest.TestCase):
         result = app._build_ingest_payload(record, rows)["record"]
         self.assertEqual(result["respiration_rate"], {})
         self.assertEqual(result["heart_rate"], {})
+
+
+# A 90-minute rest that scores as a Recovery Session rather than a night.
+NAP = ["n1"] * 60 + ["n2"] * 1008 + ["wake"] * 12
+
+
+class IngestScoreTypeTests(unittest.TestCase):
+    """score_type names which of the two score keys carries a real number."""
+
+    def upload(self, stages: List[Optional[str]], rest_mode: str
+               ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        record, rows = build_record(stages, 5.0, awakenings=1, rest_mode=rest_mode)
+        payload = app._build_ingest_payload(record, rows)
+        self.assertIsNotNone(payload, rest_mode)
+        return record, payload["record"]
+
+    def test_all_three_keys_travel_on_every_session(self) -> None:
+        # A fixed shape lets the backend branch on score_type alone instead of
+        # guessing the Session kind from whichever key happens to be present.
+        for stages, mode in ((NIGHT, "sleep"), (NAP, "nap_recovery"), (NIGHT, "night")):
+            with self.subTest(mode=mode):
+                _, result = self.upload(stages, mode)
+                for key in ("score_type", "sleep_score", "recovery_score"):
+                    self.assertIn(key, result)
+
+    def test_an_overnight_session_releases_a_sleep_score(self) -> None:
+        record, result = self.upload(NIGHT, "sleep")
+        self.assertEqual(result["score_type"], "sleep_score")
+        self.assertEqual(result["sleep_score"], record["sleep_quality"]["score"])
+        self.assertIsNone(result["recovery_score"])
+
+    def test_a_nap_releases_a_recovery_score_not_a_sleep_score(self) -> None:
+        # Before score_type existed this number was uploaded under sleep_score,
+        # which is the mislabelling the new fields exist to end.
+        record, result = self.upload(NAP, "nap_recovery")
+        self.assertEqual(record["sleep_quality"]["quality_type"], "rest_goal")
+        self.assertEqual(result["score_type"], "recovery_score")
+        self.assertEqual(result["recovery_score"], record["sleep_quality"]["score"])
+        self.assertIsNone(result["sleep_score"])
+
+    def test_legacy_recovery_modes_are_labelled_recovery(self) -> None:
+        for mode in ("relax", "recovery", "short_nap", "jet_lag"):
+            with self.subTest(mode=mode):
+                _, result = self.upload(NAP, mode)
+                self.assertEqual(result["score_type"], "recovery_score")
+                self.assertIsInstance(result["recovery_score"], int)
+                self.assertIsNone(result["sleep_score"])
+
+    def test_an_unresolved_mode_leaves_the_score_where_older_rows_carry_it(self) -> None:
+        # "night" is a pre-normalisation value a restored record can still hold.
+        # rest_mode_group() refuses to infer an identity from it, so the row
+        # reads exactly like one written before score_type existed.
+        record, result = self.upload(NIGHT, "night")
+        self.assertIsNone(result["score_type"])
+        self.assertEqual(result["sleep_score"], record["sleep_quality"]["score"])
+        self.assertIsNone(result["recovery_score"])
+
+    def test_auto_is_never_given_a_score_identity_by_implication(self) -> None:
+        # An auto Session produces no releasable score to upload today, but the
+        # helper must still refuse to name one rather than defaulting to Sleep.
+        self.assertIsNone(resolve_score_type({"rest_mode": "auto"}))
+        self.assertIsNone(resolve_score_type({}))
+
+    def test_the_detailed_rest_mode_survives_alongside_the_label(self) -> None:
+        # score_type collapses to two values; rest_mode still separates a
+        # short_nap from a jet_lag Session for any backend consumer reading it.
+        _, result = self.upload(NAP, "jet_lag")
+        self.assertEqual(result["rest_mode"], "jet_lag")
 
 
 class IngestEnvironmentTests(unittest.TestCase):

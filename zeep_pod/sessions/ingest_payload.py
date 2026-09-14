@@ -11,6 +11,7 @@ from typing import Any
 from sleep_system_policy import (
     ZEEP_OFF_BED_DATA_STATUSES,
     ZEEP_OFF_BED_LABELS,
+    rest_mode_group,
 )
 
 from .cadence import sample_interval_seconds
@@ -153,6 +154,14 @@ def _vitals(record: dict[str, Any], key: str) -> dict[str, Any]:
     return {name: series[name] for name in ("avg", "min", "max") if name in series}
 
 
+def resolve_score_type(record: dict[str, Any]) -> str | None:
+    """Label the released score by the authoritative mode, never by implication."""
+    group = rest_mode_group(record.get("rest_mode"))
+    if group is None:
+        return None
+    return "recovery_score" if group == "nap_recovery" else "sleep_score"
+
+
 def _compact_result(
     record: dict[str, Any],
     report: dict[str, Any],
@@ -168,8 +177,15 @@ def _compact_result(
         for segment in segments
         if segment.get("stage_name") != "off_bed"
     )
+    # An unresolved mode keeps the score in ``sleep_score`` so a row written
+    # before ``score_type`` existed and a row written without a resolvable mode
+    # stay readable the same way.
+    score_value = quality.get("score")
+    score_type = resolve_score_type(record)
     result: dict[str, Any] = {
-        "sleep_score": quality.get("score"),
+        "score_type": score_type,
+        "sleep_score": score_value if score_type != "recovery_score" else None,
+        "recovery_score": score_value if score_type == "recovery_score" else None,
         "sleep_efficiency": quality.get("sleep_efficiency_pct"),
         "rest_mode": record.get("rest_mode"),
         "target_duration_s": record.get("target_duration_s"),

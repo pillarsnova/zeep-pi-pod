@@ -46,10 +46,36 @@ Mobile app ไม่ควรต่อ Pi โดยตรงด้วย credent
 ZEEP Backend แบบอัตโนมัติยังไม่เปิดจนกว่าจะมี account-scoped/short-lived
 credential พร้อม read audit; ห้ามนำ `X-API-Token` เดิมมาใช้ทดแทน
 
-การเปลี่ยนแปลงรุ่นนี้เพิ่ม **Pull API ภายใน Pod** และไม่ได้ขยาย payload ของ
-legacy `POST /v1/sleep-sessions/ingest` ไปยัง `api.zeep.world`; หากทีมต้องการ
-ให้ Backend รับ field ชุดใหม่ผ่าน Push ต้องอนุมัติ schema, data minimisation
-และ retention ของปลายทางร่วมกันก่อน
+การเปลี่ยนแปลงรุ่นนี้เพิ่ม **Pull API ภายใน Pod** ส่วน payload ของ legacy
+`POST /v1/sleep-sessions/ingest` ไปยัง `api.zeep.world` ขยายเฉพาะการแยก
+Sleep/Recovery Score ที่อนุมัติร่วมกันแล้ว: `score_type`, `sleep_score`
+และ `recovery_score` ทั้งสามคีย์อยู่ใน `record` เสมอ (snake_case เหมือนคีย์อื่น
+ใน `record` ส่วน envelope ชั้นนอกยังเป็น camelCase) ไม่มี field อื่นถูกเพิ่ม
+และไม่มีข้อมูลใหม่ออกจาก Pod — `score_type` เพียงตั้งชื่อคะแนนที่ Pod ส่งอยู่แล้ว
+จึงไม่กระทบ data minimisation และ retention ที่ตกลงไว้ การเพิ่ม field อื่น
+ผ่าน Push ยังต้องอนุมัติ schema, data minimisation และ retention ของปลายทาง
+ร่วมกันก่อนเช่นเดิม
+
+`score_type` เป็นตัวบอกว่าคะแนนอยู่ในคีย์ใด คีย์ที่ไม่ได้ใช้เป็น `null` เสมอ:
+
+```json
+// Overnight Recovery
+"score_type": "sleep_score",    "sleep_score": 82,   "recovery_score": null
+// Nap & Refresh
+"score_type": "recovery_score", "sleep_score": null, "recovery_score": 78
+// โหมดที่ระบุไม่ได้
+"score_type": null,             "sleep_score": 78,   "recovery_score": null
+```
+
+เคสที่สามเกิดเมื่อ `rest_mode_group()` ระบุกลุ่มไม่ได้ Pod จะไม่เดาชนิดคะแนน
+และคงคะแนนไว้ใน `sleep_score` ให้อ่านได้เหมือนแถวที่เขียนก่อนมี `score_type`
+`rest_mode` ยังถูกส่งต่อไปตามเดิมเพราะละเอียดกว่า `score_type`
+(เช่น แยก `short_nap` จาก `jet_lag`)
+
+แถวเดิมใน `scoring_result` ไม่ถูก backfill: Nap Session ที่อัปโหลดไปก่อนหน้านี้
+ยังเก็บคะแนนไว้ใน `sleep_score` และไม่มี `score_type` ฝั่งอ่านจึงควรใช้
+`recovery_score ?? sleep_score` เมื่อไม่มี `score_type` — การไม่มี `score_type`
+คือตัวแยกแถวก่อนการเปลี่ยนแปลงนี้ที่ชัดเจนที่สุด
 
 ## Response envelope
 

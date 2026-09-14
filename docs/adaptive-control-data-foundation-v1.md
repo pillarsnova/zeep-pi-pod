@@ -100,6 +100,7 @@ token หรือคำตอบแบบสอบถาม และไม่�
   "baseline": {
     "status": "active",
     "sessions_used": 4,
+    "mode_group": "sleep",
     "behaviour_reference_same_mode_only": true,
     "physiology_reference_scope": "prior_completed_same_mode_sessions",
     "prior_completed_sessions_only": true,
@@ -129,6 +130,12 @@ token หรือคำตอบแบบสอบถาม และไม่�
 }
 ```
 
+หมายเหตุด้าน provenance: ตัวอย่างข้างต้นใช้ `mode_group: sleep` สำหรับ
+Overnight เท่านั้น ใน production ปัจจุบัน Nap ใช้ behavior/environment
+จาก Nap แต่ HR/Movement อ้าง `qualified_overnight_reference`; ต้องส่ง scope
+จริงใน payload และห้ามเรียกว่า Nap physiology baseline จนกว่าจะมีการแยก
+Baseline ของ Nap 30/90 นาทีใน schema และ implementation
+
 ## 6. ข้อมูลที่มีแล้วสำหรับ Replay/Model Development
 
 - `sessions.db/timeline`: Environment, HR, RR และ Bed ทุก 10 วินาที
@@ -154,6 +161,10 @@ ACK ของแอร์ปัจจุบันยืนยันเพีย�
 จึงห้ามใช้เป็น label สถานะกายภาพโดยตรง
 
 ## 7. ลำดับการพัฒนา Adaptive Control
+
+แผน Recommendation-first รายอุปกรณ์, Baseline maturity, API และ Safety gate
+ฉบับถัดไปอยู่ที่
+[ZEEP Adaptive Coach v1.0](adaptive-control-recommendation-plan-v1.md)
 
 | Gate | การทำงาน | อนุญาตสั่งอุปกรณ์ |
 |---|---|---|

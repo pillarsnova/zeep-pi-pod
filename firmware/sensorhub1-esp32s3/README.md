@@ -30,8 +30,8 @@ Target board ที่ตรวจจากอุปกรณ์จริงค�
   I²C ทั้งคู่ใช้งานไม่ได้
 - Pi ถือ Hub stale หลัง 25 วินาที แต่ตัดสินค่าจริงตามสถานะราย Sensor
 
-รายละเอียดลำดับการทำงานและ acceptance matrix อยู่ที่
-[`docs/sensorhub1-three-sensor-runtime.md`](../../docs/sensorhub1-three-sensor-runtime.md)
+สัญญา field/range/validity ที่ใช้งานอยู่ดูที่
+[`Sensor Interface Contract v1.2`](../../docs/zeep-sensor-interface-contract-v1.2.md)
 
 ## Sound pipeline
 

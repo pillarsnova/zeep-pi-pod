@@ -125,8 +125,8 @@ LAeq = calibration_reference_dba + 10 × log10(mean_square / reference_energy)
   <https://www.knowles.com/docs/default-source/model-downloads/sph0645lm4h-b-datasheet-rev-c.pdf>
 - Espressif I2S Programming Guide: driver/slot configurationของ ESP32
   <https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/i2s.html>
-- CEM DT-8852 field protocol and historical observations:
-  [sph0645-cem-dt8852-field-calibration-2026-08-26.md](sph0645-cem-dt8852-field-calibration-2026-08-26.md)
+- CEM DT-8852 field protocol ใช้ A/SLOW และช่วง 30–130 dBA ตามขั้นตอนด้านบน;
+  observation รุ่นเก่าตรวจสอบได้จาก Git history และไม่ใช่ runtime input
 - `ikostoski/esp32-i2s-slm` ใช้ศึกษา architecture A/C weighting และ Leq เท่านั้น;
   เป็น GPL-3.0 จึงห้ามคัดลอกเข้า Firmware ปิดของ ZEEP โดยไม่ผ่าน license review
   <https://github.com/ikostoski/esp32-i2s-slm>

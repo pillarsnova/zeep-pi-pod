@@ -4,7 +4,7 @@
 > **Positioning:** Sleep Wellness · EEG-free exploratory telemetry · ไม่ใช่ผล PSG/การวินิจฉัย/ตัวสั่งอุปกรณ์  
 > **Status:** Baseline/evidence reference · complete occupied-epoch continuity amendment active · paired-PSG G2 validation open
 > **Version:** `zeep-sleep-state-baseline-v1.8-sep1-cutover` · **Estimator:** `bcg-audio-bed-5state-v1.29-complete-occupied-epochs` · **Transition:** `zeep-semimarkov-30s-v1.18-scoreable-continuity` · **Updated:** 2026-09-13
-> **Related:** [Current Sleep System](zeep-sleep-system-current.md) · [AI Sleep-State](ai-sleep-state-and-assistant.md) · [Evidence](sleep-wellness-evidence.md) · [Closed Loop](closed-loop-spec.md)
+> **Related:** [Current Sleep System](zeep-sleep-system-current.md) · [Historical Promotion Policy](sleep-history-promotion-policy-v2.md) · [Evidence Library](../research/evidence-library/README.md)
 
 > **Normative precedence:** เอกสารนี้อธิบาย Baseline และหลักฐานทางสรีรวิทยา
 > ส่วนข้อความ legacy ที่เคยให้ช่วง Recording เป็น `WAIT`, `NO DATA`, display-only
@@ -360,8 +360,7 @@ Wake โดยลำพัง การยืนยัน cortical arousal จ�
 
 ## Verification & Corrections
 
-ใช้กรอบ correction/confidence ร่วมกับ
-[verification-notes.md](verification-notes.md) โดย v1.5 แก้จุดสำคัญแล้วดังนี้:
+กรอบ correction/confidence รุ่นปัจจุบันแก้จุดสำคัญดังนี้:
 
 - แยก ZEEP transition policy ออกจาก AASM scoring rule
 - เปลี่ยน `N3→REM` จาก hard block เป็น low-frequency transition ที่ต้องผ่าน dwell/hysteresis
@@ -375,12 +374,10 @@ Wake โดยลำพัง การยืนยัน cortical arousal จ�
 
 ## Source of Truth ใน Code
 
-- policy/version/transition graph กลาง: `pi5/sleep_system_policy.py`
-- estimator runtime: `pi5/app.py`
-- scoring และ Session report: `pi5/sleep_session_report.py`
-- raw shadow replay หลัก: `pi5/audit_sleep_history_shadow.py`
-- legacy event comparison (ปิด apply): `pi5/reclassify_sleep_history.py`
-- personal baseline: `pi5/personal.py`
-- G2 ontology/claims: `docs/ai-sleep-state-and-assistant.md`
-- evidence boundary: `docs/sleep-wellness-evidence.md`
-- governance review: `governance/wellness-evidence-review-2026-08-12.md`
+- policy/version/transition graph กลาง: [`sleep_system_policy.py`](../sleep_system_policy.py)
+- estimator runtime: [`app.py`](../app.py)
+- scoring และ Session report: [`sleep_session_report.py`](../sleep_session_report.py)
+- raw shadow replay หลัก: [`audit_sleep_history_shadow.py`](../audit_sleep_history_shadow.py)
+- legacy event comparison (ปิด apply): [`reclassify_sleep_history.py`](../reclassify_sleep_history.py)
+- personal baseline: [`personal.py`](../personal.py)
+- evidence boundary: [Evidence Library](../research/evidence-library/README.md)

@@ -4,8 +4,8 @@
 > **Positioning:** Sleep Wellness · EEG-free exploratory telemetry · ไม่ใช่ PSG/การวินิจฉัย/คำสั่งรักษา  
 > **Status:** Wellness release candidate · guarded derived-result replay/promotion · G2 paired-PSG validation open
 > **Updated:** 2026-09-15
-> **Code manifest:** [`pi5/sleep_system_policy.py`](../pi5/sleep_system_policy.py)  
-> **Related:** [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.0.md) · [ZEEP Restore Summary v1](zeep-restore-summary-v1.md) · [Respiratory Wellness v1](zeep-respiratory-wellness-v1.md) · [Historical Promotion Policy v2](sleep-history-promotion-policy-v2.md) · [v1.23 Wellness Replay Review](sleep-estimator-v123-wellness-longitudinal-report-2026-09-05.md) · [AI Sleep-State](ai-sleep-state-and-assistant.md)
+> **Code manifest:** [`sleep_system_policy.py`](../sleep_system_policy.py)
+> **Related:** [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.0.md) · [ZEEP Restore Summary v1](zeep-restore-summary-v1.md) · [Respiratory Wellness v1.1](zeep-respiratory-wellness-v1.md) · [Historical Promotion Policy v2](sleep-history-promotion-policy-v2.md)
 
 ## TL;DR
 
@@ -59,7 +59,7 @@ provenance จนกว่าจะสั่ง Historical Replay/Rescore แบ
 Bed Status รหัส `1 / Get out of bed` เป็น Raw Sensor event ที่อาจเกิดชั่วคราว
 ระหว่างถ่ายน้ำหนักหรือขยับใกล้ขอบเตียง จึงยืนยัน `OFF BED` ได้ต่อเมื่อพบต่อเนื่อง 3
 Sensor buckets (30 วินาที) เท่านั้น Raw packet burst ไม่บังคับสถานะโดยลำพัง
-เพราะ Field Session ของ Fay.yy พบ false pulse ตั้งแต่ 1–7 packets ขณะยังอยู่บนเตียง
+เพราะ Field Session แบบ coded พบ false pulse ตั้งแต่ 1–7 packets ขณะยังอยู่บนเตียง
 Raw code ที่ไม่ผ่านยังคงแสดงใน Admin
 Packet Inspector แต่ไม่เปลี่ยน Sleep State และไม่ถูกนับเป็นการลุกจากเตียงในรายงาน
 สำหรับ completed Session รหัสเดี่ยวที่เป็นรายการสุดท้ายยังนับเป็นการลุก 1 ครั้ง
@@ -635,19 +635,19 @@ health record เดิม การแก้ derived record จริงยั�
 
 | Requirement | Runtime implementation | Verification |
 |---|---|---|
-| Policy/version กลาง | `pi5/sleep_system_policy.py` | `test_sleep_system_consistency.py` |
-| Movement/Bed exit/Arousal/HR-RR/waveform proxies | `pi5/sleep_signal_features.py` | `test_sleep_signal_features.py` |
-| Wake/N1/N2/N3/REM evidence | `pi5/sleep_stage_scoring.py` | Live/Replay consistency + baseline tests |
-| Live state + 10 s cadence | `pi5/app.py` | `test_sleep_baseline_policy.py` |
-| Shared scorer | `pi5/sleep_stage_scoring.py` | baseline/signal tests |
-| Adaptive baseline รายบุคคล | `pi5/personal.py` | หลัง cutover, Session >25 นาที, completed `quality_type=sleep`, detected sleep ≥20 นาที; เรียนเฉพาะ epoch ที่ `excluded_from_personal_baseline=false` และกัน low-confidence carry ออก; ใช้ context-only; `test_personal_baseline_policy.py` |
-| Historical shadow replay | `pi5/audit_sleep_history_shadow.py` | `test_audit_sleep_history_shadow.py` |
-| Mode-aware score/report | `pi5/sleep_session_report.py` | `test_sleep_session_report.py` |
-| Derived report rescore | `pi5/rescore_session_reports.py` | dry-run + DB audit event |
-| Confirmed ground-truth annotation | `pi5/sleep_stage_annotations.py`, `pi5/annotate_sleep_stage.py` | original decision/Raw BCG immutable + annotation regression |
-| User/Admin rendering | `pi5/static/index.html` | consistency text check + browser smoke test |
+| Policy/version กลาง | `sleep_system_policy.py` | `test_sleep_system_consistency.py` |
+| Movement/Bed exit/Arousal/HR-RR/waveform proxies | `sleep_signal_features.py` | `test_sleep_signal_features.py` |
+| Wake/N1/N2/N3/REM evidence | `sleep_stage_scoring.py` | Live/Replay consistency + baseline tests |
+| Live state + 10 s cadence | `app.py` | `test_sleep_baseline_policy.py` |
+| Shared scorer | `sleep_stage_scoring.py` | baseline/signal tests |
+| Adaptive baseline รายบุคคล | `personal.py` | หลัง cutover, Session >25 นาที, completed `quality_type=sleep`, detected sleep ≥20 นาที; เรียนเฉพาะ epoch ที่ `excluded_from_personal_baseline=false` และกัน low-confidence carry ออก; ใช้ context-only; `test_personal_baseline_policy.py` |
+| Historical shadow replay | `audit_sleep_history_shadow.py` | `test_audit_sleep_history_shadow.py` |
+| Mode-aware score/report | `sleep_session_report.py` | `test_sleep_session_report.py` |
+| Derived report rescore | `rescore_session_reports.py` | dry-run + DB audit event |
+| Confirmed ground-truth annotation | `sleep_stage_annotations.py`, `annotate_sleep_stage.py` | original decision/Raw BCG immutable + annotation regression |
+| User/Admin rendering | `static/index.html` | consistency text check + browser smoke test |
 | Admin deployed-policy inspection | `GET /api/admin/sleep/policy` | Admin auth + snapshot equality test |
-| Detailed baseline rationale | `docs/zeep-sleep-state-baseline-v1.0.md` (legacy filename, content v1.8) | docs index + consistency test |
+| Detailed baseline rationale | `docs/zeep-sleep-state-baseline-v1.0.md` (legacy filename, content v1.8) | [docs index](README.md) + consistency test |
 
 ### 8.1 ความสอดคล้องของชั้นวิเคราะห์สุขภาพ
 
@@ -712,59 +712,17 @@ systemctl is-active zeep-pod.service
 
 คำสั่งต้องเริ่มด้วย dry-run และใช้ `--apply` หลังตรวจจำนวนรอบที่ได้รับผลเท่านั้น
 
-### 9.1 บันทึกการตรวจรับรุ่นก่อนหน้า — เก็บเพื่อ Audit เท่านั้น
+### 9.1 ประวัติรุ่นและผลตรวจรับ
 
-รายการรุ่นเก่าในตารางนี้บันทึกข้อเท็จจริง ณ เวลาที่ตรวจรับและ **ไม่ใช่ policy
-ปัจจุบัน** โดยเฉพาะกฎ v1.14 และ v1.28 ที่ใช้ WAIT/NO DATA หรือหัก provisional
-ถูกแทนที่ด้วย complete occupied-epoch policy v1.29 แล้ว
+เอกสารนี้เก็บเฉพาะสัญญาการทำงานปัจจุบัน ไม่เก็บชื่อผู้ใช้, Session ID,
+คะแนนรายบุคคล, path ของ backup หรือรายละเอียดผลตรวจรับรุ่นเก่าปะปนกับ policy
+รายละเอียดเหล่านั้นตรวจย้อนหลังได้จาก Git และทะเบียน audit ที่ควบคุมสิทธิ์
 
-| รายการตรวจ | ผลตรวจจริง |
-|---|---|
-| Regression บนเครื่อง Pi | ผ่าน Sleep suite `81/81` tests |
-| Python/source consistency | Live, Replay, Score, Report, UI และเอกสารอ้าง policy manifest เดียวกัน |
-| หน้าใช้งาน | `/dashboard`, `/control`, `/monitor`, `/sessions` ตอบ HTTP 200 |
-| Service | `zeep-pod.service = active` |
-| Database | `PRAGMA integrity_check = ok` |
-| Historical Replay | Session `s-20260825T202352Z-42938e` ผ่าน apply gate; เปลี่ยน 73 จาก 3,301 decisions |
-| ผลหลัง Replay | Wake 183 · N1 208 · N2 2,302 · N3 92 · REM 516 |
-| Report หลัง Rescore ครั้งก่อน | Score 80 · Quality v4.1 · Report v7.1 (คง provenance เดิมจนกว่าจะสั่ง Rescore) |
-| Provenance | Decision เดิมคง estimator version ของเวลาที่สร้าง; v1.11 ใช้กับ Live/Replay หลัง deploy โดยไม่แต่ง Raw BCG |
-| Backup ก่อน Apply | `/home/pod1/pi5/backup/sessions-pre-sleep-reclass-20260826-180708.db` |
-| Goal-aware regression | Sleep/Rest + policy consistency ผ่าน `21/21` tests |
-| Runtime activation | Service reload สำเร็จ; Session `s-20260826T215053Z-849f26` และ owner Login ถูก restore |
-| Responsive UI | ตรวจขนาด 1280×800 ไม่มี horizontal overflow และผลแยก Sleep Score / Recovery Score |
-| Sleep-compatible movement release | Estimator v1.11 + Evidence v1.6; targeted regression บน Pi ผ่าน `32/32` |
-| One-time data cleanup | ลบ completed Session ที่ `<7,200 s` จำนวน 10 รายการ พร้อม Timeline 952, Event 924, BCG 82 epochs / 4,756 packets; active Session ถูก exclude |
-| Cleanup integrity/idempotency | `sessions.db=ok`, `bcg.db=ok`, orphan=0, rerun ตอบ `already_applied` |
-| Cleanup backup/marker | `/home/pod1/pi5/backup/cleanup-short-sessions-under-2h-v1-20260826T232610Z` · `data/cleanup-short-sessions-under-2h-v1.done.json` |
-| Movement-aware Historical Replay | Session ที่เหลือ 3,301 decisions ผ่าน audit; Wake 183→19, N1 208→164, N2 2,302→2,463, N3 92, REM 516→563; Raw BCG ไม่ถูกแก้ |
-| Rebuilt derived report | Quality score 80→82 และ personal baseline ถูกคำนวณใหม่จากข้อมูลที่เหลือ |
-| Confirmed final Wake correction | `akkewach` 09:06:28–09:06:58: 6 rounds N1→Wake จาก user report + Raw BCG พบ bed exit/HR-RR loss; Score 82→81 |
-| Annotation integrity | Raw BCG, Timeline และ `sleep_stage` เดิมไม่เปลี่ยน; annotation v1.0 + SQLite backup + DB integrity `ok` |
-| Fay.yy Bed Status field correction | Session `s-20260827T060114Z-3382e4`: Raw exit 12 samples → canonical confirmed 1 + transient 11; Raw Timeline ไม่เปลี่ยน |
-| Vital/occupancy hard gate | Estimator v1.14: ไม่มี Active Recording Session, ไม่มีผู้ใช้งานบนเตียง หรือไม่มี HR+RR สด = ไม่จัดประเภท, probability 0, ไม่ persist stage และไม่ hold ผลเดิม |
-| Bed-exit field rule | Estimator v1.14: Live ต้องต่อเนื่อง 3 sensor buckets/30 s; Raw packet burst เป็น Admin diagnostic; terminal Session exit อยู่ใน Occupancy timeline แยกจาก Sleep Stage |
-| Fay.yy derived report | Rest score 38→54 · Report v8.2 · Quality v5.2 · Sleep Stage เดิม Wake 48/48 เพราะไม่มี HR/RR และไม่ฝืนสร้าง Stage |
-| Fay.yy pre-apply backup | `backup/sessions-pre-fay-bed-exit-fix-20260827T062953Z.db` · integrity `ok` |
-| Mac data snapshots | `private-data/pi5-snapshots/` มี during, pre-fix และ post-fix snapshot; SHA-256 ผ่านทุกไฟล์ และ SQLite 4 ฐาน `ok` |
-| Bed-exit targeted regression | Local/Pi ผ่าน `56/56` tests; `/dashboard`, `/control`, `/monitor` ตอบ HTTP 200; service active |
-| Vital/occupancy hard-gate release | Estimator v1.14 deploy แล้ว; ไม่มี Session/ผู้ใช้/HR/RR สด = `WAIT/OFF`, probability 0 และไม่ persist stage; Sleep suite `81/81` |
-| Terminal occupancy separation | Session `s-20260828T115851Z-3748bf`: Feedback 20:17:42–20:18:42 เป็น Wake 12 รอบ; จากนั้นแสดงไม่มีผู้ใช้งานบนเตียง 55 s → ออกจาก ZEEP 270.8 s → จบ Session; Raw BCG/decision เดิมไม่ถูกแก้ |
-| Active Session continuity หลัง v1.14 reload | Session `s-20260827T133335Z-23c23c` คง checkpoint เดิม, phase `recording`; public occupancy `true`, service `active` |
-| v1.14 rollback backup | `/home/pod1/pi5/backup/pre-vital-occupancy-gate-20260827T234113` |
-| Stable 30-second epoch release | Estimator v1.17: Sensor 10 s → Evidence 30 s → Confirmed State 60 s; rolling features 60 s (6 buckets) + EMA 20% + candidate margin 5%; Evidence probability ไม่ถูกบิดให้ตรงกับ State ที่กำลัง hold |
-| Guarded REM/Wake transition release | Estimator v1.18 / Transition v1.10: เปิด N1→REM แบบ REM-gated และ REM→Wake แบบปกติ โดยทุก transition ยังยืนยัน 2 evidence epochs/60 s; ไม่เปิด Wake→REM จากความง่วงหรือ daydream |
-| Balanced N3 evidence release | Estimator v1.19 / Transition v1.11: เฉพาะ N3 ที่ชนะ current 30 s evidence และผ่าน physiology gate เสนอ candidate ก่อน EMA แล้วจึงยืนยัน 2 epochs/60 s; State อื่นยังใช้ EMA และข้อห้ามเมื่อไม่มี HR/RR/on-bed ยังคงเดิม |
-| Sleep-onset guard release | Estimator v1.20 / Transition v1.12: 5 นาทีแรกคง W, ตัด time-only N1 bonus และต้องมี quiet downward HR/RR evidence ต่อเนื่องก่อน W→N1; แก้เคส 2026-09-04 ที่ acquisition drop ทำให้ N1 81.4% และยืนยันในไม่ถึง 2 นาที |
-| Gated N2 progression release | Estimator v1.27 / Transition v1.16: เมื่ออยู่ N1 และ N2 gate ผ่าน ผู้ชนะจากหลักฐานสด 30 วินาทีสามารถเข้าตัวรับรองก่อน EMA ที่ยังค้าง N1; ยังต้องชนะ 4 epochs/120 วินาทีและห้าม HR/RR Fit ข้าม gate |
-| Continuity carry-forward release | Estimator v1.28 / Transition v1.17: WAIT ใช้ก่อน State แรกเท่านั้น; valid on-bed epoch ที่ challenger ยังไม่ผ่านคง State ก่อนหน้า, ติด provisional 1–2 epoch โดยยังไม่เข้าคะแนน, ไม่ให้เวลา State ใหม่แก่ challenger และคง NO DATA/OFF BED เป็น hard operational precedence |
-| Terminal Wake sequence | รายงานปิดลำดับเป็น `Sleep State สุดท้าย → W · ตื่น → Occupancy/END`; marker 0 s แยกจาก physiology และไม่เปลี่ยน Stage statistics/Score/Baseline |
-| Complete occupied-epoch release | Estimator v1.29 / Evidence v3.7 / Transition v1.18: Recording เริ่มด้วย W; ทุก non-OFF-BED epoch คง W/N1/N2/N3/REM และเข้าคะแนน, provisional ไม่หักคะแนน, missing/stale/restart evidence เป็น low-confidence carry ที่ไม่เข้า Personal Baseline และ OFF BED เป็น operational exception เพียงชนิดเดียว |
-
-รายการที่อยู่ก่อน cutover เป็นหลักฐานทางวิศวกรรมเท่านั้นและไม่ถูกใช้ใน Product
-history, Baseline, Replay หรือ Score รุ่นปัจจุบัน ส่วนรายการหลัง cutover เก็บเป็น
-ลำดับ release/provenance โดยแถวที่ใหม่กว่ามีอำนาจเหนือกฎที่ถูก supersede รายงานที่
-ผู้ใช้เห็นต้องเป็น `Sleep Score` หรือ `Recovery Score` ตามสัญญาสองโหมดเท่านั้น
+หลักที่ยังมีผลคือ Sensor 10 วินาที → Evidence/State 30 วินาที, ยืนยัน State ใหม่
+60 วินาที (N2 120 วินาที), ทุก occupied epoch ต้องมี W/N1/N2/N3/REM และ
+low-confidence carry ต้องไม่เข้า Personal Baseline ส่วน OFF BED แยกเป็นสถานะ
+การใช้งาน ไม่ใช่ Sleep State รายงานผู้ใช้แสดง `Sleep Score` หรือ
+`Recovery Score` ตามสัญญาสองโหมดเท่านั้น
 
 ### 9.2 One-time cleanup contract
 

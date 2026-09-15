@@ -24,6 +24,8 @@
 | Hardware contracts | `sensor_contracts.py` | sensor model, alias, physical range, frame/telemetry contract |
 | Calibration | `sensor_calibration.py` | calibration spec, validation และ atomic JSON persistence |
 | Sensor runtime | `sensor_runtime.py` | normalize Hub 1, compose Hub 1/2, stale/hold และ Sound Leq |
+| Sensor transports | `zeep_pod/hardware/sensorhub1.py`, `sensorhub2.py` | USB/MQTT readers ที่รับ state และ callback จาก composition root |
+| Control transports | `zeep_pod/hardware/controlhub1.py`, `controlhub2.py` | MQTT command/ACK ของแอร์และเตียง แยกจาก HTTP routes |
 | Shadow guidance | `smart_response.py` | ประเมินคำแนะนำสภาพแวดล้อมโดยไม่สั่งอุปกรณ์ |
 | Adaptive learning monitor | `zeep_pod/adaptive_learning.py` | เทียบ Live กับ Baseline และรวม version/device intent ใน Shadow mode |
 | Sleep evidence | `sleep_signal_features.py` | Movement, Bed Exit, Arousal, HR/RR และ waveform features |
@@ -35,6 +37,7 @@
 | Advisory AI projection | `zeep_pod/sessions/user_ai_context.py`, `user_profile_api.py` | Positive allowlist ที่ตัด direct identifiers; ยังคงเป็น Personal Wellness Data และไม่สั่งอุปกรณ์ |
 | Identity erasure | `zeep_pod/identity/account_erasure.py`, `account_erasure_api.py` | ลบ local active store ของ canonical account/aliases, Session, BCG, Baseline, checkpoint และ capability ที่ค้าง |
 | Final report | `sleep_session_report.py` | Mode-aware Sleep/Rest score และรายงานหลังจบ Session |
+| Account ingest outbox | `zeep_pod/sessions/ingest_payload.py`, `ingest_outbox.py` | สร้าง payload แบบ allowlist, เขียนคิว atomic และ retry โดยไม่ทำให้ Session finalization ล้ม |
 | Storage | `database.py`, `bcg_storage.py`, `backup.py` | SQLite writer, raw BCG และ Daily backup |
 | UI source | `static/index.template.html`, `static/partials/control/*`, `static/partials/app/*` | App shell, Control cards, Base CSS และ ordered JavaScript fragments |
 | UI bundle | `ui_composer.py`, `static/index.html` | ประกอบและตรวจ runtime HTML โดยไม่ fetch partial ตอนใช้งาน |
@@ -79,6 +82,19 @@ Dashboard, Session และ Safety ต้องอ่านค่าจาก *
 13. Baseline/trend ต้องตรงทั้ง mode, target, behavior policy และ score formula
 14. AI รับได้เฉพาะ validated `user_ai_context.data` หลังมี purpose-specific
     authorization; ห้ามรับ Profile, event-level data หรือถือว่าข้อมูลนี้ anonymous
+
+## 3.1 Dependency และขนาด Code
+
+- `app.py` import domain/hardware modules ได้ แต่ module ภายใต้ `zeep_pod/`
+  ห้าม import `app.py`
+- Pure helper ห้ามเปิดไฟล์, Serial, MQTT, GPIO หรือ database ตอน import
+- Module ใหม่ภายใต้ `zeep_pod/` ไม่เกิน 500 บรรทัด
+- Function/method ใหม่ไม่เกิน 90 บรรทัด
+- Public boundary และ safety decision ต้องมี type hints และ docstring
+- การย้าย behavior ต้องคง compatibility facade จน caller และเครื่องมือย้อนหลัง
+  ย้ายครบ
+
+ข้อจำกัดเหล่านี้ตรวจโดย `test_modular_architecture.py` และ CI
 
 ## 4. วิธีเพิ่มหรือแก้ความสามารถ
 
@@ -132,10 +148,13 @@ git diff --check
 
 ลำดับ refactor ถัดไปควรเป็น:
 
-1. แยก GPIO, Audio, Serial และ MQTT เป็น hardware adapters
-2. แยก Session lifecycle/checkpoint/sampler เป็น `SessionCoordinator`
+1. **เสร็จแล้ว:** แยก GPIO, Audio, Sensor Hub 1/2, Control Hub 1/2 และ
+   Account ingest outbox เป็น adapters/services
+2. เพิ่ม fake-serial characterization แล้วแยก BCG reader; จากนั้นแยก Session
+   lifecycle/checkpoint/sampler เป็น service
+   ที่ inject dependency ได้
 3. แบ่ง FastAPI routes ตาม domain: auth, control, session, admin/monitor
-4. แยก browser JavaScript/CSS ตาม feature โดยคง bundle เดียวสำหรับ offline runtime
+4. ลด `app.py` ให้เหลือ construction, dependency wiring และ process lifecycle
 
 แต่ละขั้นต้องเป็น behavior-preserving commit ขนาดเล็กและผ่าน regression ก่อนเริ่ม
 ขั้นถัดไป ห้ามรวมการเปลี่ยนสูตรสุขภาพหรือ hardware behavior ไว้ใน refactor commit

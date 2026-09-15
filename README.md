@@ -1,7 +1,9 @@
 # ZEEP Pod — Pi5 Local Dashboard
 
 Code ownership, package boundaries and the incremental PEP 8 refactor are
-defined in [`docs/code-architecture.md`](docs/code-architecture.md).
+defined in [Pi 5 Software Architecture](docs/pi5-software-architecture.md).
+เอกสารปัจจุบันทั้งหมดดูที่ [Documentation Index](docs/README.md) และขั้นตอน
+ดูแลเครื่อง/Deploy ดูที่ [Operations Runbook](docs/pi5-operations-runbook.md)
 
 จอควบคุมภายในตู้ ZEEP Pod สำหรับ Raspberry Pi 5 — ธีม J.A.R.V.I.S. HUD
 ใช้งานผ่านแท็บเล็ต/เบราว์เซอร์บน Wi-Fi hotspot ของ Pi ได้โดย**ไม่ต้องมีอินเทอร์เน็ต**
@@ -71,7 +73,7 @@ module ที่ import และทดสอบได้โดยไม่เ�
 
 ขอบเขตการแปลผล RR จาก BCG, Direct evidence gate, บทบาทของช่วงอายุ,
 Personal Baseline และข้อห้ามด้านคำกล่าวสุขภาพ ดูที่
-[ZEEP Respiratory Wellness v1.0](docs/zeep-respiratory-wellness-v1.md)
+[ZEEP Respiratory Wellness v1.1](docs/zeep-respiratory-wellness-v1.md)
 
 หลักการใช้ภาษาสำหรับผู้ใช้ ข้อความความปลอดภัย และรายละเอียดสำหรับผู้ดูแล
 แยกไว้ที่ [ZEEP Product Language Guideline v1.0](docs/zeep-product-language-guideline-v1.md)
@@ -181,7 +183,7 @@ schema/version/request-id โดย Usage Session response ถูกตรวจ
 Tablet ที่ติดตั้งอยู่
 
 บันทึกการส่งมอบระหว่างทีมพร้อมผล Deploy/Rerun ล่าสุดดูที่
-[API & App Handoff — 2026-09-11](docs/zeep-api-app-handoff-2026-09-11.md)
+[ZEEP API v1](docs/zeep-api-v1.md)
 และหลักการจัดหน้าอ่านผลดูที่
 [ZEEP Session Result Presentation v1](docs/zeep-session-result-presentation-v1.md)
 
@@ -240,10 +242,6 @@ HTTP นี้ใช้เฉพาะเครือข่าย Pod ที่�
 
 ## ขา GPIO (BCM numbering)
 
-เอกสาร Wiring/Software contract ฉบับเต็ม:
-[ZEEP Pod GPIO Datasheet v1.0](../docs/zeep-pod-gpio-datasheet-v1.0.md) ·
-[GPIO Pinout CSV](../docs/zeep-pod-gpio-pinout-v1.0.csv)
-
 Door Open 17 · Door Close 27 · Lighting Room (LED) 22 · Star Light 4 ·
 Aroma1 5 · Aroma2 6 · Aroma3 13 · Aroma4 19 · Steam 26 · Red Light 23/24/25
 — เปลี่ยนได้ผ่านตัวแปร `GPIO_*`
@@ -255,8 +253,6 @@ MOSFET driver / relay เสมอ ห้ามต่อตรงเด็ดข
 
 Datasheet, physical range, field alias, JSON envelope v1 และ byte map BCG ดูที่
 [Sensor Interface Contract v1.2](docs/zeep-sensor-interface-contract-v1.2.md)
-
-[ESP32 Sensor Hub 1 · Three-Sensor Runtime](docs/sensorhub1-three-sensor-runtime.md)
 
 - BCG: `/dev/ttyUSB_HRB` @ 115200
 - ESP32 hub: `/dev/ttyACM0` @ 115200 — ส่ง JSON บรรทัดละ 1 object เช่น
@@ -344,7 +340,7 @@ Supervisor หยุด ตั้งค่าเกณฑ์ที่ผ่า�
 `SAFETY_ARMED_DEFAULT`. ก่อน Arm ต้องกำหนด
 `SAFETY_THRESHOLD_BASIS_VERSION` และให้ผู้ทบทวนที่มีคุณสมบัติอนุมัติผ่าน
 `SAFETY_THRESHOLD_BASIS_APPROVED=1`. Basis ปัจจุบันคือ
-[`ZEEP-ATMOSPHERE-OPS-v1.0`](../docs/zeep-atmosphere-operating-basis-v1.0.md):
+`ZEEP-ATMOSPHERE-OPS-v1.0` ใน versioned runtime policy:
 CO₂ >1,000 ppm หรืออุณหภูมิออกนอก 17–28°C เป็น Warning; CO₂ ≥1,300 ppm
 หรืออุณหภูมิออกนอก 13–32°C เป็น Critical. ทั้งหมดเป็น **ZEEP internal
 operating policy** ไม่ใช่เพดานสุขภาพหรือเกณฑ์การแพทย์. Session ที่เริ่ม
@@ -390,7 +386,7 @@ python3 generate_brainwaves.py --minutes 30
 | `Sleep-05-Rain-Pink-Mix` | noise ล้วนแกว่งช้าสองชั้น (ไม่มีโทน) | กลบเสียงรบกวน |
 
 ขอบเขตการเคลม: เป็น wellness ambience ตั้งชื่อตาม**บริบทการใช้และความถี่
-modulation** — **ไม่เคลมผลการนอนหรือผลทางสรีรวิทยา** (ดู `docs/sound-engine.md`)
+modulation** — **ไม่เคลมผลการนอนหรือผลทางสรีรวิทยา**
 และระดับเสียงกลางคืนเป้าหมาย ≤ 35 dB(A)
 
 ## Session รายบุคคล (profiles & history)
@@ -482,8 +478,8 @@ secondary robustness analysis ตาม [ZEEP Sleep-State Baseline v1.8](docs/ze
   (ข้อมูลส่วนบุคคล — gitignored)
 
 🔴 **ขอบเขตตาม KB**: ชั้นนี้ทำได้แค่ *เรียนรู้ / ปรับเกณฑ์การอ่านค่า / แนะนำ*
-— **ไม่สั่งอุปกรณ์อัตโนมัติจาก sleep state** จนกว่าจะผ่าน G2
-(`docs/closed-loop-spec.md`) และการปลุกใด ๆ ต้องอิงเวลานาฬิกา ไม่ผูก stage
+— **ไม่สั่งอุปกรณ์อัตโนมัติจาก sleep state** จนกว่าจะผ่าน G2 และ Safety review
+การปลุกใด ๆ ต้องอิงเวลานาฬิกา ไม่ผูก stage
 
 ## Auth และ Service automation
 

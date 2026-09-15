@@ -55,7 +55,6 @@ from api_models import (
     AirconFanLevelReferenceCommand,
     AuthLoginCommand,
     BedControlCommand,
-    BrainwavePreviewCommand,
     ForceLogoutCommand,
     LabelCommand,
     LoginCommand,
@@ -64,8 +63,6 @@ from api_models import (
     ProgressiveProfileDeferCommand,
     SensorBiasCommand,
     SwitchCommand,
-    TrackCommand,
-    VolumeCommand,
 )
 from access_control import COOKIE_NAME, CSRF_COOKIE_NAME, AuthSessionManager, Principal
 from backup import DailyBackup
@@ -97,6 +94,7 @@ from zeep_pod.identity.profile_fields import (
 )
 from zeep_pod.identity.zeep_account import authenticate_password, identity_from_auth_data
 from zeep_pod.hardware.audio import AudioPlayer, default_music_state
+from zeep_pod.hardware.audio_api import AudioControlService, create_audio_router
 from zeep_pod.hardware.controlhub1 import ControlHub1MQTT, configure_controlhub1
 from zeep_pod.hardware.controlhub2 import ControlHub2BedMQTT, configure_controlhub2
 from zeep_pod.hardware.gpio import GPIOManager
@@ -1075,11 +1073,6 @@ player = AudioPlayer(
     state=state,
     state_lock=state_lock,
 )
-music_command_lock = threading.Lock()
-# A fresh service start also presents a falling edge to connected legacy
-# tablets. Guard that first edge so a stale queue script cannot resurrect the
-# track that shutdown just stopped.
-music_stop_guard_until = time.monotonic() + MUSIC_STOP_GUARD_SECONDS
 
 # SQLite V2 storage. Serial readers only enqueue; the writer thread owns writes.
 database = DatabaseManager(DATA_DIR, int(os.getenv("DB_QUEUE_SIZE", "10000")))
@@ -5940,6 +5933,16 @@ def _pod_is_occupied() -> bool:
         return _active_session is not None
 
 
+def _active_session_token() -> Optional[str]:
+    """Identify the current occupant without exposing account information."""
+    with session_lock:
+        active = _active_session
+        if active is None:
+            return None
+        session_id = (active.get("record") or {}).get("session_id")
+        return str(session_id or f"active:{id(active)}")
+
+
 app.include_router(
     create_qr_login_router(
         qr_logins,
@@ -8152,164 +8155,30 @@ def history_detail(
     }
 
 
-# ---------- music ----------
-@app.get("/api/admin/brainwave/presets", dependencies=[Depends(require_admin)])
-def brainwave_presets():
-    """Versioned Sound Lab catalog; frequency labels are design parameters."""
-    catalog = brainwave_public_presets()
-    with session_lock:
-        occupied = _active_session is not None
-    return {**catalog, "occupied": occupied, "player": player.backend}
-
-
-@app.post("/api/admin/brainwave/preview")
-def brainwave_preview(
-    cmd: BrainwavePreviewCommand,
-    principal: Principal = Depends(require_admin),
-):
-    """Render locally and play through the Pi speaker, never the tablet.
-
-    An active occupant requires an explicit confirmation from the Admin UI.
-    This keeps an experimental stimulus from entering a Session by accident.
-    """
-    _require_safety_allows("ทดสอบเสียง Brainwave")
-    with session_lock:
-        occupied = _active_session is not None
-    if occupied and not cmd.confirm_occupied:
-        raise HTTPException(
-            409,
-            {
-                "code": "occupied_confirmation_required",
-                "message": "มีผู้ใช้งานอยู่ใน ZEEP ต้องยืนยันก่อนเล่นเสียงทดสอบ",
-            },
-        )
-    volume = max(0, min(60, int(cmd.volume)))
-    if volume != int(cmd.volume):
-        raise HTTPException(422, "Sound Lab จำกัดระดับ Digital Volume ที่ 0–60%")
-    try:
-        rendered = render_brainwave_preview(cmd.preset_id, cmd.duration_seconds, BRAINWAVE_PREVIEW_DIR)
-    except ValueError as exc:
-        if str(exc) == "unknown_preset":
-            raise HTTPException(404, "ไม่พบ Brainwave preset") from exc
-        raise HTTPException(422, "ระยะ Preview ต้องอยู่ในช่วง 10–90 วินาที") from exc
-
-    with music_command_lock:
-        try:
-            player.set_volume(volume)
-            player.play(rendered["path"], loop=False, queue=False)
-        except Exception as exc:
-            raise HTTPException(500, str(exc)) from exc
-    detail = {
-        "action": "brainwave_preview",
-        "preset_id": cmd.preset_id,
-        "version": rendered["version"],
-        "duration_seconds": rendered["duration_seconds"],
-        "volume": volume,
-        "confirmed_while_occupied": bool(occupied),
-    }
-    note_session_activity("music", detail)
-    log_event(
-        "brainwave_audio",
-        "preview_play",
-        operator=principal.username,
-        **detail,
+# ---------- audio API ----------
+audio_service = AudioControlService(
+    player=player,
+    music_dir=MUSIC_DIR,
+    preview_dir=BRAINWAVE_PREVIEW_DIR,
+    command_lock=threading.Lock(),
+    stop_guard_seconds=MUSIC_STOP_GUARD_SECONDS,
+    occupancy_token=_active_session_token,
+    safety_guard=_require_safety_allows,
+    snapshot_music=player.snapshot,
+    note_activity=note_session_activity,
+    logger=log_event,
+    presets=brainwave_public_presets,
+    # Resolve through this module at call time so diagnostics can replace the
+    # renderer without rebuilding the API service.
+    render_preview=lambda *args: render_brainwave_preview(*args),
+)
+app.include_router(
+    create_audio_router(
+        audio_service,
+        require_admin=require_admin,
+        require_pod_operator=require_pod_operator,
     )
-    return {
-        "ok": True,
-        "render": {key: value for key, value in rendered.items() if key != "path"},
-        "volume": volume,
-        "occupied": occupied,
-        "state": snapshot()["music"],
-    }
-
-
-@app.get("/api/music", dependencies=[Depends(require_pod_operator)])
-async def music_list():
-    exts = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".aac"}
-    tracks = sorted([p.name for p in MUSIC_DIR.iterdir() if p.is_file() and p.suffix.lower() in exts])
-    return {"tracks": tracks, "state": snapshot()["music"], "player": player.backend}
-
-
-# Music endpoints are plain `def` on purpose: they call subprocess spawn/wait
-# and blocking IPC, so FastAPI runs them in the threadpool instead of the
-# event loop (which would freeze websocket updates for every client).
-@app.post("/api/music/play", dependencies=[Depends(require_pod_operator)])
-def music_play(cmd: TrackCommand):
-    global music_stop_guard_until
-    _require_safety_allows("เล่นเพลง")
-    candidate = (MUSIC_DIR / cmd.track).resolve()
-    if MUSIC_DIR.resolve() not in candidate.parents or not candidate.is_file():
-        raise HTTPException(404, "Track not found")
-    with music_command_lock:
-        guard_remaining = music_stop_guard_until - time.monotonic()
-        if guard_remaining > 0 and not cmd.user_initiated:
-            raise HTTPException(
-                409,
-                "Music was stopped by the user; legacy automatic restart blocked",
-            )
-        try:
-            player.play(candidate, loop=cmd.resolved_loop, queue=bool(cmd.queue))
-        except Exception as exc:
-            raise HTTPException(500, str(exc))
-    note_session_activity(
-        "music",
-        {
-            "action": "play",
-            "track": candidate.name,
-            "loop": cmd.resolved_loop,
-            "queue": bool(cmd.queue),
-        },
-    )
-    log_event(
-        "music",
-        "play",
-        track=candidate.name,
-        loop=cmd.resolved_loop,
-        queue=bool(cmd.queue),
-    )
-    return {
-        "ok": True,
-        "track": candidate.name,
-        "loop": cmd.resolved_loop,
-        "queue": bool(cmd.queue),
-        "player": player.backend,
-        "state": snapshot()["music"],
-    }
-
-
-@app.post("/api/music/stop", dependencies=[Depends(require_pod_operator)])
-def music_stop():
-    global music_stop_guard_until
-    with music_command_lock:
-        player.stop()
-        music_stop_guard_until = time.monotonic() + MUSIC_STOP_GUARD_SECONDS
-    # Return the authoritative stopped state immediately. Waiting for the
-    # next WebSocket frame left the touch toggle looking active and allowed
-    # another browser to mistake Stop for a naturally ended queue item.
-    return {
-        "ok": True,
-        "state": snapshot()["music"],
-        "restart_guard_seconds": MUSIC_STOP_GUARD_SECONDS,
-    }
-
-
-@app.post("/api/music/pause", dependencies=[Depends(require_pod_operator)])
-def music_pause():
-    _require_safety_allows("เล่นต่อ/พักเพลง")
-    if not player.pause_toggle():
-        if player.backend != "mpv":
-            raise HTTPException(
-                501,
-                f"โหมด fallback ({player.backend}) ไม่รองรับ pause — ใช้ stop แล้วเล่นใหม่",
-            )
-        raise HTTPException(503, "Player IPC not ready — try again")
-    return {"ok": True, "state": snapshot()["music"]}
-
-
-@app.post("/api/music/volume", dependencies=[Depends(require_pod_operator)])
-def music_volume(cmd: VolumeCommand):
-    player.set_volume(cmd.volume)
-    return {"ok": True, "volume": snapshot()["music"]["volume"]}
+)
 
 
 def _graceful_poweroff() -> None:

@@ -15,6 +15,9 @@ from typing import Any
 
 DEFAULT_AUDIO_MODE = "repeat_one"
 DEFAULT_AUDIO_VOLUME_PERCENT = 60
+SUPPORTED_AUDIO_EXTENSIONS = frozenset(
+    {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".aac"}
+)
 
 
 def default_music_state() -> dict[str, Any]:
@@ -30,6 +33,22 @@ def default_music_state() -> dict[str, Any]:
         "queue_length": 0,
         "error": None,
     }
+
+
+def contained_audio_paths(music_dir: Path) -> list[Path]:
+    """List playable files whose resolved targets remain under ``music_dir``."""
+    root = music_dir.resolve()
+    paths: list[Path] = []
+    for entry in music_dir.iterdir():
+        if (
+            not entry.is_file()
+            or entry.suffix.lower() not in SUPPORTED_AUDIO_EXTENSIONS
+        ):
+            continue
+        resolved = entry.resolve()
+        if root in resolved.parents:
+            paths.append(resolved)
+    return sorted(set(paths))
 
 
 class AudioPlayer:
@@ -216,12 +235,7 @@ class AudioPlayer:
     def _queue_for(self, file_path: Path, queue: bool) -> list[Path]:
         if not queue or self.loop:
             return [file_path]
-        extensions = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".aac"}
-        ordered = sorted(
-            path
-            for path in self.music_dir.iterdir()
-            if path.is_file() and path.suffix.lower() in extensions
-        )
+        ordered = contained_audio_paths(self.music_dir)
         if file_path in ordered:
             return ordered[ordered.index(file_path) :]
         return [file_path]
@@ -421,3 +435,8 @@ class AudioPlayer:
                 self._send(["set_property", "volume", bounded])
         with self.state_lock:
             self.state["music"]["volume"] = bounded
+
+    def snapshot(self) -> dict[str, Any]:
+        """Return a detached music-only state without building a Pod snapshot."""
+        with self.state_lock:
+            return dict(self.state["music"])

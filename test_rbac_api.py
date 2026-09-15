@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 
 from fastapi.testclient import TestClient
 
+from api_models import TrackCommand
 from testing_support import configure_app_test_environment
 
 _test_root = configure_app_test_environment()
@@ -410,6 +411,109 @@ class RbacApiTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()["detail"]["code"], "occupied_confirmation_required")
+
+    def test_music_routes_enforce_owner_admin_and_csrf_boundaries(self) -> None:
+        anonymous = TestClient(pod_app.app)
+        self.assertEqual(anonymous.get("/api/music").status_code, 401)
+        self.assertEqual(
+            anonymous.post("/api/music/volume", json={"volume": 30}).status_code,
+            401,
+        )
+
+        owner = TestClient(pod_app.app)
+        owner_token, owner_principal = pod_app.auth_sessions.create(
+            subject="zeep:audio-owner",
+            username="audio-owner",
+            display_name="Audio Owner",
+            account_key="audio.owner@example.test",
+            email="audio.owner@example.test",
+            role="user",
+            auth_source="test",
+        )
+        owner.cookies.set(pod_app.COOKIE_NAME, owner_token)
+        owner.cookies.set(pod_app.CSRF_COOKIE_NAME, owner_principal.csrf_token)
+
+        other = TestClient(pod_app.app)
+        other_token, other_principal = pod_app.auth_sessions.create(
+            subject="zeep:audio-other",
+            username="audio-other",
+            display_name="Audio Other",
+            account_key="audio.other@example.test",
+            email="audio.other@example.test",
+            role="user",
+            auth_source="test",
+        )
+        other.cookies.set(pod_app.COOKIE_NAME, other_token)
+        other.cookies.set(pod_app.CSRF_COOKIE_NAME, other_principal.csrf_token)
+
+        admin = TestClient(pod_app.app)
+        self.assertEqual(
+            admin.post(
+                "/api/admin/auth/login",
+                json={
+                    "identifier": "test-admin",
+                    "password": "test-admin-password",
+                },
+            ).status_code,
+            200,
+        )
+        active = {
+            "record": {
+                "session_id": "audio-owner-session",
+                "identity_subject": owner_principal.subject,
+            },
+            "owner_auth_session_id": owner_principal.session_id,
+        }
+        previous_music = copy.deepcopy(pod_app.state["music"])
+
+        def set_volume(volume: int) -> None:
+            with pod_app.state_lock:
+                pod_app.state["music"]["volume"] = volume
+
+        try:
+            with (
+                patch.object(pod_app, "_active_session", active),
+                patch.object(pod_app.player, "set_volume", side_effect=set_volume),
+            ):
+                self.assertEqual(other.get("/api/music").status_code, 403)
+                self.assertEqual(owner.get("/api/music").status_code, 200)
+                self.assertEqual(
+                    owner.post(
+                        "/api/music/volume",
+                        json={"volume": 30},
+                    ).status_code,
+                    403,
+                )
+                self.assertEqual(
+                    owner.post(
+                        "/api/music/volume",
+                        headers=csrf(owner),
+                        json={"volume": 30},
+                    ).status_code,
+                    200,
+                )
+                self.assertEqual(admin.get("/api/music").status_code, 200)
+                self.assertEqual(
+                    admin.post(
+                        "/api/music/volume",
+                        json={"volume": 40},
+                    ).status_code,
+                    403,
+                )
+                self.assertEqual(
+                    admin.post(
+                        "/api/music/volume",
+                        headers=csrf(admin),
+                        json={"volume": 40},
+                    ).status_code,
+                    200,
+                )
+        finally:
+            pod_app.auth_sessions.revoke(owner_token)
+            pod_app.auth_sessions.revoke(other_token)
+            with pod_app.state_lock:
+                pod_app.state["music"].clear()
+                pod_app.state["music"].update(previous_music)
 
     def test_versioned_api_contracts_are_admin_scoped_and_enveloped(self) -> None:
         anonymous = TestClient(pod_app.app)
@@ -1310,7 +1414,7 @@ class RbacApiTests(unittest.TestCase):
         track.parent.mkdir(parents=True, exist_ok=True)
         track.write_bytes(b"test")
         previous_safety = copy.deepcopy(pod_app.state["safety"])
-        original_guard = pod_app.music_stop_guard_until
+        original_guard = pod_app.audio_service.stop_guard_until
         calls: list[tuple[bool, bool]] = []
 
         def fake_play(
@@ -1324,18 +1428,20 @@ class RbacApiTests(unittest.TestCase):
         try:
             with pod_app.state_lock:
                 pod_app.state["safety"]["latched"] = False
-            pod_app.music_stop_guard_until = 0
+            pod_app.audio_service.stop_guard_until = 0
             with patch.object(pod_app.player, "play", side_effect=fake_play):
-                repeated = pod_app.music_play(pod_app.TrackCommand(track=track.name, user_initiated=True))
-                queued = pod_app.music_play(
-                    pod_app.TrackCommand(
+                repeated = pod_app.audio_service.play(
+                    TrackCommand(track=track.name, user_initiated=True)
+                )
+                queued = pod_app.audio_service.play(
+                    TrackCommand(
                         track=track.name,
                         queue=True,
                         user_initiated=True,
                     )
                 )
-                legacy_both = pod_app.music_play(
-                    pod_app.TrackCommand(
+                legacy_both = pod_app.audio_service.play(
+                    TrackCommand(
                         track=track.name,
                         loop=True,
                         queue=True,
@@ -1351,7 +1457,7 @@ class RbacApiTests(unittest.TestCase):
             self.assertFalse(legacy_both["loop"])
             self.assertTrue(legacy_both["queue"])
         finally:
-            pod_app.music_stop_guard_until = original_guard
+            pod_app.audio_service.stop_guard_until = original_guard
             with pod_app.state_lock:
                 pod_app.state["safety"].clear()
                 pod_app.state["safety"].update(previous_safety)
@@ -1399,7 +1505,7 @@ class RbacApiTests(unittest.TestCase):
         """Stop ACK must let every tablet render the idle state immediately."""
         previous_music = copy.deepcopy(pod_app.state["music"])
         original_stop = pod_app.player.stop
-        original_guard = pod_app.music_stop_guard_until
+        original_guard = pod_app.audio_service.stop_guard_until
 
         def fake_stop() -> None:
             with pod_app.state_lock:
@@ -1426,7 +1532,7 @@ class RbacApiTests(unittest.TestCase):
                         "queue_length": 5,
                     }
                 )
-            result = pod_app.music_stop()
+            result = pod_app.audio_service.stop()
             self.assertTrue(result["ok"])
             self.assertFalse(result["state"]["playing"])
             self.assertFalse(result["state"]["paused"])
@@ -1435,7 +1541,7 @@ class RbacApiTests(unittest.TestCase):
             self.assertEqual(result["state"]["queue_length"], 0)
         finally:
             pod_app.player.stop = original_stop
-            pod_app.music_stop_guard_until = original_guard
+            pod_app.audio_service.stop_guard_until = original_guard
             with pod_app.state_lock:
                 pod_app.state["music"].clear()
                 pod_app.state["music"].update(previous_music)
@@ -1446,7 +1552,7 @@ class RbacApiTests(unittest.TestCase):
         track.parent.mkdir(parents=True, exist_ok=True)
         track.write_bytes(b"test")
         original_play = pod_app.player.play
-        original_guard = pod_app.music_stop_guard_until
+        original_guard = pod_app.audio_service.stop_guard_until
         previous_safety = copy.deepcopy(pod_app.state["safety"])
         calls: list[str] = []
 
@@ -1455,20 +1561,24 @@ class RbacApiTests(unittest.TestCase):
 
         try:
             pod_app.player.play = fake_play
-            pod_app.music_stop_guard_until = pod_app.time.monotonic() + pod_app.MUSIC_STOP_GUARD_SECONDS
+            pod_app.audio_service.stop_guard_until = (
+                pod_app.time.monotonic() + pod_app.MUSIC_STOP_GUARD_SECONDS
+            )
             with pod_app.state_lock:
                 pod_app.state["safety"]["latched"] = False
             with self.assertRaises(pod_app.HTTPException) as blocked:
-                pod_app.music_play(pod_app.TrackCommand(track=track.name))
+                pod_app.audio_service.play(TrackCommand(track=track.name))
             self.assertEqual(blocked.exception.status_code, 409)
             self.assertEqual(calls, [])
 
-            result = pod_app.music_play(pod_app.TrackCommand(track=track.name, user_initiated=True))
+            result = pod_app.audio_service.play(
+                TrackCommand(track=track.name, user_initiated=True)
+            )
             self.assertTrue(result["ok"])
             self.assertEqual(calls, [track.name])
         finally:
             pod_app.player.play = original_play
-            pod_app.music_stop_guard_until = original_guard
+            pod_app.audio_service.stop_guard_until = original_guard
             with pod_app.state_lock:
                 pod_app.state["safety"].clear()
                 pod_app.state["safety"].update(previous_safety)

@@ -10,17 +10,19 @@ sleep-stage intervention.
 Only Python's standard library is used so previews can be rendered locally on
 the Raspberry Pi when the Internet is unavailable.
 """
+
 from __future__ import annotations
 
 import hashlib
 import math
 import random
+import uuid
 import wave
 from array import array
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, Tuple
-
+from typing import Any
 
 BRAINWAVE_AUDIO_VERSION = "zeep-speaker-sound-lab-v1.0"
 SAMPLE_RATE = 24_000
@@ -47,33 +49,37 @@ class Preset:
     name_th: str
     purpose_th: str
     evidence_label_th: str
-    phases: Tuple[Phase, ...]
+    phases: tuple[Phase, ...]
 
 
 # Frequencies are design parameters, not claims that the loudspeaker forces
 # brain activity to the same frequency.  The unmodulated control is essential
 # for comparing the musical bed with and without rhythmic modulation.
-PRESETS: Dict[str, Preset] = {
+PRESETS: dict[str, Preset] = {
     "control-pink": Preset(
-        "control-pink", "Control · Pink Ambience",
+        "control-pink",
+        "Control · Pink Ambience",
         "เสียงควบคุมสำหรับ A/B test · ไม่มี rhythmic modulation",
         "CONTROL",
         (Phase("control", 1.0, 174.0, 0.0, 0.0, 0.58),),
     ),
     "relax-alpha": Preset(
-        "relax-alpha", "Relax · Alpha",
+        "relax-alpha",
+        "Relax · Alpha",
         "โทนอุ่นสำหรับทดสอบช่วงผ่อนคลายหรือสมาธิ",
         "EXPERIMENTAL",
         (Phase("alpha", 1.0, 196.0, 10.0, 0.16, 0.38),),
     ),
     "winddown-theta": Preset(
-        "winddown-theta", "Wind-down · Theta",
+        "winddown-theta",
+        "Wind-down · Theta",
         "บรรยากาศช้าสำหรับทดสอบช่วงเตรียมพัก",
         "EXPERIMENTAL",
         (Phase("theta", 1.0, 185.0, 6.0, 0.14, 0.44),),
     ),
     "nap-theta-alpha": Preset(
-        "nap-theta-alpha", "Nap · Theta → Alpha",
+        "nap-theta-alpha",
+        "Nap · Theta → Alpha",
         "สองช่วงสำหรับทดสอบพักสั้นและค่อย ๆ กลับมาตื่นตัว",
         "EXPERIMENTAL",
         (
@@ -82,7 +88,8 @@ PRESETS: Dict[str, Preset] = {
         ),
     ),
     "night-delta": Preset(
-        "night-delta", "Night · Slow Pulse",
+        "night-delta",
+        "Night · Slow Pulse",
         "พัลส์ช้ามากสำหรับประเมินความไพเราะและการรบกวนก่อนนอน",
         "EXPERIMENTAL",
         (Phase("slow", 1.0, 164.0, 2.0, 0.10, 0.50),),
@@ -106,7 +113,7 @@ class PinkNoise:
         return sum(self.rows) / len(self.rows)
 
 
-def public_presets() -> Dict[str, Any]:
+def public_presets() -> dict[str, Any]:
     """Return a stable, JSON-safe catalog without exposing implementation."""
     return {
         "version": BRAINWAVE_AUDIO_VERSION,
@@ -142,7 +149,7 @@ def public_presets() -> Dict[str, Any]:
     }
 
 
-def _phase_at(preset: Preset, progress: float) -> Tuple[Phase, Phase, float]:
+def _phase_at(preset: Preset, progress: float) -> tuple[Phase, Phase, float]:
     """Return current/next phase and a smooth interpolation at a boundary."""
     progress = max(0.0, min(1.0, progress))
     cumulative = 0.0
@@ -185,9 +192,7 @@ def _pcm_chunks(preset: Preset, duration_seconds: int) -> Iterable[array]:
         progress = frame / max(1, total_frames - 1)
         phase, next_phase, blend = _phase_at(preset, progress)
         carrier_hz = _lerp(phase.carrier_hz, next_phase.carrier_hz, blend)
-        modulation_hz = _lerp(
-            phase.modulation_hz, next_phase.modulation_hz, blend
-        )
+        modulation_hz = _lerp(phase.modulation_hz, next_phase.modulation_hz, blend)
         depth = _lerp(phase.modulation_depth, next_phase.modulation_depth, blend)
         noise_mix = _lerp(phase.noise_mix, next_phase.noise_mix, blend)
 
@@ -219,17 +224,27 @@ def _pcm_chunks(preset: Preset, duration_seconds: int) -> Iterable[array]:
         tonal_mix = 1.0 - (noise_mix * 0.72)
         fade = _smooth_fade(frame, total_frames, fade_frames)
         left = (
-            tonal_mix * left_pad * modulation * slow_drift
-            + noise_mix * left_noise.sample()
-        ) * PEAK_LIMIT * fade
+            (
+                tonal_mix * left_pad * modulation * slow_drift
+                + noise_mix * left_noise.sample()
+            )
+            * PEAK_LIMIT
+            * fade
+        )
         right = (
-            tonal_mix * right_pad * modulation * slow_drift
-            + noise_mix * right_noise.sample()
-        ) * PEAK_LIMIT * fade
-        chunk.extend((
-            int(max(-1.0, min(1.0, left)) * 32767),
-            int(max(-1.0, min(1.0, right)) * 32767),
-        ))
+            (
+                tonal_mix * right_pad * modulation * slow_drift
+                + noise_mix * right_noise.sample()
+            )
+            * PEAK_LIMIT
+            * fade
+        )
+        chunk.extend(
+            (
+                int(max(-1.0, min(1.0, left)) * 32767),
+                int(max(-1.0, min(1.0, right)) * 32767),
+            )
+        )
         if len(chunk) >= 8192:
             yield chunk
             chunk = array("h")
@@ -239,7 +254,7 @@ def _pcm_chunks(preset: Preset, duration_seconds: int) -> Iterable[array]:
 
 def render_preview(
     preset_id: str, duration_seconds: int, output_dir: Path
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Render one deterministic preview atomically and return audit metadata."""
     if preset_id not in PRESETS:
         raise ValueError("unknown_preset")
@@ -250,7 +265,7 @@ def render_preview(
     output_dir.mkdir(parents=True, exist_ok=True)
     safe_version = BRAINWAVE_AUDIO_VERSION.replace(".", "-")
     target = output_dir / f"{safe_version}-{preset_id}-{duration_seconds}s.wav"
-    temporary = target.with_suffix(".tmp.wav")
+    temporary = output_dir / f".{target.name}.{uuid.uuid4().hex}.tmp.wav"
     digest = hashlib.sha256()
     peak = 0
     sum_squares = 0

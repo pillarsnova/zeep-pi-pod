@@ -84,6 +84,18 @@ class AudioDefaultTests(unittest.TestCase):
         self.assertEqual(state["music"]["mode"], "repeat_one")
         self.assertTrue(state["music"]["loop"])
 
+    def test_snapshot_is_music_only_and_detached(self):
+        state = {"music": default_music_state(), "system": {"private": True}}
+        player = object.__new__(AudioPlayer)
+        player.state_lock = threading.Lock()
+        player.state = state
+
+        result = player.snapshot()
+
+        self.assertNotIn("system", result)
+        result["volume"] = 1
+        self.assertEqual(state["music"]["volume"], DEFAULT_AUDIO_VOLUME_PERCENT)
+
 
 if __name__ == "__main__":
     unittest.main()

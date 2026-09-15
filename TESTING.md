@@ -9,7 +9,8 @@ push/deploy:
 # Hardware และขอบเขต module
 python -m unittest -q \
   test_modular_architecture.py test_sensor_contract.py \
-  test_sensor_services.py test_control_protocol.py test_session_lifecycle.py
+  test_sensor_services.py test_control_protocol.py test_audio_api.py \
+  test_session_lifecycle.py
 
 # Sleep State, Baseline และคะแนน
 python -m unittest -q \

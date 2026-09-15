@@ -26,6 +26,7 @@
 | Sensor runtime | `sensor_runtime.py` | normalize Hub 1, compose Hub 1/2, stale/hold และ Sound Leq |
 | Sensor transports | `zeep_pod/hardware/sensorhub1.py`, `sensorhub2.py` | USB/MQTT readers ที่รับ state และ callback จาก composition root |
 | Control transports | `zeep_pod/hardware/controlhub1.py`, `controlhub2.py` | MQTT command/ACK ของแอร์และเตียง แยกจาก HTTP routes |
+| Audio controls | `zeep_pod/hardware/audio.py`, `audio_api.py` | MPV/fallback player และนโยบาย HTTP ของเพลง/Brainwave ที่ทดสอบได้โดยไม่เปิด audio hardware |
 | Shadow guidance | `smart_response.py` | ประเมินคำแนะนำสภาพแวดล้อมโดยไม่สั่งอุปกรณ์ |
 | Adaptive learning monitor | `zeep_pod/adaptive_learning.py` | เทียบ Live กับ Baseline และรวม version/device intent ใน Shadow mode |
 | Sleep evidence | `sleep_signal_features.py` | Movement, Bed Exit, Arousal, HR/RR และ waveform features |
@@ -57,6 +58,8 @@ LSM-800-T (USB) ───┘                                      │
 
 Browser command ─> Auth/RBAC/CSRF ─> control_protocol ─> hardware adapter
                                                      └─> ACK/event/session audit
+
+Browser audio ───> Auth/RBAC/CSRF ─> audio_api ─> AudioPlayer ─> MPV/fallback
 
 BCG + HR/RR + Bed ─> sleep_signal_features ─> sleep_stage_scoring
                    ─> sleep_system_policy ─> confirmed stage ─> final report
@@ -148,8 +151,8 @@ git diff --check
 
 ลำดับ refactor ถัดไปควรเป็น:
 
-1. **เสร็จแล้ว:** แยก GPIO, Audio, Sensor Hub 1/2, Control Hub 1/2 และ
-   Account ingest outbox เป็น adapters/services
+1. **เสร็จแล้ว:** แยก GPIO, Audio player/API, Sensor Hub 1/2, Control Hub 1/2
+   และ Account ingest outbox เป็น adapters/services
 2. เพิ่ม fake-serial characterization แล้วแยก BCG reader; จากนั้นแยก Session
    lifecycle/checkpoint/sampler เป็น service
    ที่ inject dependency ได้

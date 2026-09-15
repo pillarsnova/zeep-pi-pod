@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import statistics
 import threading
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -19,29 +20,36 @@ from zoneinfo import ZoneInfo
 
 from sleep_system_policy import (
     NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
+    PERSONAL_BASELINE_LEARNING_START_LOCAL_DATE,
+    PERSONAL_BASELINE_LEARNING_START_TIMEZONE,
+    PERSONAL_BASELINE_LEARNING_START_UTC,
     PERSONAL_BASELINE_MAX_NIGHTS,
     PERSONAL_BASELINE_MIN_DETECTED_SLEEP_SECONDS,
     PERSONAL_BASELINE_MIN_HR_SAMPLES,
     PERSONAL_BASELINE_MIN_NIGHTS,
     PERSONAL_BASELINE_MIN_SESSION_SECONDS,
-    PERSONAL_BASELINE_LEARNING_START_LOCAL_DATE,
-    PERSONAL_BASELINE_LEARNING_START_TIMEZONE,
-    PERSONAL_BASELINE_LEARNING_START_UTC,
-    PRE_RESPIRATORY_SESSION_REPORT_VERSION,
+    PERSONAL_BEHAVIOUR_BASELINE_VERSION,
     PRE_CONTINUITY_SESSION_REPORT_VERSION,
     PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
+    PRE_RESPIRATORY_SESSION_REPORT_VERSION,
     PRE_RESTORE_SESSION_REPORT_VERSION,
-    RECOVERY_SCORE_FORMULA_VERSION,
     RESTORE_BASELINE_MIN_COMPARISON_SESSIONS,
     RESTORE_TREND_MAX_SESSIONS,
     SESSION_REPORT_VERSION,
     SLEEP_QUALITY_VERSION,
-    SLEEP_SCORE_FORMULA_VERSION,
     ZEEP_SLEEP_BASELINE_VERSION,
     is_approved_sleep_result_version,
+    resolve_rest_target,
     rest_mode_group,
 )
+from zeep_pod.identity.account_aliases import (
+    account_boundary_keys,
+    normalize_account_key,
+    verified_legacy_account_keys,
+)
+from zeep_pod.sessions.personal_behaviour import aggregate_behaviour_by_mode
 from zeep_pod.sessions.score_identity import assess_score_identity
+from zeep_pod.sessions.target_provenance import assess_target_provenance
 
 # เกณฑ์กลาง (population default) — ใช้จนกว่าจะเรียนรู้ครบขั้นต่ำ
 DEFAULT_THRESHOLDS = {"cv_deep": 0.025, "cv_rem": 0.06}
@@ -66,6 +74,24 @@ def _percentile(values: list, q: float) -> Optional[float]:
     return vals[lo] * (1 - frac) + vals[hi] * frac
 
 
+def _normalized_baseline_records(value: Any) -> dict[str, Any]:
+    """Normalize cache keys and fail closed on conflicting case variants."""
+    if not isinstance(value, Mapping):
+        return {}
+    normalized: dict[str, Any] = {}
+    ambiguous: set[str] = set()
+    for raw_key, record in value.items():
+        key = normalize_account_key(raw_key)
+        if not key or key in ambiguous:
+            continue
+        if key in normalized and normalized[key] != record:
+            normalized.pop(key, None)
+            ambiguous.add(key)
+            continue
+        normalized[key] = record
+    return normalized
+
+
 class BaselineStore:
     """เก็บ/คำนวณ baseline ต่อ account key ลง data/baselines.json.
 
@@ -76,17 +102,47 @@ class BaselineStore:
     def __init__(self, database, data_dir: Path):
         self.database = database
         self.path = Path(data_dir) / "baselines.json"
+        self.profiles_path = Path(data_dir) / "profiles.json"
         self.lock = threading.Lock()
         self.data: dict[str, Any] = {}
         try:
             with self.path.open("r", encoding="utf-8") as f:
                 loaded = json.load(f)
-            if isinstance(loaded, dict):
-                self.data = loaded
+            self.data = _normalized_baseline_records(loaded)
         except FileNotFoundError:
             pass
         except Exception as exc:
             print(f"[BASELINE] ignoring invalid baselines.json: {exc}")
+
+    def _profiles_snapshot(self) -> dict[str, Any]:
+        """Read one atomic Profile snapshot; malformed data yields no aliases."""
+        try:
+            with self.profiles_path.open("r", encoding="utf-8") as file:
+                profiles = json.load(file)
+        except FileNotFoundError:
+            return {}
+        except (OSError, TypeError, json.JSONDecodeError) as exc:
+            print(f"[BASELINE] ignoring invalid profiles.json: {exc}")
+            return {}
+        return profiles if isinstance(profiles, dict) else {}
+
+    def profile_for(self, username_key: str) -> dict[str, Any]:
+        """Return a Profile with only ownership-verified legacy aliases."""
+        key = normalize_account_key(username_key)
+        profiles = self._profiles_snapshot()
+        value = profiles.get(key)
+        profile = dict(value) if isinstance(value, Mapping) else {}
+        profile["verified_legacy_account_keys"] = list(
+            verified_legacy_account_keys(key, profile, profiles)
+        )
+        return profile
+
+    def _account_keys_for(self, username_key: str) -> tuple[str, ...]:
+        key = normalize_account_key(username_key)
+        profiles = self._profiles_snapshot()
+        value = profiles.get(key)
+        profile = dict(value) if isinstance(value, Mapping) else {}
+        return account_boundary_keys(key, profile, profiles)
 
     # ---------- persistence ----------
     def _save_locked(self):
@@ -97,24 +153,57 @@ class BaselineStore:
         tmp.replace(self.path)
 
     def rekey_users(self, mapping: dict[str, str]) -> int:
-        """Move learned baselines to the same email key as Profile/Session data."""
+        """Invalidate alias caches so unified Sessions can be rebuilt safely."""
         changed = 0
+        profiles = self._profiles_snapshot()
         with self.lock:
             for old_key, new_key in mapping.items():
-                old = str(old_key or "").strip().casefold()
-                new = str(new_key or "").strip().casefold()
-                if not old or not new or old == new or old not in self.data:
+                old = normalize_account_key(old_key)
+                new = normalize_account_key(new_key)
+                if not old or not new or old == new:
                     continue
-                old_record = self.data.pop(old)
-                current = self.data.get(new)
-                if current is None or str(old_record.get("updated_at_utc") or "") > str(
-                    current.get("updated_at_utc") or ""
-                ):
-                    self.data[new] = old_record
-                changed += 1
+                value = profiles.get(new)
+                profile = dict(value) if isinstance(value, Mapping) else {}
+                if old not in account_boundary_keys(new, profile, profiles):
+                    continue
+                changed += int(self.data.pop(old, None) is not None)
+                changed += int(self.data.pop(new, None) is not None)
             if changed:
                 self._save_locked()
         return changed
+
+    def rebuild_rekeyed_users(self, mapping: dict[str, str]) -> dict[str, Any]:
+        """Rebuild every affected canonical Baseline from unified Sessions."""
+        invalidated = self.rekey_users(mapping)
+        rebuilt = 0
+        errors: dict[str, str] = {}
+        for key in sorted({normalize_account_key(value) for value in mapping.values()}):
+            if not key:
+                continue
+            try:
+                self.update_user(key)
+                rebuilt += 1
+            except Exception as exc:
+                errors[key] = str(exc)
+        return {
+            "invalidated": invalidated,
+            "rebuilt": rebuilt,
+            "errors": errors,
+        }
+
+    def delete_user(self, username_key: str) -> bool:
+        """Delete one derived Baseline as part of account erasure."""
+        key = normalize_account_key(username_key)
+        with self.lock:
+            record = self.data.pop(key, None)
+            if record is None:
+                return False
+            try:
+                self._save_locked()
+            except Exception:
+                self.data[key] = record
+                raise
+        return True
 
     # ---------- learning ----------
     def _night_metrics(
@@ -196,7 +285,6 @@ class BaselineStore:
             and detected_sleep_s >= MIN_DETECTED_SLEEP_SECONDS
         ):
             return None
-
         timeline = self.database.read_sessions(
             "SELECT timestamp,temperature,humidity,co2,lux,sound,pm2_5,voc_index,"
             "heart_rate,respiration_rate,bed_status "
@@ -387,6 +475,7 @@ class BaselineStore:
         session_id: str,
         duration_s: float,
         session_mode: Any = None,
+        target_duration_s: Any = None,
     ) -> Optional[dict]:
         """Extract mode-aware behaviour without requiring detected sleep.
 
@@ -478,6 +567,14 @@ class BaselineStore:
             )
         ):
             return None
+        target_provenance = assess_target_provenance(
+            group,
+            target_duration_s,
+            quality.get("duration_target"),
+            quality.get("formula_version"),
+        )
+        if target_provenance.get("valid_for_score") is False:
+            return None
         timeline = self.database.read_sessions(
             "SELECT timestamp,temperature,humidity,co2,lux,sound "
             "FROM timeline WHERE session_id=? ORDER BY timestamp", (session_id,))
@@ -518,21 +615,29 @@ class BaselineStore:
             and respiratory_confidence.get("direct_measurements_only") is True
             and respiratory_status.get("key") in {"supportive", "observe"}
         )
+        target = target_provenance.get("target") or resolve_rest_target(
+            group or resolved,
+            target_duration_s,
+        )
+        target_verified = target_provenance.get("verified") is True
         return {
             "session_id": session_id,
             "rest_mode": resolved,
             "mode_group": group,
+            "target_key": (
+                target.get("key")
+                if target_verified and target.get("available")
+                else None
+            ),
             "duration_s": round(max(0.0, float(duration_s or 0.0)), 1),
             "onset_proxy_s": night.get("sleep_onset_proxy_s"),
             "start_local_hour": round(first.hour + first.minute / 60.0, 2),
             "sleep_detected": bool(detected_sleep_s > 0),
             "detected_sleep_s": round(detected_sleep_s, 1),
             "wellness_score": quality.get("score"),
-            "score_formula_version": (
-                SLEEP_SCORE_FORMULA_VERSION
-                if group == "sleep"
-                else RECOVERY_SCORE_FORMULA_VERSION
-            ),
+            "score_formula_version": str(
+                quality.get("formula_version") or ""
+            ).strip(),
             "temp_median": median_field("temperature"),
             "humidity_median": median_field("humidity"),
             "co2_median": median_field("co2"),
@@ -552,13 +657,20 @@ class BaselineStore:
 
     def update_user(self, username_key: str) -> dict:
         """Rebuild physiology and behaviour from the approved cutover onward."""
+        canonical_key = normalize_account_key(username_key)
+        if not canonical_key:
+            raise ValueError("username_key is required for Baseline rebuild")
+        account_keys = self._account_keys_for(canonical_key)
+        placeholders = ",".join("?" for _key in account_keys)
         sessions = self.database.read_sessions(
-            "SELECT session_id,duration,start_time,rest_mode FROM sessions "
-            "WHERE username_key=? AND end_time IS NOT NULL AND duration>=? "
+            "SELECT session_id,duration,start_time,rest_mode,target_duration_s "
+            "FROM sessions "
+            f"WHERE lower(trim(username_key)) IN ({placeholders}) "
+            "AND end_time IS NOT NULL AND duration>=? "
             "AND julianday(start_time)>=julianday(?) "
             "ORDER BY julianday(start_time) DESC LIMIT ?",
             (
-                username_key,
+                *account_keys,
                 min(
                     MIN_SESSION_SECONDS,
                     NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
@@ -578,6 +690,11 @@ class BaselineStore:
                 row["session_id"],
                 row["duration"],
                 row_mode,
+                (
+                    row.get("target_duration_s")
+                    if hasattr(row, "get")
+                    else row["target_duration_s"]
+                ),
             )
             if behaviour:
                 behaviour_sessions.append(behaviour)
@@ -594,6 +711,7 @@ class BaselineStore:
         physiology_nights = nights[:MAX_NIGHTS]
         record: dict[str, Any] = {
             "policy_version": ZEEP_SLEEP_BASELINE_VERSION,
+            "behaviour_policy_version": PERSONAL_BEHAVIOUR_BASELINE_VERSION,
             "intended_use": "personal_wellness_baseline_not_diagnosis",
             "updated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "learning_cutoff": {
@@ -633,130 +751,17 @@ class BaselineStore:
                 "efficiency_median": med("efficiency"),
                 "deep_ratio_median": med("deep_ratio"),
                 "rem_ratio_median": med("rem_ratio"),
-                "wellness_score_median": med("wellness_score"),
             })
         # Behaviour is partitioned by mode and is descriptive only.  Mixing a
         # 30-minute nap with an overnight Session would make expected latency,
         # duration and environment meaningless.  At least three prior Sessions
         # in the same mode are required before the profile is active.
-        behaviour_by_mode: dict[str, Any] = {}
-        for group in sorted({str(item.get("mode_group") or "unknown") for item in behaviour_sessions}):
-            group_sessions = [
-                item for item in behaviour_sessions
-                if str(item.get("mode_group") or "unknown") == group
-            ][:RESTORE_TREND_MAX_SESSIONS]
-            values = lambda key: [  # noqa: E731
-                float(item[key]) for item in group_sessions
-                if isinstance(item.get(key), (int, float))
-            ]
-            scores = [
-                float(item["wellness_score"])
-                for item in reversed(group_sessions)
-                if isinstance(item.get("wellness_score"), (int, float))
-            ]
-            typical_score_range = (
-                [
-                    round(_percentile(scores, 0.25), 1),
-                    round(_percentile(scores, 0.75), 1),
-                ]
-                if scores else None
-            )
-            respiratory_rr_values = values("respiratory_rr_median")
-            respiratory_regularity_values = values(
-                "respiratory_regularity_factor"
-            )
-            respiratory_range = (
-                [
-                    round(_percentile(respiratory_rr_values, 0.25), 1),
-                    round(_percentile(respiratory_rr_values, 0.75), 1),
-                ]
-                if respiratory_rr_values else None
-            )
-            behaviour_by_mode[group] = {
-                "status": (
-                    "active"
-                    if len(group_sessions) >= MIN_NIGHTS
-                    else "learning"
-                ),
-                "sessions_used": len(group_sessions),
-                "minimum_sessions": MIN_NIGHTS,
-                "session_ids": [
-                    item["session_id"] for item in group_sessions
-                ],
-                "scores": scores,
-                "score_median": (
-                    round(statistics.median(scores), 1) if scores else None
-                ),
-                "score_typical_range": typical_score_range,
-                "score_reference": {
-                    "median": (
-                        round(statistics.median(scores), 1)
-                        if scores else None
-                    ),
-                    "typical_range": typical_score_range,
-                    "method": "median_and_interquartile_range",
-                    "same_mode_only": True,
-                    "prior_completed_sessions_only": True,
-                },
-                "score_formula_versions": sorted({
-                    str(item["score_formula_version"])
-                    for item in group_sessions
-                    if item.get("score_formula_version")
-                }),
-                "expected_onset_minutes": (
-                    round(statistics.median(values("onset_proxy_s")) / 60.0, 1)
-                    if values("onset_proxy_s") else None
-                ),
-                "typical_duration_minutes": (
-                    round(statistics.median(values("duration_s")) / 60.0, 1)
-                    if values("duration_s") else None
-                ),
-                "typical_start_local_hour": (
-                    round(statistics.median(values("start_local_hour")), 2)
-                    if values("start_local_hour") else None
-                ),
-                "typical_environment": {
-                    key: (round(statistics.median(values(key)), 1) if values(key) else None)
-                    for key in (
-                        "temp_median", "humidity_median", "co2_median",
-                        "lux_median", "sound_median",
-                    )
-                },
-                "respiratory_reference": {
-                    "status": (
-                        "active"
-                        if len(respiratory_rr_values)
-                        >= RESTORE_BASELINE_MIN_COMPARISON_SESSIONS
-                        else "learning"
-                    ),
-                    "sessions_used": len(respiratory_rr_values),
-                    "minimum_sessions": (
-                        RESTORE_BASELINE_MIN_COMPARISON_SESSIONS
-                    ),
-                    "median_rr_brpm": (
-                        round(statistics.median(respiratory_rr_values), 1)
-                        if respiratory_rr_values else None
-                    ),
-                    "typical_range_rr_brpm": respiratory_range,
-                    "regularity_median": (
-                        round(
-                            statistics.median(
-                                respiratory_regularity_values
-                            ),
-                            3,
-                        )
-                        if respiratory_regularity_values else None
-                    ),
-                    "method": "median_and_interquartile_range",
-                    "same_mode_only": True,
-                    "prior_completed_sessions_only": True,
-                    "direct_stage_influence": False,
-                    "affects_score": False,
-                },
-                "direct_stage_influence": False,
-                "role": "expectation_report_and_confidence_context_only",
-            }
-        record["behaviour_by_mode"] = behaviour_by_mode
+        record["behaviour_by_mode"] = aggregate_behaviour_by_mode(
+            behaviour_sessions,
+            minimum_sessions=MIN_NIGHTS,
+            score_minimum_sessions=RESTORE_BASELINE_MIN_COMPARISON_SESSIONS,
+            max_sessions=RESTORE_TREND_MAX_SESSIONS,
+        )
         if record["status"] == "active" and record.get("cv_p25") and record.get("cv_p75"):
             # เกณฑ์ส่วนบุคคล: DEEP = เรียบกว่า "ช่วงเรียบสุดของตัวเอง" เล็กน้อย,
             # REM = แกว่งกว่าช่วงบนของตัวเองชัดเจน · clip กันหลุดโลก + กันชนกัน
@@ -767,22 +772,34 @@ class BaselineStore:
             record["thresholds"] = {"cv_deep": round(cv_deep, 4),
                                     "cv_rem": round(cv_rem, 4)}
         with self.lock:
-            self.data[username_key] = record
+            self.data[canonical_key] = record
             self._save_locked()
         return record
 
     # ---------- read side ----------
     def get(self, username_key: str) -> Optional[dict]:
+        key = normalize_account_key(username_key)
+        account_keys = self._account_keys_for(key)
+        candidate_keys = (key, *(item for item in account_keys if item != key))
         with self.lock:
-            record = self.data.get(username_key)
-            if not isinstance(record, dict):
-                return None
-            cutoff = record.get("learning_cutoff") or {}
-            # Never let a pre-cutover baseline silently influence a new pilot
-            # Session while the asynchronous rebuild is still pending.
-            if cutoff.get("utc") != PERSONAL_BASELINE_LEARNING_START_UTC:
-                return None
-            return record
+            for candidate in candidate_keys:
+                record = self.data.get(candidate)
+                if not isinstance(record, dict):
+                    continue
+                cutoff = record.get("learning_cutoff") or {}
+                # Never let a pre-cutover baseline silently influence a new
+                # pilot Session while asynchronous rebuild is pending.
+                if (
+                    record.get("policy_version")
+                    != ZEEP_SLEEP_BASELINE_VERSION
+                    or record.get("behaviour_policy_version")
+                    != PERSONAL_BEHAVIOUR_BASELINE_VERSION
+                    or cutoff.get("utc")
+                    != PERSONAL_BASELINE_LEARNING_START_UTC
+                ):
+                    continue
+                return record
+            return None
 
     def thresholds_for(self, username_key: str) -> Optional[dict]:
         """คืนเกณฑ์ส่วนบุคคลเมื่อเรียนรู้ครบแล้วเท่านั้น (ไม่ครบ → None = ใช้ค่ากลาง)"""
@@ -791,7 +808,12 @@ class BaselineStore:
             return dict(record["thresholds"])
         return None
 
-    def behaviour_context(self, username_key: str, rest_mode: str) -> dict:
+    def behaviour_context(
+        self,
+        username_key: str,
+        rest_mode: str,
+        target_duration_s: Any = None,
+    ) -> dict:
         """Return prior-only, same-mode behaviour without selecting a stage."""
         record = self.get(username_key) or {}
         requested = str(rest_mode or "auto")
@@ -805,6 +827,19 @@ class BaselineStore:
         grouped = record.get("behaviour_by_mode")
         stored = grouped.get(group) if isinstance(grouped, dict) else None
         context = dict(stored) if isinstance(stored, dict) else {}
+        target = resolve_rest_target(rest_mode, target_duration_s)
+        if group == "nap_recovery":
+            by_target = context.get("by_target")
+            target_context = (
+                by_target.get(target.get("key"))
+                if isinstance(by_target, dict) and target.get("available")
+                else None
+            )
+            context = (
+                dict(target_context)
+                if isinstance(target_context, dict)
+                else {}
+            )
         if not context:
             context = {
                 "status": "no_data",
@@ -833,18 +868,35 @@ class BaselineStore:
                 "score_median": None,
                 "score_typical_range": None,
                 "score_reference": {
+                    "status": "learning",
+                    "sessions_used": 0,
+                    "minimum_sessions": (
+                        RESTORE_BASELINE_MIN_COMPARISON_SESSIONS
+                    ),
                     "median": None,
                     "typical_range": None,
                     "method": "median_and_interquartile_range",
                     "same_mode_only": True,
+                    "same_target_only": group == "nap_recovery",
                     "prior_completed_sessions_only": True,
+                    "formula_version": None,
                 },
                 "score_formula_versions": [],
                 "direct_stage_influence": False,
                 "role": "expectation_report_and_confidence_context_only",
             }
+        context["baseline_policy_version"] = record.get(
+            "behaviour_policy_version"
+        )
+        context["target_specific"] = bool(
+            context.get("target_specific")
+        )
         context["mode_group"] = group
-        context["source"] = "prior_completed_same_mode_sessions_only"
+        context["source"] = (
+            "prior_completed_same_mode_and_target_sessions_only"
+            if context["target_specific"]
+            else "prior_completed_same_mode_sessions_only"
+        )
         return context
 
     def personalize_baseline(self, username_key: str, age_baseline: dict) -> tuple[dict, dict]:

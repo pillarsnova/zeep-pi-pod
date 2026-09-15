@@ -114,8 +114,11 @@ Client ห้ามคำนวณคะแนนจาก State timeline เอ
 - HR/RR, Movement และ Environment ที่นำมาคิด Recovery Score ใช้เฉพาะช่วง
   eligible rest ที่วัดได้จริง; Sensor gap ลด confidence ส่วน confirmed OFF BED
   ลดเวลาเป้าหมายและ Continuity ตามเวลาจริง
-- Session Nap เดิมที่ไม่มี target 30/90 นาทีแสดง `TARGET_UNKNOWN` และไม่เผยแพร่
-  Recovery Score; ห้าม normalize จากองค์ประกอบที่เหลือหรือเดา target จากเวลา
+- Session Nap เดิมที่ไม่มี target 30/90 นาทีแสดง `TARGET_UNKNOWN`; หากมี
+  Recovery Score รุ่นที่รองรับและเวลาพักอยู่ใน guardrail 10–120 นาที ให้คงคะแนน
+  เดิมพร้อม `review_required=true` โดยไม่คำนวณใหม่ ไม่เดา target จากเวลา และไม่
+  นำไปปนกับแนวโน้ม/Baseline ของ Nap 30 หรือ 90 นาที หากไม่มีคะแนนที่ตรวจสอบรุ่น
+  ได้ ให้แสดงว่าไม่มีคะแนนตามจริง
 - ตัวหารทั้งสองสูตรคงที่ 100; optional Bed/Environment ที่หายใช้ neutral 75%
   ของส่วนนั้นและลด confidence ข้อมูลหายจึงไม่ทำให้คะแนนสูงขึ้น
 - Overnight ที่สั้นกว่า 5 ชั่วโมงยังเป็น Overnight แต่ระบุ
@@ -152,6 +155,8 @@ Restore Summary เป็น Explanation layer ของ released score เด�
 | Method/Path | วัตถุประสงค์ |
 |---|---|
 | `GET /api/v1/usage-sessions` | รายการประวัติการใช้งานแบบแบ่งหน้า |
+| `GET /api/v1/usage-sessions/longitudinal` | ภาพรวมการพักสะสมและความพร้อมของ Personal Learning |
+| `GET /api/v1/usage-sessions/longitudinal/ai-context` | Context ที่ตัด direct identifiers สำหรับ advisory AI; ยังเป็น Personal Wellness Data และยังไม่เปิด external egress |
 | `GET /api/v1/usage-sessions/{session_id}/summary` | ผลสรุปสำหรับหน้าแรกของ App |
 | `GET /api/v1/usage-sessions/{session_id}` | รายละเอียดแบบ Allowlist ไม่มี Raw Sensor |
 
@@ -174,7 +179,8 @@ Success response ใช้ envelope:
 
 - Auth ใช้ `zeep_auth` cookie
 - User อ่านเฉพาะ Session ของตนเอง
-- Admin ใช้ `account_key` และ `query` ได้
+- Admin ใช้ `account_key`/`query` กับรายการ และใช้ header
+  `X-Zeep-Account-Key` กับภาพรวมสะสมรายบัญชี
 - Session ของผู้อื่นตอบ `404` เพื่อป้องกัน ID enumeration
 - `X-API-Token` รุ่นเดิมใช้ดึงผลสุขภาพไม่ได้และตอบ `403`
 - Success response มี `Cache-Control: private, no-store`
@@ -437,7 +443,8 @@ Deployment กลางอีกครั้ง:
 
 1. User A มองไม่เห็นรายการของ User B
 2. User A ขอ Session ID ของ B ได้ 404
-3. Admin เท่านั้นที่ใช้ `account_key`/`query`
+3. Admin เท่านั้นที่ใช้ `account_key`/`query`; ภาพรวมรายบัญชีใช้
+   `X-Zeep-Account-Key` และห้ามใส่อีเมลใน URL
 4. Legacy `X-API-Token` ได้ 403
 5. Response ไม่มี Raw BCG, samples, token หรือ profile answers
 6. Overnight เป็น `sleep_score`

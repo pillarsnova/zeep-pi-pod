@@ -23,6 +23,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 from fastapi import APIRouter, HTTPException, Response
 
 from api_models import ProfileCompletionCommand
+from zeep_pod.identity.lifecycle_lock import synchronized_by
 from zeep_pod.identity.profile_fields import (
     age_from_dob,
     normalise_body_measurement,
@@ -190,6 +191,21 @@ class PendingProfileRegistry:
         with self._lock:
             self._pending.pop(str(ticket or ""), None)
 
+    def discard_account(self, account_key: str | None) -> int:
+        """Forget incomplete logins and tokens for one verified account."""
+        key = str(account_key or "").strip().casefold()
+        if not key:
+            return 0
+        with self._lock:
+            tickets = [
+                ticket
+                for ticket, pending in self._pending.items()
+                if str(pending.auth.get("email") or "").strip().casefold() == key
+            ]
+            for ticket in tickets:
+                del self._pending[ticket]
+            return len(tickets)
+
     def _prune_locked(self) -> None:
         now = self._clock()
         for key in [k for k, v in self._pending.items() if v.expires_at <= now]:
@@ -241,6 +257,7 @@ def create_profile_completion_router(
     complete_login: Callable[..., Dict[str, Any]],
     pod_occupied: Callable[[], bool],
     log_event: Callable[..., None],
+    lifecycle_lock: Any = None,
 ) -> APIRouter:
     """The one route that answers the profile gate.
 
@@ -248,6 +265,11 @@ def create_profile_completion_router(
     credentials the pod has already verified.
     """
     router = APIRouter()
+    serialize = (
+        synchronized_by(lifecycle_lock)
+        if lifecycle_lock is not None
+        else lambda function: function
+    )
 
     def retry(pending: PendingProfile, error: HTTPException) -> HTTPException:
         """Re-park a pending login so a retryable failure costs no re-auth.
@@ -261,6 +283,7 @@ def create_profile_completion_router(
         return HTTPException(error.status_code, detail)
 
     @router.post("/api/auth/profile/complete")
+    @serialize
     def auth_profile_complete(cmd: ProfileCompletionCommand, response: Response):
         """Update the ZEEP account with the form, then finish the login.
 

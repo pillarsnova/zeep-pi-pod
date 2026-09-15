@@ -17,6 +17,7 @@ from sleep_system_policy import (
     RESTORE_DRIVER_POLICY_VERSION,
     RESTORE_RECOMMENDATION_VERSION,
     RESTORE_SUMMARY_VERSION,
+    resolve_rest_target,
 )
 from zeep_pod.product_language import (
     user_confidence_level,
@@ -80,6 +81,17 @@ def _source_score(
         "copied_without_recalculation": True,
     }
     return source_score, identity
+
+
+def _source_target_key(
+    quality: Mapping[str, Any],
+    group: str,
+) -> str | None:
+    target = quality.get("duration_target") or {}
+    target = dict(target) if isinstance(target, Mapping) else {}
+    seconds = _number(target.get("seconds"))
+    resolved = resolve_rest_target(group, seconds)
+    return resolved.get("key") if resolved.get("available") else None
 
 
 def _status(
@@ -370,6 +382,7 @@ def build_restore_summary(
     group = _mode_group(score_quality, mode_source)
     source_score, score_identity = _source_score(score_quality, group)
     score = _number(source_score["value"])
+    source_target_key = _source_target_key(score_quality, group)
     driver_summary = _merge_drivers(
         score_quality,
         list(findings or []),
@@ -403,9 +416,14 @@ def build_restore_summary(
             personal_context if score_identity["valid"] else None,
             score,
             group,
+            source_formula_version=source_score.get("formula_version"),
+            source_target_key=source_target_key,
         ),
         "trend": build_trend_summary(
-            trend_context if score_identity["valid"] else None
+            trend_context if score_identity["valid"] else None,
+            group=group,
+            source_formula_version=source_score.get("formula_version"),
+            source_target_key=source_target_key,
         ),
         "recommendation": _recommendation(group, score, driver_summary),
         "confidence": _confidence(score_quality),

@@ -30,6 +30,10 @@
 | Sleep scoring | `sleep_stage_scoring.py` | หลักฐานและ probability ของ W/N1/N2/N3/REM |
 | Sleep policy | `sleep_system_policy.py` | version, gate, confirmation, transition และ environment context |
 | Personal baseline | `personal.py` | Adaptive baseline รายบุคคลแบบ versioned |
+| User learning profile | `zeep_pod/sessions/user_learning_profile.py` | รวมประวัติรายบัญชี แยก Observed/Trend/AI readiness และแยก Overnight/Nap |
+| Personal behavior cohorts | `zeep_pod/sessions/personal_behaviour.py`, `user_baseline_context.py`, `user_score_history.py` | แยกสูตรและเป้าหมาย Overnight/Nap 30/Nap 90 ก่อนเทียบ Baseline หรือ trend |
+| Advisory AI projection | `zeep_pod/sessions/user_ai_context.py`, `user_profile_api.py` | Positive allowlist ที่ตัด direct identifiers; ยังคงเป็น Personal Wellness Data และไม่สั่งอุปกรณ์ |
+| Identity erasure | `zeep_pod/identity/account_erasure.py`, `account_erasure_api.py` | ลบ local active store ของ canonical account/aliases, Session, BCG, Baseline, checkpoint และ capability ที่ค้าง |
 | Final report | `sleep_session_report.py` | Mode-aware Sleep/Rest score และรายงานหลังจบ Session |
 | Storage | `database.py`, `bcg_storage.py`, `backup.py` | SQLite writer, raw BCG และ Daily backup |
 | UI source | `static/index.template.html`, `static/partials/control/*`, `static/partials/app/*` | App shell, Control cards, Base CSS และ ordered JavaScript fragments |
@@ -71,6 +75,10 @@ Dashboard, Session และ Safety ต้องอ่านค่าจาก *
 9. Public endpoint และ JSON key เดิมยังคงใช้ได้จนมี versioned migration plan
 10. หนึ่งค่าจริงต่อ metric: UI ห้ามคำนวณ Sensor/Sleep score ซ้ำจาก Backend
 11. Adaptive Learning ต้องคง `automatic_actuation=false` จนผ่าน Gate และ Safety review
+12. User learning ห้ามตีความความถี่เป็นความชอบ หรือสภาพแวดล้อมที่พบเป็นค่าที่ผู้ใช้เลือก
+13. Baseline/trend ต้องตรงทั้ง mode, target, behavior policy และ score formula
+14. AI รับได้เฉพาะ validated `user_ai_context.data` หลังมี purpose-specific
+    authorization; ห้ามรับ Profile, event-level data หรือถือว่าข้อมูลนี้ anonymous
 
 ## 4. วิธีเพิ่มหรือแก้ความสามารถ
 

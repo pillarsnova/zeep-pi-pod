@@ -12,15 +12,17 @@ from api_v1 import response_envelope
 from zeep_pod.sessions.history_service import (
     SessionHistoryService,
     resolve_history_window,
+    safe_account_profile,
 )
 from zeep_pod.sessions.response_models import (
-    UsageSessionDevelopmentResponse,
     UsageSessionDetailResponse,
+    UsageSessionDevelopmentResponse,
     UsageSessionListResponse,
     UsageSessionPresentationResponse,
     UsageSessionSummaryResponse,
 )
 from zeep_pod.sessions.usage_service import UsageSessionService
+from zeep_pod.sessions.user_profile_api import add_user_profile_routes
 
 USAGE_LIST_EXAMPLE = {
     "schema": "zeep.api.response",
@@ -37,6 +39,7 @@ USAGE_LIST_EXAMPLE = {
             "session_count": 2,
             "sleep_score_count": 1,
             "recovery_score_count": 1,
+            "without_score_count": 0,
             "awaiting_score_count": 0,
             "average_sleep_score": 82.0,
             "average_recovery_score": 78.0,
@@ -114,6 +117,7 @@ def _history_window(
 class _UsageApiContext:
     history_service: Callable[[], SessionHistoryService]
     profiles_snapshot: Callable[[], dict[str, dict[str, Any]]]
+    baseline_snapshot: Callable[[str], dict[str, Any] | None]
     profiles_lock: Any
     timezone_name: str
 
@@ -190,7 +194,11 @@ def _build_list_endpoint(context: _UsageApiContext, principal_dependency: Any):
                 )
             data = service.list_for_account(
                 own_key,
-                profiles.get(own_key) or {},
+                safe_account_profile(
+                    own_key,
+                    dict(profiles.get(own_key) or {}),
+                    profiles,
+                ),
                 window=window,
                 limit=limit,
                 offset=offset,
@@ -339,6 +347,7 @@ def create_usage_sessions_router(
     profiles_snapshot: Callable[[], dict[str, dict[str, Any]]],
     profiles_lock: Any,
     timezone_name: str,
+    baseline_snapshot: Callable[[str], dict[str, Any] | None] | None = None,
 ) -> APIRouter:
     """Create the email-first, raw-free usage history API."""
     router = APIRouter(
@@ -348,6 +357,7 @@ def create_usage_sessions_router(
     context = _UsageApiContext(
         history_service,
         profiles_snapshot,
+        baseline_snapshot or (lambda _account_key: None),
         profiles_lock,
         timezone_name,
     )
@@ -372,6 +382,13 @@ def create_usage_sessions_router(
             },
             **ERROR_RESPONSES,
         },
+    )
+    add_user_profile_routes(
+        router,
+        principal_dependency=principal,
+        profiles_snapshot=context.profiles,
+        service_factory=context.service,
+        baseline_snapshot=context.baseline_snapshot,
     )
     router.add_api_route(
         "/{session_id}/summary",

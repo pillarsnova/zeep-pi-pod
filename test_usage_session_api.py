@@ -83,6 +83,12 @@ def _session(session_id: str, email: str, mode: str) -> dict:
             "status": "recommended",
             "score_releasable": True,
         }
+    else:
+        quality["duration_target"] = {
+            "key": "overnight_7h",
+            "seconds": 25_200,
+            "hours": 7,
+        }
     return {
         "session_id": session_id,
         "account_key": email,
@@ -93,6 +99,7 @@ def _session(session_id: str, email: str, mode: str) -> dict:
         "duration_s": 25200,
         "sample_count": 2520,
         "rest_mode": mode,
+        "target_duration_s": 1_800 if is_nap else 25_200,
         "sleep_quality": quality,
         "sleep_policy_versions": {
             "evidence": "evidence-v-test",
@@ -270,6 +277,8 @@ def _session(session_id: str, email: str, mode: str) -> dict:
 
 
 class FakeHistory:
+    history_start_utc = "2026-09-01T00:00:00+00:00"
+
     def __init__(self) -> None:
         self.sessions = {
             "a-session": _session("a-session", "a@example.test", "sleep"),
@@ -279,6 +288,15 @@ class FakeHistory:
     def account_history(self, account_key, _profile, *, window, limit, offset):
         rows = [row for row in self.sessions.values() if row["account_key"] == account_key]
         return self._listing(rows, limit, offset)
+
+    def account_sessions(self, account_key, _profile, *, window=None):
+        return [
+            row for row in self.sessions.values()
+            if row["account_key"] == account_key
+        ]
+
+    def account_completed_sessions(self, account_key, profile):
+        return self.account_sessions(account_key, profile)
 
     def admin_history(
         self,
@@ -374,6 +392,7 @@ class UsageSessionApiTests(unittest.TestCase):
                 profiles_snapshot=lambda: self.profiles,
                 profiles_lock=threading.Lock(),
                 timezone_name="Asia/Bangkok",
+                baseline_snapshot=lambda _account_key: None,
             )
         )
         self.client = TestClient(app)
@@ -470,6 +489,102 @@ class UsageSessionApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["data"]["pagination"]["total"], 2)
+
+    def test_user_gets_own_longitudinal_profile(self) -> None:
+        response = self.client.get(
+            "/api/v1/usage-sessions/longitudinal",
+            headers=self._headers("a@example.test"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["cache-control"], "private, no-store")
+        self.assertEqual(response.json()["kind"], "user_learning_profile")
+        data = response.json()["data"]
+        self.assertEqual(data["user"]["canonical_identifier"], "a@example.test")
+        self.assertEqual(data["observed_history"]["session_count"], 1)
+        self.assertEqual(data["modes"]["sleep"]["session_count"], 1)
+        self.assertEqual(data["modes"]["nap_recovery"]["session_count"], 0)
+        self.assertFalse(data["ai_contract"]["identity_input_allowed"])
+        self.assertFalse(data["ai_contract"]["automatic_actuation_allowed"])
+
+    def test_user_cannot_request_another_longitudinal_profile(self) -> None:
+        headers = self._headers("a@example.test")
+        headers["X-Zeep-Account-Key"] = "b@example.test"
+        response = self.client.get(
+            "/api/v1/usage-sessions/longitudinal",
+            headers=headers,
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_ai_context_is_allowlisted_and_contains_no_identity(self) -> None:
+        response = self.client.get(
+            "/api/v1/usage-sessions/longitudinal/ai-context",
+            headers=self._headers("a@example.test"),
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["kind"], "user_ai_context")
+        data = response.json()["data"]
+        serialized = str(data)
+        self.assertEqual(data["contract_version"], "zeep.user-ai-context.v1")
+        self.assertNotIn("user", data)
+        self.assertNotIn("profile_context", data)
+        self.assertNotIn("a@example.test", serialized)
+        self.assertNotIn("a-session", serialized)
+        self.assertEqual(
+            data["guardrails"]["privacy_classification"],
+            "direct_identifier_free_linkable_personal_wellness_data",
+        )
+        self.assertFalse(data["guardrails"]["direct_identifiers_included"])
+        self.assertTrue(
+            data["guardrails"]["linkable_personal_wellness_data"]
+        )
+        self.assertFalse(data["guardrails"]["anonymous_or_deidentified"])
+        self.assertFalse(
+            data["guardrails"]["exact_session_timestamps_included"]
+        )
+        self.assertFalse(data["guardrails"]["model_training_allowed"])
+        self.assertFalse(
+            data["learning_readiness"][
+                "personalization_inference_authorized"
+            ]
+        )
+
+    def test_admin_selects_one_longitudinal_profile(self) -> None:
+        missing = self.client.get(
+            "/api/v1/usage-sessions/longitudinal",
+            headers=self._headers("service", "admin"),
+        )
+        headers = self._headers("service", "admin")
+        headers["X-Zeep-Account-Key"] = "b@example.test"
+        selected = self.client.get(
+            "/api/v1/usage-sessions/longitudinal",
+            headers=headers,
+        )
+
+        self.assertEqual(missing.status_code, 422)
+        self.assertEqual(selected.status_code, 200)
+        data = selected.json()["data"]
+        self.assertEqual(data["user"]["canonical_identifier"], "b@example.test")
+        self.assertEqual(data["modes"]["nap_recovery"]["session_count"], 1)
+
+    def test_longitudinal_account_selector_is_a_header_not_a_query(self) -> None:
+        operation = self.client.app.openapi()["paths"][
+            "/api/v1/usage-sessions/longitudinal"
+        ]["get"]
+        parameters = operation.get("parameters") or []
+
+        self.assertIn(
+            ("x-zeep-account-key", "header"),
+            {(item["name"].casefold(), item["in"]) for item in parameters},
+        )
+        self.assertNotIn(
+            ("account_key", "query"),
+            {(item["name"], item["in"]) for item in parameters},
+        )
+        for status in ("401", "403", "422"):
+            self.assertIn(status, operation["responses"])
 
     def test_presentation_is_one_user_facing_hierarchy_without_duplicates(self) -> None:
         response = self.client.get(

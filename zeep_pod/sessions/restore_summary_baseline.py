@@ -6,10 +6,13 @@ from collections.abc import Mapping
 from typing import Any
 
 from sleep_system_policy import (
+    PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+    RECOVERY_SCORE_FORMULA_VERSION,
     RESTORE_BASELINE_COMPARISON_VERSION,
     RESTORE_BASELINE_MIN_COMPARISON_SESSIONS,
     RESTORE_BASELINE_STABLE_SESSIONS,
     RESTORE_TREND_MAX_SESSIONS,
+    SLEEP_SCORE_FORMULA_VERSION,
 )
 
 
@@ -68,19 +71,73 @@ def _score_reference(
     return median, typical
 
 
+def _provenance_valid(
+    record: Mapping[str, Any],
+    reference: Mapping[str, Any],
+    *,
+    group: str,
+    source_formula_version: str | None,
+    source_target_key: str | None,
+) -> bool:
+    expected_formula = (
+        SLEEP_SCORE_FORMULA_VERSION
+        if group == "sleep"
+        else RECOVERY_SCORE_FORMULA_VERSION
+    )
+    formula = str(reference.get("formula_version") or "")
+    target_specific = record.get("target_specific") is True
+    target_key = str(record.get("target_key") or "") or None
+    return bool(
+        formula == expected_formula
+        and formula == str(source_formula_version or "")
+        and record.get("baseline_policy_version")
+        == PERSONAL_BEHAVIOUR_BASELINE_VERSION
+        and target_specific
+        and target_key == source_target_key
+    )
+
+
 def build_baseline_summary(
     context: Mapping[str, Any] | None,
     score: float | None,
     group: str,
+    *,
+    source_formula_version: str | None = None,
+    source_target_key: str | None = None,
 ) -> dict[str, Any]:
     """Compare with prior eligible Sessions selected by the caller."""
     record = dict(context or {})
-    sessions = _session_count(record)
+    reference = record.get("score_reference") or {}
+    reference = dict(reference) if isinstance(reference, Mapping) else {}
+    formula = str(reference.get("formula_version") or "")
+    policy = str(record.get("baseline_policy_version") or "")
+    provenance_valid = _provenance_valid(
+        record,
+        reference,
+        group=group,
+        source_formula_version=source_formula_version,
+        source_target_key=source_target_key,
+    )
+    sessions = (
+        max(0, int(_number(reference.get("sessions_used")) or 0))
+        if provenance_valid
+        else 0
+    )
     maturity = _maturity(sessions)
     median, typical = _score_reference(record)
+    if not provenance_valid:
+        median, typical = None, None
     comparison = {
         "available": False,
-        "reason": ("ZEEP กำลังเรียนรู้รูปแบบของคุณจากการพักรูปแบบเดียวกัน และจะเปรียบเทียบได้ชัดขึ้นเมื่อมีข้อมูลจากหลายครั้ง" if sessions < RESTORE_BASELINE_MIN_COMPARISON_SESSIONS else "กำลังเตรียมค่ากลางของรูปแบบการพักนี้" if median is None else "กำลังเตรียมคะแนนของการพักครั้งนี้"),
+        "reason": (
+            "กำลังตรวจสอบรุ่น Baseline และสูตรคะแนนก่อนเปรียบเทียบ"
+            if not provenance_valid
+            else "ZEEP กำลังเรียนรู้รูปแบบของคุณจากการพักรูปแบบเดียวกัน และจะเปรียบเทียบได้ชัดขึ้นเมื่อมีข้อมูลจากหลายครั้ง"
+            if sessions < RESTORE_BASELINE_MIN_COMPARISON_SESSIONS
+            else "กำลังเตรียมค่ากลางของรูปแบบการพักนี้"
+            if median is None
+            else "กำลังเตรียมคะแนนของการพักครั้งนี้"
+        ),
     }
     if sessions >= RESTORE_BASELINE_MIN_COMPARISON_SESSIONS and median is not None and score is not None:
         delta = round(score - median, 1)
@@ -114,15 +171,48 @@ def build_baseline_summary(
         "affects_source_score": False,
         "population_prior_is_cold_start_only": True,
         "must_not_mix_sleep_and_nap_sessions": True,
+        "baseline_policy_version": policy or None,
+        "score_formula_version": formula or None,
+        "target_specific": bool(record.get("target_specific")),
+        "target_key": source_target_key,
     }
 
 
 def build_trend_summary(
     context: Mapping[str, Any] | None,
+    *,
+    group: str,
+    source_formula_version: str | None = None,
+    source_target_key: str | None = None,
 ) -> dict[str, Any]:
     """Summarize 7/14/30 same-mode Sessions without a day-readiness claim."""
+    record = dict(context or {})
+    reference = record.get("score_reference") or {}
+    reference = dict(reference) if isinstance(reference, Mapping) else {}
+    policy = str(record.get("baseline_policy_version") or "") or None
+    formula = str(reference.get("formula_version") or "") or None
+    target_key = record.get("target_key")
+    provenance = {
+        "baseline_policy_version": policy,
+        "score_formula_version": formula,
+        "target_specific": bool(record.get("target_specific")),
+        "target_key": target_key,
+    }
+    if not _provenance_valid(
+        record,
+        reference,
+        group=group,
+        source_formula_version=source_formula_version,
+        source_target_key=source_target_key,
+    ):
+        return {
+            "available": False,
+            "reason": "กำลังตรวจสอบรุ่น Baseline สูตรคะแนน และเป้าหมายก่อนแสดงแนวโน้ม",
+            "windows": {},
+            **provenance,
+        }
     values = []
-    for value in (context or {}).get("scores", []):
+    for value in record.get("scores", []):
         numeric = _number(value)
         if numeric is not None:
             values.append(max(0.0, min(100.0, numeric)))
@@ -131,6 +221,7 @@ def build_trend_summary(
             "available": False,
             "reason": ("แนวโน้มจะพร้อมเมื่อมีผลโหมดเดียวกันอย่างน้อย 3 ครั้ง"),
             "windows": {},
+            **provenance,
         }
     windows = {}
     for size in (
@@ -150,4 +241,5 @@ def build_trend_summary(
         "windows": windows,
         "mode_specific": True,
         "whole_day_readiness_trend": False,
+        **provenance,
     }

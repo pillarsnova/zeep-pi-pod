@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import tempfile
-import time
 import unittest
 from pathlib import Path
 
@@ -31,6 +30,37 @@ class AuthSessionTests(unittest.TestCase):
             manager.revoke(cookie)
             self.assertIsNone(manager.resolve(cookie))
 
+    def test_account_erasure_revokes_only_matching_user_sessions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = AuthSessionManager(Path(tmp))
+            user_tokens = [
+                manager.create(
+                    subject="zeep:user-1",
+                    username="tester",
+                    display_name="Tester",
+                    account_key="user@example.com",
+                    email="user@example.com",
+                    role="user",
+                    auth_source="zeep",
+                )[0]
+                for _index in range(2)
+            ]
+            admin_token, _principal = manager.create(
+                subject="admin:operator",
+                username="operator",
+                display_name="Operator",
+                account_key="user@example.com",
+                email=None,
+                role="admin",
+                auth_source="local_admin",
+            )
+
+            removed = manager.revoke_user_account("USER@example.com")
+
+            self.assertEqual(removed, 2)
+            self.assertTrue(all(manager.resolve(token) is None for token in user_tokens))
+            self.assertIsNotNone(manager.resolve(admin_token))
+
     def test_offline_ticket_is_one_time_and_identity_bound(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             manager = AuthSessionManager(Path(tmp))
@@ -40,6 +70,32 @@ class AuthSessionTests(unittest.TestCase):
             ticket = manager.issue_offline_ticket("user@example.com")
             self.assertTrue(manager.consume_offline_ticket(ticket, "USER@example.com"))
             self.assertFalse(manager.consume_offline_ticket(ticket, "user@example.com"))
+
+    def test_account_erasure_discards_only_matching_offline_tickets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = AuthSessionManager(Path(tmp))
+            deleted = manager.issue_offline_ticket("deleted@example.com")
+            retained = manager.issue_offline_ticket("retained@example.com")
+
+            removed = manager.discard_offline_tickets({"DELETED@example.com"})
+
+            self.assertEqual(removed, 1)
+            self.assertFalse(
+                manager.consume_offline_ticket(deleted, "deleted@example.com")
+            )
+            self.assertTrue(
+                manager.consume_offline_ticket(retained, "retained@example.com")
+            )
+
+    def test_account_erasure_can_invalidate_all_offline_capabilities(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = AuthSessionManager(Path(tmp))
+            first = manager.issue_offline_ticket("first@example.com")
+            second = manager.issue_offline_ticket("second@example.com")
+
+            self.assertEqual(manager.clear_offline_tickets(), 2)
+            self.assertFalse(manager.consume_offline_ticket(first, "first@example.com"))
+            self.assertFalse(manager.consume_offline_ticket(second, "second@example.com"))
 
     def test_scrypt_password_hash(self) -> None:
         encoded = hash_password("correct horse battery staple")

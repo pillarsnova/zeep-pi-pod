@@ -142,6 +142,34 @@ class SessionCheckpointStore:
         with self.lock:
             self.path.unlink(missing_ok=True)
 
+    def discard_accounts(self, account_keys: Collection[str]) -> bool:
+        """Delete a dormant checkpoint only when its account matches."""
+        keys = {
+            str(value or "").strip().casefold()
+            for value in account_keys
+            if str(value or "").strip()
+        }
+        if not keys:
+            return False
+        with self.lock:
+            try:
+                payload = json.loads(self.path.read_text(encoding="utf-8"))
+            except FileNotFoundError:
+                return False
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ValueError("cannot verify dormant Session checkpoint") from exc
+            record = payload.get("record") if isinstance(payload, dict) else None
+            if not isinstance(record, Mapping):
+                raise ValueError("cannot verify dormant Session checkpoint")
+            checkpoint_keys = {
+                str(record.get(field) or "").strip().casefold()
+                for field in ("username_key", "username")
+            }
+            if not keys.intersection(checkpoint_keys):
+                return False
+            self.path.unlink(missing_ok=True)
+            return True
+
     @staticmethod
     def _waiting_bed_elapsed(active: Mapping[str, Any], phase: Any) -> float:
         onbed_since = active.get("onbed_since")

@@ -21,6 +21,24 @@ from zeep_pod.sessions import score_summary
 from zeep_pod.sessions.history_detail_support import (
     canonical_history_rest_metadata,
 )
+from zeep_pod.sessions.history_identity import (
+    account_boundary_keys as _account_boundary_keys,
+)
+from zeep_pod.sessions.history_identity import (
+    canonicalize_identity as _canonical_identity,
+)
+from zeep_pod.sessions.history_identity import (
+    identity as _identity,
+)
+from zeep_pod.sessions.history_identity import (
+    matches_identity as _matches_identity,
+)
+from zeep_pod.sessions.history_identity import (
+    profile_for_record as _profile_for_record,
+)
+from zeep_pod.sessions.history_identity import (
+    safe_account_profile,
+)
 
 QualityRelease = Callable[[dict[str, Any], Any], dict[str, Any]]
 HealthReference = Callable[[dict[str, Any]], dict[str, Any]]
@@ -117,40 +135,6 @@ def local_history_day(timezone_name: str = "Asia/Bangkok") -> str:
     return datetime.now(local_zone).date().isoformat()
 
 
-def _identity(profile: dict[str, Any], account_key: str) -> dict[str, Any]:
-    email = (
-        profile.get("email")
-        or profile.get("zeep_email")
-        or (account_key if "@" in account_key else None)
-    )
-    return {
-        "account_key": account_key,
-        "email": email,
-        "display_name": profile.get("display_name")
-        or profile.get("username")
-        or email
-        or account_key,
-    }
-
-
-def _matches_identity(
-    profile: dict[str, Any],
-    account_key: str,
-    query: str | None,
-) -> bool:
-    needle = str(query or "").strip().casefold()
-    if not needle:
-        return True
-    fields = (
-        account_key,
-        profile.get("email"),
-        profile.get("zeep_email"),
-        profile.get("display_name"),
-        profile.get("username"),
-    )
-    return any(needle in str(value or "").casefold() for value in fields)
-
-
 class SessionHistoryService:
     """Read completed, data-backed Session summaries from SQLite."""
 
@@ -187,20 +171,26 @@ class SessionHistoryService:
         window: HistoryWindow | None,
         *,
         session_id: str | None = None,
+        require_timeline: bool = True,
     ) -> list[dict[str, Any]]:
         clauses = [
             "s.start_time>=?",
             "s.end_time IS NOT NULL",
-            "EXISTS (SELECT 1 FROM timeline AS visible_timeline "
-            "WHERE visible_timeline.session_id=s.session_id)",
         ]
+        if require_timeline:
+            clauses.append(
+                "EXISTS (SELECT 1 FROM timeline AS visible_timeline "
+                "WHERE visible_timeline.session_id=s.session_id)"
+            )
         params: list[Any] = [self.history_start_utc]
         keys = [str(key).strip().casefold() for key in account_keys or [] if key]
         if account_keys is not None:
             if not keys:
                 return []
             placeholders = ",".join("?" for _ in keys)
-            clauses.append(f"s.username_key IN ({placeholders})")
+            clauses.append(
+                f"lower(trim(s.username_key)) IN ({placeholders})"
+            )
             params.extend(keys)
         if window is not None:
             clauses.extend(("s.end_time>=?", "s.end_time<?"))
@@ -346,9 +336,7 @@ class SessionHistoryService:
         offset: int = 0,
     ) -> dict[str, Any]:
         key = str(account_key or "").strip().casefold()
-        all_sessions = [
-            self._serialize(record, profile) for record in self._records([key], window)
-        ]
+        all_sessions = self.account_sessions(key, profile, window=window)
         start = max(0, int(offset))
         size = max(1, min(500, int(limit)))
         sessions = all_sessions[start : start + size]
@@ -371,6 +359,45 @@ class SessionHistoryService:
             "older_sessions_archived_from_product_results": True,
         }
 
+    def account_sessions(
+        self,
+        account_key: str,
+        profile: dict[str, Any],
+        *,
+        window: HistoryWindow | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return every completed data-backed Session for one account.
+
+        This internal method deliberately has no pagination because the
+        longitudinal profile must not change when the history page changes
+        page.  Callers publish only compact aggregates and never Raw Sensor
+        rows.
+        """
+        key = str(account_key or "").strip().casefold()
+        return [
+            _canonical_identity(self._serialize(record, profile), key, profile)
+            for record in self._records(
+                _account_boundary_keys(key, profile),
+                window,
+            )
+        ]
+
+    def account_completed_sessions(
+        self,
+        account_key: str,
+        profile: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Return all completed Sessions, including Sessions without Sensor rows."""
+        key = str(account_key or "").strip().casefold()
+        return [
+            _canonical_identity(self._serialize(record, profile), key, profile)
+            for record in self._records(
+                _account_boundary_keys(key, profile),
+                None,
+                require_timeline=False,
+            )
+        ]
+
     def admin_history(
         self,
         profiles: dict[str, dict[str, Any]],
@@ -382,16 +409,30 @@ class SessionHistoryService:
         offset: int = 0,
     ) -> dict[str, Any]:
         requested_key = str(account_key or "").strip().casefold()
-        keys = [requested_key] if requested_key else None
+        requested_profile = safe_account_profile(
+            requested_key,
+            dict(profiles.get(requested_key) or {}),
+            profiles,
+        )
+        keys = (
+            _account_boundary_keys(requested_key, requested_profile)
+            if requested_key
+            else None
+        )
         records = self._records(keys, window)
         sessions: list[dict[str, Any]] = []
         for record in records:
             key = str(record.get("username_key") or "").strip().casefold()
-            profile = dict(profiles.get(key) or {})
+            identity_key, profile = (
+                (requested_key, requested_profile)
+                if requested_key
+                else _profile_for_record(key, profiles)
+            )
             profile.setdefault("username", record.get("user"))
-            if not _matches_identity(profile, key, query):
+            if not _matches_identity(profile, identity_key, query):
                 continue
-            sessions.append(self._serialize(record, profile))
+            session = self._serialize(record, profile)
+            sessions.append(_canonical_identity(session, identity_key, profile))
         total = len(sessions)
         start = max(0, int(offset))
         size = max(1, min(1000, int(limit)))
@@ -428,12 +469,26 @@ class SessionHistoryService:
         the API boundary.
         """
         requested_key = str(account_key or "").strip().casefold()
-        keys = [requested_key] if requested_key else None
+        requested_profile = safe_account_profile(
+            requested_key,
+            dict(profiles.get(requested_key) or {}),
+            profiles,
+        )
+        keys = (
+            _account_boundary_keys(requested_key, requested_profile)
+            if requested_key
+            else None
+        )
         records = self._records(keys, None, session_id=session_id)
         if not records:
             return None
         record = records[0]
         key = str(record.get("username_key") or "").strip().casefold()
-        profile = dict(profiles.get(key) or {})
+        identity_key, profile = (
+            (requested_key, requested_profile)
+            if requested_key
+            else _profile_for_record(key, profiles)
+        )
         profile.setdefault("username", record.get("user"))
-        return self._serialize(record, profile)
+        session = self._serialize(record, profile)
+        return _canonical_identity(session, identity_key, profile)

@@ -22,6 +22,9 @@ SLEEP_EVIDENCE_VERSION = (
     "zeep-sleep-state-evidence-v3.7-complete-occupied-epochs"
 )
 ZEEP_SLEEP_BASELINE_VERSION = "zeep-sleep-state-baseline-v1.8-sep1-cutover"
+PERSONAL_BEHAVIOUR_BASELINE_VERSION = (
+    "zeep-personal-behaviour-baseline-v1.1-formula-target-specific"
+)
 ZEEP_SLEEP_TRANSITION_POLICY_VERSION = (
     "zeep-semimarkov-30s-v1.18-scoreable-continuity"
 )

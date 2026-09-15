@@ -14,11 +14,14 @@ from sleep_system_policy import (
 from zeep_pod.sessions.history import (
     apply_session_availability,
     session_availability_by_account,
+    users_ordered_by_latest_session,
 )
 from zeep_pod.sessions.history_service import (
     SessionHistoryService,
     resolve_history_window,
+    safe_account_profile,
 )
+from zeep_pod.sessions.score_summary import history_summary
 
 
 class SessionAvailabilityTests(unittest.TestCase):
@@ -30,6 +33,37 @@ class SessionAvailabilityTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
+
+    def test_recovery_average_never_mixes_nap_targets(self) -> None:
+        def nap(session_id: str, target_s: int, score: int) -> dict:
+            key = "nap_30" if target_s == 1_800 else "nap_90"
+            return {
+                "session_id": session_id,
+                "account_key": "person@example.test",
+                "ended_at_utc": "2026-09-05T06:30:00+00:00",
+                "rest_mode": "nap_recovery",
+                "target_duration_s": target_s,
+                "sleep_quality": {
+                    "available": True,
+                    "score": score,
+                    "quality_type": "rest_goal",
+                    "score_title": "Recovery Score",
+                    "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
+                    "duration_target": {"key": key, "seconds": target_s},
+                },
+            }
+
+        same_target = history_summary([
+            nap("nap-a", 1_800, 80),
+            nap("nap-b", 1_800, 90),
+        ])
+        mixed_targets = history_summary([
+            nap("nap-a", 1_800, 80),
+            nap("nap-c", 5_400, 70),
+        ])
+
+        self.assertEqual(same_target["average_recovery_score"], 85.0)
+        self.assertIsNone(mixed_targets["average_recovery_score"])
 
     def insert_session(
         self,
@@ -109,10 +143,182 @@ class SessionAvailabilityTests(unittest.TestCase):
         self.assertEqual(result["lifetime_sessions"], 2)
         self.assertEqual(result["archived_sessions"], 1)
         self.assertEqual(result["sessions_without_data"], 1)
+        self.assertEqual(result["current_sessions_without_data"], 1)
+        self.assertEqual(result["completed_sessions"], 3)
+        self.assertEqual(result["available_usage_sessions"], 2)
         self.assertEqual(
             result["last_available_session_utc"],
             "2026-09-01T10:00:00+00:00",
         )
+        self.assertEqual(
+            result["last_available_usage_session_utc"],
+            "2026-09-02T10:00:00+00:00",
+        )
+
+        service = SessionHistoryService(
+            self.database,
+            history_start_utc="2026-09-01T00:00:00+00:00",
+            report_version="report-v1",
+            release_quality=lambda _summary, quality: quality or {},
+            health_reference=lambda _profile: {},
+        )
+        completed = service.account_completed_sessions(
+            account,
+            {"email": account},
+        )
+
+        self.assertEqual(
+            [item["session_id"] for item in completed],
+            ["current-empty", "current-data"],
+        )
+        self.assertEqual(completed[0]["sample_count"], 0)
+        self.assertEqual(completed[1]["sample_count"], 1)
+
+    def test_account_history_includes_legacy_keys_but_publishes_canonical_key(
+        self,
+    ) -> None:
+        canonical = "person@example.test"
+        legacy = "old-display-name"
+        self.insert_session(
+            "legacy-session",
+            legacy,
+            "2026-09-02T10:00:00+00:00",
+            with_timeline=True,
+        )
+        service = SessionHistoryService(
+            self.database,
+            history_start_utc="2026-09-01T00:00:00+00:00",
+            report_version="report-v1",
+            release_quality=lambda _summary, quality: quality or {},
+            health_reference=lambda _profile: {},
+        )
+        profile = {
+            "email": canonical,
+            "display_name": "Person",
+            "legacy_account_keys": [legacy],
+        }
+
+        profiles = {canonical: profile}
+        safe_profile = safe_account_profile(canonical, profile, profiles)
+        sessions = service.account_completed_sessions(canonical, safe_profile)
+        detail = service.session_by_id(
+            "legacy-session",
+            profiles,
+            account_key=canonical,
+        )
+
+        self.assertEqual([item["session_id"] for item in sessions], ["legacy-session"])
+        self.assertEqual(sessions[0]["account_key"], canonical)
+        self.assertIsNotNone(detail)
+        self.assertEqual(detail["account_key"], canonical)
+
+    def test_legacy_alias_collision_never_crosses_account_history(self) -> None:
+        canonical = "person@example.test"
+        collision = "other@example.test"
+        self.insert_session(
+            "other-session",
+            collision,
+            "2026-09-02T10:00:00+00:00",
+            with_timeline=True,
+        )
+        service = SessionHistoryService(
+            self.database,
+            history_start_utc="2026-09-01T00:00:00+00:00",
+            report_version="report-v1",
+            release_quality=lambda _summary, quality: quality or {},
+            health_reference=lambda _profile: {},
+        )
+        profile = {
+            "email": canonical,
+            "zeep_public_id": "public-person",
+            "legacy_account_keys": [collision],
+        }
+        profiles = {
+            canonical: profile,
+            collision: {
+                "email": collision,
+                "zeep_public_id": "public-other",
+            },
+        }
+
+        safe_profile = safe_account_profile(canonical, profile, profiles)
+        sessions = service.account_completed_sessions(canonical, safe_profile)
+        detail = service.session_by_id(
+            "other-session",
+            profiles,
+            account_key=canonical,
+        )
+
+        self.assertEqual(safe_profile["verified_legacy_account_keys"], [])
+        self.assertEqual(sessions, [])
+        self.assertIsNone(detail)
+
+    def test_duplicate_orphan_alias_claim_fails_closed(self) -> None:
+        alias = "old-user"
+        self.insert_session(
+            "orphan-session",
+            alias,
+            "2026-09-02T10:00:00+00:00",
+            with_timeline=True,
+        )
+        profiles = {
+            "first@example.test": {
+                "email": "first@example.test",
+                "legacy_account_keys": [alias],
+            },
+            "second@example.test": {
+                "email": "second@example.test",
+                "legacy_account_keys": [alias],
+            },
+        }
+        service = SessionHistoryService(
+            self.database,
+            history_start_utc="2026-09-01T00:00:00+00:00",
+            report_version="report-v1",
+            release_quality=lambda _summary, quality: quality or {},
+            health_reference=lambda _profile: {},
+        )
+
+        for key, profile in profiles.items():
+            safe_profile = safe_account_profile(key, profile, profiles)
+            self.assertEqual(safe_profile["verified_legacy_account_keys"], [])
+            self.assertEqual(
+                service.account_completed_sessions(key, safe_profile),
+                [],
+            )
+
+    def test_admin_all_users_canonicalizes_verified_legacy_rows(self) -> None:
+        canonical = "person@example.test"
+        legacy = "old-person"
+        self.insert_session(
+            "legacy-session",
+            legacy,
+            "2026-09-02T10:00:00+00:00",
+            with_timeline=True,
+        )
+        profiles = {
+            canonical: {
+                "email": canonical,
+                "display_name": "Person",
+                "legacy_account_keys": [legacy],
+            }
+        }
+        service = SessionHistoryService(
+            self.database,
+            history_start_utc="2026-09-01T00:00:00+00:00",
+            report_version="report-v1",
+            release_quality=lambda _summary, quality: quality or {},
+            health_reference=lambda _profile: {},
+        )
+
+        result = service.admin_history(profiles, window=None, query="person")
+        detail = service.session_by_id("legacy-session", profiles)
+
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["sessions"][0]["account_key"], canonical)
+        self.assertEqual(result["participants"][0]["account_key"], canonical)
+        self.assertIsNotNone(detail)
+        self.assertEqual(detail["account_key"], canonical)
 
     def test_profile_overlay_preserves_lifetime_context(self) -> None:
         profile = {"sessions": 9, "display_name": "Tester"}
@@ -123,7 +329,11 @@ class SessionAvailabilityTests(unittest.TestCase):
                 "lifetime_sessions": 4,
                 "archived_sessions": 2,
                 "sessions_without_data": 1,
+                "current_sessions_without_data": 1,
+                "completed_sessions": 5,
+                "available_usage_sessions": 3,
                 "last_available_session_utc": "2026-09-02T00:00:00+00:00",
+                "last_available_usage_session_utc": "2026-09-03T00:00:00+00:00",
                 "last_data_session_utc": "2026-09-02T00:00:00+00:00",
             },
         )
@@ -132,7 +342,115 @@ class SessionAvailabilityTests(unittest.TestCase):
         self.assertEqual(result["available_sessions"], 2)
         self.assertEqual(result["lifetime_sessions"], 4)
         self.assertEqual(result["archived_sessions"], 2)
+        self.assertEqual(result["completed_sessions"], 5)
+        self.assertEqual(result["available_usage_sessions"], 3)
         self.assertEqual(profile["sessions"], 9)
+
+    def test_user_selector_folds_verified_legacy_availability(self) -> None:
+        canonical = "person@example.test"
+        legacy = "old-person"
+        profiles = {
+            canonical: {
+                "account_key": canonical,
+                "email": canonical,
+                "legacy_account_keys": [legacy],
+            }
+        }
+        availability = {
+            legacy: {
+                "available_sessions": 1,
+                "lifetime_sessions": 1,
+                "sessions_without_data": 1,
+                "current_sessions_without_data": 1,
+                "last_available_usage_session_utc": (
+                    "2026-09-03T00:00:00+00:00"
+                ),
+            }
+        }
+
+        users = users_ordered_by_latest_session(
+            profiles,
+            availability_by_account=availability,
+        )
+
+        self.assertEqual(users[0]["available_sessions"], 1)
+        self.assertEqual(users[0]["available_usage_sessions"], 2)
+        self.assertEqual(users[0]["completed_sessions"], 2)
+        self.assertEqual(
+            users[0]["history_order_utc"],
+            "2026-09-03T00:00:00+00:00",
+        )
+
+    def test_mixed_case_session_key_remains_visible_and_is_normalized(self) -> None:
+        canonical = "person@example.test"
+        self.insert_session(
+            "mixed-case-session",
+            "Person@Example.Test",
+            "2026-09-05T06:00:00+00:00",
+            with_timeline=True,
+        )
+        profile = {"email": canonical, "account_key": canonical}
+        profiles = {canonical: profile}
+        service = SessionHistoryService(
+            self.database,
+            history_start_utc="2026-09-01T00:00:00+00:00",
+            report_version="report-v1",
+            release_quality=lambda _summary, quality: quality or {},
+            health_reference=lambda _profile: {},
+        )
+
+        sessions = service.account_sessions(canonical, profile)
+        detail = service.session_by_id(
+            "mixed-case-session",
+            profiles,
+            account_key=canonical,
+        )
+        availability = session_availability_by_account(
+            self.database.read_sessions,
+            "2026-09-01T00:00:00+00:00",
+        )
+
+        self.assertEqual(len(sessions), 1)
+        self.assertEqual(sessions[0]["account_key"], canonical)
+        self.assertIsNotNone(detail)
+        self.assertEqual(detail["account_key"], canonical)
+        self.assertEqual(availability[canonical]["available_sessions"], 1)
+
+        self.database.initialize()
+        rows = self.database.read_sessions(
+            "SELECT username_key FROM sessions WHERE session_id=?",
+            ("mixed-case-session",),
+        )
+        self.assertEqual(rows[0]["username_key"], canonical)
+
+    def test_user_selector_rejects_duplicate_legacy_alias_claim(self) -> None:
+        alias = "old-user"
+        profiles = {
+            "first@example.test": {
+                "account_key": "first@example.test",
+                "legacy_account_keys": [alias],
+            },
+            "second@example.test": {
+                "account_key": "second@example.test",
+                "legacy_account_keys": [alias],
+            },
+        }
+        availability = {
+            alias: {
+                "available_sessions": 1,
+                "lifetime_sessions": 1,
+            }
+        }
+
+        users = users_ordered_by_latest_session(
+            profiles,
+            availability_by_account=availability,
+        )
+
+        self.assertEqual(
+            [user["available_usage_sessions"] for user in users],
+            [0, 0],
+        )
 
     def test_local_day_window_is_converted_to_bangkok_utc(self) -> None:
         window = resolve_history_window(
@@ -166,12 +484,14 @@ class SessionAvailabilityTests(unittest.TestCase):
         )
         connection = sqlite3.connect(self.data_dir / "sessions.db")
         connection.execute(
-            "UPDATE sessions SET end_time=? WHERE session_id=?",
-            ("2026-09-05T00:30:00+00:00", "overnight"),
+            "UPDATE sessions SET end_time=?,rest_mode=?,target_duration_s=? "
+            "WHERE session_id=?",
+            ("2026-09-05T00:30:00+00:00", "sleep", 25_200, "overnight"),
         )
         connection.execute(
-            "UPDATE sessions SET end_time=? WHERE session_id=?",
-            ("2026-09-05T06:30:00+00:00", "nap"),
+            "UPDATE sessions SET end_time=?,rest_mode=?,target_duration_s=? "
+            "WHERE session_id=?",
+            ("2026-09-05T06:30:00+00:00", "nap_recovery", 1_800, "nap"),
         )
         for session_id, score, quality_type, title, formula in (
             (
@@ -201,6 +521,21 @@ class SessionAvailabilityTests(unittest.TestCase):
                         "score_title": title,
                         "formula_version": formula,
                         "level": "ดีมาก",
+                        **(
+                            {
+                                "duration_target": {
+                                    "key": "nap_30",
+                                    "seconds": 1_800,
+                                }
+                            }
+                            if quality_type == "rest_goal"
+                            else {
+                                "duration_target": {
+                                    "key": "overnight_7h",
+                                    "seconds": 25_200,
+                                }
+                            }
+                        ),
                     },
                 },
                 "session_report": {"version": "report-v1"},
@@ -250,12 +585,17 @@ class SessionAvailabilityTests(unittest.TestCase):
                 "account_key": "first@example.test",
                 "ended_at_utc": "2026-09-05T01:00:00+00:00",
                 "rest_mode": "sleep",
+                "target_duration_s": 25_200,
                 "sleep_quality": {
                     "available": True,
                     "score": 88,
                     "quality_type": "sleep",
                     "score_title": "Sleep Score",
                     "formula_version": SLEEP_SCORE_FORMULA_VERSION,
+                    "duration_target": {
+                        "key": "overnight_7h",
+                        "seconds": 25_200,
+                    },
                 },
             },
             {
@@ -263,12 +603,17 @@ class SessionAvailabilityTests(unittest.TestCase):
                 "account_key": "second@example.test",
                 "ended_at_utc": "2026-09-05T02:00:00+00:00",
                 "rest_mode": "nap_recovery",
+                "target_duration_s": 1_800,
                 "sleep_quality": {
                     "available": True,
                     "score": 81,
                     "quality_type": "rest_goal",
                     "score_title": "Recovery Score",
                     "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
+                    "duration_target": {
+                        "key": "nap_30",
+                        "seconds": 1_800,
+                    },
                 },
             },
             {
@@ -308,6 +653,38 @@ class SessionAvailabilityTests(unittest.TestCase):
         self.assertIsNone(conflicting["score"])
         self.assertEqual(conflicting["score_type"], "recovery_score")
         self.assertEqual(conflicting["score_title"], "Recovery Score")
+
+    def test_history_average_is_hidden_when_score_formulas_differ(self) -> None:
+        sessions = [
+            {"account_key": "first@example.test"},
+            {"account_key": "second@example.test"},
+        ]
+        canonical = [
+            {
+                "score": {
+                    "available": True,
+                    "type": "sleep_score",
+                    "value": 84,
+                    "formula_version": "sleep-formula-v2",
+                }
+            },
+            {
+                "score": {
+                    "available": True,
+                    "type": "sleep_score",
+                    "value": 92,
+                    "formula_version": "sleep-formula-v1",
+                }
+            },
+        ]
+
+        summary = SessionHistoryService._summary(
+            sessions,
+            canonical_results=canonical,
+        )
+
+        self.assertEqual(summary["sleep_score_count"], 2)
+        self.assertIsNone(summary["average_sleep_score"])
 
     def test_name_filter_is_admin_presentation_only(self) -> None:
         account = "search@example.test"

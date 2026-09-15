@@ -15,12 +15,14 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Response
 
 from api_models import QrLoginPollCommand
+from zeep_pod.identity.lifecycle_lock import synchronized_by
 from zeep_pod.identity.zeep_account import identity_from_auth_data
 
 # ZEEP issues a 180 s QR plus a further 60 s window to collect tokens after the
@@ -52,10 +54,10 @@ class QrLoginRegistry:
         self._clock = clock
         self._grace = grace_seconds
         self._lock = threading.Lock()
-        self._tickets: Dict[str, QrTicket] = {}
+        self._tickets: dict[str, QrTicket] = {}
 
     def remember(
-        self, login_id: str, poll_secret: str, expires_in: Optional[float] = None
+        self, login_id: str, poll_secret: str, expires_in: float | None = None
     ) -> QrTicket:
         """Store a freshly issued ticket and return it."""
         if not login_id or not poll_secret:
@@ -72,7 +74,7 @@ class QrLoginRegistry:
             self._tickets[login_id] = ticket
         return ticket
 
-    def secret_for(self, login_id: str) -> Optional[str]:
+    def secret_for(self, login_id: str) -> str | None:
         """Return the stored secret, or ``None`` when this pod holds no ticket.
 
         ``None`` covers both a loginId this pod never issued and one whose
@@ -106,11 +108,12 @@ class QrLoginRegistry:
 def create_qr_login_router(
     registry: QrLoginRegistry,
     *,
-    zeep_request: Callable[..., Dict[str, Any]],
+    zeep_request: Callable[..., dict[str, Any]],
     zeep_offline: type[BaseException],
-    complete_login: Callable[..., Dict[str, Any]],
+    complete_login: Callable[..., dict[str, Any]],
     pod_occupied: Callable[[], bool],
     log_event: Callable[..., None],
+    lifecycle_lock: Any,
 ) -> APIRouter:
     """QR login routes: the Pi runs the ZEEP handshake on the tablet's behalf.
 
@@ -157,6 +160,7 @@ def create_qr_login_router(
         }
 
     @router.post("/api/auth/qr/poll")
+    @synchronized_by(lifecycle_lock)
     def auth_qr_poll(cmd: QrLoginPollCommand, response: Response):
         """Forward one poll to ZEEP, adding the pollSecret this pod held back.
 

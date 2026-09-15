@@ -519,8 +519,10 @@ Score จากเวลาพักจริงและหลักฐาน S
 `implausible_outlier` และไม่เผยแพร่คะแนน
 
 ข้อมูลเดิมที่ไม่มี target ไม่ถูกเดา: 10–45 นาทีแสดง `TARGET_UNKNOWN`, 45–120
-นาทีแสดง `TARGET_UNKNOWN/extended`; ทั้งสองกรณีไม่เผยแพร่ Recovery Score และ
-เก็บธงให้ Admin ตรวจ มากกว่า 120 นาทีถือเป็น outlier ที่ปิดคะแนนเช่นกัน
+นาทีแสดง `TARGET_UNKNOWN/extended` หากมี Recovery Score รุ่นที่รองรับ ระบบคง
+คะแนนเดิมพร้อมธง Admin review โดยไม่คำนวณใหม่และไม่นำไปปนกับ Baseline/แนวโน้ม
+ของ Nap 30 หรือ 90 นาที หากไม่มีคะแนนที่ตรวจสอบรุ่นได้จึงแสดงว่าไม่มีคะแนนตามจริง
+ส่วน Session มากกว่า 120 นาทีถือเป็น outlier ที่ปิดคะแนน
 
 คำว่า 7 ชั่วโมงในระบบหมายถึง AASM/SRS adult overnight recommendation threshold
 ไม่ใช่ “ZEEP target 7.5 ชั่วโมง” และไม่ใช้ลงโทษการงีบหรือการพักจากเข้าเวร

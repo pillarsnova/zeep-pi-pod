@@ -24,6 +24,11 @@ Raw BCG, Sensor Timeline หรือคำตอบ Profile ผู้ใช้
 - `restore_summary` อธิบายคะแนนเดิม ไม่สร้างคะแนนที่สาม
 - User เห็นเฉพาะ Session ของอีเมลตนเองโดยไม่รับชื่อผู้ใช้ใน path
 - Admin ที่ Login แล้วเห็นหลายบัญชีและกรองด้วยอีเมลได้
+- ภาพรวมสะสมรายบัญชีอยู่ที่ `GET /api/v1/usage-sessions/longitudinal`
+  และแยก Overnight/Nap ตลอดสาย
+- Context สำหรับ advisory AI อยู่ที่
+  `GET /api/v1/usage-sessions/longitudinal/ai-context` โดยตัดตัวระบุโดยตรงออก
+  แต่ยังเป็นข้อมูล Wellness ส่วนบุคคล ไม่ใช่ข้อมูลนิรนาม
 - Session ที่ปิดแล้วถือว่า closed; read adapter ไม่คำนวณคะแนนใหม่ ส่วนคะแนน
   อาจปรับย้อนหลังได้เฉพาะแบบมีเวอร์ชันและ Audit trail โดย Raw ไม่เปลี่ยน
 
@@ -32,7 +37,12 @@ Raw BCG, Sensor Timeline หรือคำตอบ Profile ผู้ใช้
 | ผู้เรียก | วิธี Authentication | ขอบเขต |
 |---|---|---|
 | แอป/หน้า User | Cookie `zeep_auth` | เฉพาะ `principal.account_key` ของตนเอง |
-| หน้า Admin | Cookie ผู้ดูแล | ทุกบัญชี; ใช้ `account_key`/`query` ได้ |
+| หน้า Admin | Cookie ผู้ดูแล | ทุกบัญชี; รายการใช้ filter เดิม ส่วนภาพรวมใช้ `X-Zeep-Account-Key` |
+
+Cookie เป็น bearer credential: Production traffic ต้องอยู่บน HTTPS และตั้ง
+`AUTH_SECURE_COOKIE=true` หรือวิ่งภายใน Tailscale encrypted overlay เท่านั้น
+HTTP ตรงบน Pod LAN ใช้ได้เฉพาะเครือข่ายทดสอบที่ควบคุมได้ ห้าม expose port 8000
+สู่ public internet
 
 Usage API v1 **ปฏิเสธ `X-API-Token` รุ่นเดิมโดยตั้งใจ** เพราะเป็น credential
 สิทธิ์กว้างที่ใช้กับระบบควบคุมและไม่เหมาะกับผลสุขภาพรายบุคคล รุ่นนี้รองรับเฉพาะ
@@ -174,6 +184,23 @@ Query parameters:
 หน้าถัดไปใช้ `offset + returned` เมื่อ `has_more=true` ห้ามเดาจากจำนวน
 รายการอย่างเดียว เพราะจำนวนจริงอาจเปลี่ยนเมื่อ Session ใหม่ปิด
 
+## 1.1 ภาพรวมสะสมรายผู้ใช้
+
+`GET /api/v1/usage-sessions/longitudinal`
+
+User อ่านบัญชีที่ Login อยู่โดยไม่ส่ง email ส่วน Admin ต้องเลือกบัญชีที่แน่นอนด้วย
+header `X-Zeep-Account-Key` เพื่อไม่ให้อีเมลปรากฏใน URL/access log Contract นี้รวม
+Session ที่จบแล้วทั้งหมดตั้งแต่ Product
+cutover รวม Session ที่ไม่มี Sensor data ไว้ใน usage ledger แต่แยกจำนวนออกมาและ
+ไม่ใช้ Session เหล่านั้นสร้างคะแนนหรือ Baseline รายละเอียด field และ AI guardrails
+ดูที่ [ZEEP User Learning Profile v1](zeep-user-learning-profile-v1.md)
+
+`GET /api/v1/usage-sessions/longitudinal/ai-context` ใช้ authorization เดียวกัน
+แต่คืน positive allowlist ที่ตัด direct identifiers, Session ID, exact Session
+timestamp, demographic value และคำตอบแบบสอบถามออก ข้อมูลยังเชื่อมโยงกับเจ้าของ
+บัญชีได้ จึงถือเป็น Personal Wellness Data และห้ามส่งไป AI ภายนอกจนกว่าจะมี
+purpose-specific consent และนโยบาย processor/retention ที่อนุมัติแล้ว
+
 ## 2. ผลสรุป Session
 
 `GET /api/v1/usage-sessions/{session_id}/summary`
@@ -306,7 +333,8 @@ Nap & Refresh
 
 1. Login เป็น User A แล้วเรียกรายการ ต้องไม่พบ User B
 2. ใช้ Session ID ของ User B ผ่าน User A ต้องได้ `404`
-3. Login Admin จึงใช้ `account_key`/`query` ได้; `X-API-Token` ต้องได้ `403`
+3. Login Admin จึงใช้ list filter `account_key`/`query` ได้; ภาพรวมรายคนใช้
+   `X-Zeep-Account-Key`; `X-API-Token` ต้องได้ `403`
 4. ตรวจว่า response ไม่มี `samples`, `bcg_base64`, token หรือ Profile answers
    รวมทั้งรูปแบบ camelCase เช่น `rawSamples`, `bcgBase64`, `accessToken`,
    `xApiKey`, `clientApiKey` หรือ `privateKey`

@@ -131,10 +131,10 @@ token หรือคำตอบแบบสอบถาม และไม่�
 ```
 
 หมายเหตุด้าน provenance: ตัวอย่างข้างต้นใช้ `mode_group: sleep` สำหรับ
-Overnight เท่านั้น ใน production ปัจจุบัน Nap ใช้ behavior/environment
-จาก Nap แต่ HR/Movement อ้าง `qualified_overnight_reference`; ต้องส่ง scope
-จริงใน payload และห้ามเรียกว่า Nap physiology baseline จนกว่าจะมีการแยก
-Baseline ของ Nap 30/90 นาทีใน schema และ implementation
+Overnight เท่านั้น Behavior/score Baseline ของ Nap แยก `nap_30` และ `nap_90`
+ใน implementation แล้ว แต่ HR/Movement ยังอ้าง
+`qualified_overnight_reference`; ต้องส่ง scope จริงใน payload และห้ามเรียกว่า
+Nap physiology baseline จนกว่าจะมีการ validate reference แยกตามเป้าหมาย
 
 ## 6. ข้อมูลที่มีแล้วสำหรับ Replay/Model Development
 

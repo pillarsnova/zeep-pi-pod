@@ -421,6 +421,7 @@ class UsageHistorySummary(ContractModel):
     session_count: int = Field(ge=0)
     sleep_score_count: int = Field(ge=0)
     recovery_score_count: int = Field(ge=0)
+    without_score_count: int = Field(ge=0)
     awaiting_score_count: int = Field(ge=0)
     average_sleep_score: float | None = Field(..., ge=0, le=100)
     average_recovery_score: float | None = Field(..., ge=0, le=100)

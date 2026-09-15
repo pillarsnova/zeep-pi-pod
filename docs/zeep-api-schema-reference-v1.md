@@ -42,10 +42,24 @@ Base path คือ `/api/v1/usage-sessions` และทุก endpoint ใช�
 | Method และ path | ใช้สำหรับ | `kind` ใน envelope |
 |---|---|---|
 | `GET /api/v1/usage-sessions` | รายการประวัติแบบแบ่งหน้า | `usage_session_list` |
+| `GET /api/v1/usage-sessions/longitudinal` | ภาพรวมสะสมของผู้ใช้ แยก Overnight/Nap | `user_learning_profile` |
+| `GET /api/v1/usage-sessions/longitudinal/ai-context` | Context แบบ allowlist สำหรับ advisory AI | `user_ai_context` |
 | `GET /api/v1/usage-sessions/{session_id}/summary` | สรุปหนึ่ง Session สำหรับหน้าแรก | `usage_session_summary` |
 | `GET /api/v1/usage-sessions/{session_id}/presentation` | ลำดับผลแบบไม่ซ้ำสำหรับ User/App | `usage_session_presentation` |
 | `GET /api/v1/usage-sessions/{session_id}/development` | QA aggregate สำหรับ Admin เท่านั้น | `usage_session_development` |
 | `GET /api/v1/usage-sessions/{session_id}` | รายงานหนึ่ง Session แบบละเอียดแต่ไม่มี raw | `usage_session_detail` |
+
+สำหรับสอง endpoint `longitudinal` ผู้ใช้ไม่ส่ง account selector ส่วน Admin ส่ง
+`X-Zeep-Account-Key: normalized@example.com` ใน header เท่านั้น ไม่ใช่ query string
+เพื่อไม่ให้อีเมลถูกบันทึกใน URL access log
+
+รายละเอียดสัญญาภาพรวมสะสมและข้อจำกัดของ AI อยู่ที่
+[ZEEP User Learning Profile v1](zeep-user-learning-profile-v1.md) โดย User
+อ่านได้เฉพาะบัญชีตนเอง ส่วน Admin ต้องระบุบัญชีด้วย header
+`X-Zeep-Account-Key` AI Context ใช้สิทธิ์เดียวกันแต่ตัด direct identifiers,
+Session ID, exact Session timestamp, demographic value และคำตอบแบบสอบถามออก
+ข้อมูลยังเป็น linkable Personal Wellness Data ไม่ใช่ anonymous data และยังไม่
+อนุญาต external AI egress ในรุ่นนี้
 
 `session_id` เป็น path string ความยาว 1–160 ตัวอักษร และต้อง URL-encode
 เมื่อมีอักขระพิเศษ เป็น Immutable Pi external Session ID ไม่ใช่ username
@@ -160,7 +174,7 @@ Session เพื่อให้เป็น payload ที่ตรวจสอ
 |---|---|---|---|
 | `schema` | `string` | ไม่ได้ | ต้องเป็น `zeep.api.response` |
 | `api_version` | `string` | ไม่ได้ | ปัจจุบัน `1.0` |
-| `kind` | `enum<string>` | ไม่ได้ | `usage_session_list`, `usage_session_summary`, `usage_session_detail`, `usage_session_presentation`, `usage_session_development` |
+| `kind` | `enum<string>` | ไม่ได้ | `usage_session_list`, `user_learning_profile`, `user_ai_context`, `usage_session_summary`, `usage_session_detail`, `usage_session_presentation`, `usage_session_development` |
 | `generated_at` | `string` (RFC 3339 timestamp) | ไม่ได้ | เวลา server สร้าง response; มี timezone/offset |
 | `request_id` | `string` (UUID) | ไม่ได้ | ใช้อ้างอิงใน log/support ticket; ไม่ใช่ Session ID |
 | `data` | `object` | ไม่ได้ | รูปตาม `kind` |
@@ -202,7 +216,7 @@ Client ต้องตรวจ `schema`, `api_version`, `kind` และ `data.
 | `contract_version` | `string` | ไม่ได้ | `zeep.usage-session.v1` |
 | `history_name` | `string` | ไม่ได้ | `usage_history` |
 | `items` | `array<SessionItem>` | ไม่ได้ | อาจว่าง; เรียงล่าสุดก่อนตาม history service |
-| `summary` | `UsageHistorySummary` | ไม่ได้ | aggregate 7 field ตาม schema ได้แก่จำนวนคน/Session/คะแนนแต่ละประเภท/คะแนนที่ยังไม่พร้อม และค่าเฉลี่ยแยกประเภท |
+| `summary` | `UsageHistorySummary` | ไม่ได้ | aggregate จำนวนคน/Session/คะแนนแต่ละประเภท/Session ที่ยังสรุปคะแนนไม่ได้ และค่าเฉลี่ยแยกประเภท; ค่าเฉลี่ยเป็น `null` เมื่อพบคะแนนต่าง formula version หรือไม่มี provenance; `awaiting_score_count` คงเป็น alias เดิมของ `without_score_count` ชั่วคราว |
 | `pagination` | `Pagination` | ไม่ได้ | ข้อมูลแบ่งหน้า |
 | `range` | `UsageHistoryRange` | nullable | ช่วงเวลาที่ service resolve: `start_utc`, `end_utc`, `start_local`, `end_local`, `timezone`, `day_assignment=session_end_local_date`; field อื่นไม่อนุญาต |
 | `history_start_utc` | `string` (RFC 3339) | ไม่ได้ | จุดเริ่มประวัติที่ค้นได้ |

@@ -130,6 +130,23 @@ class SessionCheckpointStoreTests(unittest.TestCase):
         self.assertIsNone(store.load())
         self.assertEqual(errors, ["unsupported checkpoint version"])
 
+    def test_account_erasure_discards_only_matching_checkpoint(self) -> None:
+        store = SessionCheckpointStore(self.path, bed_start_seconds=20)
+        store.save(self.active_session())
+
+        self.assertFalse(store.discard_accounts({"another@example.test"}))
+        self.assertTrue(self.path.exists())
+        self.assertTrue(store.discard_accounts({"PERSON@example.test"}))
+        self.assertFalse(self.path.exists())
+
+    def test_account_erasure_fails_closed_on_unverifiable_checkpoint(self) -> None:
+        self.path.write_text("not-json", encoding="utf-8")
+        store = SessionCheckpointStore(self.path, bed_start_seconds=20)
+
+        with self.assertRaisesRegex(ValueError, "cannot verify"):
+            store.discard_accounts({"person@example.test"})
+        self.assertTrue(self.path.exists())
+
 
 class SessionVitalGateTests(unittest.TestCase):
     @staticmethod

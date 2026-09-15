@@ -28,6 +28,17 @@ def csrf(client: TestClient) -> dict[str, str]:
     return {"X-CSRF-Token": client.cookies.get("zeep_csrf") or ""}
 
 
+def route_endpoint(path: str):
+    """Find direct and lazily included FastAPI routes."""
+    routes = list(pod_app.app.routes)
+    routes.extend(
+        child
+        for route in pod_app.app.routes
+        for child in getattr(getattr(route, "original_router", None), "routes", [])
+    )
+    return next(route.endpoint for route in routes if getattr(route, "path", None) == path)
+
+
 class RbacApiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -47,6 +58,151 @@ class RbacApiTests(unittest.TestCase):
         # and commands shown behind the Admin-only Control Debug overlay.
         self.assertEqual(client.get("/control-debug").status_code, 200)
         self.assertEqual(client.get("/api/state").status_code, 401)
+
+    def test_session_start_and_account_erasure_share_one_lock(self) -> None:
+        self.assertIs(
+            pod_app._complete_occupant_login.__serialized_lock__,
+            pod_app.session_lock,
+        )
+        self.assertIs(
+            pod_app.session_login.__serialized_lock__,
+            pod_app.session_lock,
+        )
+        self.assertIs(
+            route_endpoint("/api/auth/login").__serialized_lock__,
+            pod_app.session_lock,
+        )
+        self.assertIs(
+            route_endpoint("/api/auth/qr/poll").__serialized_lock__,
+            pod_app.session_lock,
+        )
+        self.assertIs(
+            pod_app._finalize_active_session.__serialized_lock__,
+            pod_app.session_lock,
+        )
+        self.assertIs(
+            pod_app._sweep_ingest_outbox.__serialized_lock__,
+            pod_app.ingest_outbox_lock,
+        )
+        share = route_endpoint("/api/session/report-share")
+        self.assertIs(share.__serialized_lock__, pod_app.session_lock)
+        profile_complete = route_endpoint("/api/auth/profile/complete")
+        self.assertIs(
+            profile_complete.__serialized_lock__,
+            pod_app.session_lock,
+        )
+        erasure = route_endpoint("/api/users/{username}")
+        self.assertIs(erasure.__serialized_lock__, pod_app.session_lock)
+
+    def test_longitudinal_openapi_declares_browser_cookie_security(self) -> None:
+        document = pod_app.app.openapi()
+        cookie_schemes = {
+            name
+            for name, schema in document["components"]["securitySchemes"].items()
+            if schema.get("in") == "cookie"
+            and schema.get("name") == pod_app.COOKIE_NAME
+        }
+        self.assertTrue(cookie_schemes)
+        for path in (
+            "/api/v1/usage-sessions/longitudinal",
+            "/api/v1/usage-sessions/longitudinal/ai-context",
+        ):
+            security = document["paths"][path]["get"].get("security") or []
+            self.assertTrue(
+                any(cookie_schemes.intersection(requirement) for requirement in security),
+                path,
+            )
+
+    def test_profile_migration_unions_legacy_aliases_on_email_collision(self) -> None:
+        profiles = {
+            "old-login": {
+                "email": "person@example.com",
+                "legacy_account_keys": ["older-login"],
+                "sessions": 2,
+            },
+            "person@example.com": {
+                "email": "person@example.com",
+                "legacy_account_keys": ["prior-email@example.com"],
+                "sessions": 3,
+            },
+        }
+        saved = {}
+
+        with (
+            patch.object(pod_app, "_load_profiles", return_value=profiles),
+            patch.object(
+                pod_app,
+                "_save_profiles",
+                side_effect=lambda value: saved.update(copy.deepcopy(value)),
+            ),
+        ):
+            mapping = pod_app._migrate_profiles_to_email_keys()
+
+        self.assertEqual(mapping["old-login"], "person@example.com")
+        merged = saved["person@example.com"]
+        self.assertEqual(merged["sessions"], 5)
+        self.assertEqual(
+            merged["legacy_account_keys"],
+            ["old-login", "older-login", "prior-email@example.com"],
+        )
+
+    def test_profile_migration_never_assigns_a_shared_alias_last_writer_wins(
+        self,
+    ) -> None:
+        profiles = {
+            "first-login": {
+                "email": "first@example.com",
+                "zeep_public_id": "public-first",
+                "legacy_account_keys": ["shared-login"],
+            },
+            "second-login": {
+                "email": "second@example.com",
+                "zeep_public_id": "public-second",
+                "legacy_account_keys": ["shared-login"],
+            },
+        }
+
+        with (
+            patch.object(pod_app, "_load_profiles", return_value=profiles),
+            patch.object(pod_app, "_save_profiles"),
+        ):
+            mapping = pod_app._migrate_profiles_to_email_keys()
+
+        self.assertEqual(mapping["first-login"], "first@example.com")
+        self.assertEqual(mapping["second-login"], "second@example.com")
+        self.assertNotIn("shared-login", mapping)
+
+    def test_profile_migration_rejects_conflicting_immutable_public_ids(
+        self,
+    ) -> None:
+        profiles = {
+            "first-login": {
+                "email": "person@example.com",
+                "zeep_public_id": "public-first",
+            },
+            "second-login": {
+                "email": "person@example.com",
+                "zeep_public_id": "public-second",
+            },
+        }
+
+        with (
+            patch.object(pod_app, "_load_profiles", return_value=profiles),
+            patch.object(pod_app, "_save_profiles") as save,
+        ):
+            with self.assertRaises(RuntimeError):
+                pod_app._migrate_profiles_to_email_keys()
+
+        save.assert_not_called()
+
+    def test_stale_session_object_cannot_recreate_restart_checkpoint(self) -> None:
+        stale = {"phase": "waiting_bed", "record": {"session_id": "erased"}}
+        with (
+            patch.object(pod_app, "_active_session", None),
+            patch.object(pod_app.session_checkpoint_store, "save") as save,
+        ):
+            self.assertEqual(pod_app._save_active_session_checkpoint(stale), {})
+        save.assert_not_called()
 
     def test_aroma_and_steam_outputs_use_a_five_second_pulse(self) -> None:
         """A tap must hold the real dispenser output HIGH for five seconds."""

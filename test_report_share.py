@@ -35,6 +35,7 @@ def finished_record(**overrides) -> dict:
     record = {
         "session_id": "session-1",
         "identity_subject": SUBJECT,
+        "username_key": "sleeper@example.test",
         "username": "sleeper@example.test",
         "duration_s": 21_600.0,
         "ended_at_utc": "2026-09-10T00:10:00+00:00",
@@ -104,6 +105,21 @@ class RegistryTests(unittest.TestCase):
         self.assertIsNone(
             asyncio.run(self.registry.await_notice(SUBJECT, timeout=5.0))
         )
+
+    def test_discard_account_revokes_only_that_accounts_ticket(self) -> None:
+        ticket = self.fulfilled()
+        other_subject = "zeep:other"
+        self.registry.reserve(
+            other_subject,
+            account_key="other@example.test",
+        )
+
+        removed = self.registry.discard_account("SLEEPER@example.test")
+
+        self.assertEqual(removed, 1)
+        self.assertIsNone(self.registry.claim(ticket))
+        self.assertEqual(len(self.registry), 1)
+        self.assertEqual(self.registry.discard_account("sleeper@example.test"), 0)
 
     def test_await_notice_returns_a_reservation_once_it_is_fulfilled(self) -> None:
         self.registry.reserve(SUBJECT)

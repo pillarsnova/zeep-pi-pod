@@ -189,6 +189,23 @@ class PendingRegistryTests(unittest.TestCase):
     def test_an_unknown_ticket_is_refused(self) -> None:
         self.assertIsNone(PendingProfileRegistry().consume("never-issued"))
 
+    def test_account_erasure_discards_only_matching_pending_login(self) -> None:
+        registry = PendingProfileRegistry()
+        removed_ticket = registry.remember(
+            {"username": "one", "email": "one@example.test"},
+            {},
+            (),
+        )
+        kept_ticket = registry.remember(
+            {"username": "two", "email": "two@example.test"},
+            {},
+            (),
+        )
+
+        self.assertEqual(registry.discard_account("ONE@example.test"), 1)
+        self.assertIsNone(registry.consume(removed_ticket))
+        self.assertIsNotNone(registry.consume(kept_ticket))
+
 
 class FakeZeep:
     """Stand in for the account API, recording what the pod wrote."""

@@ -58,6 +58,9 @@ def create_api_v1_router(
                 "maintenance": "/api/v1/admin/maintenance",
                 "adaptive_learning_live": "/api/v1/admin/adaptive/live",
                 "usage_sessions": "/api/v1/usage-sessions",
+                "user_ai_context": (
+                    "/api/v1/usage-sessions/longitudinal/ai-context"
+                ),
             },
             "mutation_policy": {
                 "idempotent_set_commands_preferred": True,

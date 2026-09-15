@@ -26,6 +26,14 @@ from zeep_pod.sessions.usage_response_models import (
     UsageSessionSummary,
     UsageSessionSummaryResponse,
 )
+from zeep_pod.sessions.user_ai_response_models import (
+    UserAiContext,
+    UserAiContextResponse,
+)
+from zeep_pod.sessions.user_profile_response_models import (
+    UserLearningProfile,
+    UserLearningProfileResponse,
+)
 
 __all__ = [
     "ApiResponseBase",
@@ -44,4 +52,8 @@ __all__ = [
     "UsageSessionPresentationResponse",
     "UsageSessionSummary",
     "UsageSessionSummaryResponse",
+    "UserAiContext",
+    "UserAiContextResponse",
+    "UserLearningProfile",
+    "UserLearningProfileResponse",
 ]

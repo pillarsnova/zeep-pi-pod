@@ -668,7 +668,7 @@ async function deleteUser(btn){
   if (sessionState.active && sessionState.username === user){
     toast('ผู้ใช้นี้กำลังอยู่ใน session — ออกจากระบบก่อนลบ', 'error'); return;
   }
-  if (!await confirmAction({title:'ลบข้อมูลผู้ใช้',message:`Profile และประวัติการใช้งานทั้งหมดของ “${user}” จะถูกลบถาวรและไม่สามารถย้อนกลับได้`,confirmText:'ลบถาวร',tone:'danger',icon:'×'})) return;
+  if (!await confirmAction({title:'ลบข้อมูลบน ZEEP เครื่องนี้',message:`Profile, Session และ Baseline ของ “${user}” ในเครื่องนี้จะถูกลบ ส่วนข้อมูลที่ส่งขึ้นระบบกลางหรือสำรองรายวันอยู่ตามรอบเก็บรักษาแยก`,confirmText:'ลบจากเครื่องนี้',tone:'danger',icon:'×'})) return;
   await withBusy(btn, async ()=>{
     const opt = {method:'DELETE', headers:authenticatedHeaders({})};
     let r;
@@ -679,7 +679,7 @@ async function deleteUser(btn){
       toast(msg || `HTTP ${r.status}`, 'error'); return;
     }
     const d = await r.json();
-    toast(`ลบข้อมูลของ ${d.username} แล้ว (${d.sessions_removed} sessions)`, 'ok', 3600);
+    toast(`ลบข้อมูลบนเครื่องของ ${d.username||user} แล้ว (${d.sessions_removed} sessions)`, 'ok', 4200);
     document.getElementById('sessionList').innerHTML = '<div class="mini">เลือกผู้ใช้แล้วกด "โหลดประวัติ"</div>';
     document.getElementById('sessionDetail').innerHTML = '';
     loadUsers();

@@ -198,6 +198,10 @@ function renderSleepQuality(q, ended, presentationOverride){
   </section>`;
 }
 
+let historyRequestSeq=0;
+let historyJourneyRequestSeq=0;
+let historyDetailRequestSeq=0;
+
 async function refreshHistory(btn){
   ensureHistoryFilterDefaults();
   const user=currentPrincipal
@@ -208,9 +212,13 @@ async function refreshHistory(btn){
     list.innerHTML='<div class="mini">กรุณาเข้าสู่ระบบอีกครั้งเพื่อดูประวัติของคุณ</div>';return;
   }
   const run = async ()=>{
+    const requestSeq=++historyRequestSeq;
     const adminView=currentPrincipal?.role==='admin';
     list.innerHTML=`<div class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังโหลดประวัติการใช้งาน</b><span>${adminView?'กำลังอ่าน Session จากเครื่อง Pi':'กำลังเตรียมรายการย้อนหลังของคุณ'}</span></div></div>`;
     document.getElementById('historySummary').innerHTML='<div class="mini">กำลังสรุปช่วงเวลาที่เลือก…</div>';
+    historyJourneyRequestSeq+=1;
+    historyDetailRequestSeq+=1;
+    document.getElementById('historyUserJourney').innerHTML='';
     document.getElementById('historyParticipants').innerHTML='';
     document.getElementById('sessionDetail').innerHTML='';
     const params=historyFilterParams();
@@ -219,12 +227,21 @@ async function refreshHistory(btn){
       : `/api/history/${encodeURIComponent(user)}?${params}`;
     let r;
     try { r=await fetch(path,{cache:'no-store'}); }
-    catch { toast(adminView?'เชื่อมต่อ server ไม่ได้':'ยังเชื่อมต่อระบบไม่ได้ กรุณาลองอีกครั้ง', 'error'); return; }
+    catch {
+      if(requestSeq===historyRequestSeq){
+        toast(adminView?'เชื่อมต่อ server ไม่ได้':'ยังเชื่อมต่อระบบไม่ได้ กรุณาลองอีกครั้ง', 'error');
+      }
+      return;
+    }
+    if(requestSeq!==historyRequestSeq)return;
     if (!r.ok){
       let detail='';try{detail=(await r.json()).detail||'';}catch{}
       toast(adminView?(detail||`โหลดประวัติไม่ได้ · HTTP ${r.status}`):'ยังโหลดประวัติไม่ได้ กรุณาลองอีกครั้ง','error');return;
     }
-    renderSessionList(await r.json());
+    const data=await r.json();
+    if(requestSeq!==historyRequestSeq)return;
+    renderSessionList(data);
+    refreshUserJourney();
   };
   return btn ? withBusy(btn, run) : run();
 }
@@ -544,8 +561,7 @@ function renderRestoreSummary(source,presentation,ended=true){
 
 function historyScoreMarkup(score){
   const available=score?.available&&score?.score!=null;
-  const title=historyEscape(score?.score_title||'คะแนน');
-  return `<span class="history-score ${available?'available':'unavailable'}"><b>${available?historyEscape(score.score):'—'}</b><small>${title}</small></span>`;
+  return `<span class="history-score ${available?'available':'unavailable'}"><b>${available?historyEscape(score.score):'—'}</b><small>${historyEscape(score?.score_title||'คะแนน')}</small></span>`;
 }
 
 function renderHistorySummary(d){
@@ -563,10 +579,78 @@ function renderHistorySummary(d){
   root.innerHTML=`<div class="history-summary-heading"><span>${selected?'วันนี้':'ช่วงที่เลือก'}</span><b>${scope}</b><small>${scopeNote}</small></div>
     <div class="history-summary-metrics">
       <div><span>${adminView?'Session':'การพัก'}</span><b>${summary.session_count||0}</b></div>
-      <div><span>Sleep Score</span><b>${summary.sleep_score_count||0}</b><small>${summary.average_sleep_score==null?'—':`เฉลี่ย ${historyEscape(summary.average_sleep_score)}`}</small></div>
-      <div><span>Recovery Score</span><b>${summary.recovery_score_count||0}</b><small>${summary.average_recovery_score==null?'—':`เฉลี่ย ${historyEscape(summary.average_recovery_score)}`}</small></div>
-      <div><span>${adminView?'ไม่มีคะแนน':'ยังไม่มีคะแนน'}</span><b>${summary.awaiting_score_count||0}</b></div>
+      <div><span>Overnight Recovery</span><b>${summary.sleep_score_count||0}</b><small>ครั้งที่มี Sleep Score</small></div>
+      <div><span>Nap & Refresh</span><b>${summary.recovery_score_count||0}</b><small>ครั้งที่มี Recovery Score</small></div>
+      <div><span>ยังสรุปคะแนนไม่ได้</span><b>${summary.without_score_count??summary.awaiting_score_count??0}</b></div>
     </div>`;
+}
+
+function historyJourneyMode(mode){
+  const score=mode.latest_score==null?'—':historyEscape(mode.latest_score);
+  const scoreCaption=mode.latest_score==null
+    ?'Session ล่าสุดยังไม่มีคะแนน'
+    :`${historyEscape(mode.score_title)} ล่าสุด`;
+  const targetText=(mode.targets||[]).map(item=>{
+    const latest=item.latest_score==null?'ยังไม่มีคะแนนล่าสุด':`ล่าสุด ${historyEscape(item.latest_score)}`;
+    return `${historyEscape(item.minutes)} นาที ${item.session_count} ครั้ง · ${latest}`;
+  }).join(' / ');
+  const trend=mode.trend?.label||'กำลังสะสมข้อมูลในรูปแบบนี้';
+  return `<article class="history-journey-mode mode-${historyEscape(mode.key)}">
+    <div class="history-journey-mode-head"><span>${historyEscape(mode.label)}</span><b>${mode.session_count} ครั้ง</b></div>
+    <div class="history-journey-score"><strong>${score}</strong><span>${scoreCaption}</span></div>
+    <p>${historyEscape(trend)}</p>
+    <small>มีคะแนน ${mode.scored_count} ครั้ง${mode.without_score_count?` · ยังสรุปคะแนนไม่ได้ ${mode.without_score_count} ครั้ง`:''}${targetText?` · เป้าหมาย ${targetText}`:''}</small>
+  </article>`;
+}
+
+function renderUserJourney(payload){
+  const root=document.getElementById('historyUserJourney');
+  const history=payload.observed_history||{};
+  const adminView=currentPrincipal?.role==='admin';
+  if(!history.session_count){
+    root.innerHTML='<div class="history-journey-empty"><b>ยังไม่มีภาพรวมสะสม</b><span>ระบบจะเริ่มรวมข้อมูลเมื่อมี Session ที่จบ</span></div>';
+    return;
+  }
+  const identity=adminView
+    ?historyEscape(payload.user?.email||payload.user?.canonical_identifier||'ผู้ใช้งาน')
+    :'รูปแบบการพักของคุณ';
+  const duration=fmtDur(Number(history.usage_minutes||0)*60);
+  const noSensor=history.without_sensor_data_count
+    ?` · ไม่มีข้อมูล Sensor ${history.without_sensor_data_count} ครั้ง`:'';
+  const noScore=history.without_score_count
+    ?` · ${history.without_score_count} ครั้งยังสรุปคะแนนไม่ได้`:'';
+  root.innerHTML=`<div class="history-journey-head">
+      <div><span>ภาพรวมสะสมตั้งแต่เริ่ม Pilot</span><b>${identity}</b><small>ใช้ ZEEP ${history.session_count} ครั้ง · เวลารวม ${duration}${noScore}${noSensor}</small></div>
+      <div class="history-learning-state"><span>PERSONAL CONTEXT</span><b>${historyEscape(payload.learning_readiness?.label||'กำลังเรียนรู้รูปแบบของคุณ')}</b><small>ข้อมูลประกอบคำแนะนำ · คุณเป็นผู้ยืนยันก่อนปรับอุปกรณ์</small></div>
+    </div>
+    <div class="history-journey-modes">${historyJourneyMode(payload.modes.sleep)}${historyJourneyMode(payload.modes.nap_recovery)}</div>
+    <div class="history-journey-note">Overnight และ Nap เรียนรู้แยกกัน · จำนวนครั้งที่ใช้ไม่ถูกตีความว่าเป็นความชอบ</div>`;
+}
+
+async function refreshUserJourney(){
+  const root=document.getElementById('historyUserJourney');
+  if(!root||!currentPrincipal)return;
+  const requestSeq=++historyJourneyRequestSeq;
+  const adminView=currentPrincipal.role==='admin';
+  const account=document.getElementById('historyUser')?.value||'';
+  if(adminView&&!account){
+    root.innerHTML='<div class="history-journey-empty compact"><b>เลือกผู้ใช้งานเพื่อดูภาพรวมสะสม</b><span>การ์ดนี้รวม Overnight Recovery และ Nap & Refresh ของคนเดียวกัน</span></div>';
+    return;
+  }
+  root.innerHTML='<div class="mini">กำลังรวมรูปแบบการพักที่ผ่านมา…</div>';
+  const path='/api/v1/usage-sessions/longitudinal';
+  const headers=adminView?{'X-Zeep-Account-Key':account}:{};
+  try{
+    const response=await fetch(path,{cache:'no-store',headers});
+    if(!response.ok)throw new Error(`HTTP ${response.status}`);
+    const data=(await response.json()).data||{};
+    const selected=document.getElementById('historyUser')?.value||'';
+    if(requestSeq!==historyJourneyRequestSeq||(adminView&&selected!==account))return;
+    renderUserJourney(data);
+  }catch{
+    if(requestSeq!==historyJourneyRequestSeq)return;
+    root.innerHTML='<div class="history-journey-empty compact"><b>ยังรวมภาพรวมสะสมไม่ได้</b><span>รายการ Session ด้านล่างยังใช้งานได้ตามปกติ</span></div>';
+  }
 }
 
 function renderHistoryParticipants(d){
@@ -575,8 +659,11 @@ function renderHistoryParticipants(d){
     root.innerHTML='';return;
   }
   root.innerHTML=`<div class="history-people-heading"><b>ผู้ใช้งานและคะแนน</b><span>${d.participants.length} คนในช่วงที่เลือก</span></div><div class="history-people-grid">${d.participants.map(person=>{
-    const scores=(person.scores||[]).map(historyScoreMarkup).join('');
-    return `<button type="button" class="history-person" data-history-account="${historyEscape(person.account_key)}"><span class="history-person-avatar">${historyEscape(identityLabel(person,'?').slice(0,1).toUpperCase())}</span><span class="history-person-copy"><b>${historyEscape(identityLabel(person))}</b><small>${person.session_count} Session</small></span><span class="history-person-scores">${scores}</span></button>`;
+    const sleepCount=(person.scores||[]).filter(item=>item.score_type==='sleep_score').length;
+    const recoveryCount=(person.scores||[]).filter(item=>item.score_type==='recovery_score').length;
+    const withoutScore=(person.scores||[]).filter(item=>!item.available).length;
+    const modeText=[sleepCount?`Overnight ${sleepCount}`:'',recoveryCount?`Nap ${recoveryCount}`:'',withoutScore?`ยังไม่มีคะแนน ${withoutScore}`:''].filter(Boolean).join(' · ');
+    return `<button type="button" class="history-person" data-history-account="${historyEscape(person.account_key)}"><span class="history-person-avatar">${historyEscape(identityLabel(person,'?').slice(0,1).toUpperCase())}</span><span class="history-person-copy"><b>${historyEscape(identityLabel(person))}</b><small>${person.session_count} Session</small></span><span class="history-person-mode-mix">${historyEscape(modeText||'ยังไม่ยืนยันรูปแบบ')}</span></button>`;
   }).join('')}</div>`;
   root.querySelectorAll('[data-history-account]').forEach(button=>{
     button.onclick=()=>selectHistoryPerson(button.dataset.historyAccount);
@@ -625,6 +712,7 @@ function renderSessionList(d){
 }
 
 async function loadDetail(user, sid, row){
+  const requestSeq=++historyDetailRequestSeq;
   document.querySelectorAll('.hist-row').forEach(x=>x.classList.remove('sel'));
   row?.classList.add('sel');
   const adminView=currentPrincipal?.role==='admin';
@@ -636,7 +724,9 @@ async function loadDetail(user, sid, row){
   try { r=await fetch(legacyPath,{cache:'no-store'}); }
   catch { toast(adminView?'เชื่อมต่อ server ไม่ได้':'ยังเชื่อมต่อระบบไม่ได้ กรุณาลองอีกครั้ง', 'error'); return; }
   if (!r.ok){ toast(adminView?`โหลดรายละเอียดไม่ได้ · HTTP ${r.status}`:'ยังโหลดรายละเอียดไม่ได้ กรุณาลองอีกครั้ง', 'error'); return; }
-  renderReport(await r.json());
+  const data=await r.json();
+  if(requestSeq!==historyDetailRequestSeq)return;
+  renderReport(data);
   // On a tablet the history list can fill most of the viewport. Bring the
   // completed report into view so the newly requested quality result is not
   // hidden below the fixed navigation bar.

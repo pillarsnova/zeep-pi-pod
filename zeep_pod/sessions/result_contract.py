@@ -25,6 +25,7 @@ from zeep_pod.sessions.result_restore_contract import (
     build_result_restore_summary,
 )
 from zeep_pod.sessions.score_identity import assess_score_identity
+from zeep_pod.sessions.target_provenance import apply_target_review
 
 RESULT_CONTRACT_VERSION = "zeep.session-result.v1"
 
@@ -192,6 +193,7 @@ def _released_score(
     quality: Mapping[str, Any],
     *,
     mode_conflict: bool,
+    target_conflict: bool,
     session_closed: bool,
     safety_review_required: bool,
     quality_review_required: bool,
@@ -205,6 +207,7 @@ def _released_score(
         and 0.0 <= score_value <= 100.0
         and score_type != "unresolved_score"
         and not mode_conflict
+        and not target_conflict
     )
     score_identity = (
         assess_score_identity(quality, group) if release_candidate else None
@@ -219,6 +222,9 @@ def _released_score(
     elif mode_conflict:
         reason = "พบข้อมูลรูปแบบการพักไม่ตรงกัน ระบบจึงพักการแสดงคะแนนไว้เพื่อตรวจสอบ"
         validation_status = "mode_metadata_conflict"
+    elif target_conflict:
+        reason = "เป้าหมายเวลาของรูปแบบการพักไม่ตรงกับสูตรคะแนน ระบบจึงพักคะแนนไว้เพื่อตรวจสอบ"
+        validation_status = "target_metadata_conflict"
     elif provenance_issue and score_identity is not None:
         reason = score_identity.get("reason")
         validation_status = score_identity.get("validation_status")
@@ -250,6 +256,7 @@ def _released_score(
         "reason": reason,
         "review_required": bool(
             mode_conflict
+            or target_conflict
             or group == "unknown"
             or provenance_issue
             or safety_review_required
@@ -262,6 +269,7 @@ def _target_contract(
     session: Mapping[str, Any],
     mode: Mapping[str, Any],
     quality: Mapping[str, Any],
+    target_provenance: Mapping[str, Any],
 ) -> dict[str, Any] | None:
     target = (
         _mapping(quality.get("duration_target"))
@@ -269,17 +277,34 @@ def _target_contract(
         else {}
     )
     session_target = _number(session.get("target_duration_s"))
+    if mode.get("group") == "nap_recovery" and session_target is None:
+        return None
     persisted_target = _number(target.get("seconds"))
-    session_target_overrides = bool(
-        session_target is not None
-        and (persisted_target is None or abs(session_target - persisted_target) > 1.0)
+    resolved_session_target = (
+        resolve_rest_target(mode.get("group"), session_target)
+        if session_target is not None or mode.get("group") == "sleep"
+        else {}
     )
-    if session_target_overrides:
-        resolved_target = resolve_rest_target(
-            mode.get("group"),
-            session_target,
+    canonical_session_target = bool(
+        resolved_session_target.get("available") is True
+    )
+    session_target_overrides = (
+        target_provenance.get("verified") is not True
+        if mode.get("group") == "nap_recovery"
+        else target_provenance.get("valid_for_score") is False
+        if mode.get("group") == "sleep"
+        else bool(
+            session_target is not None
+            and (
+                not canonical_session_target
+                or persisted_target is None
+                or abs(session_target - persisted_target) > 1.0
+            )
         )
-        target = {
+    )
+    if session_target_overrides or canonical_session_target:
+        resolved_target = resolved_session_target
+        canonical_target = {
             "key": resolved_target.get("key"),
             "label": resolved_target.get("label"),
             "seconds": resolved_target.get("seconds"),
@@ -295,9 +320,17 @@ def _target_contract(
                 or None
             ),
         }
-    target_seconds = (
-        session_target if session_target is not None else _number(target.get("seconds"))
-    )
+        target = (
+            canonical_target
+            if session_target_overrides
+            else {**target, **canonical_target}
+        )
+    if session_target is None:
+        target_seconds = _number(target.get("seconds"))
+    elif canonical_session_target:
+        target_seconds = _number(resolved_session_target.get("seconds"))
+    else:
+        target_seconds = None
     if not target and target_seconds is None:
         return None
     return {
@@ -358,6 +391,11 @@ def _data_quality_contract(
 def build_result_contract(session: Mapping[str, Any]) -> dict[str, Any]:
     """Adapt one finalized report without changing its score or raw record."""
     report, quality, mode = _mode_and_quality(session)
+    mode, target_provenance, target_conflict = apply_target_review(
+        session,
+        mode,
+        quality,
+    )
     group = str(mode.get("group") or "unknown")
     mode_conflict = mode.get("validation_status") == "mode_metadata_conflict"
     session_closed = bool(session.get("ended_at_utc"))
@@ -372,6 +410,7 @@ def build_result_contract(session: Mapping[str, Any]) -> dict[str, Any]:
         group,
         quality,
         mode_conflict=mode_conflict,
+        target_conflict=target_conflict,
         session_closed=session_closed,
         safety_review_required=safety_review_required,
         quality_review_required=quality_review_required,
@@ -394,7 +433,12 @@ def build_result_contract(session: Mapping[str, Any]) -> dict[str, Any]:
             "requested": mode.get("requested"),
             "resolved": mode.get("resolved"),
             "sleep_required": mode.get("sleep_required"),
-            "target": _target_contract(session, mode, quality),
+            "target": _target_contract(
+                session,
+                mode,
+                quality,
+                target_provenance,
+            ),
             "review_required": mode.get("review_required"),
             "protocol_review_required": mode.get(
                 "protocol_review_required"

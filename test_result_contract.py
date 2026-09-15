@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from sleep_system_policy import (
+    PERSONAL_BEHAVIOUR_BASELINE_VERSION,
     RECOVERY_SCORE_FORMULA_VERSION,
     RESTORE_SUMMARY_VERSION,
     SLEEP_SCORE_FORMULA_VERSION,
@@ -176,6 +177,10 @@ class SessionResultContractTests(unittest.TestCase):
                     "quality_type": "sleep",
                     "score_title": "Sleep Score",
                     "formula_version": SLEEP_SCORE_FORMULA_VERSION,
+                    "duration_target": {
+                        "key": "overnight_7h",
+                        "seconds": 25_200,
+                    },
                     "level_key": "very_good",
                     "level": "ดีมาก",
                 }
@@ -190,6 +195,7 @@ class SessionResultContractTests(unittest.TestCase):
                     {
                         "ended_at_utc": "2026-09-11T00:00:00+00:00",
                         "rest_mode": "sleep",
+                        "target_duration_s": 25_200,
                         "sleep_quality": quality,
                         "session_report": report,
                     }
@@ -230,11 +236,16 @@ class SessionResultContractTests(unittest.TestCase):
             {
                 "ended_at_utc": "2026-09-11T00:00:00+00:00",
                 "rest_mode": "sleep",
+                "target_duration_s": 25_200,
                 "sleep_quality": {
                     "available": True,
                     "score": 90,
                     "quality_type": "sleep",
                     "formula_version": SLEEP_SCORE_FORMULA_VERSION,
+                    "duration_target": {
+                        "key": "overnight_7h",
+                        "seconds": 25_200,
+                    },
                 },
                 "session_report": {"restore_summary": persisted},
             }
@@ -287,12 +298,17 @@ class SessionResultContractTests(unittest.TestCase):
             {
                 "ended_at_utc": "2026-09-11T00:00:00+00:00",
                 "rest_mode": "sleep",
+                "target_duration_s": 25_200,
                 "sleep_quality": {
                     "available": True,
                     "score": 81,
                     "quality_type": "sleep",
                     "score_title": "Sleep Score",
                     "formula_version": SLEEP_SCORE_FORMULA_VERSION,
+                    "duration_target": {
+                        "key": "overnight_7h",
+                        "seconds": 25_200,
+                    },
                 },
                 "session_report": {
                     "rest_mode": {
@@ -409,6 +425,186 @@ class SessionResultContractTests(unittest.TestCase):
         self.assertEqual(result["mode"]["target"]["minutes"], 90)
         self.assertEqual(result["mode"]["target"]["key"], "nap_90")
         self.assertNotEqual(result["mode"]["target"]["key"], "nap_30")
+        self.assertFalse(result["score"]["available"])
+        self.assertEqual(
+            result["score"]["validation_status"],
+            "target_metadata_conflict",
+        )
+
+    def test_session_target_seconds_canonicalize_a_wrong_equal_seconds_key(self) -> None:
+        result = build_result_contract(
+            {
+                "ended_at_utc": "2026-09-11T00:00:00+00:00",
+                "rest_mode": "nap_recovery",
+                "target_duration_s": 5400,
+                "sleep_quality": {
+                    "available": True,
+                    "score": 80,
+                    "quality_type": "rest_goal",
+                    "rest_mode": {"group": "nap_recovery"},
+                    "duration_target": {
+                        "key": "nap_30",
+                        "seconds": 5400,
+                    },
+                },
+                "session_report": {
+                    "rest_mode": {"group": "nap_recovery"},
+                },
+            }
+        )
+
+        self.assertEqual(result["mode"]["target"]["key"], "nap_90")
+        self.assertEqual(result["mode"]["target"]["seconds"], 5400)
+        self.assertEqual(result["mode"]["target"]["minutes"], 90)
+        self.assertFalse(result["score"]["available"])
+
+    def test_current_nap_without_score_target_fails_closed(self) -> None:
+        result = build_result_contract(
+            {
+                "ended_at_utc": "2026-09-11T00:00:00+00:00",
+                "rest_mode": "nap_recovery",
+                "target_duration_s": 1_800,
+                "sleep_quality": {
+                    "available": True,
+                    "score": 80,
+                    "quality_type": "rest_goal",
+                    "score_title": "Recovery Score",
+                    "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
+                    "rest_mode": {"group": "nap_recovery"},
+                },
+            }
+        )
+
+        self.assertEqual(result["mode"]["target"]["key"], "nap_30")
+        self.assertFalse(result["score"]["available"])
+        self.assertTrue(result["score"]["review_required"])
+        self.assertEqual(
+            result["score"]["validation_status"],
+            "target_metadata_conflict",
+        )
+
+    def test_legacy_nap_without_session_target_stays_readable_but_unscoped(
+        self,
+    ) -> None:
+        result = build_result_contract(
+            {
+                "ended_at_utc": "2026-09-11T00:00:00+00:00",
+                "rest_mode": "nap_recovery",
+                "sleep_quality": {
+                    "available": True,
+                    "score": 80,
+                    "quality_type": "rest_goal",
+                    "score_title": "Recovery Score",
+                    "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
+                    "duration_target": {
+                        "key": "nap_30m",
+                        "seconds": 1_800,
+                    },
+                },
+            }
+        )
+
+        self.assertTrue(result["score"]["available"])
+        self.assertTrue(result["score"]["review_required"])
+        self.assertIsNone(result["mode"]["target"])
+
+    def test_invalid_session_target_is_reviewed_and_never_published_as_valid(self):
+        nap = build_result_contract(
+            {
+                "ended_at_utc": "2026-09-11T00:00:00+00:00",
+                "rest_mode": "nap_recovery",
+                "target_duration_s": 1234,
+                "sleep_quality": {
+                    "available": True,
+                    "score": 80,
+                    "quality_type": "rest_goal",
+                    "rest_mode": {"group": "nap_recovery"},
+                    "duration_target": {"key": "nap_30", "seconds": 1234},
+                },
+            }
+        )
+        sleep = build_result_contract(
+            {
+                "ended_at_utc": "2026-09-11T00:00:00+00:00",
+                "rest_mode": "sleep",
+                "target_duration_s": 3600,
+                "sleep_quality": {
+                    "available": True,
+                    "score": 80,
+                    "quality_type": "sleep",
+                    "rest_mode": {"group": "sleep"},
+                },
+            }
+        )
+
+        self.assertTrue(nap["mode"]["protocol_review_required"])
+        self.assertTrue(nap["mode"]["review_required"])
+        self.assertIsNone(nap["mode"]["target"]["key"])
+        self.assertIsNone(nap["mode"]["target"]["seconds"])
+        self.assertTrue(sleep["mode"]["protocol_review_required"])
+        self.assertEqual(sleep["mode"]["target"]["key"], "overnight_7h")
+        self.assertEqual(sleep["mode"]["target"]["seconds"], 7 * 3600)
+        self.assertFalse(sleep["score"]["available"])
+
+    def test_current_sleep_target_mismatch_fails_closed(self) -> None:
+        for quality_target in (None, {"seconds": 27_000, "key": "overnight"}):
+            with self.subTest(quality_target=quality_target):
+                quality = {
+                    "available": True,
+                    "score": 88,
+                    "quality_type": "sleep",
+                    "score_title": "Sleep Score",
+                    "formula_version": SLEEP_SCORE_FORMULA_VERSION,
+                    "rest_mode": {"group": "sleep"},
+                }
+                if quality_target is not None:
+                    quality["duration_target"] = quality_target
+                result = build_result_contract(
+                    {
+                        "ended_at_utc": "2026-09-11T00:00:00+00:00",
+                        "rest_mode": "sleep",
+                        "target_duration_s": 25_200,
+                        "sleep_quality": quality,
+                    }
+                )
+
+                self.assertEqual(
+                    result["mode"]["target"]["seconds"],
+                    25_200,
+                )
+                self.assertFalse(result["score"]["available"])
+                self.assertEqual(
+                    result["score"]["validation_status"],
+                    "target_metadata_conflict",
+                )
+                self.assertIn(
+                    "รูปแบบการพัก",
+                    result["score"]["reason"],
+                )
+
+    def test_current_sleep_without_any_target_metadata_fails_closed(self) -> None:
+        result = build_result_contract(
+            {
+                "ended_at_utc": "2026-09-11T00:00:00+00:00",
+                "rest_mode": "sleep",
+                "sleep_quality": {
+                    "available": True,
+                    "score": 88,
+                    "quality_type": "sleep",
+                    "score_title": "Sleep Score",
+                    "formula_version": SLEEP_SCORE_FORMULA_VERSION,
+                    "rest_mode": {"group": "sleep"},
+                },
+            }
+        )
+
+        self.assertFalse(result["score"]["available"])
+        self.assertIsNone(result["score"]["value"])
+        self.assertTrue(result["score"]["review_required"])
+        self.assertEqual(
+            result["score"]["validation_status"],
+            "target_metadata_conflict",
+        )
 
     def test_persisted_context_is_canonical_and_subjective_needs_provenance(
         self,
@@ -423,6 +619,10 @@ class SessionResultContractTests(unittest.TestCase):
             "session_scope": {"mode": "sleep"},
             "personal_baseline": {
                 "mode": "sleep",
+                "baseline_policy_version": PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+                "score_formula_version": SLEEP_SCORE_FORMULA_VERSION,
+                "target_specific": True,
+                "target_key": "overnight_7h",
                 "maturity": {"sessions_used": 8},
                 "comparison": {
                     "available": True,
@@ -434,6 +634,10 @@ class SessionResultContractTests(unittest.TestCase):
             },
             "trend": {
                 "available": True,
+                "baseline_policy_version": PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+                "score_formula_version": SLEEP_SCORE_FORMULA_VERSION,
+                "target_specific": True,
+                "target_key": "overnight_7h",
                 "windows": {
                     "7": {
                         "session_count": 7,
@@ -457,12 +661,17 @@ class SessionResultContractTests(unittest.TestCase):
             {
                 "ended_at_utc": "2026-09-11T00:00:00+00:00",
                 "rest_mode": "sleep",
+                "target_duration_s": 25_200,
                 "sleep_quality": {
                     "available": True,
                     "score": 80,
                     "quality_type": "sleep",
                     "formula_version": SLEEP_SCORE_FORMULA_VERSION,
                     "rest_mode": {"group": "sleep"},
+                    "duration_target": {
+                        "key": "overnight_7h",
+                        "seconds": 25_200,
+                    },
                 },
                 "session_report": {
                     "rest_mode": {"group": "sleep"},
@@ -490,12 +699,17 @@ class SessionResultContractTests(unittest.TestCase):
             {
                 "ended_at_utc": "2026-09-11T00:00:00+00:00",
                 "rest_mode": "sleep",
+                "target_duration_s": 25_200,
                 "sleep_quality": {
                     "available": True,
                     "score": 80,
                     "quality_type": "sleep",
                     "formula_version": SLEEP_SCORE_FORMULA_VERSION,
                     "rest_mode": {"group": "sleep"},
+                    "duration_target": {
+                        "key": "overnight_7h",
+                        "seconds": 25_200,
+                    },
                 },
                 "session_report": {
                     "rest_mode": {"group": "sleep"},

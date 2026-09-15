@@ -43,6 +43,8 @@ import segno
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from zeep_pod.identity.lifecycle_lock import synchronized_by
+
 # A reserved-but-unfulfilled notice is a Session still inside finalization.
 # The WebSocket waits for it, so it must self-expire well before that wait
 # would otherwise hang a tablet whose finalization died part way through.
@@ -82,6 +84,7 @@ class ShareEntry:
 
     subject: str
     expires_at: float
+    account_key: str | None = None
     session_id: str | None = None
     access_token: str | None = None
     report: dict[str, Any] = field(default_factory=dict)
@@ -140,7 +143,12 @@ class ReportShareRegistry:
         self._entries: dict[str, ShareEntry] = {}
         self._by_ticket: dict[str, str] = {}
 
-    def reserve(self, subject: str | None) -> None:
+    def reserve(
+        self,
+        subject: str | None,
+        *,
+        account_key: str | None = None,
+    ) -> None:
         """Mark a Session as finalizing, before any of the slow work starts.
 
         ``_active_session`` is cleared on the first line of finalization but
@@ -157,6 +165,7 @@ class ReportShareRegistry:
             self._entries[subject] = ShareEntry(
                 subject=subject,
                 expires_at=self._clock() + PENDING_TIMEOUT_SECONDS,
+                account_key=str(account_key or "").strip().casefold() or None,
             )
 
     def fulfil(self, record: Mapping[str, Any], *, access_token: str | None) -> None:
@@ -184,6 +193,11 @@ class ReportShareRegistry:
             self._entries[subject] = ShareEntry(
                 subject=subject,
                 expires_at=self._clock() + self._ttl,
+                account_key=(
+                    self._entries[subject].account_key
+                    or str(record.get("username_key") or "").strip().casefold()
+                    or None
+                ),
                 session_id=str(record.get("session_id") or "") or None,
                 access_token=access_token,
                 report=report,
@@ -192,12 +206,29 @@ class ReportShareRegistry:
             )
             self._by_ticket[ticket] = subject
 
-    def discard(self, subject: str | None) -> None:
+    def discard(self, subject: str | None) -> bool:
         """Drop a reservation so a waiting WebSocket stops waiting at once."""
         if not subject:
-            return
+            return False
         with self._lock:
+            existed = subject in self._entries
             self._forget_locked(subject)
+            return existed
+
+    def discard_account(self, account_key: str | None) -> int:
+        """Drop every pending share and access token for one local account."""
+        key = str(account_key or "").strip().casefold()
+        if not key:
+            return 0
+        with self._lock:
+            subjects = [
+                subject
+                for subject, entry in self._entries.items()
+                if entry.account_key == key
+            ]
+            for subject in subjects:
+                self._forget_locked(subject)
+            return len(subjects)
 
     def share_for(self, subject: str | None) -> dict[str, Any] | None:
         """Return the ticket half a browser may see, or None."""
@@ -367,6 +398,7 @@ def create_report_share_router(
     zeep_request: Callable[..., dict[str, Any]],
     zeep_offline: type[BaseException],
     log_event: Callable[..., None],
+    lifecycle_lock: Any = None,
 ) -> APIRouter:
     """One public route: exchange a ticket plus a PNG for a QR code.
 
@@ -375,8 +407,14 @@ def create_report_share_router(
     and only that tablet was handed -- is the credential.
     """
     router = APIRouter()
+    serialize = (
+        synchronized_by(lifecycle_lock)
+        if lifecycle_lock is not None
+        else lambda function: function
+    )
 
     @router.post("/api/session/report-share")
+    @serialize
     def session_report_share(cmd: ReportShareCommand) -> dict[str, Any]:
         if not registry.enabled:
             raise HTTPException(404, "การแชร์ผลการนอนถูกปิดอยู่")

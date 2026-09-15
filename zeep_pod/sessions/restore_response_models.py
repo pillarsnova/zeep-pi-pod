@@ -283,6 +283,10 @@ class PersonalBaseline(ContractModel):
     affects_source_score: Literal[False]
     population_prior_is_cold_start_only: Literal[True]
     must_not_mix_sleep_and_nap_sessions: Literal[True]
+    baseline_policy_version: str | None = Field(...)
+    score_formula_version: str | None = Field(...)
+    target_specific: bool
+    target_key: str | None = Field(...)
 
 
 class TrendWindow(ContractModel):
@@ -303,6 +307,10 @@ class AvailableTrend(ContractModel):
     windows: TrendWindows
     mode_specific: Literal[True]
     whole_day_readiness_trend: Literal[False]
+    baseline_policy_version: str | None = Field(...)
+    score_formula_version: str | None = Field(...)
+    target_specific: bool
+    target_key: str | None = Field(...)
 
     @validator("windows")
     def at_least_one_window(cls, value: TrendWindows):
@@ -315,6 +323,10 @@ class UnavailableTrend(ContractModel):
     available: Literal[False]
     reason: str
     windows: TrendWindows
+    baseline_policy_version: str | None = Field(...)
+    score_formula_version: str | None = Field(...)
+    target_specific: bool
+    target_key: str | None = Field(...)
 
 
 RestoreTrend = AvailableTrend | UnavailableTrend

@@ -33,6 +33,9 @@ pi5/
 ├── sleep_stage_scoring.py  # Evidence scorer ร่วมของ Live และ Replay
 ├── sleep_system_policy.py  # Version/gate/transition/score policy source of truth
 ├── personal.py             # Adaptive baseline รายบุคคลจาก Session ที่หลับจริง
+├── zeep_pod/sessions/user_learning_profile.py # ประวัติสะสมรายบัญชี
+├── zeep_pod/sessions/user_score_history.py     # Score trend แยกสูตร/เป้าหมาย
+├── zeep_pod/sessions/user_ai_context.py        # Direct-identifier-free AI context
 ├── sleep_session_report.py # Mode-aware Sleep/Rest score และ final report
 ├── maintenance_registry.py # Write boundary/guard ของเครื่องมือข้อมูลย้อนหลัง
 ├── {reclassify,rescore,recalibrate,cleanup,trim,reset,annotate}_*.py
@@ -45,7 +48,7 @@ pi5/
 ├── REMOTE-ACCESS.md        # แผนเปิดใช้ผ่าน URL (Tailscale / Cloudflare Tunnel)
 ├── research/evidence-library/ # ทะเบียนหลักฐาน Sleep/Health/WHO/VOC + downloader
 ├── music/     (gitignored) # ไฟล์เสียง — สร้างจากสคริปต์ หรือทีมวางไฟล์เพิ่มเอง
-└── data/      (gitignored) # ข้อมูลส่วนบุคคล เก็บบนเครื่องเท่านั้น:
+└── data/      (gitignored) # Local active store ของข้อมูลส่วนบุคคล:
     ├── sessions.db         #   Session, Timeline, Event และ derived report
     ├── bcg.db              #   Raw BCG packet/epoch แยกจาก derived decision
     ├── auth.db             #   Browser auth session/CSRF/revocation
@@ -166,6 +169,12 @@ G2 primary ontology แก้เป็น `W / N1 / N2 / N3 / REM` แบบ one
 `/api/v1/usage-sessions/{session_id}/summary` ส่วนรูปแบบแสดงผลที่ไม่ซ้ำสำหรับ
 App อยู่ที่ `/api/v1/usage-sessions/{session_id}/presentation` และรายละเอียด QA
 สำหรับ Admin อยู่ที่ `/api/v1/usage-sessions/{session_id}/development`
+ภาพรวมสะสมรายผู้ใช้ใช้ `/api/v1/usage-sessions/longitudinal` ตาม
+[ZEEP User Learning Profile v1](docs/zeep-user-learning-profile-v1.md)
+ส่วน context สำหรับ advisory AI ใช้
+`/api/v1/usage-sessions/longitudinal/ai-context` ซึ่งตัด direct identity และ
+Session-level identifiers แต่ยังเป็นข้อมูล Wellness ที่เชื่อมโยงกับบัญชีได้
+รุ่นนี้จึงเตรียม contract ไว้เท่านั้น ยังไม่อนุญาตส่งออกไป AI ภายนอก
 ทุก route ใช้ envelope ที่มี
 schema/version/request-id โดย Usage Session response ถูกตรวจด้วย Pydantic และ
 เผยแพร่ชนิดข้อมูล/enum ผ่าน OpenAPI ส่วน endpoint เดิมด้านล่างยังคงรองรับ
@@ -183,7 +192,7 @@ Tablet ที่ติดตั้งอยู่
 | เสียง | `GET /api/music` · `POST /api/music/{play,stop,pause,volume}` |
 | ป้ายชื่อ | `POST /api/labels/{aroma1..4}` |
 | Session | `POST /api/session/{login,logout}` · `GET /api/users` · `GET /api/history/{user}[/{id}]` · `DELETE /api/users/{user}` |
-| ประวัติการใช้งาน v1 | `GET /api/v1/usage-sessions` · `GET /api/v1/usage-sessions/{id}/summary` · `GET /api/v1/usage-sessions/{id}/presentation` · `GET /api/v1/usage-sessions/{id}` |
+| ประวัติการใช้งาน v1 | `GET /api/v1/usage-sessions` · `GET /api/v1/usage-sessions/longitudinal` · `GET /api/v1/usage-sessions/{id}/summary` · `GET /api/v1/usage-sessions/{id}/presentation` · `GET /api/v1/usage-sessions/{id}` |
 | วิเคราะห์ผลสำหรับ Admin | `GET /api/v1/usage-sessions/{id}/development` |
 
 ทุก API ส่วนบุคคล/ควบคุมตรวจ Auth Session และ RBAC ที่ Backend ส่วน `POST`/`DELETE`
@@ -223,6 +232,11 @@ cd ~/pi5_local_webapp
 ```
 
 เปิดจากแท็บเล็ต: `http://<IP-ของ-Pi>:8000`
+
+HTTP นี้ใช้เฉพาะเครือข่าย Pod ที่ควบคุมได้หรือผ่าน Tailscale encrypted overlay
+เท่านั้น ห้าม expose port 8000 ตรงสู่อินเทอร์เน็ต Production ที่ผ่าน reverse proxy
+ต้องใช้ HTTPS และตั้ง `AUTH_SECURE_COOKIE=true`; การเปิด HTTPS บน local tablet
+ต้องติดตั้ง certificate/trust chain ก่อน มิฉะนั้น Browser จะไม่ส่ง Secure cookie
 
 ## ขา GPIO (BCM numbering)
 
@@ -388,9 +402,12 @@ session ระบบเก็บ Temperature/Humidity/Lux/dBA/HR/RR/bed status/s
 กด "ออกจากระบบ" → บันทึกลงเครื่อง + แสดงรายงานอ่านง่าย · ถ้า server ถูกปิด
 กลางคัน session ที่ค้างจะถูกบันทึกให้อัตโนมัติ
 
-ข้อมูลทั้งหมดอยู่ **บนเครื่องเท่านั้น** (`data/` ถูก gitignore) — เป็นข้อมูลส่วนบุคคล
-(ชื่อ + แนวโน้ม HR/RR): ห้ามส่งต่อโฟลเดอร์ `data/` และลบได้จริงด้วยปุ่ม
-"ลบข้อมูลผู้ใช้" (`DELETE /api/users/{username}`) ตามหลัก PDPA
+โฟลเดอร์ `data/` คือ **local active store** และเป็นข้อมูลส่วนบุคคล (ชื่อ + แนวโน้ม
+HR/RR): ห้ามส่งต่อทั้งโฟลเดอร์ ปุ่ม "ลบข้อมูลผู้ใช้"
+(`DELETE /api/users/{username}`) ลบข้อมูลบน Pi เครื่องนี้เท่านั้น รวมถึง derived
+Baseline และ capability ที่ยังค้าง โดย Daily backup จะหมดอายุตามรอบ 3 วัน
+ข้อมูลที่ส่งถึง ZEEP Backend หรือ report object ที่แชร์สำเร็จแล้วอยู่คนละ retention
+boundary และต้องลบ/เพิกถอนผ่าน Backend API เมื่อระบบส่วนนั้นรองรับ
 HR/RR เป็นค่า directional จาก sensor (pre-G2) ไม่ใช่ medical measurement
 
 ### การอ่านการ์ด Biosignal · BCG LSM-800-T

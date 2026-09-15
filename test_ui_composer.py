@@ -239,6 +239,9 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("<h3>ประวัติการใช้งาน</h3>", template)
         self.assertIn("USAGE HISTORY", template)
         self.assertNotIn("<h3>ประวัติการนอน</h3>", template)
+        self.assertIn("u.available_usage_sessions??", template)
+        self.assertIn("u.current_sessions_without_data??0", template)
+        self.assertIn("ไม่มี Sensor", template)
 
         for legacy_contract in (
             'id="historyCard"',
@@ -358,7 +361,8 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("const technicalNote=currentPrincipal?.role==='admin'", template)
         self.assertNotIn("function normalizeUsageDetail(payload)", template)
         self.assertIn("const legacyPath=`/api/history/", template)
-        self.assertIn("renderReport(await r.json())", template)
+        self.assertIn("requestSeq!==historyDetailRequestSeq", template)
+        self.assertIn("renderReport(data)", template)
         self.assertNotIn("sleep_timeline:[]", template)
         self.assertIn('class="sleep-period user-sleep-period"', template)
         self.assertIn("ประเมินจากแนวโน้มระหว่างการพัก", template)
@@ -644,6 +648,20 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("card.setAttribute('aria-live','polite')", atmosphere_renderer)
         self.assertIn("function renderSafety", template)
         self.assertIn("'safety_emergency'", template)
+
+    def test_history_has_one_longitudinal_profile_without_cross_mode_score(self):
+        template = ui_composer.render()
+        start = template.index("function renderUserJourney")
+        end = template.index("function renderHistoryParticipants", start)
+        renderer = template[start:end]
+
+        self.assertEqual(template.count('id="historyUserJourney"'), 1)
+        self.assertIn("/api/v1/usage-sessions/longitudinal", renderer)
+        self.assertIn("payload.modes.sleep", renderer)
+        self.assertIn("payload.modes.nap_recovery", renderer)
+        self.assertIn("จำนวนครั้งที่ใช้ไม่ถูกตีความว่าเป็นความชอบ", renderer)
+        self.assertNotIn("average_sleep_score+", renderer)
+        self.assertNotIn("average_recovery_score+", renderer)
 
 
 if __name__ == "__main__":

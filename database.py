@@ -78,6 +78,12 @@ class DatabaseManager:
                         "CREATE INDEX IF NOT EXISTS idx_sessions_subject_start "
                         "ON sessions(identity_subject, start_time DESC)"
                     )
+                    connection.execute(
+                        "UPDATE sessions "
+                        "SET username_key=lower(trim(username_key)) "
+                        "WHERE username_key IS NOT NULL "
+                        "AND username_key!=lower(trim(username_key))"
+                    )
                     # Schema v4 persists the two ESP32 Air Sensor values that
                     # were previously available on Live/Monitor only.  Without
                     # these additive columns a completed Session incorrectly

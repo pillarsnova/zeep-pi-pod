@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from progressive_profile import admin_progress_summary
 from zeep_pod.sessions import score_summary
 from zeep_pod.sessions.history_service import HistoryWindow, SessionHistoryService
 from zeep_pod.sessions.quality_publication import public_result_data_quality
@@ -17,6 +18,7 @@ from zeep_pod.sessions.usage_publication import (
     public_policy_versions,
     public_report_value,
 )
+from zeep_pod.sessions.user_learning_profile import build_user_learning_profile
 
 USAGE_SESSION_CONTRACT_VERSION = "zeep.usage-session.v1"
 
@@ -162,6 +164,26 @@ class UsageSessionService:
             account_key=None,
         )
         return build_usage_development(detail) if detail else None
+
+    def learning_profile(
+        self,
+        account_key: str,
+        profile: dict[str, Any],
+        *,
+        baseline: Mapping[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Combine all completed Sessions into one longitudinal profile."""
+        key = str(account_key or "").strip().casefold()
+        rows = self.history.account_completed_sessions(key, profile)
+        sessions = [_session_item(row, include_report=False) for row in rows]
+        return build_user_learning_profile(
+            account_key=key,
+            profile=profile,
+            sessions=sessions,
+            baseline=baseline,
+            questionnaire=admin_progress_summary(profile),
+            history_start_utc=self.history.history_start_utc,
+        )
 
     @staticmethod
     def _list_contract(

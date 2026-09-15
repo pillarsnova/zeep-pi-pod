@@ -16,6 +16,7 @@ from pydantic import ValidationError
 
 from sleep_session_report import build_session_report, build_sleep_quality
 from sleep_system_policy import (
+    PERSONAL_BEHAVIOUR_BASELINE_VERSION,
     RECOVERY_SCORE_FORMULA_VERSION,
     SLEEP_SCORE_FORMULA_VERSION,
 )
@@ -76,6 +77,10 @@ def _sleep_quality(*, available: bool = True) -> dict:
         "version": "quality-v-test",
         "formula_version": SLEEP_SCORE_FORMULA_VERSION,
         "rest_mode": {"group": "sleep", "requested": "sleep"},
+        "duration_target": {
+            "key": "overnight_7h",
+            "seconds": 25_200,
+        },
         "component_points": {
             "sleep_opportunity": 17.0,
             "sleep_stability": 24.0,
@@ -122,6 +127,7 @@ def _stored_session() -> dict:
         "end_reason": "completed",
         "sample_count": 2520,
         "rest_mode": "sleep",
+        "target_duration_s": 25_200,
         "sleep_quality": quality,
         "session_report": {
             "available": True,
@@ -186,6 +192,7 @@ class UsageResponseModelTests(unittest.TestCase):
                 "group": "nap_recovery",
                 "requested": "nap_recovery",
             },
+            "duration_target": {"seconds": 1_800},
             "component_points": {"goal_duration": 20},
             "component_max_points": {"goal_duration": 25},
             "score_confidence": {"level": "medium"},
@@ -207,8 +214,26 @@ class UsageResponseModelTests(unittest.TestCase):
                 "score_median": 72,
                 "score_typical_range": [68, 78],
                 "scores": [68, 70, 71, 72, 73, 75, 74],
+                "baseline_policy_version": PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+                "target_specific": True,
+                "target_key": "nap_30",
+                "score_reference": {
+                    "sessions_used": 7,
+                    "median": 72,
+                    "typical_range": [68, 78],
+                    "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
+                },
             },
-            trend_context={"scores": [68, 70, 71, 72, 73, 75, 74]},
+            trend_context={
+                "scores": [68, 70, 71, 72, 73, 75, 74],
+                "baseline_policy_version": PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+                "target_specific": True,
+                "target_key": "nap_30",
+                "score_reference": {
+                    "sessions_used": 7,
+                    "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
+                },
+            },
             subjective_outcome={
                 "status": "measured",
                 "freshness_delta": 2,
@@ -792,6 +817,7 @@ print(json.dumps(required, sort_keys=True))
                 "session_count": 1,
                 "sleep_score_count": 1,
                 "recovery_score_count": 0,
+                "without_score_count": 0,
                 "awaiting_score_count": 0,
                 "average_sleep_score": 82,
                 "average_recovery_score": None,

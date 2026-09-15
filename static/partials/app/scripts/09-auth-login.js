@@ -61,16 +61,22 @@ async function loadUsers(){
       };
       chips.appendChild(c);
       const availableSessions=Number(u.available_sessions??u.sessions??0);
-      if(availableSessions<=0)return;
+      const sessionsWithoutSensor=Number(u.current_sessions_without_data??0);
+      const usageSessions=Number(
+        u.available_usage_sessions??(availableSessions+sessionsWithoutSensor)
+      );
+      if(usageSessions<=0)return;
       const o = document.createElement('option');
       o.value = u.account_key||u.email||u.username;
-      o.textContent = `${identityLabel(u)} (${availableSessions} sessions)`;
+      const sensorNote=sessionsWithoutSensor
+        ?` · ไม่มี Sensor ${sessionsWithoutSensor}`:'';
+      o.textContent = `${identityLabel(u)} (${usageSessions} ครั้ง${sensorNote})`;
       sel.appendChild(o);
     });
     if (!orderedUsers.length) chips.innerHTML = '<div class="mini" style="margin-top:2px">ยังไม่มีผู้ใช้ — พิมพ์ชื่อด้านล่างเพื่อสร้างใหม่</div>';
     if (sel.options.length===1){
       const empty=document.createElement('option');
-      empty.value='';empty.textContent='ยังไม่มี Session ที่มีข้อมูล';empty.disabled=true;
+      empty.value='';empty.textContent='ยังไม่มี Session ที่จบในช่วง Pilot';empty.disabled=true;
       sel.innerHTML='';empty.selected=true;sel.appendChild(empty);
     }
     // Sessions may receive its first WebSocket frame before the admin user

@@ -395,7 +395,9 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertIn("sortHistoryUsersNewestFirst(d.users)", ui)
         self.assertIn("sessionState.account_key||sessionState.email", ui)
         self.assertIn("u.available_sessions??u.sessions??0", ui)
-        self.assertIn("ยังไม่มี Session ที่มีข้อมูล", ui)
+        self.assertIn("u.current_sessions_without_data??0", ui)
+        self.assertIn("u.available_usage_sessions??", ui)
+        self.assertIn("ยังไม่มี Session ที่จบในช่วง Pilot", ui)
 
     def test_session_history_has_daily_time_and_admin_name_filters(self):
         ui = (PI5_ROOT / "static" / "index.html").read_text(encoding="utf-8")

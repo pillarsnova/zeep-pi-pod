@@ -41,6 +41,43 @@ def _score_buckets(
     return sleep_scores, recovery_scores, awaiting
 
 
+def _formula_safe_average(
+    results: list[dict[str, Any]],
+    score_type: str,
+) -> float | None:
+    """Average only a complete cohort with one verified score formula."""
+    values: list[float] = []
+    formula: str | None = None
+    recovery_target: str | None = None
+    for result in results:
+        score = _mapping(result.get("score"))
+        value = score.get("value")
+        if score.get("available") is not True or score.get("type") != score_type:
+            continue
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            continue
+        current_formula = str(score.get("formula_version") or "").strip()
+        if not current_formula:
+            return None
+        if formula is not None and current_formula != formula:
+            return None
+        formula = current_formula
+        if score_type == "recovery_score":
+            target = _mapping(_mapping(result.get("mode")).get("target"))
+            current_target = str(target.get("key") or "").strip().casefold()
+            current_target = {
+                "nap_30m": "nap_30",
+                "nap_90m": "nap_90",
+            }.get(current_target, current_target)
+            if current_target not in {"nap_30", "nap_90"}:
+                return None
+            if recovery_target is not None and recovery_target != current_target:
+                return None
+            recovery_target = current_target
+        values.append(float(value))
+    return round(sum(values) / len(values), 1) if values else None
+
+
 def _summary_payload(
     *,
     people_count: int,
@@ -48,6 +85,7 @@ def _summary_payload(
     sleep_scores: list[float],
     recovery_scores: list[float],
     awaiting: int,
+    results: list[dict[str, Any]],
 ) -> dict[str, Any]:
     assert len(sleep_scores) + len(recovery_scores) + awaiting == session_count
     return {
@@ -55,14 +93,12 @@ def _summary_payload(
         "session_count": session_count,
         "sleep_score_count": len(sleep_scores),
         "recovery_score_count": len(recovery_scores),
+        "without_score_count": awaiting,
         "awaiting_score_count": awaiting,
-        "average_sleep_score": (
-            round(sum(sleep_scores) / len(sleep_scores), 1) if sleep_scores else None
-        ),
-        "average_recovery_score": (
-            round(sum(recovery_scores) / len(recovery_scores), 1)
-            if recovery_scores
-            else None
+        "average_sleep_score": _formula_safe_average(results, "sleep_score"),
+        "average_recovery_score": _formula_safe_average(
+            results,
+            "recovery_score",
         ),
     }
 
@@ -87,6 +123,7 @@ def history_summary(
         sleep_scores=sleep_scores,
         recovery_scores=recovery_scores,
         awaiting=awaiting,
+        results=results,
     )
 
 
@@ -152,6 +189,7 @@ def usage_page_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
         sleep_scores=sleep_scores,
         recovery_scores=recovery_scores,
         awaiting=awaiting,
+        results=items,
     )
 
 
@@ -209,6 +247,7 @@ def validated_range_summary(
         "session_count": total,
         "sleep_score_count": sleep_count,
         "recovery_score_count": recovery_count,
+        "without_score_count": awaiting_count,
         "awaiting_score_count": awaiting_count,
         "average_sleep_score": _valid_average(
             summary, "average_sleep_score", sleep_count

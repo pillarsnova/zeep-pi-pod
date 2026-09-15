@@ -24,6 +24,8 @@ def canonical_personal_baseline(
     *,
     group: str,
     score: float | None,
+    source_formula_version: str | None,
+    source_target_key: str | None,
 ) -> dict[str, Any]:
     """Rebuild a Baseline result from an explicit, same-mode allowlist."""
     persisted = _mapping(source)
@@ -34,16 +36,30 @@ def canonical_personal_baseline(
     sessions = _number(maturity.get("sessions_used"))
     if sessions is None:
         return dict(fallback)
-    context: dict[str, Any] = {"sessions_used": max(0, int(sessions))}
+    context: dict[str, Any] = {
+        "baseline_policy_version": persisted.get("baseline_policy_version"),
+        "target_specific": persisted.get("target_specific") is True,
+        "target_key": persisted.get("target_key"),
+        "score_reference": {
+            "sessions_used": max(0, int(sessions)),
+            "formula_version": persisted.get("score_formula_version"),
+        },
+    }
     median = _number(comparison.get("baseline_median"))
     typical = comparison.get("typical_range")
     if median is not None and 0.0 <= median <= 100.0:
-        context["score_median"] = median
+        context["score_reference"]["median"] = median
     if isinstance(typical, list | tuple) and len(typical) == 2:
         low, high = _number(typical[0]), _number(typical[1])
         if low is not None and high is not None and 0.0 <= low <= high <= 100.0:
-            context["score_typical_range"] = [low, high]
-    return build_baseline_summary(context, score, group)
+            context["score_reference"]["typical_range"] = [low, high]
+    return build_baseline_summary(
+        context,
+        score,
+        group,
+        source_formula_version=source_formula_version,
+        source_target_key=source_target_key,
+    )
 
 
 def canonical_trend(
@@ -51,10 +67,21 @@ def canonical_trend(
     fallback: Mapping[str, Any],
     *,
     score_available: bool,
+    baseline_policy_version: str | None,
+    score_formula_version: str | None,
+    target_specific: bool,
+    target_key: str | None,
 ) -> dict[str, Any]:
     """Allow only same-mode Session score windows, never day readiness."""
     persisted = _mapping(source)
-    if not score_available or persisted.get("available") is not True:
+    if (
+        not score_available
+        or persisted.get("available") is not True
+        or persisted.get("baseline_policy_version") != baseline_policy_version
+        or persisted.get("score_formula_version") != score_formula_version
+        or persisted.get("target_specific") is not target_specific
+        or persisted.get("target_key") != target_key
+    ):
         return dict(fallback)
     windows = _mapping(persisted.get("windows"))
     public_windows: dict[str, Any] = {}
@@ -85,6 +112,10 @@ def canonical_trend(
         "windows": public_windows,
         "mode_specific": True,
         "whole_day_readiness_trend": False,
+        "baseline_policy_version": baseline_policy_version,
+        "score_formula_version": score_formula_version,
+        "target_specific": target_specific,
+        "target_key": target_key,
     }
 
 
@@ -138,6 +169,8 @@ def persisted_restore_matches(
     persisted_source = _mapping(existing.get("source_score"))
     canonical_source = _mapping(canonical.get("source_score"))
     persisted_scope = _mapping(existing.get("session_scope"))
+    persisted_baseline = _mapping(existing.get("personal_baseline"))
+    canonical_baseline = _mapping(canonical.get("personal_baseline"))
     return bool(
         existing
         and existing.get("version") == canonical.get("version")
@@ -147,6 +180,8 @@ def persisted_restore_matches(
         and persisted_source.get("formula_version")
         == canonical_source.get("formula_version")
         and persisted_scope.get("mode") == group
+        and persisted_baseline.get("target_key")
+        == canonical_baseline.get("target_key")
     )
 
 
@@ -160,17 +195,28 @@ def canonical_restore_contexts(
     score_available: bool,
 ) -> dict[str, Any]:
     """Return the three persisted context sections through strict adapters."""
+    source = _mapping(canonical.get("source_score"))
+    baseline = _mapping(canonical.get("personal_baseline"))
+    source_formula = source.get("formula_version")
+    source_target = baseline.get("target_key")
+    personal = canonical_personal_baseline(
+        summary.get("personal_baseline"),
+        _mapping(canonical.get("personal_baseline")),
+        group=group,
+        score=score_value if score_available else None,
+        source_formula_version=source_formula,
+        source_target_key=source_target,
+    )
     return {
-        "personal_baseline": canonical_personal_baseline(
-            summary.get("personal_baseline"),
-            _mapping(canonical.get("personal_baseline")),
-            group=group,
-            score=score_value if score_available else None,
-        ),
+        "personal_baseline": personal,
         "trend": canonical_trend(
             summary.get("trend"),
             _mapping(canonical.get("trend")),
             score_available=score_available,
+            baseline_policy_version=personal.get("baseline_policy_version"),
+            score_formula_version=source_formula,
+            target_specific=personal.get("target_specific") is True,
+            target_key=source_target,
         ),
         "subjective_outcome": canonical_subjective_outcome(
             existing.get("subjective_outcome")

@@ -9,6 +9,7 @@ from personal import BaselineStore
 from sleep_session_report import build_session_report, build_sleep_quality
 from sleep_system_policy import (
     APPROVED_SLEEP_RESULT_VERSION_PAIRS,
+    PERSONAL_BEHAVIOUR_BASELINE_VERSION,
     PRE_CONTINUITY_SESSION_REPORT_VERSION,
     PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
     PRE_RECOVERY_TIMING_SESSION_REPORT_VERSION,
@@ -22,6 +23,7 @@ from sleep_system_policy import (
     SESSION_REPORT_VERSION,
     SLEEP_QUALITY_VERSION,
     SLEEP_SCORE_FORMULA_VERSION,
+    ZEEP_SLEEP_BASELINE_VERSION,
 )
 from zeep_pod.sessions.history_quality import released_historical_quality
 from zeep_pod.sessions.restore_summary import build_restore_summary
@@ -69,6 +71,8 @@ class _BehaviourDatabase:
                     "session_id": session_id,
                     "duration": 30 * 60,
                     "start_time": f"2026-09-{index:02d}T06:00:00+00:00",
+                    "rest_mode": "nap_recovery",
+                    "target_duration_s": 30 * 60,
                 },
             )
             self.summaries[session_id] = {
@@ -80,6 +84,10 @@ class _BehaviourDatabase:
                         "quality_type": "rest_goal",
                         "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
                         "version": SLEEP_QUALITY_VERSION,
+                        "duration_target": {
+                            "key": "nap_30",
+                            "seconds": 30 * 60,
+                        },
                     },
                 },
                 "session_report": {
@@ -364,22 +372,37 @@ class RestoreSummaryTests(unittest.TestCase):
         self.assertIsNone(summary["subjective_outcome"]["freshness_delta"])
 
     def test_baseline_compares_only_after_seven_same_mode_sessions(self):
+        early_context = {
+            "sessions_used": 6,
+            "score_median": 75,
+            "score_typical_range": [72, 79],
+            "baseline_policy_version": PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+            "target_specific": True,
+            "target_key": "overnight_7h",
+            "score_reference": {
+                "sessions_used": 6,
+                "median": 75,
+                "typical_range": [72, 79],
+                "formula_version": SLEEP_SCORE_FORMULA_VERSION,
+            },
+        }
         early = build_restore_summary(
             _sleep_quality(),
-            personal_context={
-                "sessions_used": 6,
-                "score_median": 75,
-                "score_typical_range": [72, 79],
-            },
+            personal_context=early_context,
         )
+        active_context = {
+            **early_context,
+            "sessions_used": 8,
+            "scores": [70, 72, 75, 77, 82],
+            "score_reference": {
+                **early_context["score_reference"],
+                "sessions_used": 8,
+            },
+        }
         active = build_restore_summary(
             _sleep_quality(),
-            personal_context={
-                "sessions_used": 8,
-                "score_median": 75,
-                "score_typical_range": [72, 79],
-            },
-            trend_context={"scores": [70, 72, 75, 77, 82]},
+            personal_context=active_context,
+            trend_context=active_context,
         )
 
         self.assertEqual(early["personal_baseline"]["maturity"]["key"], "early")
@@ -641,7 +664,9 @@ class RestoreSummaryTests(unittest.TestCase):
         )
 
         record = store.update_user("person@example.com")
-        context = record["behaviour_by_mode"]["nap_recovery"]
+        context = record["behaviour_by_mode"]["nap_recovery"]["by_target"][
+            "nap_30"
+        ]
 
         self.assertEqual(context["sessions_used"], 8)
         self.assertEqual(context["scores"], list(range(71, 79)))
@@ -654,6 +679,8 @@ class RestoreSummaryTests(unittest.TestCase):
             context["score_formula_versions"],
             [RECOVERY_SCORE_FORMULA_VERSION],
         )
+        self.assertEqual(context["score_reference"]["sessions_used"], 8)
+        self.assertTrue(context["target_specific"])
 
     def test_personal_aggregation_excludes_mode_conflict(self):
         database = _BehaviourDatabase()

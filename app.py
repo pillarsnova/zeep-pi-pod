@@ -40,10 +40,12 @@ from fastapi import (
     HTTPException,
     Request,
     Response,
+    Security,
     WebSocket,
     WebSocketDisconnect,
 )
 from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.security import APIKeyCookie
 from fastapi.staticfiles import StaticFiles
 from api_history import create_history_router
 from api_models import (
@@ -65,12 +67,7 @@ from api_models import (
     TrackCommand,
     VolumeCommand,
 )
-from access_control import (
-    COOKIE_NAME,
-    CSRF_COOKIE_NAME,
-    AuthSessionManager,
-    Principal,
-)
+from access_control import COOKIE_NAME, CSRF_COOKIE_NAME, AuthSessionManager, Principal
 from backup import DailyBackup
 from bcg_storage import BCGStorage
 from brainwave_audio import public_presets as brainwave_public_presets
@@ -84,6 +81,10 @@ from database import DatabaseManager
 from api_v1 import create_api_v1_router
 from zeep_pod.adaptive_learning import build_adaptive_learning_snapshot
 from zeep_pod.api_state_projection import project_consumer_snapshot
+from zeep_pod.identity.account_aliases import verified_alias_mapping
+from zeep_pod.identity.account_erasure_api import create_account_erasure_router
+from zeep_pod.identity.lifecycle_lock import synchronized_by
+from zeep_pod.identity.startup_migration import migrate_identity_stores
 from zeep_pod.identity.profile_fields import (
     health_reference_from_profile as build_health_reference,
     normalise_blood_group as _normalise_blood_group,
@@ -122,15 +123,11 @@ from zeep_pod.sessions.sleep_context import (
     restore_session_sleep_context,
 )
 from zeep_pod.sessions.history import (
-    USER_HISTORY_FILTER,
     session_availability_by_account,
     users_ordered_by_latest_session as _users_ordered_by_latest_session,
 )
-from zeep_pod.sessions.history_service import (
-    SessionHistoryService,
-    local_history_day,
-    resolve_history_window,
-)
+from zeep_pod.sessions.history_service import SessionHistoryService, local_history_day
+from zeep_pod.sessions.history_service import resolve_history_window, safe_account_profile
 from zeep_pod.sessions.history_quality import (
     released_historical_quality as _released_historical_quality,
 )
@@ -1096,6 +1093,7 @@ daily_backup = DailyBackup(
 # Browser authentication and physical occupancy intentionally use separate
 # stores.  One pod session can coexist with one or more admin browser sessions.
 auth_sessions = AuthSessionManager(DATA_DIR)
+auth_cookie = APIKeyCookie(name=COOKIE_NAME, auto_error=False)
 # In-flight QR logins.  Process memory only: a pollSecret must never reach the
 # browser, the QR image, disk or the log.
 qr_logins = QrLoginRegistry()
@@ -1292,9 +1290,9 @@ def safety_supervisor():
 # ---------- profile & session store (on-device only) ----------
 profile_lock = threading.Lock()
 sessions_file_lock = threading.Lock()
-session_lock = threading.Lock()
+session_lock = threading.RLock()
 last_sensor_frame_lock = threading.Lock()
-ingest_outbox_lock = threading.Lock()
+ingest_outbox_lock = threading.RLock()
 # RLock permits atomic nested Sleep lifecycle helpers.
 sleep_path_lock = threading.RLock()
 analysis_frame_lock = threading.Lock()
@@ -1346,7 +1344,10 @@ def _active_session_checkpoint_payload(active: Dict[str, Any]) -> Dict[str, Any]
 
 def _save_active_session_checkpoint(active: Dict[str, Any]) -> Dict[str, Any]:
     """Compatibility facade for durable Session checkpoint persistence."""
-    return session_checkpoint_store.save(_active_with_sleep_context(active))
+    with session_lock:
+        if active is not _active_session:
+            return {}
+        return session_checkpoint_store.save(_active_with_sleep_context(active))
 
 
 def _load_active_session_checkpoint() -> Optional[Dict[str, Any]]:
@@ -2439,7 +2440,6 @@ def _migrate_profiles_to_email_keys() -> Dict[str, str]:
         if not profiles:
             return {}
         migrated: Dict[str, Dict[str, Any]] = {}
-        mapping: Dict[str, str] = {}
         changed = False
         for stored_key, stored_profile in profiles.items():
             old_key = str(stored_key or "").strip().casefold()
@@ -2455,35 +2455,36 @@ def _migrate_profiles_to_email_keys() -> Dict[str, str]:
                 profile["zeep_email"] = email
             profile["account_key"] = new_key
             if new_key != old_key:
-                mapping[old_key] = new_key
                 aliases = {str(value).strip().casefold() for value in (profile.get("legacy_account_keys") or []) if value}
                 aliases.add(old_key)
                 profile["legacy_account_keys"] = sorted(aliases)
                 changed = True
-            for alias in profile.get("legacy_account_keys") or []:
-                alias_key = str(alias or "").strip().casefold()
-                if alias_key and alias_key != new_key:
-                    mapping[alias_key] = new_key
 
             existing = migrated.get(new_key)
             if existing is None:
                 migrated[new_key] = profile
                 continue
-            # A renamed legacy profile can collide with an already email-keyed
+            existing_public_id = str(existing.get("zeep_public_id") or "").strip()
+            incoming_public_id = str(profile.get("zeep_public_id") or "").strip()
+            if existing_public_id and incoming_public_id and existing_public_id != incoming_public_id:
+                raise RuntimeError(
+                    "refusing to merge Profiles with conflicting immutable identities"
+                )
             # profile. Preserve the newest metadata and combine counters.
             old_last = str(existing.get("last_session_utc") or "")
             new_last = str(profile.get("last_session_utc") or "")
             newer, older = (profile, existing) if new_last >= old_last else (existing, profile)
             combined = {**older, **newer}
             combined["sessions"] = int(existing.get("sessions", 0)) + int(profile.get("sessions", 0))
-            created = [
-                value
-                for value in (
-                    existing.get("created_at_utc"),
-                    profile.get("created_at_utc"),
-                )
-                if value
-            ]
+            aliases = set(existing.get("legacy_account_keys") or [])
+            aliases.update(profile.get("legacy_account_keys") or [])
+            combined["legacy_account_keys"] = sorted(
+                normalized
+                for alias in aliases
+                if alias and (normalized := str(alias).strip().casefold()) != new_key
+            )
+            created = [existing.get("created_at_utc"), profile.get("created_at_utc")]
+            created = [value for value in created if value]
             if created:
                 combined["created_at_utc"] = min(created)
             combined["account_key"] = new_key
@@ -2491,7 +2492,7 @@ def _migrate_profiles_to_email_keys() -> Dict[str, str]:
             changed = True
         if changed or migrated != profiles:
             _save_profiles(migrated)
-        return mapping
+        return verified_alias_mapping(migrated)
 
 
 def _read_sessions() -> list:
@@ -2574,6 +2575,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
         session_active = bool(state["session"].get("active"))
         session_recording = bool(state["session"].get("recording"))
         rest_mode = state["session"].get("rest_mode") or "auto"
+        target_duration_s = state["session"].get("target_duration_s")
     age_group = selected_age_group if selected_age_group in AGE_SLEEP_BASELINES else _age_group(age)
     age_baseline = AGE_SLEEP_BASELINES[age_group]
     baseline, gender_adjustment = _gender_adjusted_baseline(age_group, gender)
@@ -2591,7 +2593,7 @@ def estimate_sleep_state() -> Dict[str, Any]:
             "candidate_available": proposed_personal_baseline != baseline,
         }
     personal_behaviour = (
-        baselines.behaviour_context(_account_key, rest_mode)
+        baselines.behaviour_context(_account_key, rest_mode, target_duration_s)
         if _account_key
         else {
             "status": "no_session",
@@ -5058,9 +5060,12 @@ def _write_ingest_outbox(entry: Dict[str, Any]) -> None:
         os.replace(temporary, path)
 
 
-def _clear_ingest_outbox(session_id: str) -> None:
+def _clear_ingest_outbox(session_id: str) -> bool:
     with ingest_outbox_lock:
-        _ingest_outbox_path(session_id).unlink(missing_ok=True)
+        path = _ingest_outbox_path(session_id)
+        existed = path.is_file()
+        path.unlink(missing_ok=True)
+        return existed
 
 
 def _post_ingest_entry(entry: Dict[str, Any], *, timeout: Optional[float] = None) -> bool:
@@ -5176,6 +5181,7 @@ def _enqueue_session_ingest(record: Dict[str, Any], report_samples: List[Dict[st
         )
 
 
+@synchronized_by(ingest_outbox_lock)
 def _sweep_ingest_outbox() -> None:
     """Retry every queued upload, oldest first. Safe to call at any time."""
     if not (ZEEP_INGEST_API_KEY and ZEEP_INGEST_DEVICE_ID):
@@ -5287,6 +5293,7 @@ def _commit_live_session_finalization(
     _clear_active_session_checkpoint()
 
 
+@synchronized_by(session_lock)
 def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]:
     """Close the active session and persist its record. Returns None if idle."""
     global _active_session
@@ -5296,7 +5303,7 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
     if active is None:
         return None
     record = active["record"]
-    report_shares.reserve(record.get("identity_subject"))
+    report_shares.reserve(record.get("identity_subject"), account_key=record.get("username_key"))
     samples = active["samples"]
     acquisition_interval_s = _sample_interval_seconds(record.get("sample_interval_s"), SESSION_SAMPLE_SECONDS)
     ended_at_utc = datetime.now(timezone.utc).isoformat()
@@ -5593,7 +5600,7 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
     night_summary["sleep_quality"] = sleep_quality
     night_summary["wellness_score"] = sleep_quality.get("score")
     record["sleep_quality"] = sleep_quality
-    restore_context = baselines.behaviour_context(record["username_key"], record.get("rest_mode") or "auto")
+    restore_context = baselines.behaviour_context(record["username_key"], record.get("rest_mode") or "auto", record.get("target_duration_s"))
     session_report = build_session_report(
         record["duration_s"],
         report_samples,
@@ -6156,22 +6163,17 @@ async def lifespan(_: FastAPI):
         log_event("db", "migration_skipped", error=str(exc))
     try:
         account_mapping = _migrate_profiles_to_email_keys()
-        if account_mapping:
-            migrated_sessions = database.rekey_session_accounts(account_mapping)
-            migrated_baselines = baselines.rekey_users(account_mapping)
-            migrated_auth = auth_sessions.rekey_account_keys(account_mapping)
-            log_event(
-                "db",
-                "account_keys_migrated_to_email",
-                profiles=len(account_mapping),
-                sessions=migrated_sessions,
-                baselines=migrated_baselines,
-                browser_sessions=migrated_auth,
-            )
     except Exception as exc:
-        # Identity migration is additive/re-keying only. Keep the original
-        # records available if one local file is malformed and surface it to Admin.
-        log_event("db", "account_key_migration_failed", error=str(exc))
+        log_event("db", "profile_key_migration_failed", error=str(exc))
+    else:
+        if account_mapping:
+            outcome = migrate_identity_stores(
+                account_mapping,
+                session_migration=database.rekey_session_accounts,
+                baseline_migration=baselines.rebuild_rekeyed_users,
+                auth_migration=auth_sessions.rekey_account_keys,
+            )
+            log_event("db", "account_keys_migrated_to_email", **outcome)
     database.start()
     try:
         _restore_interrupted_session()
@@ -6200,7 +6202,6 @@ async def lifespan(_: FastAPI):
     threading.Thread(target=safety_supervisor, daemon=True).start()
     threading.Thread(target=ingest_outbox_sweeper, daemon=True).start()
     yield
-    # Restart/power cycle is not a logout: keep the DB row open for recovery.
     with session_lock:
         active = _active_session
     if active is not None:
@@ -6208,8 +6209,6 @@ async def lifespan(_: FastAPI):
             _save_active_session_checkpoint(active)
         except Exception as exc:
             log_event("session", "restart_checkpoint_save_failed", error=str(exc))
-        # waiting_bed deliberately has no sessions.db row yet, so an event
-        # would violate its foreign key. The checkpoint alone restores Login.
         if active.get("phase") == "recording":
             database.enqueue(
                 "sessions",
@@ -6261,6 +6260,7 @@ def optional_principal(
 
 def require_user(
     request: Request,
+    _cookie_token: Optional[str] = Security(auth_cookie),
     x_api_token: Optional[str] = Header(default=None),
     x_csrf_token: Optional[str] = Header(default=None),
 ) -> Principal:
@@ -6315,8 +6315,6 @@ def _set_auth_cookies(response: Response, cookie_token: str, principal: Principa
         samesite="strict",
         path="/",
     )
-    # JavaScript reads only this random CSRF value; the authentication cookie
-    # itself remains HttpOnly and is never accessible to frontend code.
     response.set_cookie(
         CSRF_COOKIE_NAME,
         principal.csrf_token,
@@ -6345,19 +6343,19 @@ def _pod_is_occupied() -> bool:
 app.include_router(
     create_qr_login_router(
         qr_logins,
-        # Late binding on purpose: both hooks are swapped in regression tests.
         zeep_request=lambda *a, **kw: _zeep_request(*a, **kw),
         zeep_offline=ZeepApiOffline,
         complete_login=lambda *a, **kw: _complete_occupant_login(*a, **kw),
         pod_occupied=_pod_is_occupied,
         log_event=log_event,
+        lifecycle_lock=session_lock,
     )
 )
 app.include_router(create_profile_completion_router(
-    pending_profiles,  # late-bound hooks, exactly like the QR router above
+    pending_profiles,
     zeep_request=lambda *a, **kw: _zeep_request(*a, **kw), zeep_offline=ZeepApiOffline,
     complete_login=lambda *a, **kw: _complete_occupant_login(*a, **kw),
-    pod_occupied=_pod_is_occupied, log_event=log_event,
+    pod_occupied=_pod_is_occupied, log_event=log_event, lifecycle_lock=session_lock,
 ))
 app.include_router(
     create_report_share_router(
@@ -6365,10 +6363,34 @@ app.include_router(
         zeep_request=lambda *a, **kw: _zeep_request(*a, **kw),
         zeep_offline=ZeepApiOffline,
         log_event=log_event,
+        lifecycle_lock=session_lock,
     )
 )
 app.include_router(create_history_router(database, require_admin=require_admin))
 app.include_router(create_occupancy_router(occupancy_store, OCCUPANCY_COORDINATOR_TOKEN))
+app.include_router(
+    create_account_erasure_router(
+        require_admin=require_admin,
+        lifecycle_lock=session_lock,
+        normalize_account_key=_normalize_account_key,
+        active_account_key=lambda: (
+            _active_session["record"]["username_key"]
+            if _active_session is not None
+            else None
+        ),
+        database=database,
+        baseline_store=baselines,
+        auth_sessions=auth_sessions,
+        profiles_lock=profile_lock,
+        load_profiles=_load_profiles,
+        save_profiles=_save_profiles,
+        clear_pending_ingest=_clear_ingest_outbox,
+        clear_report_shares=report_shares.discard_account, clear_pending_profiles=pending_profiles.discard_account,
+        clear_session_checkpoint=session_checkpoint_store.discard_accounts,
+        log_event=log_event,
+        backup_retention_count=lambda: daily_backup.retention_count,
+    )
+)
 app.include_router(
     create_api_v1_router(
         require_pod_operator=require_pod_operator,
@@ -6388,6 +6410,7 @@ app.include_router(
         profiles_snapshot=lambda: _load_profiles(),
         profiles_lock=profile_lock,
         timezone_name=POD_TIMEZONE or "Asia/Bangkok",
+        baseline_snapshot=lambda account_key: baselines.get(account_key),
     )
 )
 
@@ -7462,6 +7485,7 @@ _zeep_identity_from_auth_data = partial(identity_from_auth_data, **_zeep_binding
 _authenticate_zeep_account = partial(authenticate_password, **_zeep_binding)
 
 
+@synchronized_by(session_lock)
 def _complete_occupant_login(
     auth: Dict[str, Any],
     me: Dict[str, Any],
@@ -7538,14 +7562,14 @@ def _complete_occupant_login(
 
 
 @app.post("/api/auth/login")
+@synchronized_by(session_lock)
 def auth_login(cmd: AuthLoginCommand, response: Response):
     """Authenticate an occupant, acquire the pod lease, then start a pod session."""
     identifier = (cmd.identifier or "").strip()
     if not identifier or not cmd.password:
         raise HTTPException(422, "กรอก Username/Email และรหัสผ่านให้ครบ")
-    with session_lock:
-        if _active_session is not None:
-            raise HTTPException(409, {"code": "pod_already_occupied", "message": "ตู้นี้กำลังมีผู้ใช้งาน"})
+    if _active_session is not None:
+        raise HTTPException(409, {"code": "pod_already_occupied", "message": "ตู้นี้กำลังมีผู้ใช้งาน"})
     try:
         auth, me = _authenticate_zeep_account(identifier, cmd.password)
     except ZeepApiOffline as exc:
@@ -7845,6 +7869,7 @@ def auth_logout(
 
 
 @app.post("/api/session/login")
+@synchronized_by(session_lock)
 def session_login(cmd: LoginCommand, response: Response):
     """Local fallback: เปิด session โดยไม่ใช้บัญชี ZEEP (ไม่มีรหัสผ่าน).
 
@@ -8306,7 +8331,8 @@ def history_list(
         default_today=False,
     )
     with profile_lock:
-        history_profile = _load_profiles().get(key, {})
+        profiles = _load_profiles()
+        history_profile = safe_account_profile(key, dict(profiles.get(key) or {}), profiles)
     return _session_history_service().account_history(
         key,
         history_profile,
@@ -8325,12 +8351,16 @@ def history_detail(
     response.headers["Cache-Control"] = "private, no-store"
     response.headers["Pragma"] = "no-cache"
     key = _require_username_access(username, principal)
-    rows = database.read_sessions(
-        "SELECT s.* FROM sessions AS s WHERE s.session_id=? AND " + USER_HISTORY_FILTER,
-        (session_id, key, PERSONAL_BASELINE_LEARNING_START_UTC),
-    )
-    if not rows:
+    with profile_lock:
+        profiles = _load_profiles()
+        profile = safe_account_profile(key, dict(profiles.get(key) or {}), profiles)
+    authorized = _session_history_service().session_by_id(session_id, profiles, account_key=key)
+    if authorized is None:
         raise HTTPException(404, "ไม่พบ session นี้")
+    rows = database.read_sessions(
+        "SELECT s.* FROM sessions AS s WHERE s.session_id=?",
+        (session_id,),
+    )
     row = rows[0]
     timeline = database.read_sessions("SELECT * FROM timeline WHERE session_id=? ORDER BY timestamp", (session_id,))
     timeline_interval_s = _timeline_sample_interval(timeline, 5.0)
@@ -8395,8 +8425,6 @@ def history_detail(
         session_start=row["start_time"],
         classification_end=classification_end,
     )
-    with profile_lock:
-        profile = _load_profiles().get(row["username_key"], {})
     history_rest_mode, history_target_duration_s = (
         history_support.canonical_history_rest_metadata(row, final_summary)
     )
@@ -8459,14 +8487,16 @@ def history_detail(
         session_report["display_recomputed"] = True
         session_report["display_recomputed_from_version"] = persisted_report_version
         session_report["persisted_record_unchanged"] = True
+    canonical_key = str(authorized.get("account_key") or key)
+    canonical_email = authorized.get("email") or profile.get("email") or profile.get("zeep_email")
     return {
         "session_id": row["session_id"],
-        "username": row["user"],
-        "display_name": profile.get("display_name") or row["user"],
-        "account_key": row["username_key"],
-        "email": profile.get("email") or profile.get("zeep_email") or (row["username_key"] if "@" in row["username_key"] else None),
+        "username": profile.get("username") or row["user"],
+        "display_name": authorized.get("display_name") or row["user"],
+        "account_key": canonical_key,
+        "email": canonical_email or (canonical_key if "@" in canonical_key else None),
         # Legacy response alias retained for existing Admin tools.
-        "username_key": row["username_key"],
+        "username_key": canonical_key,
         "gender": row["gender"],
         "age": profile.get("age"),
         "age_group": profile.get("age_group"),
@@ -8519,37 +8549,6 @@ def history_detail(
             "sleep_state_counts": history_sleep_counts,
         },
         "counters": final_summary.get("counters") or counters,
-    }
-
-
-@app.delete("/api/users/{username}", dependencies=[Depends(require_admin)])
-def user_delete(username: str):
-    """PDPA erasure: remove the profile and every stored session of this user."""
-    key = _normalize_account_key(username)
-    with session_lock:
-        if _active_session is not None and _active_session["record"]["username_key"] == key:
-            raise HTTPException(409, "ผู้ใช้นี้กำลังอยู่ใน session — ออกจากระบบก่อนลบ")
-    with profile_lock:
-        profiles = _load_profiles()
-        if key not in profiles:
-            raise HTTPException(404, "ไม่พบผู้ใช้นี้")
-        removed = profiles.pop(key)
-        _save_profiles(profiles)
-    records = database.read_sessions("SELECT session_id FROM sessions WHERE username_key=?", (key,))
-    for record in records:
-        database.enqueue("bcg", "delete_bcg_session", {"session_id": record["session_id"]})
-        database.enqueue("sessions", "delete_session", {"session_id": record["session_id"]})
-    database.flush(30)
-    log_event(
-        "session",
-        "user_deleted",
-        user=removed.get("username"),
-        sessions_removed=len(records),
-    )
-    return {
-        "ok": True,
-        "username": removed.get("username"),
-        "sessions_removed": len(records),
     }
 
 

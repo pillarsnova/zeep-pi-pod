@@ -18,11 +18,11 @@ import secrets
 import sqlite3
 import threading
 import time
+from collections.abc import Collection
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
-
 
 COOKIE_NAME = "zeep_auth"
 CSRF_COOKIE_NAME = "zeep_csrf"
@@ -309,6 +309,47 @@ class AuthSessionManager:
                 params,
             )
             return max(0, int(cursor.rowcount or 0))
+
+    def revoke_user_account(self, account_key: str) -> int:
+        """Revoke every local User browser Session for one account key."""
+        key = str(account_key or "").strip().casefold()
+        if not key:
+            return 0
+        with self._lock, closing(self._connect()) as connection, connection:
+            cursor = connection.execute(
+                "DELETE FROM auth_sessions "
+                "WHERE role='user' AND lower(account_key)=?",
+                (key,),
+            )
+        return max(0, int(cursor.rowcount or 0))
+
+    def clear_offline_tickets(self) -> int:
+        """Invalidate every local fallback capability after account erasure."""
+        with self._lock:
+            count = len(self._offline_tickets)
+            self._offline_tickets.clear()
+        return count
+
+    def discard_offline_tickets(self, account_keys: Collection[str]) -> int:
+        """Invalidate fallback capabilities issued for matching identities."""
+        identity_hashes = {
+            hashlib.sha256(
+                str(value).strip().casefold().encode("utf-8")
+            ).hexdigest()
+            for value in account_keys
+            if str(value or "").strip()
+        }
+        if not identity_hashes:
+            return 0
+        with self._lock:
+            tokens = [
+                token
+                for token, ticket in self._offline_tickets.items()
+                if ticket[0] in identity_hashes
+            ]
+            for token in tokens:
+                del self._offline_tickets[token]
+        return len(tokens)
 
     def issue_offline_ticket(self, identifier: str) -> str:
         """Allow local fallback only after this Pi observed ZEEP being offline."""

@@ -357,16 +357,54 @@ async function pollQrLogin(){
    ผูกฟอร์มกับ Login ที่ยืนยันตัวตนไปแล้ว (QR สแกนซ้ำไม่ได้) ---------- */
 let profileGate = {ticket:null, gender:'', blood:''};
 
+function fillDobOptions(){
+  // ช่วงปีตรงกับที่ Session ยอมรับ (อายุ 18–100 ปี) — เลือกปี พ.ศ. ไม่ได้อยู่แล้ว
+  const year = document.getElementById('profileDobYear');
+  const thisYear = new Date().getFullYear();
+  year.innerHTML = '<option value="">ปี ค.ศ.</option>';
+  for (let y = thisYear - 18; y >= thisYear - 100; y--) year.add(new Option(String(y), String(y)));
+  refreshDobDays();
+}
+
+// จำนวนวันของเดือนที่เลือก · ยังไม่เลือกปี → เผื่อ 29 ไว้ก่อนด้วยปีอธิกสุรทิน
+// แล้วค่อยตัดทิ้งตอนผู้ใช้เลือกปีจริง
+function dobDaysInMonth(){
+  const m = Number(document.getElementById('profileDobMonth').value);
+  if (!m) return 31;
+  return new Date(Number(document.getElementById('profileDobYear').value) || 2000, m, 0).getDate();
+}
+
+// เรียกทุกครั้งที่เดือนหรือปีเปลี่ยน เพื่อไม่ให้เลือกวันที่ไม่มีอยู่จริงได้เลย
+// (31 กุมภาพันธ์, 31 เมษายน, 29 กุมภาพันธ์ ในปีที่ไม่ใช่อธิกสุรทิน)
+function refreshDobDays(){
+  const day = document.getElementById('profileDobDay');
+  const chosen = day.value, days = dobDaysInMonth();
+  day.innerHTML = '<option value="">วัน</option>';
+  for (let d = 1; d <= days; d++) day.add(new Option(String(d), String(d)));
+  // วันที่เคยเลือกไว้หลุดช่วง → ล้างทิ้ง ไม่เดาวันเกิดให้ผู้ใช้เอง
+  day.value = (chosen && Number(chosen) <= days) ? chosen : '';
+}
+
+// วัน/เดือน/ปี → ISO ที่ server รับ · คืน '' เมื่อยังเลือกไม่ครบ
+function profileDobValue(){
+  const d = document.getElementById('profileDobDay').value;
+  const m = document.getElementById('profileDobMonth').value;
+  const y = document.getElementById('profileDobYear').value;
+  if (!d || !m || !y) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${y}-${pad(m)}-${pad(d)}`;
+}
+
 function openProfileGate(detail){
   profileGate.ticket = (detail && detail.profile_ticket) || null;
-  ['profileDob','profileHeight','profileWeight'].forEach(id=>{
+  fillDobOptions();
+  ['profileDobMonth','profileHeight','profileWeight'].forEach(id=>{
     document.getElementById(id).value = '';
   });
   selectProfileGender('');
   selectProfileBlood('');
   showProfileError('');
   document.getElementById('profileModal').classList.remove('hide');
-  document.getElementById('profileDob').focus();
 }
 
 function closeProfileGate(){
@@ -393,15 +431,17 @@ function showProfileError(message, tone = 'danger'){
   if (!el) return;
   el.textContent = message || '';
   el.className = `login-safety ${tone}${message ? '' : ' login-off'}`;
+  // แถบ error ดันปุ่มบันทึกลงไปได้ — เลื่อนให้เห็นทั้งคู่ ไม่ให้ดูเหมือนกดแล้วเงียบ
+  if (message) el.scrollIntoView({block:'end', behavior:'smooth'});
 }
 
 async function submitProfileForm(btn){
   if (!profileGate.ticket){ showProfileError('แบบฟอร์มหมดอายุแล้ว — เข้าสู่ระบบอีกครั้ง'); return; }
-  const dob = document.getElementById('profileDob').value;
+  const dob = profileDobValue();
   const height = Number(document.getElementById('profileHeight').value);
   const weight = Number(document.getElementById('profileWeight').value);
   if (!profileGate.gender){ showProfileError('เลือกเพศก่อน'); return; }
-  if (!dob){ showProfileError('เลือกวันเกิดก่อน'); return; }
+  if (!dob){ showProfileError('เลือกวันเกิดให้ครบ'); return; }
   if (!(height > 0) || !(weight > 0)){ showProfileError('กรอกส่วนสูงและน้ำหนักให้ครบ'); return; }
   const body = {
     profile_ticket:profileGate.ticket, gender:profileGate.gender, date_of_birth:dob,

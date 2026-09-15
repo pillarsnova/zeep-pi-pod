@@ -204,7 +204,28 @@
     <div class="modal-message" id="profileIntro">บัญชี ZEEP ของคุณยังไม่มีข้อมูลสุขภาพพื้นฐาน · ZEEP ใช้ค่าเหล่านี้ตั้ง Baseline ให้ตรงกับคุณ</div>
     <div class="profile-form">
       <div class="muted">วันเกิด</div>
-      <input id="profileDob" type="date" autocomplete="bday">
+      <!-- ไม่ใช้ <input type=date>: ตัวย่อในช่องเป็นคำแปลของ browser ที่หน้าเว็บ
+           สั่งไม่ได้ และภาษาไทยได้ "มม." ซึ่งย่อผิด (เดือน → ดด) · สามช่องนี้
+           อ่านเหมือนกันทุกเครื่องทุกภาษา และระบุ ค.ศ. ไว้ชัดกันสับสนกับ พ.ศ. -->
+      <div class="profile-date">
+        <select id="profileDobDay" aria-label="วันเกิด · วัน"></select>
+        <select id="profileDobMonth" aria-label="วันเกิด · เดือน" onchange="refreshDobDays()">
+          <option value="">เดือน</option>
+          <option value="1">มกราคม</option>
+          <option value="2">กุมภาพันธ์</option>
+          <option value="3">มีนาคม</option>
+          <option value="4">เมษายน</option>
+          <option value="5">พฤษภาคม</option>
+          <option value="6">มิถุนายน</option>
+          <option value="7">กรกฎาคม</option>
+          <option value="8">สิงหาคม</option>
+          <option value="9">กันยายน</option>
+          <option value="10">ตุลาคม</option>
+          <option value="11">พฤศจิกายน</option>
+          <option value="12">ธันวาคม</option>
+        </select>
+        <select id="profileDobYear" aria-label="วันเกิด · ปี ค.ศ." onchange="refreshDobDays()"></select>
+      </div>
 
       <div class="muted">เพศ</div>
       <div class="genders three" id="profileGenderSeg">

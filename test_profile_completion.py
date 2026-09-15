@@ -149,6 +149,13 @@ class PatchBuilderTests(unittest.TestCase):
         with self.assertRaises(HTTPException):
             build_zeep_patch(**form(gender="unspecified"))
 
+    def test_a_date_that_never_existed_is_refused(self) -> None:
+        """The form cannot offer 31 February, but the server must not rely on it."""
+        for bad in ("1995-02-31", "1995-04-31", "1999-02-29", "1995-13-01"):
+            with self.subTest(date_of_birth=bad):
+                with self.assertRaises(HTTPException):
+                    build_zeep_patch(**form(date_of_birth=bad))
+
     def test_bounds_match_the_session_guards(self) -> None:
         """Reject here rather than update the account and fail the Session."""
         today = date(2026, 9, 15)

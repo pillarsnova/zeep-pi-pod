@@ -34,8 +34,5 @@ jobs:
         run: |
           ruff check zeep_pod
           ruff format --check zeep_pod
-      - name: Check architecture boundaries
-        run: python -m unittest -v test_modular_architecture.py
       - name: Run regression suite
         run: python -m unittest discover -q
-

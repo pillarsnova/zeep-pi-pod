@@ -286,13 +286,14 @@ class FakeHistory:
         }
 
     def account_history(self, account_key, _profile, *, window, limit, offset):
-        rows = [row for row in self.sessions.values() if row["account_key"] == account_key]
+        rows = [
+            row for row in self.sessions.values() if row["account_key"] == account_key
+        ]
         return self._listing(rows, limit, offset)
 
     def account_sessions(self, account_key, _profile, *, window=None):
         return [
-            row for row in self.sessions.values()
-            if row["account_key"] == account_key
+            row for row in self.sessions.values() if row["account_key"] == account_key
         ]
 
     def account_completed_sessions(self, account_key, profile):
@@ -323,8 +324,16 @@ class FakeHistory:
 
     @staticmethod
     def _listing(rows, limit, offset):
-        sleep_scores = [row["sleep_quality"]["score"] for row in rows if row["sleep_quality"]["quality_type"] == "sleep"]
-        recovery_scores = [row["sleep_quality"]["score"] for row in rows if row["sleep_quality"]["quality_type"] == "rest_goal"]
+        sleep_scores = [
+            row["sleep_quality"]["score"]
+            for row in rows
+            if row["sleep_quality"]["quality_type"] == "sleep"
+        ]
+        recovery_scores = [
+            row["sleep_quality"]["score"]
+            for row in rows
+            if row["sleep_quality"]["quality_type"] == "rest_goal"
+        ]
         return {
             "sessions": rows[offset : offset + limit],
             "total": len(rows),
@@ -334,8 +343,14 @@ class FakeHistory:
                 "sleep_score_count": len(sleep_scores),
                 "recovery_score_count": len(recovery_scores),
                 "awaiting_score_count": 0,
-                "average_sleep_score": (sum(sleep_scores) / len(sleep_scores) if sleep_scores else None),
-                "average_recovery_score": (sum(recovery_scores) / len(recovery_scores) if recovery_scores else None),
+                "average_sleep_score": (
+                    sum(sleep_scores) / len(sleep_scores) if sleep_scores else None
+                ),
+                "average_recovery_score": (
+                    sum(recovery_scores) / len(recovery_scores)
+                    if recovery_scores
+                    else None
+                ),
             },
             "range": None,
             "history_start_utc": "2026-09-01T00:00:00+00:00",
@@ -343,6 +358,8 @@ class FakeHistory:
 
 
 class UsageSessionApiTests(unittest.TestCase):
+    _openapi_document = None
+
     def setUp(self) -> None:
         self.history = FakeHistory()
         self.profiles = {
@@ -400,6 +417,12 @@ class UsageSessionApiTests(unittest.TestCase):
     @staticmethod
     def _headers(account: str, role: str = "user") -> dict[str, str]:
         return {"x-test-account": account, "x-test-role": role}
+
+    def _openapi(self):
+        cls = type(self)
+        if cls._openapi_document is None:
+            cls._openapi_document = self.client.app.openapi()
+        return cls._openapi_document
 
     def test_user_lists_only_own_email_first_sessions(self) -> None:
         response = self.client.get(
@@ -537,18 +560,12 @@ class UsageSessionApiTests(unittest.TestCase):
             "direct_identifier_free_linkable_personal_wellness_data",
         )
         self.assertFalse(data["guardrails"]["direct_identifiers_included"])
-        self.assertTrue(
-            data["guardrails"]["linkable_personal_wellness_data"]
-        )
+        self.assertTrue(data["guardrails"]["linkable_personal_wellness_data"])
         self.assertFalse(data["guardrails"]["anonymous_or_deidentified"])
-        self.assertFalse(
-            data["guardrails"]["exact_session_timestamps_included"]
-        )
+        self.assertFalse(data["guardrails"]["exact_session_timestamps_included"])
         self.assertFalse(data["guardrails"]["model_training_allowed"])
         self.assertFalse(
-            data["learning_readiness"][
-                "personalization_inference_authorized"
-            ]
+            data["learning_readiness"]["personalization_inference_authorized"]
         )
 
     def test_admin_selects_one_longitudinal_profile(self) -> None:
@@ -570,9 +587,9 @@ class UsageSessionApiTests(unittest.TestCase):
         self.assertEqual(data["modes"]["nap_recovery"]["session_count"], 1)
 
     def test_longitudinal_account_selector_is_a_header_not_a_query(self) -> None:
-        operation = self.client.app.openapi()["paths"][
-            "/api/v1/usage-sessions/longitudinal"
-        ]["get"]
+        operation = self._openapi()["paths"]["/api/v1/usage-sessions/longitudinal"][
+            "get"
+        ]
         parameters = operation.get("parameters") or []
 
         self.assertIn(
@@ -705,9 +722,7 @@ class UsageSessionApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()["data"]
         self.assertFalse(data["score_release"]["score_available"])
-        self.assertFalse(
-            data["user_summary"]["primary_result"]["available"]
-        )
+        self.assertFalse(data["user_summary"]["primary_result"]["available"])
         self.assertIn(
             "session_not_closed",
             {flag["code"] for flag in data["review_flags"]},
@@ -721,7 +736,9 @@ class UsageSessionApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 404)
 
-    def test_completed_unavailable_result_has_final_reason_not_waiting_copy(self) -> None:
+    def test_completed_unavailable_result_has_final_reason_not_waiting_copy(
+        self,
+    ) -> None:
         quality = self.history.sessions["b-session"]["sleep_quality"]
         quality.update(available=False, score=None)
         quality["rest_mode"]["protocol_status"] = {
@@ -943,7 +960,10 @@ class UsageSessionApiTests(unittest.TestCase):
             50.0,
         )
         self.assertEqual(
-            sum(stage["score_eligible_duration_s"] for stage in payload["report"]["stages"]),
+            sum(
+                stage["score_eligible_duration_s"]
+                for stage in payload["report"]["stages"]
+            ),
             accounting["score_eligible_s"],
         )
         self.assertEqual(payload["report"]["environment"][0]["average"], 22.4)
@@ -955,8 +975,12 @@ class UsageSessionApiTests(unittest.TestCase):
             payload["report"]["findings"][0]["title"],
             "อุณหภูมิ · กำลังรวบรวมข้อมูล",
         )
-        self.assertEqual(payload["sleep_policy_versions"], {"evidence": "evidence-v-test"})
-        self.assertEqual(payload["sleep_estimator_versions"], {"bcg-audio-bed-test": 840})
+        self.assertEqual(
+            payload["sleep_policy_versions"], {"evidence": "evidence-v-test"}
+        )
+        self.assertEqual(
+            payload["sleep_estimator_versions"], {"bcg-audio-bed-test": 840}
+        )
         rendered = str(payload).casefold()
         self.assertNotIn("must-not-leak", rendered)
         self.assertNotIn("bcg_base64", rendered)
@@ -1032,7 +1056,9 @@ class UsageSessionApiTests(unittest.TestCase):
                     "safety_excursion_observed": True,
                     "safety_review_required": True,
                     "safety_excursion_count": 1,
-                    "safety_excursions": quality["environment_support"]["safety_excursions"],
+                    "safety_excursions": quality["environment_support"][
+                        "safety_excursions"
+                    ],
                 },
                 "findings": [
                     {
@@ -1102,7 +1128,9 @@ class UsageSessionApiTests(unittest.TestCase):
             payload["report"]["post_session_guidance"]["primary"],
             "กรุณาแจ้งทีมงาน",
         )
-        self.assertFalse(payload["report"]["post_session_guidance"]["medical_diagnosis"])
+        self.assertFalse(
+            payload["report"]["post_session_guidance"]["medical_diagnosis"]
+        )
         self.assertNotIn("ยอดเยี่ยม", rendered)
         self.assertNotIn("พร้อมแข่งขัน", rendered)
         self.assertNotIn("SHT3x", rendered)
@@ -1242,10 +1270,7 @@ class UsageSessionApiTests(unittest.TestCase):
             payload["report"]["findings"][0]["title"],
             "อุณหภูมิ · ควรปรับ",
         )
-        findings = {
-            item["key"]: item
-            for item in payload["report"]["findings"]
-        }
+        findings = {item["key"]: item for item in payload["report"]["findings"]}
         self.assertEqual(
             findings["acoustic_corroborated"]["title"],
             "เสียงและการขยับบนเตียง · ลองสังเกตเพิ่มเติม",
@@ -1269,7 +1294,9 @@ class UsageSessionApiTests(unittest.TestCase):
             payload["report"]["disclaimer"],
             "ผลประเมินเพื่อ Wellness · ไม่ใช่การวินิจฉัยหรือทดแทนผลตรวจทางการแพทย์",
         )
-        self.assertFalse(payload["report"]["post_session_guidance"]["medical_diagnosis"])
+        self.assertFalse(
+            payload["report"]["post_session_guidance"]["medical_diagnosis"]
+        )
         rendered = str(payload)
         for internal_copy in (
             "แย่มาก",
@@ -1476,16 +1503,20 @@ class UsageSessionApiTests(unittest.TestCase):
         self.assertNotIn("future_protocol_field", rendered)
 
     def test_openapi_publishes_typed_usage_response_contracts(self) -> None:
-        document = self.client.app.openapi()
+        document = self._openapi()
         paths = document["paths"]
         expected = {
             "/api/v1/usage-sessions": "UsageSessionListResponse",
-            "/api/v1/usage-sessions/{session_id}/summary": ("UsageSessionSummaryResponse"),
+            "/api/v1/usage-sessions/{session_id}/summary": (
+                "UsageSessionSummaryResponse"
+            ),
             "/api/v1/usage-sessions/{session_id}": "UsageSessionDetailResponse",
         }
         for path, schema_name in expected.items():
             with self.subTest(path=path):
-                schema = paths[path]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+                schema = paths[path]["get"]["responses"]["200"]["content"][
+                    "application/json"
+                ]["schema"]
                 self.assertEqual(
                     schema["$ref"],
                     f"#/components/schemas/{schema_name}",
@@ -1512,8 +1543,10 @@ class UsageSessionApiTests(unittest.TestCase):
         self.assertEqual(parsed.kind, "usage_session_list")
         self.assertEqual(parsed.data.summary.session_count, 2)
 
-        document = self.client.app.openapi()
-        published_example = document["paths"]["/api/v1/usage-sessions"]["get"]["responses"]["200"]["content"]["application/json"]["example"]
+        document = self._openapi()
+        published_example = document["paths"]["/api/v1/usage-sessions"]["get"][
+            "responses"
+        ]["200"]["content"]["application/json"]["example"]
         if validate:
             validate(published_example)
         else:  # pragma: no cover - Pydantic v1 deployment compatibility

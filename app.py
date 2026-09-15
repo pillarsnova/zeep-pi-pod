@@ -98,7 +98,9 @@ from zeep_pod.identity.profile_fields import (
 from zeep_pod.identity.zeep_account import authenticate_password, identity_from_auth_data
 from zeep_pod.hardware.audio import AudioPlayer, default_music_state
 from zeep_pod.hardware.controlhub1 import ControlHub1MQTT, configure_controlhub1
+from zeep_pod.hardware.controlhub2 import ControlHub2BedMQTT, configure_controlhub2
 from zeep_pod.hardware.gpio import GPIOManager
+from zeep_pod.hardware.sensorhub2 import run_sensorhub2_reader
 from zeep_pod.safety_faults import SafetyThresholds, evaluate_safety_faults
 from zeep_pod.hardware.sensorhub1 import (
     SensorHub1Reader,
@@ -143,6 +145,7 @@ from zeep_pod.sessions.ingest_payload import (
     build_ingest_payload as _build_account_ingest_payload,
     sample_off_bed as _sample_off_bed,
 )
+from zeep_pod.sessions.ingest_outbox import IngestOutbox
 from zeep_pod.sessions.sleep_between_epochs import (
     between_evidence_epoch_value,
     current_frame_issue,
@@ -1113,6 +1116,15 @@ baselines = BaselineStore(database, DATA_DIR)
 # ---------- event log (ตรวจสอบย้อนหลังได้ทุกเหตุการณ์สำคัญ) ----------
 EVENT_LOG_PATH = Path(os.getenv("EVENT_LOG_PATH", str(BASE_DIR / "logs" / "events.jsonl")))
 EVENT_RING_LIMIT = int(os.getenv("EVENT_RING_LIMIT", "200"))
+# Durable event logging cannot be disabled on a production Pod.  Tests use a
+# reserved Pod identifier and opt out of disk/console I/O explicitly.
+_TEST_POD = POD_ID.startswith("test-")
+EVENT_LOG_FILE_ENABLED = (
+    not _TEST_POD or os.getenv("EVENT_LOG_FILE_ENABLED", "1") == "1"
+)
+EVENT_LOG_STDOUT_ENABLED = (
+    not _TEST_POD or os.getenv("EVENT_LOG_STDOUT_ENABLED", "1") == "1"
+)
 event_log_lock = threading.Lock()
 _event_ring: deque = deque(maxlen=EVENT_RING_LIMIT)
 
@@ -1127,13 +1139,16 @@ def log_event(component: str, event: str, **detail):
     }
     with event_log_lock:
         _event_ring.append(entry)
-        try:
-            EVENT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-            with EVENT_LOG_PATH.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        except Exception as exc:
-            print(f"[LOG] write failed: {exc}")
-    print(f"[{component.upper()}] {event} {detail if detail else ''}")
+        if EVENT_LOG_FILE_ENABLED:
+            try:
+                EVENT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+                with EVENT_LOG_PATH.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            except Exception as exc:
+                if EVENT_LOG_STDOUT_ENABLED:
+                    print(f"[LOG] write failed: {exc}")
+    if EVENT_LOG_STDOUT_ENABLED:
+        print(f"[{component.upper()}] {event} {detail if detail else ''}")
 
 
 # ---------- local Safety Supervisor (Pi-local; no Internet dependency) ----------
@@ -3913,83 +3928,19 @@ def esp32_reader():
 
 def sensorhub2_mqtt_reader():
     """Subscribe to Hub 2 telemetry without replacing Hub 1 serial data."""
-    if not MQTT_AVAILABLE:
-        log_event("sensorhub2", "mqtt_library_missing", install="paho-mqtt")
-        with state_lock:
-            state["sensor"]["sensorhub2"]["error"] = "paho-mqtt is not installed"
-        return
-
-    def on_connect(client, _userdata, _flags, reason_code, _properties=None):
-        if reason_code == 0:
-            client.subscribe(
-                [
-                    (SENSORHUB2_TELEMETRY_TOPIC, 0),
-                    (SENSORHUB2_STATUS_TOPIC, 0),
-                ]
-            )
-            log_event("sensorhub2", "mqtt_connected", host=MQTT_HOST, port=MQTT_PORT)
-        else:
-            log_event("sensorhub2", "mqtt_connect_failed", reason=str(reason_code))
-
-    def on_disconnect(_client, _userdata, _disconnect_flags, reason_code, _properties=None):
-        with state_lock:
-            hub = dict(state["sensor"].get("sensorhub2") or {})
-            hub["connected"] = False
-            hub["error"] = f"MQTT disconnected: {reason_code}"
-            state["sensor"]["sensorhub2"] = hub
-        log_event("sensorhub2", "mqtt_disconnected", reason=str(reason_code))
-
-    def on_message(_client, _userdata, message):
-        try:
-            obj = json.loads(message.payload.decode("utf-8"))
-            if not isinstance(obj, dict):
-                raise ValueError("payload is not a JSON object")
-            now = time.time()
-            with state_lock:
-                previous = dict(state["sensor"].get("sensorhub2") or {})
-                if message.topic == SENSORHUB2_TELEMETRY_TOPIC:
-                    obj = decode_hub_payload(obj, expected_hub="sensorhub2")
-                    obj["connected"] = True
-                    obj["transport"] = "mqtt"
-                    obj["topic"] = message.topic
-                    obj["last_update"] = now
-                    obj["stale"] = False
-                    obj.pop("error", None)
-                    state["sensor"]["sensorhub2"] = obj
-                else:
-                    previous["mqtt_status"] = obj
-                    previous["status_last_update"] = now
-                    if obj.get("online") is False:
-                        previous["connected"] = False
-                    state["sensor"]["sensorhub2"] = previous
-        except Exception as exc:
-            log_event(
-                "sensorhub2",
-                "invalid_mqtt_payload",
-                topic=message.topic,
-                error=str(exc),
-            )
-
-    while True:
-        try:
-            client = mqtt.Client(
-                mqtt.CallbackAPIVersion.VERSION2,
-                client_id=f"zeep-pi5-dashboard-{socket.gethostname()}",
-            )
-            client.on_connect = on_connect
-            client.on_disconnect = on_disconnect
-            client.on_message = on_message
-            client.reconnect_delay_set(min_delay=1, max_delay=30)
-            client.connect(MQTT_HOST, MQTT_PORT, MQTT_KEEPALIVE)
-            client.loop_forever(retry_first_connection=True)
-        except Exception as exc:
-            log_event("sensorhub2", "mqtt_error", error=str(exc))
-            with state_lock:
-                hub = dict(state["sensor"].get("sensorhub2") or {})
-                hub["connected"] = False
-                hub["error"] = str(exc)
-                state["sensor"]["sensorhub2"] = hub
-            time.sleep(5)
+    run_sensorhub2_reader(
+        mqtt_module=mqtt,
+        mqtt_available=MQTT_AVAILABLE,
+        mqtt_host=MQTT_HOST,
+        mqtt_port=MQTT_PORT,
+        mqtt_keepalive=MQTT_KEEPALIVE,
+        telemetry_topic=SENSORHUB2_TELEMETRY_TOPIC,
+        status_topic=SENSORHUB2_STATUS_TOPIC,
+        shared_state=state,
+        shared_state_lock=state_lock,
+        decode_payload=decode_hub_payload,
+        event_logger=log_event,
+    )
 
 
 configure_controlhub1(
@@ -4009,235 +3960,24 @@ configure_controlhub1(
     event_logger=log_event,
 )
 controlhub1_mqtt = ControlHub1MQTT()
-
-
-class ControlHub2BedMQTT:
-    """MQTT command/ack bridge for the ESP32-S3 bed-remote servo hub."""
-
-    def __init__(self):
-        self._client = None
-        self._client_lock = threading.Lock()
-        self._command_lock = threading.Lock()
-        self._ack_condition = threading.Condition()
-        self._ack_seq = 0
-        self._last_ack = None
-
-    def _set_client(self, client):
-        with self._client_lock:
-            self._client = client
-
-    def _get_client(self):
-        with self._client_lock:
-            return self._client
-
-    def _on_connect(self, client, _userdata, _flags, reason_code, _properties=None):
-        if reason_code == 0:
-            self._set_client(client)
-            client.subscribe(
-                [
-                    (CONTROLHUB2_STATUS_TOPIC, 0),
-                    (CONTROLHUB2_EVENT_TOPIC, 0),
-                ]
-            )
-            with state_lock:
-                state["bed_control"]["mqtt_connected"] = True
-                state["bed_control"].pop("mqtt_error", None)
-            log_event("controlhub2_bed", "mqtt_connected", host=MQTT_HOST, port=MQTT_PORT)
-        else:
-            log_event("controlhub2_bed", "mqtt_connect_failed", reason=str(reason_code))
-
-    def _on_disconnect(self, client, _userdata, _disconnect_flags, reason_code, _properties=None):
-        with self._client_lock:
-            if self._client is client:
-                self._client = None
-        with state_lock:
-            bed = dict(state.get("bed_control") or {})
-            bed.update(
-                {
-                    "connected": False,
-                    "mqtt_connected": False,
-                    "error": f"MQTT disconnected: {reason_code}",
-                    "command_pending": False,
-                    "pending_command": None,
-                }
-            )
-            state["bed_control"] = bed
-        with self._ack_condition:
-            self._ack_condition.notify_all()
-        log_event("controlhub2_bed", "mqtt_disconnected", reason=str(reason_code))
-
-    def _on_message(self, _client, _userdata, message):
-        try:
-            obj = json.loads(message.payload.decode("utf-8"))
-            if not isinstance(obj, dict):
-                raise ValueError("payload is not a JSON object")
-            now = time.time()
-            with state_lock:
-                bed = dict(state.get("bed_control") or {})
-                if message.topic == CONTROLHUB2_STATUS_TOPIC:
-                    bed.update(obj)
-                    bed["connected"] = obj.get("online") is not False
-                    bed["transport"] = "mqtt"
-                    bed["status_last_update"] = now
-                else:
-                    bed["connected"] = True
-                    bed["last_event"] = obj
-                    bed["last_command"] = obj.get("command")
-                    bed["last_command_ok"] = bool(obj.get("ok"))
-                    bed["event_last_update"] = now
-                    if obj.get("command_count") is not None:
-                        bed["command_count"] = obj.get("command_count")
-                    if obj.get("active_command") is not None:
-                        bed["active_command"] = obj.get("active_command")
-                    if "active_servo" in obj:
-                        bed["active_servo"] = obj.get("active_servo")
-                bed["last_update"] = now
-                bed["stale"] = False
-                bed["mqtt_connected"] = True
-                bed.pop("error", None)
-                state["bed_control"] = bed
-
-            if message.topic == CONTROLHUB2_EVENT_TOPIC:
-                with self._ack_condition:
-                    self._ack_seq += 1
-                    self._last_ack = (dict(obj), now)
-                    self._ack_condition.notify_all()
-        except Exception as exc:
-            log_event(
-                "controlhub2_bed",
-                "invalid_mqtt_payload",
-                topic=message.topic,
-                error=str(exc),
-            )
-
-    def run(self):
-        if not MQTT_AVAILABLE:
-            with state_lock:
-                state["bed_control"]["error"] = "paho-mqtt is not installed"
-            log_event("controlhub2_bed", "mqtt_library_missing", install="paho-mqtt")
-            return
-
-        while True:
-            try:
-                client = mqtt.Client(
-                    mqtt.CallbackAPIVersion.VERSION2,
-                    client_id=f"zeep-pi5-controlhub2-bed-{socket.gethostname()}",
-                )
-                client.on_connect = self._on_connect
-                client.on_disconnect = self._on_disconnect
-                client.on_message = self._on_message
-                client.reconnect_delay_set(min_delay=1, max_delay=30)
-                client.connect(MQTT_HOST, MQTT_PORT, MQTT_KEEPALIVE)
-                client.loop_forever(retry_first_connection=True)
-            except Exception as exc:
-                self._set_client(None)
-                with state_lock:
-                    bed = dict(state.get("bed_control") or {})
-                    bed.update({"connected": False, "mqtt_connected": False, "error": str(exc)})
-                    state["bed_control"] = bed
-                log_event("controlhub2_bed", "mqtt_error", error=str(exc))
-                time.sleep(5)
-
-    def _publish(self, command: str):
-        client = self._get_client()
-        if client is None or not client.is_connected():
-            raise HTTPException(503, "Control Hub 2 Bed ไม่เชื่อมต่อ")
-        info = client.publish(CONTROLHUB2_COMMAND_TOPIC, command, qos=0, retain=False)
-        if info.rc != mqtt.MQTT_ERR_SUCCESS:
-            raise HTTPException(503, f"MQTT publish failed: {info.rc}")
-
-    def publish_stop_best_effort(self, reason: str = "safety") -> bool:
-        """Non-blocking stop for safety/one-shot motion; never raises."""
-        try:
-            self._publish("bed_stop")
-            log_event("controlhub2_bed", "stop_published", reason=reason)
-            return True
-        except Exception as exc:
-            log_event("controlhub2_bed", "stop_failed", reason=reason, error=str(exc))
-            return False
-
-    def publish_and_wait(self, requested_command: str, toggle_repeat: bool = False) -> Tuple[Dict[str, Any], str]:
-        if not self._command_lock.acquire(blocking=False):
-            raise HTTPException(429, "Bed command already in progress")
-        try:
-            now = time.time()
-            with state_lock:
-                bed = dict(state.get("bed_control") or {})
-                active_command = bed.get("active_command")
-                last_update = bed.get("last_update")
-                fresh = isinstance(last_update, (int, float)) and (now - last_update <= CONTROLHUB2_STALE_SECONDS)
-                online = bool(bed.get("connected") and fresh)
-            if not online:
-                raise HTTPException(503, "Control Hub 2 Bed ไม่เชื่อมต่อ")
-
-            directional_commands = {
-                "head_up",
-                "head_down",
-                "foot_up",
-                "foot_down",
-            }
-            command = requested_command
-            if toggle_repeat and requested_command in directional_commands and active_command == requested_command:
-                command = "bed_stop"
-
-            # Resolve the toggle while holding the per-device command lock, so
-            # repeated clicks from multiple browser clients cannot race. A
-            # repeated active direction becomes STOP and remains available
-            # during a safety latch; FLAT is never toggled.
-            if command not in ("bed_stop", "status"):
-                _require_safety_allows(f"Bed {command}")
-
-            with self._ack_condition:
-                initial_ack_seq = self._ack_seq
-            with state_lock:
-                state["bed_control"]["command_pending"] = True
-                state["bed_control"]["pending_command"] = command
-                state["bed_control"].pop("last_command_error", None)
-
-            self._publish(command)
-            log_event(
-                "controlhub2_bed",
-                "command_published",
-                requested_command=requested_command,
-                command=command,
-            )
-            deadline = time.monotonic() + CONTROLHUB2_ACK_TIMEOUT_SECONDS
-            acknowledgement = None
-            with self._ack_condition:
-                while time.monotonic() < deadline:
-                    if self._ack_seq > initial_ack_seq and self._last_ack:
-                        candidate, received_at = self._last_ack
-                        if received_at >= now and candidate.get("command") == command:
-                            acknowledgement = dict(candidate)
-                            break
-                    remaining = deadline - time.monotonic()
-                    if remaining > 0:
-                        self._ack_condition.wait(remaining)
-
-            if acknowledgement is None:
-                with state_lock:
-                    state["bed_control"]["last_command_error"] = "ack_timeout"
-                raise HTTPException(
-                    504,
-                    "ส่ง MQTT แล้ว แต่ไม่ได้รับคำยืนยันจาก Control Hub 2 Bed",
-                )
-            if acknowledgement.get("ok") is not True:
-                detail = acknowledgement.get("detail") or "command rejected"
-                raise HTTPException(502, f"Control Hub 2 Bed ปฏิเสธคำสั่ง: {detail}")
-            log_event(
-                "controlhub2_bed",
-                "command_acknowledged",
-                command=command,
-                command_count=acknowledgement.get("command_count"),
-            )
-            return acknowledgement, command
-        finally:
-            with state_lock:
-                state["bed_control"]["command_pending"] = False
-                state["bed_control"]["pending_command"] = None
-            self._command_lock.release()
-
-
+configure_controlhub2(
+    mqtt_module=mqtt,
+    mqtt_available=MQTT_AVAILABLE,
+    mqtt_host=MQTT_HOST,
+    mqtt_port=MQTT_PORT,
+    mqtt_keepalive=MQTT_KEEPALIVE,
+    command_topic=CONTROLHUB2_COMMAND_TOPIC,
+    status_topic=CONTROLHUB2_STATUS_TOPIC,
+    event_topic=CONTROLHUB2_EVENT_TOPIC,
+    stale_seconds=CONTROLHUB2_STALE_SECONDS,
+    ack_timeout_seconds=CONTROLHUB2_ACK_TIMEOUT_SECONDS,
+    shared_state=state,
+    shared_state_lock=state_lock,
+    event_logger=log_event,
+    # Resolve the route-layer guard only when a command is requested.  The
+    # function is declared later while FastAPI routes are assembled.
+    safety_guard=lambda action: _require_safety_allows(action),
+)
 controlhub2_bed_mqtt = ControlHub2BedMQTT()
 
 # Generation tokens cancel an older delayed stop when a new movement starts.
@@ -5040,184 +4780,44 @@ def _build_ingest_payload(
     )
 
 
+_session_ingest_outbox = IngestOutbox(
+    directory=INGEST_OUTBOX_DIR,
+    schema_version=INGEST_OUTBOX_VERSION,
+    lock=ingest_outbox_lock,
+    ingest_path=ZEEP_INGEST_PATH,
+    api_key=lambda: ZEEP_INGEST_API_KEY,
+    device_id=lambda: ZEEP_INGEST_DEVICE_ID,
+    payload_builder=_build_ingest_payload,
+    request=lambda *args, **kwargs: _zeep_request(*args, **kwargs),
+    offline_error=ZeepApiOffline,
+    logger=log_event,
+    inline_timeout=ZEEP_INGEST_INLINE_TIMEOUT,
+)
+
+
 def _ingest_outbox_path(session_id: str) -> Path:
-    # session_id is generated by this process (s-<utc>-<hex>) and never reaches
-    # here from a request, but keep the filename to one path component anyway.
-    return INGEST_OUTBOX_DIR / f"{Path(str(session_id)).name}.json"
+    return _session_ingest_outbox.path(session_id)
 
 
 def _write_ingest_outbox(entry: Dict[str, Any]) -> None:
-    """Atomically persist one pending upload, mirroring the session checkpoint."""
-    path = _ingest_outbox_path(entry["payload"]["externalSessionId"])
-    with ingest_outbox_lock:
-        INGEST_OUTBOX_DIR.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_suffix(".json.tmp")
-        with temporary.open("w", encoding="utf-8") as handle:
-            json.dump(entry, handle, ensure_ascii=False, indent=2, sort_keys=True)
-            handle.write("\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
+    _session_ingest_outbox.write(entry)
 
 
 def _clear_ingest_outbox(session_id: str) -> bool:
-    with ingest_outbox_lock:
-        path = _ingest_outbox_path(session_id)
-        existed = path.is_file()
-        path.unlink(missing_ok=True)
-        return existed
+    return _session_ingest_outbox.clear(session_id)
 
 
 def _post_ingest_entry(entry: Dict[str, Any], *, timeout: Optional[float] = None) -> bool:
-    """Send one queued upload. True = done (delivered or permanently rejected).
-
-    Returns False only for a failure worth retrying, so a Pod that is merely
-    offline keeps its night queued while a payload the backend refuses does not
-    retry forever.
-    """
-    payload = entry["payload"]
-    session_id = payload["externalSessionId"]
-    entry["attempts"] = int(entry.get("attempts") or 0) + 1
-    try:
-        body = _zeep_request(
-            "POST",
-            ZEEP_INGEST_PATH,
-            json_body=payload,
-            api_key=ZEEP_INGEST_API_KEY,
-            timeout=timeout,
-        )
-    except ZeepApiOffline as exc:
-        entry["last_error"] = str(exc)
-        log_event(
-            "ingest",
-            "deferred",
-            session_id=session_id,
-            attempts=entry["attempts"],
-            error=str(exc),
-        )
-        return False
-    except HTTPException as exc:
-        detail = str(getattr(exc, "detail", exc))
-        entry["last_error"] = detail
-        status = getattr(exc, "status_code", 0)
-        # A rejected payload or an unknown user/device will be rejected the same
-        # way forever, so park it instead of retrying every sweep for the life
-        # of the Pod. 401/403 are deliberately excluded: a rotated or mistyped
-        # ZEEP_INGEST_API_KEY is fixed by an operator, and the queued nights
-        # should then flush on their own rather than need unparking by hand.
-        if 400 <= status < 500 and status not in (401, 403, 408, 429):
-            entry["parked"] = True
-            log_event("ingest", "rejected", session_id=session_id, status=status, error=detail)
-            return True
-        log_event(
-            "ingest",
-            "deferred",
-            session_id=session_id,
-            attempts=entry["attempts"],
-            status=status,
-            error=detail,
-        )
-        return False
-    remote = (body.get("data") or {}) if isinstance(body, dict) else {}
-    log_event(
-        "ingest",
-        "uploaded",
-        session_id=session_id,
-        attempts=entry["attempts"],
-        remote_id=remote.get("id"),
-        remote_type=remote.get("type"),
-        message=body.get("message"),
-    )
-    return True
+    return _session_ingest_outbox.post(entry, timeout=timeout)
 
 
 def _enqueue_session_ingest(record: Dict[str, Any], report_samples: List[Dict[str, Any]]) -> None:
-    """Best-effort upload of a finished Session; never fails finalization.
-
-    The pending marker is written before the request so a power cut mid-upload
-    leaves the night queued rather than lost.  Re-sending is free: the backend
-    is idempotent on externalSessionId.
-    """
-    payload = _build_ingest_payload(record, report_samples)
-    if payload is None:
-        log_event(
-            "ingest",
-            "skipped",
-            session_id=record.get("session_id"),
-            configured=bool(ZEEP_INGEST_API_KEY and ZEEP_INGEST_DEVICE_ID),
-            zeep_account=bool(record.get("zeep_public_id")),
-        )
-        return
-    entry = {
-        "schema_version": INGEST_OUTBOX_VERSION,
-        "queued_at_utc": datetime.now(timezone.utc).isoformat(),
-        "attempts": 0,
-        "last_error": None,
-        "parked": False,
-        "payload": payload,
-    }
-    try:
-        _write_ingest_outbox(entry)
-    except OSError as exc:
-        # Without a durable marker a failed upload could not be retried, so a
-        # one-shot attempt is still better than nothing.
-        log_event(
-            "ingest",
-            "outbox_write_failed",
-            session_id=record.get("session_id"),
-            error=str(exc),
-        )
-    try:
-        if _post_ingest_entry(entry, timeout=ZEEP_INGEST_INLINE_TIMEOUT) and not entry.get("parked"):
-            _clear_ingest_outbox(payload["externalSessionId"])
-            return
-        _write_ingest_outbox(entry)
-    except Exception as exc:
-        log_event(
-            "ingest",
-            "upload_failed",
-            session_id=record.get("session_id"),
-            error=str(exc),
-        )
+    _session_ingest_outbox.enqueue(record, report_samples)
 
 
 @synchronized_by(ingest_outbox_lock)
 def _sweep_ingest_outbox() -> None:
-    """Retry every queued upload, oldest first. Safe to call at any time."""
-    if not (ZEEP_INGEST_API_KEY and ZEEP_INGEST_DEVICE_ID):
-        return
-    try:
-        pending = sorted(INGEST_OUTBOX_DIR.glob("*.json"), key=lambda item: item.stat().st_mtime)
-    except OSError:
-        return
-    for path in pending:
-        try:
-            with path.open("r", encoding="utf-8") as handle:
-                entry = json.load(handle)
-            if not isinstance(entry, dict) or not isinstance(entry.get("payload"), dict):
-                raise ValueError("outbox entry is not a pending upload")
-        except (OSError, ValueError, json.JSONDecodeError) as exc:
-            log_event("ingest", "outbox_entry_invalid", file=path.name, error=str(exc))
-            continue
-        if entry.get("parked"):
-            continue
-        try:
-            done = _post_ingest_entry(entry)
-        except Exception as exc:
-            log_event("ingest", "upload_failed", file=path.name, error=str(exc))
-            continue
-        try:
-            if done and not entry.get("parked"):
-                _clear_ingest_outbox(entry["payload"]["externalSessionId"])
-            else:
-                _write_ingest_outbox(entry)
-        except OSError as exc:
-            log_event("ingest", "outbox_write_failed", file=path.name, error=str(exc))
-        if not done:
-            # One unreachable backend means the rest will not go through
-            # either; leave them for the next sweep instead of timing out once
-            # per queued night.
-            break
+    _session_ingest_outbox.sweep()
 
 
 def ingest_outbox_sweeper() -> None:

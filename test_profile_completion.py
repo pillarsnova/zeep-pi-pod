@@ -270,11 +270,11 @@ class ProfileGateApiTests(unittest.TestCase):
         self.client = TestClient(pod_app.app)
 
     def tearDown(self) -> None:
-        pod_app._zeep_request = self.original_request
-        pod_app._authenticate_zeep_account = self.original_auth
         pod_app.qr_logins.forget(LOGIN_ID)
         if pod_app._active_session is not None:
             pod_app._finalize_active_session("profile_gate_test_cleanup")
+        pod_app._zeep_request = self.original_request
+        pod_app._authenticate_zeep_account = self.original_auth
 
     def install(self, me, **kwargs) -> FakeZeep:
         fake = FakeZeep(me, **kwargs)

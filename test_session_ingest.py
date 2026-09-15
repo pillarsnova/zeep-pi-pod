@@ -5,6 +5,7 @@ from both the history list and detail endpoints, so these tests pin two things:
 the payload stays small and free of raw Timeline/Profile data, and the numbers
 inside it reconcile with each other and with what the Pod itself displays.
 """
+
 from __future__ import annotations
 
 import json
@@ -60,26 +61,35 @@ def build_record(
     for index, stage in enumerate(stages):
         operational_off_bed = stage == "off_bed"
         operational_no_data = stage is None
-        rows.append({
-            "t": START_EPOCH + index * interval_s,
-            "sleep": None if operational_off_bed else stage,
-            "bed": "Get out of bed" if operational_off_bed else "On bed",
-            "temp": 24.0, "hum": 50.0, "lux": 1.0, "dba": 33.0, "co2": 800.0,
-            "pm2_5": None, "voc": None, "hr": 60.0, "rr": 14.0,
-            "sleep_data_status": (
-                "confirmed_off_bed"
-                if operational_off_bed
-                else "sensor_unavailable"
-                if operational_no_data
-                else "live"
-            ),
-            "sleep_score_eligible": not (
-                operational_off_bed or operational_no_data
-            ),
-            "sleep_excluded_from_score": bool(
-                operational_off_bed or operational_no_data
-            ),
-        })
+        rows.append(
+            {
+                "t": START_EPOCH + index * interval_s,
+                "sleep": None if operational_off_bed else stage,
+                "bed": "Get out of bed" if operational_off_bed else "On bed",
+                "temp": 24.0,
+                "hum": 50.0,
+                "lux": 1.0,
+                "dba": 33.0,
+                "co2": 800.0,
+                "pm2_5": None,
+                "voc": None,
+                "hr": 60.0,
+                "rr": 14.0,
+                "sleep_data_status": (
+                    "confirmed_off_bed"
+                    if operational_off_bed
+                    else "sensor_unavailable"
+                    if operational_no_data
+                    else "live"
+                ),
+                "sleep_score_eligible": not (
+                    operational_off_bed or operational_no_data
+                ),
+                "sleep_excluded_from_score": bool(
+                    operational_off_bed or operational_no_data
+                ),
+            }
+        )
     duration_s = len(stages) * interval_s
     counts: Dict[str, int] = {}
     for row in rows:
@@ -88,36 +98,59 @@ def build_record(
     sleep_samples = sum(value for key, value in counts.items() if key in SLEEP_LIKE)
     scored = sleep_samples + counts.get("wake", 0)
     night = {
-        "sleep_onset_proxy_s": None, "awakenings": awakenings, "waso_proxy_s": 0.0,
+        "sleep_onset_proxy_s": None,
+        "awakenings": awakenings,
+        "waso_proxy_s": 0.0,
         "estimated_sleep_s": round(min(duration_s, sleep_samples * interval_s), 1),
         "sleep_efficiency": round(sleep_samples / scored, 3) if scored else None,
-        "deep_ratio": None, "rem_ratio": None,
+        "deep_ratio": None,
+        "rem_ratio": None,
     }
-    score_counts = {
-        key: value for key, value in counts.items() if key != "off_bed"
-    }
+    score_counts = {key: value for key, value in counts.items() if key != "off_bed"}
     quality = build_sleep_quality(
-        duration_s, night, counts, completed=True, rest_mode=rest_mode,
-        stage_sequence=rows, sensor_samples=rows, sample_interval_s=interval_s,
-        score_state_counts=score_counts)
+        duration_s,
+        night,
+        counts,
+        completed=True,
+        rest_mode=rest_mode,
+        stage_sequence=rows,
+        sensor_samples=rows,
+        sample_interval_s=interval_s,
+        score_state_counts=score_counts,
+    )
     night["sleep_quality"] = quality
     report = build_session_report(
-        duration_s, rows, night, counts, quality, rest_mode=rest_mode,
-        sample_interval_s=interval_s, estimator_version="test", completed=True,
+        duration_s,
+        rows,
+        night,
+        counts,
+        quality,
+        rest_mode=rest_mode,
+        sample_interval_s=interval_s,
+        estimator_version="test",
+        completed=True,
         timeline_schema_version=app.SESSION_TIMELINE_SCHEMA_VERSION,
-        sleep_score_state_counts=score_counts)
+        sleep_score_state_counts=score_counts,
+    )
     record = {
         "session_id": "s-20260831T150000Z-a1b2c3",
-        "username": "tester", "username_key": "tester@example.com",
+        "username": "tester",
+        "username_key": "tester@example.com",
         "zeep_public_id": zeep_public_id,
-        "identity_subject": f"zeep:{zeep_public_id}", "pod_id": "test-pod-01",
+        "identity_subject": f"zeep:{zeep_public_id}",
+        "pod_id": "test-pod-01",
         "rest_mode": rest_mode,
         "started_at_utc": datetime.fromtimestamp(START_EPOCH, timezone.utc).isoformat(),
-        "ended_at_utc": datetime.fromtimestamp(START_EPOCH + duration_s, timezone.utc).isoformat(),
+        "ended_at_utc": datetime.fromtimestamp(
+            START_EPOCH + duration_s, timezone.utc
+        ).isoformat(),
         "duration_s": duration_s,
-        "sample_interval_s": interval_s if persisted_interval_s == "same" else persisted_interval_s,
+        "sample_interval_s": interval_s
+        if persisted_interval_s == "same"
+        else persisted_interval_s,
         # Present on the real record and all of it must stay out of the upload.
-        "samples": rows, "counters": {"led": 3, "steam": 1},
+        "samples": rows,
+        "counters": {"led": 3, "steam": 1},
         "health_reference": {"height_cm": 175, "conditions": ["hypertension"]},
         "wellness_context": {"alcohol": True},
         "sample_cadence_segments": [{"from": 0}],
@@ -128,7 +161,8 @@ def build_record(
             "sleep_state_counts": counts,
             "sleep_score_state_counts": score_counts,
         },
-        "sleep_quality": quality, "session_report": report,
+        "sleep_quality": quality,
+        "session_report": report,
     }
     return record, rows
 
@@ -142,35 +176,68 @@ def derive_architecture(segments: List[Dict[str, Any]]) -> Tuple[Optional[float]
     return latency, sum(1 for s in segments[first_sleep:] if s["stage"] == 0)
 
 
-NIGHT = (["wake"] * 96 + ["n1"] * 60 + ["n2"] * 900 + ["n3"] * 600 + ["n2"] * 300
-         + ["rem"] * 400 + ["wake"] * 24 + ["n2"] * 700 + ["n3"] * 400 + ["rem"] * 500
-         + ["off_bed"] * 36 + ["n2"] * 600 + ["rem"] * 350 + ["wake"] * 12)
+NIGHT = (
+    ["wake"] * 96
+    + ["n1"] * 60
+    + ["n2"] * 900
+    + ["n3"] * 600
+    + ["n2"] * 300
+    + ["rem"] * 400
+    + ["wake"] * 24
+    + ["n2"] * 700
+    + ["n3"] * 400
+    + ["rem"] * 500
+    + ["off_bed"] * 36
+    + ["n2"] * 600
+    + ["rem"] * 350
+    + ["wake"] * 12
+)
 
 
 class IngestPayloadTests(unittest.TestCase):
     """A full night must upload as a small, self-consistent summary."""
 
-    def setUp(self) -> None:
-        self.record, self.rows = build_record(NIGHT, 5.0, awakenings=3)
-        self.payload = app._build_ingest_payload(self.record, self.rows)
-        self.assertIsNotNone(self.payload)
-        self.result = self.payload["record"]
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.record, cls.rows = build_record(NIGHT, 5.0, awakenings=3)
+        cls.payload = app._build_ingest_payload(cls.record, cls.rows)
+        if cls.payload is None:
+            raise AssertionError("full-night fixture must produce an ingest payload")
+        cls.result = cls.payload["record"]
 
     def test_raw_timeline_and_profile_context_never_leave_the_pod(self) -> None:
         # scoring_result is echoed by every history request, so a leak here is
         # not just size: health_reference is frozen medical context.
-        for key in ("samples", "counters", "health_reference", "wellness_context",
-                    "identity_subject", "summary", "session_report", "sleep_quality",
-                    "username", "username_key", "zeep_public_id",
-                    "sample_cadence_segments", "terminal_wake_transition"):
+        for key in (
+            "samples",
+            "counters",
+            "health_reference",
+            "wellness_context",
+            "identity_subject",
+            "summary",
+            "session_report",
+            "sleep_quality",
+            "username",
+            "username_key",
+            "zeep_public_id",
+            "sample_cadence_segments",
+            "terminal_wake_transition",
+        ):
             self.assertNotIn(key, self.result)
         self.assertLess(len(json.dumps(self.payload, ensure_ascii=False)), 64_000)
 
     def test_envelope_carries_only_the_documented_fields(self) -> None:
         self.assertEqual(
             set(self.payload),
-            {"userPublicId", "deviceId", "externalSessionId", "startedAt",
-             "endedAt", "timezone", "record"},
+            {
+                "userPublicId",
+                "deviceId",
+                "externalSessionId",
+                "startedAt",
+                "endedAt",
+                "timezone",
+                "record",
+            },
         )
         self.assertEqual(self.payload["externalSessionId"], self.record["session_id"])
 
@@ -178,33 +245,48 @@ class IngestPayloadTests(unittest.TestCase):
         self.assertEqual(self.result["epoch_seconds"], 5)
         self.assertAlmostEqual(
             self.result["total_epochs"] * self.result["epoch_seconds"] / 60.0,
-            self.result["total_scored_minutes"], delta=0.1)
+            self.result["total_scored_minutes"],
+            delta=0.1,
+        )
 
     def test_segment_minutes_reconcile_with_stage_minutes(self) -> None:
         for state in ("wake", "n1", "n2", "n3", "rem"):
-            got = sum(s["minutes"] for s in self.result["segments"]
-                      if s["stage_name"] == state)
-            self.assertAlmostEqual(got, self.result[f"{state}_minutes"], delta=0.6, msg=state)
-        scored = sum(s["minutes"] for s in self.result["segments"]
-                     if s["stage_name"] != "off_bed")
+            got = sum(
+                s["minutes"]
+                for s in self.result["segments"]
+                if s["stage_name"] == state
+            )
+            self.assertAlmostEqual(
+                got, self.result[f"{state}_minutes"], delta=0.6, msg=state
+            )
+        scored = sum(
+            s["minutes"]
+            for s in self.result["segments"]
+            if s["stage_name"] != "off_bed"
+        )
         self.assertAlmostEqual(scored, self.result["total_scored_minutes"], delta=0.6)
 
     def test_every_segment_carries_minutes(self) -> None:
         # Without minutes the backend falls back to a 30-second epoch this Pod
         # never uses, silently inflating latency and stage durations.
-        self.assertTrue(all(isinstance(s.get("minutes"), float)
-                            for s in self.result["segments"]))
+        self.assertTrue(
+            all(isinstance(s.get("minutes"), float) for s in self.result["segments"])
+        )
 
     def test_hypnogram_runs_parallel_to_segments(self) -> None:
         self.assertEqual(len(self.result["hypnogram"]), self.result["total_segments"])
         for run, segment in zip(self.result["hypnogram"], self.result["segments"]):
-            self.assertEqual((run["s"], run["n"]), (segment["stage"], segment["epochs"]))
+            self.assertEqual(
+                (run["s"], run["n"]), (segment["stage"], segment["epochs"])
+            )
 
     def test_backend_derives_the_pods_own_latency_and_awakenings(self) -> None:
         latency, awakenings = derive_architecture(self.result["segments"])
         self.assertAlmostEqual(latency, 8.0, delta=0.1)
         # Three wake bouts after onset, one of which is the bed exit.
-        self.assertEqual(awakenings, self.record["session_report"]["sleep"]["awakenings"])
+        self.assertEqual(
+            awakenings, self.record["session_report"]["sleep"]["awakenings"]
+        )
         self.assertEqual(awakenings, 3)
 
     def test_bed_exit_stays_visible_and_out_of_the_stage_totals(self) -> None:
@@ -218,8 +300,9 @@ class IngestPayloadTests(unittest.TestCase):
     def test_score_is_present_so_history_statistics_include_the_night(self) -> None:
         # The backend skips a session with a null score in every aggregate.
         self.assertIsInstance(self.result["sleep_score"], int)
-        self.assertEqual(self.result["sleep_score"],
-                         self.record["sleep_quality"]["score"])
+        self.assertEqual(
+            self.result["sleep_score"], self.record["sleep_quality"]["score"]
+        )
 
     def test_all_five_stage_percentages_are_sent_as_one_comparable_set(self) -> None:
         percentages = {}
@@ -241,8 +324,9 @@ class IngestPayloadTests(unittest.TestCase):
         scored = self.result["total_scored_minutes"]
         for state in ("wake", "n1", "n2", "n3", "rem"):
             share = self.result[f"{state}_minutes"] * 100.0 / scored
-            self.assertAlmostEqual(share, self.result[f"{state}_percent"],
-                                   delta=0.6, msg=state)
+            self.assertAlmostEqual(
+                share, self.result[f"{state}_percent"], delta=0.6, msg=state
+            )
 
     def test_heart_rate_is_reduced_to_the_fields_the_backend_reads(self) -> None:
         self.assertEqual(set(self.result["heart_rate"]), {"avg", "min", "max"})
@@ -272,21 +356,17 @@ NAP = ["n1"] * 60 + ["n2"] * 1008 + ["wake"] * 12
 class IngestScoreTypeTests(unittest.TestCase):
     """score_type names which of the two score keys carries a real number."""
 
-    def upload(self, stages: List[Optional[str]], rest_mode: str
-               ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    def upload(
+        self, stages: List[Optional[str]], rest_mode: str
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         record, rows = build_record(stages, 5.0, awakenings=1, rest_mode=rest_mode)
         payload = app._build_ingest_payload(record, rows)
         self.assertIsNotNone(payload, rest_mode)
-        return record, payload["record"]
-
-    def test_all_three_keys_travel_on_every_session(self) -> None:
-        # A fixed shape lets the backend branch on score_type alone instead of
-        # guessing the Session kind from whichever key happens to be present.
-        for stages, mode in ((NIGHT, "sleep"), (NAP, "nap_recovery"), (NIGHT, "night")):
-            with self.subTest(mode=mode):
-                _, result = self.upload(stages, mode)
-                for key in ("score_type", "sleep_score", "recovery_score"):
-                    self.assertIn(key, result)
+        result = payload["record"]
+        self.assertEqual(result["rest_mode"], rest_mode)
+        for key in ("score_type", "sleep_score", "recovery_score"):
+            self.assertIn(key, result)
+        return record, result
 
     def test_an_overnight_session_releases_a_sleep_score(self) -> None:
         record, result = self.upload(NIGHT, "sleep")
@@ -311,7 +391,9 @@ class IngestScoreTypeTests(unittest.TestCase):
                 self.assertIsInstance(result["recovery_score"], int)
                 self.assertIsNone(result["sleep_score"])
 
-    def test_an_unresolved_mode_leaves_the_score_where_older_rows_carry_it(self) -> None:
+    def test_an_unresolved_mode_leaves_the_score_where_older_rows_carry_it(
+        self,
+    ) -> None:
         # "night" is a pre-normalisation value a restored record can still hold.
         # rest_mode_group() refuses to infer an identity from it, so the row
         # reads exactly like one written before score_type existed.
@@ -326,23 +408,22 @@ class IngestScoreTypeTests(unittest.TestCase):
         self.assertIsNone(resolve_score_type({"rest_mode": "auto"}))
         self.assertIsNone(resolve_score_type({}))
 
-    def test_the_detailed_rest_mode_survives_alongside_the_label(self) -> None:
-        # score_type collapses to two values; rest_mode still separates a
-        # short_nap from a jet_lag Session for any backend consumer reading it.
-        _, result = self.upload(NAP, "jet_lag")
-        self.assertEqual(result["rest_mode"], "jet_lag")
-
 
 class IngestEnvironmentTests(unittest.TestCase):
     """Pod criterion keys must be re-keyed to what the backend reads."""
 
-    def setUp(self) -> None:
+    @classmethod
+    def setUpClass(cls) -> None:
         record, rows = build_record(NIGHT, 5.0)
-        self.environment = app._build_ingest_payload(record, rows)["record"]["environment"]
+        cls.environment = app._build_ingest_payload(record, rows)["record"][
+            "environment"
+        ]
 
     def test_keys_are_remapped_for_the_account_backend(self) -> None:
-        self.assertEqual(set(self.environment),
-                         {"temperature", "humidity", "co2", "noise", "lux", "pm25", "voc"})
+        self.assertEqual(
+            set(self.environment),
+            {"temperature", "humidity", "co2", "noise", "lux", "pm25", "voc"},
+        )
         self.assertEqual(self.environment["noise"]["sample_key"], "dba")
         self.assertEqual(self.environment["lux"]["sample_key"], "lux")
 
@@ -369,10 +450,12 @@ class IngestStageEncodingTests(unittest.TestCase):
 
     def test_legacy_aliases_fold_into_n2_and_n3(self) -> None:
         record, rows = build_record(
-            ["wake"] * 12 + ["nrem_light"] * 600 + ["nrem_deep"] * 300 + ["rem"] * 200)
+            ["wake"] * 12 + ["nrem_light"] * 600 + ["nrem_deep"] * 300 + ["rem"] * 200
+        )
         result = app._build_ingest_payload(record, rows)["record"]
-        self.assertEqual({s["stage_name"] for s in result["segments"]},
-                         {"wake", "n2", "n3", "rem"})
+        self.assertEqual(
+            {s["stage_name"] for s in result["segments"]}, {"wake", "n2", "n3", "rem"}
+        )
         got = sum(s["minutes"] for s in result["segments"] if s["stage_name"] == "n2")
         self.assertAlmostEqual(got, result["n2_minutes"], delta=0.6)
 
@@ -380,7 +463,8 @@ class IngestStageEncodingTests(unittest.TestCase):
         # Splitting would report a single awakening as two, and the unscored
         # rows are absent from every stage total anyway.
         record, rows = build_record(
-            ["wake"] * 12 + ["n2"] * 300 + [None] * 12 + ["n2"] * 300 + ["rem"] * 100)
+            ["wake"] * 12 + ["n2"] * 300 + [None] * 12 + ["n2"] * 300 + ["rem"] * 100
+        )
         segments = app._build_ingest_payload(record, rows)["record"]["segments"]
         self.assertEqual([s["stage_name"] for s in segments], ["wake", "n2", "rem"])
         self.assertEqual(segments[1]["epochs"], 600)
@@ -398,25 +482,25 @@ class IngestStageEncodingTests(unittest.TestCase):
 
     def test_provisional_hold_is_unscored_but_off_bed_stays_visible(self) -> None:
         record, rows = build_record(
-            ["wake"] * 12
-            + ["n2"] * 12
-            + ["n2"] * 6
-            + ["off_bed"] * 6
-            + ["n2"] * 12,
+            ["wake"] * 12 + ["n2"] * 12 + ["n2"] * 6 + ["off_bed"] * 6 + ["n2"] * 12,
             10.0,
         )
         for row in rows[24:30]:
-            row.update({
-                "sleep_provisional": True,
-                "sleep_score_eligible": False,
-            })
+            row.update(
+                {
+                    "sleep_provisional": True,
+                    "sleep_score_eligible": False,
+                }
+            )
         for row in rows[30:36]:
-            row.update({
-                "sleep": None,
-                "bed": "Get out of bed",
-                "sleep_score_eligible": False,
-                "sleep_data_status": "confirmed_off_bed",
-            })
+            row.update(
+                {
+                    "sleep": None,
+                    "bed": "Get out of bed",
+                    "sleep_score_eligible": False,
+                    "sleep_data_status": "confirmed_off_bed",
+                }
+            )
 
         # Rebuild the report after adding the explicit status metadata, exactly
         # as finalisation does before creating the external payload.
@@ -486,20 +570,29 @@ class IngestCadenceTests(unittest.TestCase):
         result = app._build_ingest_payload(record, rows)["record"]
         self.assertEqual(result["epoch_seconds"], 10)
         self.assertAlmostEqual(
-            result["total_epochs"] * 10 / 60.0, result["total_scored_minutes"], delta=0.1)
+            result["total_epochs"] * 10 / 60.0,
+            result["total_scored_minutes"],
+            delta=0.1,
+        )
 
-    def test_a_session_without_a_persisted_cadence_uses_the_configured_one(self) -> None:
-        record, rows = build_record(["wake"] * 10 + ["n2"] * 100, 10.0,
-                                    persisted_interval_s=None)
-        self.assertEqual(app._build_ingest_payload(record, rows)["record"]["epoch_seconds"],
-                         int(round(app.SESSION_SAMPLE_SECONDS)))
+    def test_a_session_without_a_persisted_cadence_uses_the_configured_one(
+        self,
+    ) -> None:
+        record, rows = build_record(
+            ["wake"] * 10 + ["n2"] * 100, 10.0, persisted_interval_s=None
+        )
+        self.assertEqual(
+            app._build_ingest_payload(record, rows)["record"]["epoch_seconds"],
+            int(round(app.SESSION_SAMPLE_SECONDS)),
+        )
 
     def test_sub_second_metadata_cannot_send_a_zero_epoch(self) -> None:
         # A zero would make the backend fall back to 30 s and stretch the
         # hypnogram time base; _normalise_samples_for_report floors at 100 ms.
         record, rows = build_record(["wake"] * 10 + ["n2"] * 100, 0.1)
         self.assertGreaterEqual(
-            app._build_ingest_payload(record, rows)["record"]["epoch_seconds"], 1)
+            app._build_ingest_payload(record, rows)["record"]["epoch_seconds"], 1
+        )
 
 
 class IngestSkipTests(unittest.TestCase):
@@ -528,8 +621,11 @@ class IngestSkipTests(unittest.TestCase):
 class IngestOutboxTests(unittest.TestCase):
     """A night must survive an unreachable backend, and stop retrying a rejection."""
 
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.record, cls.rows = build_record(NIGHT, 5.0)
+
     def setUp(self) -> None:
-        self.record, self.rows = build_record(NIGHT, 5.0)
         self.calls = 0
         self._original = app._zeep_request
         for path in app.INGEST_OUTBOX_DIR.glob("*.json"):
@@ -544,6 +640,7 @@ class IngestOutboxTests(unittest.TestCase):
             if isinstance(outcome, Exception):
                 raise outcome
             return outcome
+
         app._zeep_request = handler
 
     def _queued(self):
@@ -559,7 +656,9 @@ class IngestOutboxTests(unittest.TestCase):
         self.assertEqual(len(self._queued()), 1)
         entry = self._entry()
         # The marker holds the built payload so a retry never rebuilds it.
-        self.assertEqual(entry["payload"]["externalSessionId"], self.record["session_id"])
+        self.assertEqual(
+            entry["payload"]["externalSessionId"], self.record["session_id"]
+        )
         self.assertEqual((entry["attempts"], entry["parked"]), (1, False))
         app._sweep_ingest_outbox()
         self.assertEqual(self._entry()["attempts"], 2)
@@ -567,8 +666,13 @@ class IngestOutboxTests(unittest.TestCase):
     def test_a_successful_upload_clears_the_queue(self) -> None:
         self._respond(app.ZeepApiOffline("offline"))
         app._enqueue_session_ingest(self.record, self.rows)
-        self._respond({"status": "success", "message": "Sleep session ingested",
-                       "data": {"id": "uuid-1", "type": "night", "score": 80}})
+        self._respond(
+            {
+                "status": "success",
+                "message": "Sleep session ingested",
+                "data": {"id": "uuid-1", "type": "night", "score": 80},
+            }
+        )
         app._sweep_ingest_outbox()
         self.assertEqual(self._queued(), [])
 

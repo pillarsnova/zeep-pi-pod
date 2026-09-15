@@ -28,8 +28,6 @@ jobs:
           cache: pip
       - name: Install schema validator
         run: python -m pip install --disable-pip-version-check "jsonschema==4.23.0"
-      - name: Validate JSON Schemas
-        run: python -m unittest -v test_research_evidence_library.ResearchEvidenceLibraryTests.test_json_schema_validates_both_authoritative_registers
       - name: Check registry consistency and security regression
         run: |
           python research/evidence-library/update_research_library.py check

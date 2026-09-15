@@ -4,6 +4,7 @@ Importing :mod:`app` initializes storage objects. Standalone test execution
 must therefore point those objects at temporary paths before the import, or a
 developer's mirrored production data can be polluted by test accounts.
 """
+
 from __future__ import annotations
 
 import os
@@ -25,6 +26,9 @@ def configure_app_test_environment() -> Path:
     os.environ["DATA_DIR"] = str(root / "data")
     os.environ["BACKUP_DIR"] = str(root / "backup")
     os.environ["MUSIC_DIR"] = str(root / "music")
+    os.environ["EVENT_LOG_PATH"] = str(root / "logs" / "events.jsonl")
+    os.environ["EVENT_LOG_FILE_ENABLED"] = "0"
+    os.environ["EVENT_LOG_STDOUT_ENABLED"] = "0"
     os.environ["POD_ID"] = "test-pod-01"
     os.environ["AIRCON_POWER_ON_DEFAULT_TEMP_C"] = "18"
     os.environ["CONTROLHUB1_MIN_IR_GAP_SECONDS"] = "0"

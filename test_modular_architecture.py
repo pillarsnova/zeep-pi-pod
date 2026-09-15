@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parent
 PACKAGE = ROOT / "zeep_pod"
 MAX_PACKAGE_FILE_LINES = 500
 MAX_FUNCTION_LINES = 90
-MAX_APP_LINES = 8_800
+MAX_APP_LINES = 8_400
 
 
 class ModularArchitectureTests(unittest.TestCase):
@@ -57,9 +57,7 @@ class ModularArchitectureTests(unittest.TestCase):
         self.assertEqual(offenders, [])
 
     def test_composition_root_cannot_grow(self) -> None:
-        app_lines = len(
-            (ROOT / "app.py").read_text(encoding="utf-8").splitlines()
-        )
+        app_lines = len((ROOT / "app.py").read_text(encoding="utf-8").splitlines())
         self.assertLessEqual(app_lines, MAX_APP_LINES)
 
     def test_hardware_classes_live_in_hardware_package(self) -> None:
@@ -69,6 +67,7 @@ class ModularArchitectureTests(unittest.TestCase):
         }
         self.assertNotIn("GPIOManager", local_classes)
         self.assertNotIn("AudioPlayer", local_classes)
+        self.assertNotIn("ControlHub2BedMQTT", local_classes)
 
 
 if __name__ == "__main__":

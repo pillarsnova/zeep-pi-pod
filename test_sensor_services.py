@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+import threading
 from pathlib import Path
 import unittest
 
@@ -30,6 +31,7 @@ from sensor_runtime import (
     source_freshness,
 )
 from smart_response import SmartResponsePolicy, evaluate_smart_response
+from zeep_pod.hardware.sensorhub2 import _publish_payload, run_sensorhub2_reader
 
 
 NOW = 1_800_000_000.0
@@ -46,7 +48,9 @@ class CalibrationServiceTests(unittest.TestCase):
             humidity_bias=0.0,
             humidity_source="calibration.json",
         )
-        self.assertEqual(SENSOR_CALIBRATION_SPECS["pm10_ug_m3"]["config_key"], "pm10_bias")
+        self.assertEqual(
+            SENSOR_CALIBRATION_SPECS["pm10_ug_m3"]["config_key"], "pm10_bias"
+        )
         self.assertEqual(biases["pm10_ug_m3"], -2.5)
         self.assertNotIn("sound_dba_est", sources)
 
@@ -74,7 +78,8 @@ class CalibrationServiceTests(unittest.TestCase):
             "not_applied_on_pi",
         )
         self.assertNotIn(
-            "historical_provisional_display", document["sound_processing"],
+            "historical_provisional_display",
+            document["sound_processing"],
         )
         self.assertNotIn("historical_sound_photo_audit", document)
         biases, _ = resolve_biases(
@@ -119,6 +124,52 @@ class CalibrationServiceTests(unittest.TestCase):
 
 
 class SensorRuntimeTests(unittest.TestCase):
+    def test_sensorhub2_missing_mqtt_isolated_to_that_device(self) -> None:
+        state = {"sensor": {"sensorhub2": {}}}
+        events = []
+        run_sensorhub2_reader(
+            mqtt_module=None,
+            mqtt_available=False,
+            mqtt_host="localhost",
+            mqtt_port=1883,
+            mqtt_keepalive=60,
+            telemetry_topic="zeep/hub2/telemetry",
+            status_topic="zeep/hub2/status",
+            shared_state=state,
+            shared_state_lock=threading.Lock(),
+            decode_payload=lambda payload, **_kwargs: dict(payload),
+            event_logger=lambda *args, **kwargs: events.append((args, kwargs)),
+        )
+        self.assertIn("paho-mqtt", state["sensor"]["sensorhub2"]["error"])
+        self.assertEqual(events[0][0], ("sensorhub2", "mqtt_library_missing"))
+
+    def test_sensorhub2_adapter_projects_telemetry_and_offline_status(self) -> None:
+        state = {"sensor": {"sensorhub2": {"connected": False}}}
+        lock = threading.Lock()
+
+        _publish_payload(
+            "zeep/hub2/telemetry",
+            {"co2_ppm": 812},
+            telemetry_topic="zeep/hub2/telemetry",
+            shared_state=state,
+            shared_state_lock=lock,
+            decode_payload=lambda payload, **_kwargs: dict(payload),
+        )
+        projected = state["sensor"]["sensorhub2"]
+        self.assertEqual(projected["co2_ppm"], 812)
+        self.assertTrue(projected["connected"])
+        self.assertEqual(projected["transport"], "mqtt")
+
+        _publish_payload(
+            "zeep/hub2/status",
+            {"online": False},
+            telemetry_topic="zeep/hub2/telemetry",
+            shared_state=state,
+            shared_state_lock=lock,
+            decode_payload=lambda payload, **_kwargs: dict(payload),
+        )
+        self.assertFalse(state["sensor"]["sensorhub2"]["connected"])
+
     def test_ten_second_hub_cadence_has_explicit_stale_boundary(self) -> None:
         at_boundary = source_freshness(
             {"connected": True, "last_update": NOW - 25.0},
@@ -304,7 +355,7 @@ class SensorRuntimeTests(unittest.TestCase):
 
     def test_huge_sound_integer_is_packet_local_invalid_data(self) -> None:
         normalized = normalize_hub1_sensor(
-            {"sound_dba": 10 ** 10_000, "temperature_c": 24.0},
+            {"sound_dba": 10**10_000, "temperature_c": 24.0},
             sound_display_min=SOUND_DBA_DISPLAY_MIN,
             sound_display_max=SOUND_DBA_DISPLAY_MAX,
         )
@@ -347,7 +398,9 @@ class SensorRuntimeTests(unittest.TestCase):
             hub2_stale_s=20.0,
             device_specs=ENVIRONMENT_DEVICE_SPECS,
             calibration_metrics=tuple(SENSOR_CALIBRATION_SPECS),
-            apply_bias=lambda metric, value: apply_additive_bias(metric, value, biases=biases),
+            apply_bias=lambda metric, value: apply_additive_bias(
+                metric, value, biases=biases
+            ),
             bias_value=lambda metric: biases[metric],
             bias_sources={metric: "default" for metric in biases},
         )
@@ -388,7 +441,8 @@ class SensorRuntimeTests(unittest.TestCase):
             device_specs=ENVIRONMENT_DEVICE_SPECS,
             calibration_metrics=tuple(SENSOR_CALIBRATION_SPECS),
             apply_bias=lambda metric, value: apply_additive_bias(
-                metric, value, biases=biases),
+                metric, value, biases=biases
+            ),
             bias_value=lambda metric: biases[metric],
             bias_sources={metric: "default" for metric in biases},
         )
@@ -470,15 +524,15 @@ class SensorRuntimeTests(unittest.TestCase):
             device_specs=ENVIRONMENT_DEVICE_SPECS,
             calibration_metrics=tuple(SENSOR_CALIBRATION_SPECS),
             apply_bias=lambda metric, value: apply_additive_bias(
-                metric, value, biases=biases),
+                metric, value, biases=biases
+            ),
             bias_value=lambda metric: biases[metric],
             bias_sources={metric: "default" for metric in biases},
         )
 
         self.assertEqual(result["temperature_c"], 23.0)
         self.assertEqual(result["devices"]["sht3x_dis"]["status"], "degraded")
-        self.assertEqual(
-            result["devices"]["sht3x_dis"]["reason"], "sht_crc_failed")
+        self.assertEqual(result["devices"]["sht3x_dis"]["reason"], "sht_crc_failed")
         self.assertEqual(result["status"], "degraded")
 
     def test_legacy_dbfs_is_exposed_only_as_raw_display_diagnostic(self) -> None:
@@ -562,22 +616,30 @@ class SmartResponseServiceTests(unittest.TestCase):
                 "sgp40",
             )
         }
-        result = evaluate_smart_response({
-            "sensor": {"environment": {
-                "devices": devices,
-                "temperature_c": 24.0,
-                "humidity_rh": 50.0,
-                "co2_ppm": 1400.0,
-                "pm2_5_ug_m3": 2.0,
-                "voc_index": 100.0,
-                "sound_dba_est": 33.0,
-                "lux": 0.2,
-            }},
-            "safety": {"ready": True, "armed": True},
-            "aircon": {"connected": True, "stale": False},
-            "session": {"active": True, "recording": True},
-        }, policy, now=NOW)
-        air = next(item for item in result["recommendations"] if item["domain"] == "air")
+        result = evaluate_smart_response(
+            {
+                "sensor": {
+                    "environment": {
+                        "devices": devices,
+                        "temperature_c": 24.0,
+                        "humidity_rh": 50.0,
+                        "co2_ppm": 1400.0,
+                        "pm2_5_ug_m3": 2.0,
+                        "voc_index": 100.0,
+                        "sound_dba_est": 33.0,
+                        "lux": 0.2,
+                    }
+                },
+                "safety": {"ready": True, "armed": True},
+                "aircon": {"connected": True, "stale": False},
+                "session": {"active": True, "recording": True},
+            },
+            policy,
+            now=NOW,
+        )
+        air = next(
+            item for item in result["recommendations"] if item["domain"] == "air"
+        )
         self.assertEqual(air["level"], "critical")
         self.assertFalse(result["automatic_actuation"])
         self.assertFalse(result["sleep_stage_used"])
@@ -619,9 +681,7 @@ class SmartResponseServiceTests(unittest.TestCase):
             policy,
             now=NOW,
         )
-        by_domain = {
-            item["domain"]: item for item in result["recommendations"]
-        }
+        by_domain = {item["domain"]: item for item in result["recommendations"]}
         self.assertEqual(by_domain["temperature"]["level"], "blocked")
         self.assertEqual(by_domain["humidity"]["level"], "blocked")
         self.assertEqual(by_domain["sound"]["level"], "blocked")

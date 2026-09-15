@@ -58,6 +58,8 @@ class FakeZeep:
             return {"status": "success", "data": self.poll_states.pop(0)}
         if path == "/v1/users/me":
             return {"status": "success", "data": self.profile}
+        if path == "/v1/auth/logout":
+            return {"status": "success"}
         raise AssertionError(f"unexpected ZEEP call: {method} {path}")
 
 
@@ -86,10 +88,10 @@ class QrLoginApiTests(unittest.TestCase):
         self.client = TestClient(pod_app.app)
 
     def tearDown(self) -> None:
-        pod_app._zeep_request = self.original
         pod_app.qr_logins.forget(LOGIN_ID)
         if pod_app._active_session is not None:
             pod_app._finalize_active_session("qr_test_cleanup")
+        pod_app._zeep_request = self.original
 
     def install(self, *poll_states, profile=None) -> FakeZeep:
         fake = FakeZeep(poll_states, profile=profile)

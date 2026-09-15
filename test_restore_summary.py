@@ -23,7 +23,6 @@ from sleep_system_policy import (
     SESSION_REPORT_VERSION,
     SLEEP_QUALITY_VERSION,
     SLEEP_SCORE_FORMULA_VERSION,
-    ZEEP_SLEEP_BASELINE_VERSION,
 )
 from zeep_pod.sessions.history_quality import released_historical_quality
 from zeep_pod.sessions.restore_summary import build_restore_summary
@@ -229,9 +228,7 @@ class RestoreSummaryTests(unittest.TestCase):
         self.assertFalse(summary["source_score"]["available"])
         self.assertIsNone(summary["source_score"]["value"])
         self.assertIsNone(summary["source_score"]["formula_version"])
-        self.assertEqual(
-            summary["personal_baseline"]["maturity"]["sessions_used"], 0
-        )
+        self.assertEqual(summary["personal_baseline"]["maturity"]["sessions_used"], 0)
         self.assertFalse(summary["trend"]["available"])
 
     def test_untyped_or_cross_family_score_provenance_is_unavailable(self):
@@ -317,7 +314,11 @@ class RestoreSummaryTests(unittest.TestCase):
         attention_keys = {item["key"] for item in summary["drivers"]["attention"]}
         self.assertNotIn("environment_sound", positive_keys)
         self.assertIn("environment_sound", attention_keys)
-        driver = next(item for item in summary["drivers"]["attention"] if item["key"] == "environment_sound")
+        driver = next(
+            item
+            for item in summary["drivers"]["attention"]
+            if item["key"] == "environment_sound"
+        )
         self.assertFalse(driver["affects_source_score"])
         self.assertEqual(driver["label"], "เสียง · กำลังรวบรวมข้อมูล")
         self.assertEqual(driver["message"], "ZEEP กำลังรวบรวมข้อมูลส่วนนี้")
@@ -462,7 +463,12 @@ class RestoreSummaryTests(unittest.TestCase):
         recovery_environment = quality["environment_support"]
         self.assertTrue(recovery_environment["contributes_to_primary_score"])
         self.assertEqual(recovery_environment["max_points"], 10.0)
-        self.assertTrue(all(finding["contributes_to_primary_score"] is False for finding in report["findings"]))
+        self.assertTrue(
+            all(
+                finding["contributes_to_primary_score"] is False
+                for finding in report["findings"]
+            )
+        )
 
     def test_missing_nap_sensor_is_qa_not_a_score_penalty(self):
         samples = [
@@ -500,10 +506,16 @@ class RestoreSummaryTests(unittest.TestCase):
             target_duration_s=30 * 60,
         )
 
-        sound = next(finding for finding in report["findings"] if finding["key"] == "sound")
+        sound = next(
+            finding for finding in report["findings"] if finding["key"] == "sound"
+        )
         self.assertEqual(sound["severity"], "unavailable")
         self.assertFalse(sound["contributes_to_primary_score"])
-        driver = next(item for item in report["restore_summary"]["drivers"]["attention"] if item["key"] == "environment_sound")
+        driver = next(
+            item
+            for item in report["restore_summary"]["drivers"]["attention"]
+            if item["key"] == "environment_sound"
+        )
         self.assertFalse(driver["affects_source_score"])
 
     def test_report_version_bump_preserves_previous_approved_pair(self):
@@ -616,9 +628,7 @@ class RestoreSummaryTests(unittest.TestCase):
         self.assertFalse(released["available"])
         self.assertIsNone(released["score"])
         self.assertEqual(released["score_title"], "Sleep Score")
-        self.assertEqual(
-            released["validation_status"], "mode_metadata_conflict"
-        )
+        self.assertEqual(released["validation_status"], "mode_metadata_conflict")
 
     def test_history_release_withholds_untyped_and_wrong_formula_scores(self):
         base = {
@@ -664,9 +674,7 @@ class RestoreSummaryTests(unittest.TestCase):
         )
 
         record = store.update_user("person@example.com")
-        context = record["behaviour_by_mode"]["nap_recovery"]["by_target"][
-            "nap_30"
-        ]
+        context = record["behaviour_by_mode"]["nap_recovery"]["by_target"]["nap_30"]
 
         self.assertEqual(context["sessions_used"], 8)
         self.assertEqual(context["scores"], list(range(71, 79)))
@@ -684,12 +692,15 @@ class RestoreSummaryTests(unittest.TestCase):
 
     def test_personal_aggregation_excludes_mode_conflict(self):
         database = _BehaviourDatabase()
-        database.sessions.insert(0, {
-            "session_id": "conflicting-session",
-            "duration": 30 * 60,
-            "start_time": "2026-09-09T06:00:00+00:00",
-            "rest_mode": "sleep",
-        })
+        database.sessions.insert(
+            0,
+            {
+                "session_id": "conflicting-session",
+                "duration": 30 * 60,
+                "start_time": "2026-09-09T06:00:00+00:00",
+                "rest_mode": "sleep",
+            },
+        )
         database.summaries["conflicting-session"] = {
             "rest_mode": "sleep",
             "night_summary": {

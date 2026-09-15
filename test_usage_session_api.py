@@ -1322,7 +1322,10 @@ class UsageSessionApiTests(unittest.TestCase):
             detail["restore_summary"]["status"]["key"],
             "safety_review",
         )
-        self.assertIn("ควรให้ทีมตรวจสอบ", detail["report"]["headline"])
+        self.assertIn(
+            "ตรวจสอบก่อนใช้งานครั้งถัดไป",
+            detail["report"]["headline"],
+        )
 
         presentation_response = self.client.get(
             "/api/v1/usage-sessions/a-session/presentation",
@@ -1331,7 +1334,7 @@ class UsageSessionApiTests(unittest.TestCase):
         self.assertEqual(presentation_response.status_code, 200)
         primary = presentation_response.json()["data"]["primary_result"]
         self.assertEqual(primary["value"], 94)
-        self.assertIn("ควรให้ทีมตรวจสอบ", primary["status"])
+        self.assertIn("ตรวจสอบก่อนใช้งานครั้งถัดไป", primary["status"])
 
     def test_available_score_rebuilds_all_user_copy_from_stable_keys(self) -> None:
         session = self.history.sessions["a-session"]

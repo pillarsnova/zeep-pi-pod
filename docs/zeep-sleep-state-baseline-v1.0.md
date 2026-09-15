@@ -10,7 +10,8 @@
 > ส่วนข้อความ legacy ที่เคยให้ช่วง Recording เป็น `WAIT`, `NO DATA`, display-only
 > หรือไม่เข้าคะแนน ถูกแทนที่แล้ว กติกา runtime/report ที่มีอำนาจสูงสุดอยู่ใน
 > [Current Sleep System](zeep-sleep-system-current.md): ทุก occupied Recording epoch
-> ต้องมี W/N1/N2/N3/REM และเข้าคะแนน; confirmed `OFF BED` เป็นข้อยกเว้นเดียว
+> ต้องมี W/N1/N2/N3/REM และเข้าคะแนน; confirmed `OFF BED` เป็นข้อยกเว้นที่ไม่เข้า
+> Stage ratio แต่ยังใช้ประกอบ continuity/presence ของคะแนน
 
 ## TL;DR
 
@@ -274,7 +275,8 @@ confidence จาก high เป็น medium โดยไม่เปลี่�
   ถ้าเกิน engineering threshold ให้ติด quality flag และลด confidence แต่ไม่ใช้สร้าง stage
 - amplitude shift ถูกใช้เป็น signal-stability/artifact proxy เท่านั้น ห้ามแสดงว่าเป็น K-complex หรือ sleep spindle
 - Bed Status ระบุลุกจากเตียงต่อเนื่องครบ 3 รอบ: latch `OFF BED` ซึ่งไม่ใช่ Wake
-  และไม่เข้าคะแนน จนมีหลักฐาน occupied return ที่ยืนยันได้
+  และไม่เข้า Stage ratio จนมีหลักฐาน occupied return ที่ยืนยันได้ แต่เวลานี้ยังใช้
+  ประกอบ continuity/presence ของคะแนน
 - Historical replay ของ completed Session อนุญาต Raw exit หนึ่งครั้งเฉพาะรอบ
   สุดท้ายที่ติดกับการจบ Session เพื่อรักษาจังหวะลุกก่อนกดจบ
 - ผลทุกครั้งเก็บ version, probability, confidence, reason, progression,
@@ -313,6 +315,12 @@ Wake โดยลำพัง การยืนยัน cortical arousal จ�
 10. ห้าม closed-loop จาก sleep state จนผ่าน acceptance gate G2 และ safety review
 
 ## Evidence & Citations
+
+รายการอ้างอิงในส่วนนี้ใช้เป็น background สำหรับออกแบบสมมติฐานและแผน validation
+ด้วย รายการที่ยังไม่มี Evidence ID ใน
+[`research/evidence-library/source-register.json`](../research/evidence-library/source-register.json)
+ห้ามใช้เพียงลำพังเพื่อเปลี่ยน runtime threshold, สูตรคะแนน หรือยกระดับ claim
+จนกว่าจะผ่าน provenance/limitation/checksum review ตามทะเบียนหลัก
 
 1. American Academy of Sleep Medicine. *The AASM Manual for the Scoring of
    Sleep and Associated Events*. Sleep staging rules and monitored EEG/EOG/EMG

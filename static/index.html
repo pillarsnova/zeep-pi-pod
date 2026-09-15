@@ -485,6 +485,11 @@
     .login-card input[type=text],.login-card input[type=password],.login-card select{width:100%;
       background:var(--inset);border:1px solid var(--line);
       color:var(--text);padding:13px 14px;font-size:15px;font-family:inherit;margin-top:12px}
+    .login-nap-target{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;
+      align-items:center;margin-top:10px}
+    .login-nap-target.login-off{display:none}
+    .login-nap-target .muted{white-space:nowrap}
+    .login-card .login-nap-target select{min-height:44px;margin-top:0;padding:9px 12px}
     /* ช่องรหัสผ่าน + ปุ่มแสดง/ซ่อนซ้อนขวาใน */
     .pw-field{position:relative}
     .pw-field input{padding-right:74px}
@@ -796,10 +801,6 @@
     .main-nav{max-width:760px;margin-left:auto;margin-right:auto}.main-nav a{min-height:50px}
     .dashboard-overview,.unified-control{grid-column:1/-1}
     .dashboard-overview{padding:0;overflow:hidden;background:linear-gradient(145deg,#12283a,#0b1723 58%,#101a2c)}
-    .dash-user-head{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:20px 22px;border-bottom:1px solid #294657}
-    .dash-user-main{display:flex;align-items:center;gap:13px;min-width:0}.dash-avatar{display:grid;place-items:center;width:46px;height:46px;border-radius:14px;background:linear-gradient(145deg,#1d6680,#184054);color:#e8fbff;font-size:20px;font-weight:900}
-    .dash-user-main h3{margin:0;color:#f3fbff;font-size:20px}.dash-user-main p{margin:4px 0 0;color:#819aa7;font-size:10.5px}
-    .dash-session-badge{padding:8px 12px;border:1px solid #765c29;border-radius:999px;color:var(--amber);background:#251d0f;font-size:10px;font-weight:800;white-space:nowrap}.dash-session-badge.live{color:var(--good);border-color:#2e7258;background:#0e2a20}
     .dash-health-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:18px 22px 10px}.dash-health{padding:14px;border:1px solid #294557;border-radius:12px;background:#071521}.dash-health span{display:block;color:#748f9d;font-size:9.5px}.dash-health b{display:block;margin-top:8px;color:#f2fbff;font:800 22px "SF Mono",ui-monospace,monospace}.dash-health small{display:block;margin-top:5px;color:#607986;font-size:8.5px}
     .dash-sensors-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 22px;color:#a9c2cc;font-size:11px;font-weight:800}.dash-sensors-head span{color:#718b98;font-size:9px;font-weight:600}
     .dash-sensor-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;padding:0 22px 20px}.dash-sensor{position:relative;padding:11px;border:1px solid #243f50;border-radius:10px;background:#081722}.dash-sensor::after{content:"";position:absolute;right:9px;top:9px;width:7px;height:7px;border-radius:50%;background:var(--faint)}.dash-sensor.live::after{background:var(--good);box-shadow:0 0 8px #2effab88}.dash-sensor.offline::after{background:var(--bad)}.dash-sensor span{display:block;color:#718b98;font-size:8.5px}.dash-sensor b{display:block;margin-top:7px;color:#e9f7fb;font:800 15px "SF Mono",ui-monospace,monospace}.dash-foot{padding:11px 22px;border-top:1px solid #213b4b;color:#6f8793;font-size:9px}
@@ -813,8 +814,8 @@
     .device-inline{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.device-inline select{width:auto;min-width:84px;margin:0;padding:8px 25px 8px 10px;font-size:10px}.device-mini-btn{min-height:36px;padding:7px 10px;border:1px solid #355369;border-radius:9px;background:#102433;color:#b8d2dc;font-size:9px;cursor:pointer}.device-mini-btn:disabled{opacity:.4}.device-details{margin-top:8px;border-top:1px solid #1d3442}.device-details summary{padding-top:9px;color:#7794a1;font-size:9px;cursor:pointer}.bed-mini-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:9px}.bed-mini-grid button{min-height:38px}.unified-note{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding:10px 12px;border:1px solid #5d4a28;border-radius:10px;background:#1d180f;color:#d3b472;font-size:9px}.unified-note strong{color:#f1cc7d}
     .monitor-alert-bar{border-radius:12px}.monitor-advanced-btn.active{border-color:#4d8297;color:#dff8ff}.show-advanced-monitor #bcgCard,.show-advanced-monitor #rawMonitorCard{grid-column:1/-1}
     @media(max-width:980px){.controller-map{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-sensor-grid,.unified-sensor-strip{grid-template-columns:repeat(3,minmax(0,1fr))}.device-zone-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.device-zone.wide{grid-column:span 2}}
-    @media(max-width:700px){.dash-user-head,.unified-head{align-items:flex-start;flex-direction:column}.dash-health-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.device-zone-grid{grid-template-columns:1fr}.device-zone.wide{grid-column:auto}.unified-note{align-items:flex-start;flex-direction:column}.main-nav{position:sticky;top:6px;z-index:20;background:#07131ef2;backdrop-filter:blur(12px);border-radius:13px}.top .pills{width:100%}}
-    @media(max-width:480px){.controller-map{grid-template-columns:1fr 1fr}.controller-node{min-height:104px}.dash-health-grid,.dash-sensor-grid,.unified-sensor-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-user-head,.dash-health-grid,.dash-sensor-grid,.dash-foot{padding-left:14px;padding-right:14px}.unified-control{padding:14px}.smart-switch{min-width:72px}.main-nav a{font-size:10px}.nav-icon{font-size:15px}}
+    @media(max-width:700px){.unified-head{align-items:flex-start;flex-direction:column}.dash-health-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.device-zone-grid{grid-template-columns:1fr}.device-zone.wide{grid-column:auto}.unified-note{align-items:flex-start;flex-direction:column}.main-nav{position:sticky;top:6px;z-index:20;background:#07131ef2;backdrop-filter:blur(12px);border-radius:13px}.top .pills{width:100%}}
+    @media(max-width:480px){.controller-map{grid-template-columns:1fr 1fr}.controller-node{min-height:104px}.dash-health-grid,.dash-sensor-grid,.unified-sensor-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-health-grid,.dash-sensor-grid,.dash-foot{padding-left:14px;padding-right:14px}.unified-control{padding:14px}.smart-switch{min-width:72px}.main-nav a{font-size:10px}.nav-icon{font-size:15px}}
 
     /* ---------- JARVIS Human UI v4: clear hierarchy, large controls ---------- */
     :root{
@@ -842,7 +843,6 @@
     .card{border-color:#245064;border-radius:18px;clip-path:none;box-shadow:0 16px 42px #0004}.card::before,.card::after{width:18px;height:18px;opacity:.65}
     .section-title{font-size:14px;letter-spacing:.08em;text-transform:none}.muted{font-size:13px}.mini{font-size:12px}
     .btn,button,select,input{font-family:inherit}.btn{min-height:48px;padding:11px 17px;font-size:14px}.btn:focus-visible,.smart-switch:focus-visible,.device-mini-btn:focus-visible,.main-nav a:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #54e8ff66;outline-offset:2px}
-    body[data-view="dashboard"] .dash-user-head{display:none!important}
     .dashboard-overview{border-radius:20px;background:linear-gradient(145deg,#102b3d,#091825 62%,#111c30)}
     .dash-profile-reference{margin:0 22px 2px;padding:12px 14px;border:1px solid #284d60;border-radius:14px;background:#071722}.dash-profile-reference-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.dash-profile-reference-head b{color:#dff6fc;font-size:12px}.dash-profile-reference-head small{color:#6f8b98;font-size:9.5px}.dash-profile-reference-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}.dash-profile-fact{min-width:0;padding:8px 10px;border:1px solid #203e4e;border-radius:10px;background:#0a1b28}.dash-profile-fact span{display:block;color:#718e9b;font-size:9px}.dash-profile-fact strong{display:block;margin-top:4px;color:#eafaff;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dash-profile-fact.missing strong{color:#708894}.dash-profile-reference.idle{opacity:.55}
     .dash-health-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:14px 22px}.dash-health{min-height:116px;padding:17px;border-color:#2a5265;border-radius:14px;background:#071621}.dash-health span{font-size:12px}.dash-health b{margin-top:10px;font-size:28px}.dash-health small{font-size:11px;line-height:1.45}
@@ -973,9 +973,16 @@
       <div class="pilot-welcome"><b>ยินดีต้อนรับสู่การทดสอบใช้งาน ZEEP</b><span>เลือกรูปแบบการพัก 1 แบบก่อนเริ่ม</span></div>
       <div class="muted">รูปแบบการทดสอบ</div>
       <select id="loginRestMode" onchange="renderRestModeHint()">
-        <option value="nap_recovery">Nap &amp; Refresh · ประมาณ 30 นาที</option>
+        <option value="nap_recovery">Nap &amp; Refresh · พักระหว่างวัน</option>
         <option value="sleep">Overnight Recovery · พักค้างคืน</option>
       </select>
+      <div id="loginNapTargetBlock" class="login-nap-target">
+        <label class="muted" for="loginNapTarget">เวลาพักเป้าหมาย</label>
+        <select id="loginNapTarget" onchange="renderRestModeHint()" aria-label="เวลาพักเป้าหมายสำหรับ Nap &amp; Refresh">
+          <option value="30" selected>30 นาที</option>
+          <option value="90">90 นาที</option>
+        </select>
+      </div>
       <div class="mini" id="loginRestModeHint">พักระหว่างวัน จะหลับ พักสายตา หรือทำสมาธิก็ได้</div>
       <details class="pilot-steps">
         <summary>ขั้นตอนก่อน–หลังการทดสอบ</summary>
@@ -1168,16 +1175,12 @@
   <div class="grid">
     <section class="card dashboard-overview" id="dashboardOverview" data-pages="dashboard" aria-label="สุขภาพผู้ใช้งานและ Sensor">
       <div class="tablet-deck-head">
-        <h3>สุขภาพและสภาพแวดล้อม</h3>
+        <h3>ข้อมูลล่าสุด</h3>
         <div class="dash-clock" role="timer" aria-label="เวลาปัจจุบันและเขตเวลาที่ใช้">
           <span class="dash-clock-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg></span>
           <span class="dash-clock-copy"><b id="dashClockTime">--:--:--</b><small id="dashClockDate">กำลังอ่านเวลา</small></span>
           <em id="dashClockZone">Timezone --</em>
         </div>
-      </div>
-      <div class="dash-user-head">
-        <div class="dash-user-main"><div class="dash-avatar" id="dashAvatar">Z</div><div><h3 id="dashUserName">ยังไม่เริ่ม Session</h3><p id="dashUserMeta">เลือกผู้ใช้งานเพื่อเริ่มติดตามสุขภาพและสภาพแวดล้อม</p></div></div>
-        <div class="dash-session-badge" id="dashSessionBadge">ยังไม่เริ่ม</div>
       </div>
       <section class="dash-profile-reference idle" id="dashProfileReference" aria-label="ข้อมูลอ้างอิงสุขภาพของผู้ใช้งาน">
         <div class="dash-profile-reference-head"><b>ข้อมูลสำหรับคำแนะนำของคุณ</b><small id="dashProfileSource">ข้อมูลจาก Profile ช่วยให้คำแนะนำเหมาะกับคุณมากขึ้น</small></div>
@@ -1206,11 +1209,7 @@
             <p id="dashPersonalRestAdvice">เมื่อกลับมาใช้ครั้งที่ 2 ZEEP จะเริ่มแนะนำช่วงเวลาที่เหมาะกับคุณ</p>
           </div>
         </div>
-        <div class="dash-personal-rest-environment" id="dashPersonalRestEnvironment" hidden>
-          <small>ค่าที่บันทึกได้ในช่วงพักนี้</small>
-          <div id="dashPersonalRestEnvironmentValues"></div>
-        </div>
-        <small class="dash-personal-rest-guardrail" id="dashPersonalRestGuardrail">ใช้เพื่อแนะนำเท่านั้น · ระบบจะให้คุณยืนยันก่อนปรับอุปกรณ์</small>
+        <small class="dash-personal-rest-guardrail" id="dashPersonalRestGuardrail">คำแนะนำส่วนบุคคล · คุณยืนยันก่อนปรับอุปกรณ์</small>
       </section>
       <div class="dashboard-zone-grid">
         <section class="dashboard-zone dashboard-health-zone" aria-label="สุขภาพผู้ใช้งาน">
@@ -1241,38 +1240,35 @@
           </div>
         </section>
       </div>
-      <section class="admin-sleep-baseline" id="dashSleepBaseline" data-admin-panel aria-label="Baseline ของสถานะการนอนทั้ง 5 ระดับ">
-        <div class="admin-sleep-baseline-head">
-          <div><span class="admin-sleep-baseline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 15.5A8 8 0 0 1 9 4.5 8.5 8.5 0 1 0 20 15.5Z"/><path d="M4 20h16M7 17v3m10-3v3"/></svg></span><div><b>Baseline สถานะการนอน</b><small>หลักฐาน 30 วินาที · สถานะยืนยันเมื่อแนวโน้มต่อเนื่อง 60 วินาที</small></div></div>
-          <span id="dashSleepBaselineSource">Age + Gender Baseline</span>
+      <div class="dash-foot"><span class="dash-foot-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></svg></span><span id="dashHealthNote">ข้อมูลช่วยดูแนวโน้มระหว่างพัก · ไม่ใช่การวินิจฉัย</span></div>
+    </section>
+
+    <section class="card admin-sleep-baseline monitor-analysis-card" id="dashSleepBaseline" data-pages="monitor" data-admin-panel aria-label="Baseline ของสถานะการนอนทั้ง 5 ระดับ">
+      <div class="admin-sleep-baseline-head">
+        <div><span class="admin-sleep-baseline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 15.5A8 8 0 0 1 9 4.5 8.5 8.5 0 1 0 20 15.5Z"/><path d="M4 20h16M7 17v3m10-3v3"/></svg></span><div><b>Baseline สถานะการนอน</b><small>หลักฐาน 30 วินาที · ยืนยันเมื่อแนวโน้มต่อเนื่อง 60 วินาที</small></div></div>
+        <span id="dashSleepBaselineSource">Age + Gender Baseline</span>
+      </div>
+      <div class="admin-sleep-baseline-grid" id="dashSleepBaselineGrid"><div class="admin-sleep-baseline-empty">กำลังรอข้อมูล Baseline</div></div>
+      <div class="admin-sleep-baseline-foot"><span id="dashSleepBaselineProgress">Sensor 10 วิ · Evidence 30 วิ · Confirm 60 วิ</span><span id="dashSleepBaselinePolicy">หลักฐานและสถานะยืนยันแยกจากกัน · ไม่ใช่ผล PSG</span></div>
+    </section>
+    <section class="card admin-live-explanation monitor-analysis-card" id="adminLiveExplanation" data-pages="monitor" data-admin-panel aria-label="สรุปสิ่งที่ต้องติดตามสำหรับผู้ดูแลระบบ">
+      <div class="admin-live-explanation-head">
+        <div class="admin-live-explanation-identity">
+          <span class="admin-live-explanation-icon" aria-hidden="true"><i></i><svg viewBox="0 0 24 24"><path d="M4 18V9m6 9V5m6 13v-7m4 7V3"/><path d="M3 21h18"/></svg></span>
+          <div><em>INSIGHTS &amp; ACTIONS</em><b>สรุปสิ่งที่ต้องติดตาม</b><small>แสดงความหมายและข้อสังเกตสำหรับ Admin</small></div>
         </div>
-        <div class="admin-sleep-baseline-grid" id="dashSleepBaselineGrid"><div class="admin-sleep-baseline-empty">กำลังรอข้อมูล Baseline</div></div>
-        <div class="admin-sleep-baseline-foot"><span id="dashSleepBaselineProgress">Sensor 10 วิ · Evidence 30 วิ · Confirm 60 วิ</span><span id="dashSleepBaselinePolicy">หลักฐานและสถานะยืนยันแยกจากกัน · ไม่ใช่ผล PSG</span></div>
-      </section>
-      <section class="admin-live-explanation" id="adminLiveExplanation" data-admin-panel aria-label="สรุปสิ่งที่ต้องติดตามสำหรับผู้ดูแลระบบ">
-        <div class="admin-live-explanation-head">
-          <div class="admin-live-explanation-identity">
-            <span class="admin-live-explanation-icon" aria-hidden="true"><i></i><svg viewBox="0 0 24 24"><path d="M4 18V9m6 9V5m6 13v-7m4 7V3"/><path d="M3 21h18"/></svg></span>
-            <div><em>INSIGHTS &amp; ACTIONS</em><b>สรุปสิ่งที่ต้องติดตาม</b><small>ค่าปัจจุบันอยู่ด้านบน · ส่วนนี้แสดงความหมายและข้อสังเกต</small></div>
-          </div>
-          <div class="admin-live-explanation-context" aria-label="ค่าจริง · เทียบ Baseline และเกณฑ์ของโหมด">
-            <div class="admin-live-explanation-basis"><span><i></i>ค่าปัจจุบัน</span><span>Baseline</span><span>เกณฑ์โหมด</span></div>
-            <strong id="adminExplanationMode">กำลังรอโหมด</strong>
-          </div>
+        <div class="admin-live-explanation-context" aria-label="ค่าจริง · เทียบ Baseline และเกณฑ์ของโหมด">
+          <div class="admin-live-explanation-basis"><span><i></i>ค่าปัจจุบัน</span><span>Baseline</span><span>เกณฑ์โหมด</span></div>
+          <strong id="adminExplanationMode">กำลังรอโหมด</strong>
         </div>
-        <div class="admin-live-explanation-grid">
-          <article class="admin-live-explanation-group admin-live-explanation-bio" aria-labelledby="adminBioExplanationTitle">
-            <div class="admin-live-explanation-group-head"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h4l2-4 4 9 2-5h6"/><path d="M12 21C5 17 3 13 3 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 9 2.5c0 3.5-2 7.5-9 11.5Z"/></svg></span><div><h4 id="adminBioExplanationTitle">สัญญาณชีพและการนอน</h4><small>แสดงความหมายของสถานะและค่าที่อยู่นอก Baseline</small></div><em>BIOMETRIC</em></div>
-            <div class="admin-live-explanation-list" id="adminBioExplanation"><div class="admin-live-explanation-empty">กำลังรอข้อมูล BCG, HR และ RR</div></div>
-          </article>
-          <article class="admin-live-explanation-group admin-live-explanation-environment" aria-labelledby="adminEnvironmentExplanationTitle">
-            <div class="admin-live-explanation-group-head"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8c4-4 8 4 12 0 2-2 3-2 4-2M4 13c4-4 8 4 12 0 2-2 3-2 4-2M4 18c4-4 8 4 12 0 2-2 3-2 4-2"/></svg></span><div><h4 id="adminEnvironmentExplanationTitle">สภาพแวดล้อมภายใน ZEEP</h4><small>สรุปภาพรวมเดียว · รายละเอียดค่าดูจากการ์ด Sensor ด้านบน</small></div><em>ENVIRONMENT</em></div>
-            <div class="admin-live-explanation-list environment" id="adminEnvironmentExplanation"><div class="admin-live-explanation-empty">กำลังรอข้อมูล Sensor</div></div>
-          </article>
-        </div>
-        <div class="admin-live-explanation-note"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></svg></span><div><b>WELLNESS INTERPRETATION</b><small>ใช้ติดตามแนวโน้มและตรวจระบบ · Sleep Stage เป็นค่าประเมินจาก BCG/HR/RR ไม่ใช่ผลยืนยันจาก PSG · Sensor ที่ไม่ Live จะไม่ถูกตีความ</small></div></div>
-      </section>
-      <div class="dash-foot"><span class="dash-foot-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></svg></span><span id="dashHealthNote">ข้อมูลจาก Sensor ใช้ติดตามแนวโน้มการนอน</span></div>
+      </div>
+      <div class="admin-live-explanation-grid single">
+        <article class="admin-live-explanation-group admin-live-explanation-bio" aria-labelledby="adminBioExplanationTitle">
+          <div class="admin-live-explanation-group-head"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h4l2-4 4 9 2-5h6"/><path d="M12 21C5 17 3 13 3 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 9 2.5c0 3.5-2 7.5-9 11.5Z"/></svg></span><div><h4 id="adminBioExplanationTitle">สัญญาณชีพและการนอน</h4><small>ความหมายของสถานะและค่าที่อยู่นอก Baseline</small></div><em>BIOMETRIC</em></div>
+          <div class="admin-live-explanation-list" id="adminBioExplanation"><div class="admin-live-explanation-empty">กำลังรอข้อมูล BCG, HR และ RR</div></div>
+        </article>
+      </div>
+      <div class="admin-live-explanation-note"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></svg></span><div><b>WELLNESS INTERPRETATION</b><small>ใช้ดูแนวโน้มและตรวจระบบ · Sleep Stage เป็นค่าประเมินจาก BCG/HR/RR ไม่ใช่ผล PSG</small></div></div>
     </section>
 
     <section class="card unified-control" id="unifiedControlCard" data-pages="control" aria-label="ศูนย์ควบคุมอุปกรณ์ทั้งหมด">
@@ -1772,7 +1768,7 @@
         </details>
       </div>
     </section>
-    <section class="card admin-atmosphere-card" id="adminAtmosphereCard" data-pages="dashboard" data-admin-panel aria-label="แผนปรับสภาพแวดล้อมสำหรับผู้ดูแลระบบ">
+    <section class="card admin-atmosphere-card" id="adminAtmosphereCard" data-pages="monitor" data-admin-panel aria-label="แผนปรับสภาพแวดล้อมสำหรับผู้ดูแลระบบ">
       <div class="admin-atmosphere-head">
         <div><div class="section-title">แผนปรับสภาพแวดล้อม</div><p>พอใช้ขึ้นไปถือว่าผ่านขั้นต่ำ · แสดงเฉพาะจุดที่ควรดูแลหรือปรับเพิ่ม · เกณฑ์ฉบับเต็มเปิดดูได้ด้านล่าง</p></div>
         <div class="admin-atmosphere-summary atmosphere-unknown" id="adminAtmosphereSummary"><span id="adminAtmosphereIcon">?</span><div><b id="adminAtmosphereLevel">รอข้อมูล</b><small id="adminAtmosphereCoverage">Sensor 0/7 เกณฑ์</small></div></div>
@@ -2206,43 +2202,46 @@
         <span class="history-self-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-history"/></svg></span>
         <div><b id="historyOwnerTitle">ประวัติการใช้งานของฉัน</b><small>เลือก Overnight Recovery หรือ Nap & Refresh เพื่อดูผลย้อนหลัง</small></div>
       </div>
-      <div id="historyToolbar" class="history-filter-panel" aria-label="ตัวกรองประวัติการใช้งาน">
-        <div class="history-filter-group history-date-group">
-          <button class="history-day-step" type="button" onclick="shiftHistoryRange(-1)" aria-label="เลื่อนช่วงวันย้อนหลัง"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-previous"/></svg></button>
-          <label><span>จากวันที่</span><input id="historyDateFrom" type="date" onchange="refreshHistory()"></label>
-          <label><span>ถึงวันที่</span><input id="historyDateTo" type="date" onchange="refreshHistory()"></label>
-          <button class="history-today-button" type="button" onclick="setHistoryToday()">วันนี้</button>
-          <button class="history-day-step" type="button" onclick="shiftHistoryRange(1)" aria-label="เลื่อนช่วงวันถัดไป"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-next"/></svg></button>
+      <section class="history-section history-filter-section" aria-labelledby="historyFilterTitle">
+        <div class="history-section-head"><div><h4 id="historyFilterTitle">เลือกช่วงเวลา</h4><small>เลือกวัน เวลา และผู้ใช้งานที่ต้องการดู</small></div></div>
+        <div id="historyToolbar" class="history-filter-panel" aria-label="ตัวกรองประวัติการใช้งาน">
+          <div class="history-filter-group history-date-group">
+            <button class="history-day-step" type="button" onclick="shiftHistoryRange(-1)" aria-label="เลื่อนช่วงวันย้อนหลัง"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-previous"/></svg></button>
+            <label><span>จากวันที่</span><input id="historyDateFrom" type="date"></label>
+            <label><span>ถึงวันที่</span><input id="historyDateTo" type="date"></label>
+            <button class="history-today-button" type="button" onclick="setHistoryToday()">วันนี้</button>
+            <button class="history-day-step" type="button" onclick="shiftHistoryRange(1)" aria-label="เลื่อนช่วงวันถัดไป"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-next"/></svg></button>
+          </div>
+          <div class="history-filter-group history-time-group">
+            <label><span>เวลาเริ่ม</span><input id="historyTimeFrom" type="time" value="00:00"></label>
+            <label><span>เวลาสิ้นสุด</span><input id="historyTimeTo" type="time" value="23:59"></label>
+          </div>
+          <div class="history-filter-group history-admin-filter admin-only">
+            <label class="history-name-search"><span>ค้นหาชื่อหรืออีเมล</span><input id="historyNameFilter" type="search" placeholder="ทุกคน" onkeydown="if(event.key==='Enter')refreshHistory()"></label>
+            <label class="history-person-select"><span>เลือกผู้ใช้งาน</span><select id="historyUser" aria-label="เลือกผู้ใช้ เรียงจาก Session ล่าสุด" title="เรียงจาก Session ล่าสุด"></select></label>
+          </div>
+          <div class="history-filter-actions">
+            <button class="btn ui-label-button" onclick="refreshHistory(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-refresh"/></svg><span>ค้นหา</span></button>
+            <button class="btn danger admin-only ui-label-button" onclick="deleteUser(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-trash"/></svg><span>ลบผู้ใช้</span></button>
+          </div>
         </div>
-        <div class="history-filter-group history-time-group">
-          <label><span>เวลาเริ่ม</span><input id="historyTimeFrom" type="time" value="00:00" onchange="refreshHistory()"></label>
-          <label><span>เวลาสิ้นสุด</span><input id="historyTimeTo" type="time" value="23:59" onchange="refreshHistory()"></label>
-        </div>
-        <div class="history-filter-group history-admin-filter admin-only">
-          <label class="history-name-search"><span>ค้นหาชื่อหรืออีเมล</span><input id="historyNameFilter" type="search" placeholder="ทุกคน" onkeydown="if(event.key==='Enter')refreshHistory()"></label>
-          <label class="history-person-select"><span>เลือกผู้ใช้งาน</span><select id="historyUser" aria-label="เลือกผู้ใช้ เรียงจาก Session ล่าสุด" title="เรียงจาก Session ล่าสุด" onchange="refreshHistory()"></select></label>
-        </div>
-        <div class="history-filter-actions">
-          <button class="btn ui-label-button" onclick="refreshHistory(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-refresh"/></svg><span>แสดงผล</span></button>
-          <button class="btn danger admin-only ui-label-button" onclick="deleteUser(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-trash"/></svg><span>ลบผู้ใช้</span></button>
-        </div>
-      </div>
-      <section id="historySummary" class="history-summary" aria-live="polite"><div class="mini">กำลังสรุปข้อมูลวันนี้…</div></section>
-      <section id="historyUserJourney" class="history-user-journey" aria-live="polite"></section>
-      <div id="historyParticipants" class="history-participants" aria-live="polite"></div>
-      <details class="stage-guide">
-        <summary>ความหมาย Sleep Stages สำหรับ Overnight</summary>
-        <div class="stage-guide-grid">
-          <div><b>W</b><strong>ตื่น</strong><span>ช่วงที่ระบบประเมินว่ายังตื่นหรือกลับเข้าสู่สถานะตื่น</span></div>
-          <div><b>N1</b><strong>หลับตื้น / เคลิ้มหลับ</strong><span>เริ่มเข้าสู่การนอน ร่างกายผ่อนคลาย และปลุกให้ตื่นได้ง่าย</span></div>
-          <div><b>N2</b><strong>หลับสนิทขึ้น / หลับตื้นต่อเนื่อง</strong><span>หัวใจและการหายใจช้าลง ร่างกายเข้าสู่การนอนที่ต่อเนื่องขึ้น</span></div>
-          <div><b>N3</b><strong>หลับลึก</strong><span>ช่วงหลับลึกที่ร่างกายได้พักอย่างต่อเนื่อง</span></div>
-          <div><b>REM</b><strong>ระยะ REM / หลับฝัน</strong><span>ช่วงหลับที่สมองยังทำงานมากขึ้นและมักมีความฝัน</span></div>
-        </div>
-        <div class="stage-guide-note">Sleep Stage เป็นค่าประเมินแนวโน้มจากข้อมูลที่ ZEEP บันทึกได้ โดย ZEEP ไม่ได้วัดการฟื้นตัวของร่างกาย ความฝัน หรือความจำโดยตรง</div>
+      </section>
+      <section class="history-section history-summary-section" aria-labelledby="historySummaryTitle">
+        <div class="history-section-head"><div><h4 id="historySummaryTitle">สรุปช่วงที่เลือก</h4><small>แยก Sleep Score และ Recovery Score ตามรูปแบบการพัก</small></div></div>
+        <div id="historySummary" class="history-summary" aria-live="polite"><div class="mini">กำลังสรุปข้อมูลวันนี้…</div></div>
+      </section>
+      <section class="history-section history-list-section" aria-labelledby="historyListTitle">
+        <div class="history-section-head"><div><h4 id="historyListTitle">รายการการพัก</h4><small>เลือกรายการเพื่อดูผลและ Timeline</small></div></div>
+        <div id="sessionList" class="hist-list"><div class="mini">กำลังโหลดประวัติการใช้งาน…</div></div>
+      </section>
+      <details class="history-section history-journey-panel">
+        <summary><span><b>แนวโน้มการพักที่ผ่านมา</b><small>รวม Overnight Recovery และ Nap &amp; Refresh ของคนเดียวกัน</small></span></summary>
+        <div id="historyUserJourney" class="history-user-journey" aria-live="polite"></div>
       </details>
-      <div id="sessionList" class="hist-list"><div class="mini">กำลังโหลดประวัติการใช้งาน…</div></div>
-      <div id="sessionDetail"></div>
+      <section class="history-section history-detail-section" aria-labelledby="historyDetailTitle">
+        <div class="history-section-head"><div><h4 id="historyDetailTitle">ผลรายการที่เลือก</h4><small>สรุปเชิงสุขภาพก่อน แล้วจึงเปิดดูรายละเอียดได้</small></div></div>
+        <div id="sessionDetail"><div class="history-empty"><b>เลือกรายการการพัก</b><span>ผลสรุปจะแสดงในส่วนนี้</span></div></div>
+      </section>
     </div>
   </div>
 </div>
@@ -2296,7 +2295,7 @@ function userScoreMeaning(quality={},presentationOverride,safetyReviewOverride=f
   const meanings=recovery?{
     very_good:'ช่วงพักนี้เป็นไปได้ดีมากตามเป้าหมายที่เลือก',
     good:'ช่วงพักนี้เป็นไปได้ดีตามเป้าหมายที่เลือก',
-    fair:'ช่วงพักนี้ช่วยให้ร่างกายได้หยุดนิ่งและผ่อนคลาย',
+    fair:'ภาพรวมช่วงพักนี้พอใช้ และยังมีบางจุดที่ลองปรับได้',
     low:'ครั้งนี้ยังมีบางจุดที่ช่วยให้ช่วงพักสบายขึ้นได้',
   }:{
     very_good:'เวลา ความต่อเนื่อง และรูปแบบการนอนคืนนี้อยู่ในระดับดีมาก',
@@ -2651,7 +2650,15 @@ const USER_BED_STATUS_TH = {
 };
 
 function genderTh(g){ return ({male:'ชาย', female:'หญิง', other:'อื่น ๆ', unspecified:'ไม่ระบุ'})[g] || g || '-'; }
-function ageToGroup(age){ return age>=60?'60+':age>=45?'45-59':age>=30?'30-44':'18-29'; }
+function ageToGroup(value){
+  const age=Number(value);
+  if(!Number.isFinite(age)||age<18||age>100)return '';
+  return age>=60?'60+':age>=45?'45-59':age>=30?'30-44':'18-29';
+}
+function ageGroupDisplay(value){
+  return ['18-29','30-44','45-59','60+'].includes(String(value||''))
+    ?`อายุ ${value} ปี`:'ยังไม่ระบุช่วงอายุ';
+}
 function displayAge(se={}){
   const ref=se.health_reference||{},exact=Number(ref.age_years);
   if(Number.isFinite(exact)&&exact>0)return `อายุ ${Math.round(exact)} ปี`;
@@ -2728,10 +2735,10 @@ function renderLoginBaseline(){
    sleep_system_policy.py; label stays compact for the live Dashboard tile. */
 const SLEEP_TH = {
   wake:       {code:'W',   title:'ตื่น',meaning:'ช่วงที่ระบบประเมินว่ายังตื่นหรือกลับเข้าสู่สถานะตื่น',label:'ตื่น',cls:'wake'},
-  n1:         {code:'N1',  title:'หลับตื้น / เคลิ้มหลับ',meaning:'เริ่มเข้าสู่การนอน ร่างกายผ่อนคลาย และปลุกให้ตื่นได้ง่าย',label:'หลับตื้น',cls:'nrem'},
-  n2:         {code:'N2',  title:'หลับสนิทขึ้น / หลับตื้นต่อเนื่อง',meaning:'หัวใจและการหายใจช้าลง ร่างกายเข้าสู่การนอนที่ต่อเนื่องขึ้น',label:'หลับสนิทขึ้น',cls:'nrem'},
-  n3:         {code:'N3',  title:'หลับลึก',meaning:'ช่วงหลับลึกที่ร่างกายได้พักอย่างต่อเนื่อง',label:'หลับลึก',cls:'deep'},
-  rem:        {code:'REM', title:'ระยะ REM / หลับฝัน',meaning:'ช่วงหลับที่สมองยังทำงานมากขึ้นและมักมีความฝัน',label:'หลับฝัน',cls:'rem'},
+  n1:         {code:'N1',  title:'หลับตื้น / เคลิ้มหลับ',meaning:'ช่วงที่ระบบประเมินว่าเริ่มเข้าสู่การนอน ซึ่งมักปลุกตื่นได้ง่าย',label:'หลับตื้น',cls:'nrem'},
+  n2:         {code:'N2',  title:'หลับสนิทขึ้น / หลับตื้นต่อเนื่อง',meaning:'ช่วงที่ระบบประเมินว่าการนอนต่อเนื่องขึ้น โดยทั่วไปชีพจรและการหายใจอาจช้าลง',label:'หลับสนิทขึ้น',cls:'nrem'},
+  n3:         {code:'N3',  title:'หลับลึก',meaning:'ช่วงที่ระบบประเมินว่าเป็นหลับลึก',label:'หลับลึก',cls:'deep'},
+  rem:        {code:'REM', title:'ระยะ REM / หลับฝัน',meaning:'ช่วง REM ซึ่งมักสัมพันธ์กับความฝัน',label:'หลับฝัน',cls:'rem'},
   // ``nrem`` is kept only for rendering old history. The live estimator never
   // emits a generic NREM because ZEEP's current ontology is W/N1/N2/N3/REM.
   nrem:       {code:'NREM', label:'หลับ · ข้อมูลเดิม',cls:'nrem'},
@@ -2790,7 +2797,7 @@ function renderSleepState(sl={},session={},bcg={}){
   const base=sl.baseline||{}, names={wake:'W · ตื่น',n1:'N1',n2:'N2',n3:'N3',rem:'REM'};
   const baselineRows=order.filter(k=>base[k]).map(k=>`<tr class="${classificationActive&&sl.state===k?'current':''}"><td>${names[k]}</td><td>${base[k].hr[0]}–${base[k].hr[1]} BPM</td><td>${base[k].rr[0]}–${base[k].rr[1]} ครั้ง/นาที</td></tr>`).join('');
   const genderAdj=sl.gender_adjustment||{};
-  const baselineTable=baselineRows?`<div class="baseline-block"><div class="baseline-title"><strong>Wellness Baseline · อายุ ${sl.age_group || '18-29'} ปี · ${genderTh(sl.gender)}</strong><span>Age + Gender directional starting range</span></div><table class="baseline-table"><thead><tr><th>Sleep State</th><th>HR · Heart Rate</th><th>RR · Respiratory Rate</th></tr></thead><tbody>${baselineRows}</tbody></table></div>`:'';
+  const baselineTable=baselineRows?`<div class="baseline-block"><div class="baseline-title"><strong>Wellness Baseline · ${ageGroupDisplay(sl.age_group)} · ${genderTh(sl.gender)}</strong><span>Age + Gender directional starting range</span></div><table class="baseline-table"><thead><tr><th>Sleep State</th><th>HR · Heart Rate</th><th>RR · Respiratory Rate</th></tr></thead><tbody>${baselineRows}</tbody></table></div>`:'';
   const env=sl.environment||{}, q=sl.signal_quality||{};
   const envParts=[
     env.temperature_c!=null?`🌡 ${env.temperature_c}°C`:null,
@@ -3101,11 +3108,11 @@ function dashboardRangeScore(value,ranges){
 // criterion wins so a healthy reading cannot hide a genuinely bad one.
 const dashboardAtmosphereCriteria=Object.freeze([
   {id:'temperature',name:'อุณหภูมิ',deviceKey:'sht3x_dis',source:'SHT3x-DIS',unit:'°C',digits:1,target:'18–27°C',principle:'ประเมิน Thermal comfort จากอุณหภูมิจริงใน ZEEP',bands:'ยอดเยี่ยม 18–27 · ดี 17–28 · พอใช้ 16–29 · ควรปรับ 13–32 · ต้องดูแลเมื่ออยู่นอกช่วง',read:e=>e.temperature_c,score:v=>dashboardRangeScore(v,[[18,27],[17,28],[16,29],[13,32]]),control:'เครื่องปรับอากาศ',action:v=>v>27?'ลดอุณหภูมิที่เลือกหรือเปิดแอร์':v<18?'เพิ่มอุณหภูมิที่เลือกหรือลดความเย็น':'รักษาอุณหภูมิปัจจุบัน'},
-  {id:'humidity',name:'ความชื้น',deviceKey:'sht3x_dis',source:'SHT3x-DIS',unit:'%RH',digits:1,target:'40–60%RH',principle:'ป้องกันอากาศแห้งเกินไปหรือความชื้นสะสมและการควบแน่น',bands:'ยอดเยี่ยม 40–60 · ดี 35–65 · พอใช้ 30–70 · ควรปรับ 20–80 · ต้องดูแลเมื่ออยู่นอกช่วง',read:e=>e.humidity_rh,score:v=>dashboardRangeScore(v,[[40,60],[35,65],[30,70],[20,80]]),control:'ไอน้ำ · ระบบระบายอากาศ',action:v=>v>60?'ปิดไอน้ำและเร่งระบายอากาศ':v<40?'เปิดไอน้ำเป็นช่วงและติดตามค่า':'รักษาความชื้นปัจจุบัน'},
+  {id:'humidity',name:'ความชื้น',deviceKey:'sht3x_dis',source:'SHT3x-DIS',unit:'%RH',digits:1,target:'40–60%RH',principle:'ใช้สังเกตอากาศแห้ง ความชื้นสะสม และความเสี่ยงการควบแน่น',bands:'ยอดเยี่ยม 40–60 · ดี 35–65 · พอใช้ 30–70 · ควรปรับ 20–80 · ต้องดูแลเมื่ออยู่นอกช่วง',read:e=>e.humidity_rh,score:v=>dashboardRangeScore(v,[[40,60],[35,65],[30,70],[20,80]]),control:'ไอน้ำ · ระบบระบายอากาศ',action:v=>v>60?'ปิดไอน้ำและเร่งระบายอากาศ':v<40?'เปิดไอน้ำเป็นช่วงและติดตามค่า':'รักษาความชื้นปัจจุบัน'},
   {id:'light',name:'ความสว่าง',deviceKey:'opt3001',source:'OPT3001',unit:'lux',digits:1,target:'≤5 lux',principle:'ประเมินแสงรบกวนในโหมดเตรียมนอนและขณะนอน',bands:'ยอดเยี่ยม ≤5 · ดี ≤10 · พอใช้ ≤30 · ควรปรับ ≤100 · ต้องดูแล >100 lux',read:e=>e.lux,score:v=>dashboardUpperScore(v,[5,10,30,100]),control:'ไฟเพดาน · แสงแดง · ประตู',action:v=>v>5?'ลดหรือปิดไฟ ตรวจแสงรั่วและตำแหน่งประตู':'รักษาระดับแสงปัจจุบัน'},
   {id:'sound',name:'เสียง',deviceKey:'sph0645',source:'SPH0645LM4H-B',unit:'dBA',digits:1,target:'<40 dBA',requiredForOverall:false,principle:'รับค่า sound_dba ที่ Sensor Hub 1 ส่งจาก ESP32 โดยตรง',bands:'ยอดเยี่ยม <40 · ดี 40–45 · พอใช้ >45–50 · ควรปรับ >50–60 · ต้องดูแล >60 dBA',read:e=>e.sound_dba_est,score:v=>v<40?4:v<=45?3:v<=50?2:v<=60?1:0,control:'เสียงบรรยากาศ · พัดลม · คอมเพรสเซอร์',action:v=>v>=40?'ลดเสียงเพลงและตรวจพัดลม คอมเพรสเซอร์ หรือการสั่น':'รักษาระดับเสียงปัจจุบัน'},
   {id:'co2',name:'CO₂',deviceKey:'mhz19c',source:'MH-Z19C',unit:'ppm',digits:0,target:'≤800 ppm',principle:'ใช้ CO₂ เป็นตัวชี้การระบายอากาศ ไม่ใช่ค่าปริมาณออกซิเจน',bands:'ยอดเยี่ยม ≤800 · ดี ≤1,000 · พอใช้ ≤1,150 · ควรปรับ <1,300 · เกณฑ์หยุด ≥1,300 ppm',read:e=>e.co2_ppm,score:v=>v<=800?4:v<=1000?3:v<=1150?2:v<1300?1:0,control:'พัดลมลมเข้า · พัดลมลมออก',action:v=>v>800?'เพิ่มการเติมและระบายอากาศ พร้อมตรวจ Filter อุดตัน':'รักษาการหมุนเวียนอากาศปัจจุบัน'},
-  {id:'pm25',name:'PM2.5',deviceKey:'pms7003',source:'PMS7003',unit:'µg/m³',digits:1,target:'≤15 µg/m³',principle:'ตรวจประสิทธิภาพการกรองฝุ่นละเอียดและการรั่วของอากาศ',bands:'ยอดเยี่ยม ≤15 · ดี ≤25 · พอใช้ ≤37.5 · ควรปรับ ≤50 · ต้องดูแล >50 µg/m³',read:e=>e.pm2_5_ug_m3,score:v=>dashboardUpperScore(v,[15,25,37.5,50]),control:'Pre-Filter · HEPA · ซีลประตู',action:v=>v>15?'ตรวจหรือเปลี่ยน Pre/HEPA Filter และตรวจรอยรั่ว':'รักษาระบบกรองอากาศปัจจุบัน'},
+  {id:'pm25',name:'PM2.5',deviceKey:'pms7003',source:'PMS7003',unit:'µg/m³',digits:1,target:'≤15 µg/m³',principle:'ใช้สังเกตฝุ่นละเอียดและเป็นสัญญาณให้ตรวจระบบกรองหรือรอยรั่ว',bands:'ยอดเยี่ยม ≤15 · ดี ≤25 · พอใช้ ≤37.5 · ควรปรับ ≤50 · ต้องดูแล >50 µg/m³',read:e=>e.pm2_5_ug_m3,score:v=>dashboardUpperScore(v,[15,25,37.5,50]),control:'Pre-Filter · HEPA · ซีลประตู',action:v=>v>15?'ตรวจหรือเปลี่ยน Pre/HEPA Filter และตรวจรอยรั่ว':'รักษาระบบกรองอากาศปัจจุบัน'},
   {id:'voc',name:'VOC Index',deviceKey:'sgp40',source:'SGP40',unit:'',digits:0,target:'≤120',principle:'เทียบสารระเหยกับ Adaptive baseline ของ SGP40 ซึ่งปรับตัวใกล้ 100',bands:'ยอดเยี่ยม ≤120 · ดี ≤150 · พอใช้ ≤200 · ควรปรับ ≤300 · ต้องดูแล >300',read:e=>e.voc_index,score:v=>dashboardUpperScore(v,[120,150,200,300]),control:'กลิ่น · พัดลมระบาย · Carbon Filter',action:v=>v>120?'หยุดแหล่งกลิ่นหรือสารระเหย เร่งระบาย และตรวจ Carbon Filter':'รักษาการระบายอากาศปัจจุบัน'},
 ]);
 function assessDashboardAtmosphere(environment={},devices={}){
@@ -3124,7 +3131,7 @@ function assessDashboardAtmosphere(environment={},devices={}){
   const blockingUnavailable=unavailable.filter(metric=>metric.required_for_overall!==false);
   const advisoryUnavailable=unavailable.filter(metric=>metric.required_for_overall===false);
   const blockingMissingActions=blockingUnavailable.map(metric=>({type:'sensor',priority:'required',name:metric.name,current:'ไม่มีข้อมูล Live',target:metric.target,control:metric.source,action:`ตรวจการเชื่อมต่อ ${metric.source} และ freshness ก่อนประเมิน`,blocks_overall:true}));
-  const advisoryActions=advisoryUnavailable.map(metric=>({type:'sensor',priority:'advisory',name:metric.name,current:'ไม่มีข้อมูล Live',target:metric.target,control:metric.source,action:`ตรวจการเชื่อมต่อ ${metric.source} โดยภาพรวมยังทำงานต่อ`,blocks_overall:false}));
+  const advisoryActions=advisoryUnavailable.map(metric=>({type:'sensor',priority:'advisory',name:metric.name,current:'ไม่มีข้อมูล Live',target:metric.target,control:metric.source,action:`ตรวจการเชื่อมต่อ ${metric.source} · ภาพรวมยังประเมินจาก Sensor หลักที่พร้อม`,blocks_overall:false}));
   if(!metrics.length){
     return {key:'unknown',label:'รอข้อมูล',english:'Waiting',symbol:'?',description:'Sensor ยังไม่พร้อมสำหรับประเมินภาพรวม',reason:'รอข้อมูล Sensor 7 เกณฑ์',metrics,evaluations,actions:[...blockingMissingActions,...advisoryActions],required_actions:blockingMissingActions,advisory_actions:advisoryActions,assessment_quality:'insufficient'};
   }
@@ -3262,9 +3269,8 @@ function adminBaselineTone(value,range){
 }
 function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
   const bioRoot=document.getElementById('adminBioExplanation');
-  const environmentRoot=document.getElementById('adminEnvironmentExplanation');
   const modeRoot=document.getElementById('adminExplanationMode');
-  if(!bioRoot||!environmentRoot||!modeRoot)return;
+  if(!bioRoot||!modeRoot)return;
   const stageKey=sleep.classification_active===true?(sleep.confirmed_state||sleep.state):null;
   const stage=SLEEP_TH[stageKey]||SLEEP_TH.no_data;
   const baseline=(sleep.baseline||sleep.age_baseline||{})[stageKey]||{};
@@ -3325,30 +3331,7 @@ function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
   }));
   bioRoot.innerHTML=bioRows.join('');
 
-  const result=atmosphere||{key:'unknown',evaluations:[]};
-  const evaluations=Array.isArray(result.evaluations)?result.evaluations:[];
-  const unavailable=evaluations.filter(metric=>metric.status!=='live');
-  const blockingUnavailable=unavailable.filter(metric=>metric.required_for_overall!==false);
-  const advisoryUnavailable=unavailable.filter(metric=>metric.required_for_overall===false);
-  const required=evaluations.filter(metric=>(metric.status!=='live'&&metric.required_for_overall!==false)||metric.decision==='required'||Number(metric.score)<2);
-  const optimise=evaluations.filter(metric=>metric.status==='live'&&(metric.decision==='optimise'||Number(metric.score)===2));
-  const available=evaluations.filter(metric=>metric.status==='live').length;
-  const environmentTone=result.key&&result.key!=='unknown'?result.key:'unknown';
-  const environmentStatus=result.key==='unknown'?'รอข้อมูล':result.label||ADMIN_LEVEL_COPY[environmentTone]||environmentTone;
-  const environmentSummary=blockingUnavailable.length
-    ?`${blockingUnavailable.length} Sensor หลักไม่มีข้อมูล Live · ยังไม่ยืนยันภาพรวม`
-    :required.length?`${required.length} จุดต่ำกว่าเกณฑ์ขั้นต่ำ · เริ่มจาก ${required[0].name}`
-    :advisoryUnavailable.length?`ประเมินได้จาก ${available}/${evaluations.length||7} เกณฑ์ · ${advisoryUnavailable[0].name}เป็น Sensor เสริมที่ไม่มีข้อมูล`
-    :optimise.length?`ผ่านขั้นต่ำแล้ว · มี ${optimise.length} จุดที่ปรับให้ดีขึ้นได้`:`Sensor พร้อม ${available}/${evaluations.length||7} เกณฑ์ · ไม่พบจุดที่ต้องแก้`;
-  const environmentAction=required.length
-    ?(required[0].recommendation||`ตรวจ ${required[0].source||required[0].name}`)
-    :optimise.length?(optimise[0].recommendation||`ปรับ ${optimise[0].name}`)
-    :advisoryUnavailable.length?`ตรวจ ${advisoryUnavailable[0].source} ภายหลัง โดยภาพรวมและ Safety ยังทำงานต่อ`
-    :'รักษาการตั้งค่าปัจจุบันและติดตาม freshness ต่อเนื่อง';
-  environmentRoot.innerHTML=evaluations.length?adminExplanationRow({
-    tone:environmentTone,icon:'unknown',title:'ภาพรวมสภาพแวดล้อม',value:'',status:environmentStatus,
-    summary:environmentSummary,detail:`${environmentAction} · ค่าราย Sensor อยู่ด้านบน`,
-  }):'<div class="admin-live-explanation-empty">ยังไม่มีข้อมูล Sensor ที่ใช้แปลผลได้</div>';
+  const result=atmosphere||{};
   const modeLabel=({
     sleep:'Overnight Recovery',
     nap_recovery:'Nap & Refresh',
@@ -3403,8 +3386,6 @@ function renderPersonalRestBaseline(sleep={},session={}){
   const duration=document.getElementById('dashPersonalRestDuration');
   const score=document.getElementById('dashPersonalRestScore');
   const advice=document.getElementById('dashPersonalRestAdvice');
-  const environmentRoot=document.getElementById('dashPersonalRestEnvironment');
-  const environmentValues=document.getElementById('dashPersonalRestEnvironmentValues');
   const baseline=personalRestWindowSource(sleep,session);
   const count=Math.max(0,Math.floor(Number(baseline.sessions_compared)||0));
   const start=personalRestClock(baseline.start_local_minute);
@@ -3413,23 +3394,21 @@ function renderPersonalRestBaseline(sleep={},session={}){
   root.classList.toggle('idle',!session.active);
   root.classList.toggle('learning',session.active&&!available);
   root.classList.toggle('available',available);
-  environmentRoot.hidden=true;
-  environmentValues.replaceChildren();
   if(!session.active){
-    title.textContent='Baseline ช่วงเวลาพักของคุณ';
-    evidence.textContent='เข้าสู่ระบบเพื่อเริ่มเรียนรู้จากการพักของคุณ';
+    title.textContent='ช่วงเวลาพักที่เหมาะกับคุณ';
+    evidence.textContent='เข้าสู่ระบบเพื่อดูข้อมูลจากการพักครั้งก่อน';
     status.textContent='รอเริ่ม';
     mode.textContent='รูปแบบการพัก';
     time.textContent='--:-- – --:--';
     duration.textContent='ยังไม่มีข้อมูลช่วงเวลา';
     score.textContent='กำลังรอผลการพักครั้งแรก';
-    advice.textContent='เมื่อกลับมาใช้ครั้งที่ 2 ZEEP จะเริ่มแนะนำช่วงเวลาที่เหมาะกับคุณ';
+    advice.textContent='เมื่อกลับมาใช้ครั้งที่ 2 ZEEP จะแสดงช่วงเวลาจากครั้งก่อนเพื่อใช้เปรียบเทียบ';
     return;
   }
   mode.textContent=personalRestModeLabel(baseline,session);
   if(!available){
-    title.textContent='กำลังสร้าง Baseline ครั้งแรก';
-    evidence.textContent='ครั้งถัดไป ZEEP จะเริ่มแนะนำช่วงเวลาจากข้อมูลของคุณ';
+    title.textContent='กำลังเรียนรู้ช่วงเวลาของคุณ';
+    evidence.textContent='ครั้งถัดไป ZEEP จะเริ่มเปรียบเทียบกับข้อมูลครั้งนี้';
     status.textContent='ครั้งแรก';
     time.textContent='กำลังเรียนรู้';
     duration.textContent='บันทึกเฉพาะรูปแบบการพักครั้งนี้';
@@ -3445,7 +3424,7 @@ function renderPersonalRestBaseline(sleep={},session={}){
   };
   title.textContent=!outcomeSupported
     ?'ช่วงเวลาจากครั้งก่อน'
-    :observedOnce?'ช่วงเวลาที่ได้ผลดีจากครั้งก่อน':'ช่วงเวลาพักที่ได้ผลดีที่สุดของคุณ';
+    :observedOnce?'ช่วงเวลาจากครั้งก่อน':'ช่วงที่ได้คะแนนสูงสุดจากข้อมูลก่อนหน้า';
   evidence.textContent=!outcomeSupported
     ?'ข้อมูลเวลาพร้อมแล้ว · หลักฐานผลลัพธ์ยังจำกัด'
     :observedOnce
@@ -3465,45 +3444,13 @@ function renderPersonalRestBaseline(sleep={},session={}){
   advice.textContent=!outcomeSupported
     ?'ใช้เป็นข้อมูลเวลาเบื้องต้น และรอผลครั้งถัดไปก่อนแนะนำการปรับ'
     :tolerance
-      ?`หากสะดวก ลองเริ่มพักใกล้เวลานี้ ±${tolerance} นาที`
+      ?`หากสะดวก ลองเริ่มพักใกล้เวลานี้ ±${tolerance} นาที และบอกความรู้สึกหลังพัก`
       :'หากสะดวก ลองเริ่มพักใกล้ช่วงเวลานี้';
-  const environment=baseline.environment&&typeof baseline.environment==='object'
-    ?baseline.environment:{};
-  const environmentMetrics=[
-    ['temp_median','อุณหภูมิ','°C',1],['humidity_median','ความชื้น','%RH',1],
-    ['co2_median','CO₂','ppm',0],['lux_median','แสง','lux',1],
-    ['sound_median','เสียง','dBA',1],
-  ];
-  if(baseline.environment_reference_available===true){
-    environmentMetrics.forEach(([key,label,unit,digits])=>{
-      const value=Number(environment[key]);
-      if(environment[key]===null||environment[key]===undefined||environment[key]===''||!Number.isFinite(value))return;
-      const chip=document.createElement('span'),name=document.createElement('small'),reading=document.createElement('b');
-      name.textContent=label;
-      reading.textContent=`${value.toLocaleString('th-TH-u-nu-latn',{minimumFractionDigits:digits,maximumFractionDigits:digits})} ${unit}`;
-      chip.append(name,reading);environmentValues.append(chip);
-    });
-    environmentRoot.hidden=!environmentValues.childElementCount;
-  }
 }
 function renderSimpleDashboard(state={},environment={},bcg={},session={}){
   const active=!!session.active,recording=!!session.recording;
   const adminView=currentPrincipal?.role==='admin';
   renderHealthReference(session);
-  const avatar=document.getElementById('dashAvatar');
-  const account=active?identityLabel(session):'ยังไม่เริ่ม Session';
-  avatar.textContent=active?String(account||'Z').trim().slice(0,1).toUpperCase():'Z';
-  document.getElementById('dashUserName').textContent=account;
-  document.getElementById('dashUserMeta').textContent=active
-    ? `${genderTh(session.gender)} · ${displayAge(session)} · ${adminView
-      ?recording?`บันทึกแล้ว ${session.samples||0} จุด`:sessionStartGateText(session,state.system||{})
-      :recording?'กำลังบันทึกการพัก':'กำลังเตรียมเริ่มบันทึก'}`
-    : adminView?'เลือกผู้ใช้งานเพื่อเริ่มติดตามสุขภาพและสภาพแวดล้อม':'เข้าสู่ระบบเพื่อเริ่มการพัก';
-  const badge=document.getElementById('dashSessionBadge');
-  badge.textContent=adminView
-    ?recording?'● RECORDING':active?'WAITING FOR VITALS':'NO SESSION'
-    :recording?'● กำลังบันทึก':active?'กำลังเตรียม':'ยังไม่เริ่ม';
-  badge.classList.toggle('live',recording);
   const bcgLive=!!bcg.connected&&!bcg.stale,bcgStatus=Number(bcg.status_code),bcgRestored=bcg.restored_after_restart===true;
   const personOnBed=bcgLive&&[0,2,3,5].includes(bcgStatus);
   const vitalFallbackNote=adminView
@@ -3560,7 +3507,7 @@ function renderSimpleDashboard(state={},environment={},bcg={},session={}){
         :classificationActive
           ?'ประเมินจากแนวโน้มชีพจร การหายใจ และการพักนิ่ง'
           :sleep.evidence_active?'กำลังดูแนวโน้มให้ชัดขึ้น':'กำลังอ่านสัญญาณจากเตียง';
-  renderAdminSleepBaseline(sleep,session);
+  if(adminView)renderAdminSleepBaseline(sleep,session);
   const devices=environment.devices||{};
   setDashboardSensor('dashSensorTemp','dashTemp',environment.temperature_c,'°C',devices.sht3x_dis,1);
   setDashboardSensor('dashSensorHumidity','dashHumidity',environment.humidity_rh,'%RH',devices.sht3x_dis,1);
@@ -3571,7 +3518,7 @@ function renderSimpleDashboard(state={},environment={},bcg={},session={}){
   const soundMetric=soundDisplayMetric(environment);
   setDashboardSensor('dashSensorSound','dashSound',soundMetric.value,soundMetric.unit,devices.sph0645,soundMetric.digits);
   const atmosphere=renderDashboardAtmosphere(environment,devices);
-  renderAdminLiveExplanation({bcg,sleep,session,atmosphere});
+  if(adminView)renderAdminLiveExplanation({bcg,sleep,session,atmosphere});
   document.getElementById('dashSensorSummary').textContent=adminView
     ?`Sensor ${environment.live_count||0}/${environment.total_count||6} · ${environment.status||'offline'}`
     :`ข้อมูลพร้อม ${environment.live_count||0}/${environment.total_count||6}`;
@@ -3631,7 +3578,7 @@ function renderAdminSleepBaseline(sleep={},session={}){
   const personal=sleep.personal_baseline||{};
   sourceEl.textContent=sleep.classification_source==='personal'
     ? `Personal Baseline · ${personal.nights_used||0} คืน`
-    : `Age + Gender · ${sleep.age_group||session.age_group||'18-29'} ปี · ${genderTh(sleep.gender||session.gender)}`;
+    : `Age + Gender · ${ageGroupDisplay(sleep.age_group||session.age_group)} · ${genderTh(sleep.gender||session.gender)}`;
   const frame=current.sensor_frame||current.analysis_frame||{};
   const frameTime=frame.timestamp?new Date(frame.timestamp).toLocaleTimeString('th-TH',{hour12:false}):'--:--:--';
   const clock=sleep.sensor_frame_clock||{},confirmation=sleep.confirmation||{};
@@ -5882,7 +5829,7 @@ async function loadUsers(){
         document.querySelectorAll('.chip').forEach(x=>x.classList.remove('sel'));
         c.classList.add('sel');
         document.getElementById('loginName').value = u.username;
-        document.getElementById('loginAgeGroup').value = u.age_group || ageToGroup(Number(u.age)||24);
+        document.getElementById('loginAgeGroup').value = u.age_group || ageToGroup(u.age);
         renderLoginBaseline();
         selectGender(u.gender);
       };
@@ -6015,14 +5962,29 @@ function setLoginMode(mode){
   }
 }
 
-function renderRestModeHint(){
-  const select=document.getElementById('loginRestMode'),hint=document.getElementById('loginRestModeHint');
-  if(!select||!hint)return;
-  const descriptions={
-    sleep:'เหมาะกับการพักค้างคืนประมาณ 5 ชั่วโมงขึ้นไป · สรุปความต่อเนื่องและรูปแบบการนอน',
-    nap_recovery:'พักระหว่างวันประมาณ 30 นาที · จะหลับ พักสายตา หรือทำสมาธิก็ได้',
+function selectedRestIntent(){
+  const mode=document.getElementById('loginRestMode')?.value||'nap_recovery';
+  const requested=Number(document.getElementById('loginNapTarget')?.value);
+  const napTarget=requested===90?90:30;
+  return {
+    rest_mode:mode,
+    target_duration_minutes:mode==='nap_recovery'?napTarget:null,
   };
-  hint.textContent=descriptions[select.value]||descriptions.nap_recovery;
+}
+
+function renderRestModeHint(){
+  const hint=document.getElementById('loginRestModeHint');
+  const targetBlock=document.getElementById('loginNapTargetBlock');
+  if(!hint||!targetBlock)return;
+  const intent=selectedRestIntent(),isNap=intent.rest_mode==='nap_recovery';
+  targetBlock.classList.toggle('login-off',!isNap);
+  if(!isNap){
+    hint.textContent='เหมาะกับการพักค้างคืนประมาณ 5 ชั่วโมงขึ้นไป · สรุปความต่อเนื่องและรูปแบบการนอน';
+    return;
+  }
+  hint.textContent=intent.target_duration_minutes===90
+    ?'พัก 90 นาที · จะหลับหรือพักอย่างเป็นธรรมชาติก็ได้'
+    :'พัก 30 นาที · จะหลับ พักสายตา หรือทำสมาธิก็ได้';
 }
 function toggleLoginMode(){
   if(loginAudience==='user'&&offlineTicket)setLoginMode(loginMode === 'zeep' ? 'local' : 'zeep');
@@ -6108,7 +6070,7 @@ async function startQrSession(){
 async function pollQrLogin(){
   qrLogin.timer = null;
   if (!qrLogin.loginId) return;
-  const body = {login_id:qrLogin.loginId, rest_mode:document.getElementById('loginRestMode').value};
+  const body = {login_id:qrLogin.loginId, ...selectedRestIntent()};
   const ageBlock = document.getElementById('loginAgeBlock');
   if (!ageBlock.classList.contains('login-off')){
     const ageGroup = document.getElementById('loginAgeGroup').value;
@@ -6279,7 +6241,7 @@ async function submitProfileForm(btn){
   const body = {
     profile_ticket:profileGate.ticket, gender:profileGate.gender, date_of_birth:dob,
     height_cm:height, weight_kg:weight, blood_group:profileGate.blood || null,
-    rest_mode:document.getElementById('loginRestMode').value,
+    ...selectedRestIntent(),
   };
   await withBusy(btn, async ()=>{
     let r, d = null;
@@ -6378,7 +6340,7 @@ async function doZeepLogin(btn){
   const password = document.getElementById('loginPassword').value;
   if (!identifier || !password){ showLoginError('กรอกอีเมลหรือชื่อผู้ใช้และรหัสผ่านให้ครบ'); return; }
   const ageBlock = document.getElementById('loginAgeBlock');
-  const body = {identifier, password, rest_mode:document.getElementById('loginRestMode').value};
+  const body = {identifier, password, ...selectedRestIntent()};
   // ช่องช่วงอายุจะโผล่เฉพาะรอบที่ server ตอบ age_group_required มา → ส่งกลับไปด้วย
   if (!ageBlock.classList.contains('login-off')){
     const ageGroup = document.getElementById('loginAgeGroup').value;
@@ -6429,7 +6391,7 @@ async function doLocalLogin(btn){
     try{
       response=await fetch('/api/session/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
         username:name,gender:selectedGender,age_group:ageGroup,offline_ticket:offlineTicket,
-        offline_identifier:offlineIdentifier,rest_mode:document.getElementById('loginRestMode').value
+        offline_identifier:offlineIdentifier,...selectedRestIntent()
       })});
     }catch{showLoginError('ยังเชื่อมต่อระบบไม่ได้ กรุณาลองอีกครั้ง');return;}
     let result={};try{result=await response.json();}catch{}
@@ -6979,6 +6941,8 @@ function sleepQualityCompact(q, ended, presentationOverride,safetyReviewOverride
 let historyRequestSeq=0;
 let historyJourneyRequestSeq=0;
 let historyDetailRequestSeq=0;
+const HISTORY_JOURNEY_CACHE_MS=60000;
+const historyJourneyCache=new Map();
 
 async function refreshHistory(btn){
   ensureHistoryFilterDefaults();
@@ -6994,11 +6958,9 @@ async function refreshHistory(btn){
     const adminView=currentPrincipal?.role==='admin';
     list.innerHTML=`<div class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังโหลดประวัติการใช้งาน</b><span>${adminView?'กำลังอ่าน Session จากเครื่อง Pi':'กำลังเตรียมรายการย้อนหลังของคุณ'}</span></div></div>`;
     document.getElementById('historySummary').innerHTML='<div class="mini">กำลังสรุปช่วงเวลาที่เลือก…</div>';
-    historyJourneyRequestSeq+=1;
     historyDetailRequestSeq+=1;
-    document.getElementById('historyUserJourney').innerHTML='';
-    document.getElementById('historyParticipants').innerHTML='';
-    document.getElementById('sessionDetail').innerHTML='';
+    document.getElementById('sessionDetail').innerHTML='<div class="history-empty"><b>เลือกรายการการพัก</b><span>ผลสรุปจะแสดงในส่วนนี้</span></div>';
+    refreshUserJourney();
     const params=historyFilterParams();
     const path=currentPrincipal?.role==='admin'
       ? `/api/admin/history?${params}`
@@ -7019,7 +6981,6 @@ async function refreshHistory(btn){
     const data=await r.json();
     if(requestSeq!==historyRequestSeq)return;
     renderSessionList(data);
-    refreshUserJourney();
   };
   return btn ? withBusy(btn, run) : run();
 }
@@ -7145,7 +7106,7 @@ function userRestoreMeaning(statusKey,presentation,unavailable){
     sleep_restore_very_good:'ภาพรวมการนอนคืนนี้เป็นไปได้ดีมาก',sleep_restore_good:'ภาพรวมการนอนคืนนี้เป็นไปได้ดี',
     pace_morning:'คืนนี้ได้พักในระดับหนึ่ง',prioritise_rest:'ครั้งนี้ยังมีบางจุดที่ช่วยให้การพักสบายขึ้นได้',
     rest_goal_full:'ช่วงพักนี้เป็นไปได้ดีมาก',rest_good:'ช่วงพักนี้เป็นไปได้ดี',
-    rest_partial:'ช่วงพักนี้ช่วยให้ร่างกายได้หยุดนิ่งและผ่อนคลาย',rest_more:'ครั้งนี้ยังมีบางจุดที่ลองปรับให้สบายขึ้นได้',
+    rest_partial:'ภาพรวมช่วงพักนี้พอใช้',rest_more:'ครั้งนี้ยังมีบางจุดที่ลองปรับให้สบายขึ้นได้',
   };
   return meanings[statusKey]||(presentation==='recovery'?'ดูผลช่วงพักนี้ร่วมกับความรู้สึกหลังพัก':'ดูภาพรวมคืนนี้ร่วมกับความรู้สึกหลังตื่น');
 }
@@ -7331,11 +7292,9 @@ function renderHistorySummary(d){
   const adminView=currentPrincipal?.role==='admin';
   const selected=document.getElementById('historyDateFrom').value===historyLocalToday()
     &&document.getElementById('historyDateTo').value===historyLocalToday();
-  const scope=adminView
-    ? `${summary.people_count||0} คน`
-    : `${summary.session_count||0} ครั้ง`;
+  const scope=adminView?`${summary.people_count||0} คน`:'ผลการพัก';
   const scopeNote=adminView
-    ?'นับการใช้งานที่จบแล้วและมีข้อมูล Sensor · Asia/Bangkok'
+    ?'Session ที่จบแล้วในช่วงที่เลือก · Asia/Bangkok'
     :'สรุปการพักที่บันทึกไว้ในช่วงนี้';
   root.innerHTML=`<div class="history-summary-heading"><span>${selected?'วันนี้':'ช่วงที่เลือก'}</span><b>${scope}</b><small>${scopeNote}</small></div>
     <div class="history-summary-metrics">
@@ -7388,7 +7347,7 @@ function renderUserJourney(payload){
     <div class="history-journey-note">Overnight และ Nap เรียนรู้แยกกัน · จำนวนครั้งที่ใช้ไม่ถูกตีความว่าเป็นความชอบ</div>`;
 }
 
-async function refreshUserJourney(){
+async function refreshUserJourney(force=false){
   const root=document.getElementById('historyUserJourney');
   if(!root||!currentPrincipal)return;
   const requestSeq=++historyJourneyRequestSeq;
@@ -7396,6 +7355,14 @@ async function refreshUserJourney(){
   const account=document.getElementById('historyUser')?.value||'';
   if(adminView&&!account){
     root.innerHTML='<div class="history-journey-empty compact"><b>เลือกผู้ใช้งานเพื่อดูภาพรวมสะสม</b><span>การ์ดนี้รวม Overnight Recovery และ Nap & Refresh ของคนเดียวกัน</span></div>';
+    return;
+  }
+  const principalKey=currentPrincipal.account_key||currentPrincipal.email
+    ||currentPrincipal.username||'';
+  const cacheKey=`${currentPrincipal.role}:${adminView?account:principalKey}`;
+  const cached=historyJourneyCache.get(cacheKey);
+  if(!force&&cached&&Date.now()-cached.savedAt<HISTORY_JOURNEY_CACHE_MS){
+    renderUserJourney(cached.payload);
     return;
   }
   root.innerHTML='<div class="mini">กำลังรวมรูปแบบการพักที่ผ่านมา…</div>';
@@ -7407,6 +7374,7 @@ async function refreshUserJourney(){
     const data=(await response.json()).data||{};
     const selected=document.getElementById('historyUser')?.value||'';
     if(requestSeq!==historyJourneyRequestSeq||(adminView&&selected!==account))return;
+    historyJourneyCache.set(cacheKey,{payload:data,savedAt:Date.now()});
     renderUserJourney(data);
   }catch{
     if(requestSeq!==historyJourneyRequestSeq)return;
@@ -7414,36 +7382,9 @@ async function refreshUserJourney(){
   }
 }
 
-function renderHistoryParticipants(d){
-  const root=document.getElementById('historyParticipants');
-  if(currentPrincipal?.role!=='admin'||!(d.participants||[]).length){
-    root.innerHTML='';return;
-  }
-  root.innerHTML=`<div class="history-people-heading"><b>ผู้ใช้งานและคะแนน</b><span>${d.participants.length} คนในช่วงที่เลือก</span></div><div class="history-people-grid">${d.participants.map(person=>{
-    const sleepCount=(person.scores||[]).filter(item=>item.score_type==='sleep_score').length;
-    const recoveryCount=(person.scores||[]).filter(item=>item.score_type==='recovery_score').length;
-    const withoutScore=(person.scores||[]).filter(item=>!item.available).length;
-    const modeText=[sleepCount?`Overnight ${sleepCount}`:'',recoveryCount?`Nap ${recoveryCount}`:'',withoutScore?`ยังไม่มีคะแนน ${withoutScore}`:''].filter(Boolean).join(' · ');
-    return `<button type="button" class="history-person" data-history-account="${historyEscape(person.account_key)}"><span class="history-person-avatar">${historyEscape(identityLabel(person,'?').slice(0,1).toUpperCase())}</span><span class="history-person-copy"><b>${historyEscape(identityLabel(person))}</b><small>${person.session_count} Session</small></span><span class="history-person-mode-mix">${historyEscape(modeText||'ยังไม่ยืนยันรูปแบบ')}</span></button>`;
-  }).join('')}</div>`;
-  root.querySelectorAll('[data-history-account]').forEach(button=>{
-    button.onclick=()=>selectHistoryPerson(button.dataset.historyAccount);
-  });
-}
-
-function selectHistoryPerson(accountKey){
-  const select=document.getElementById('historyUser');
-  if(select&&[...select.options].some(option=>option.value===accountKey)){
-    select.value=accountKey;
-    document.getElementById('historyNameFilter').value='';
-    refreshHistory();
-  }
-}
-
 function renderSessionList(d){
   const root = document.getElementById('sessionList'); root.innerHTML = '';
   renderHistorySummary(d);
-  renderHistoryParticipants(d);
   if (!d.sessions.length){
     root.innerHTML=currentPrincipal?.role==='admin'
       ?`<div class="history-empty"><b>${currentPrincipal?.role==='admin'?'ไม่พบ Session ในช่วงเวลานี้':'ยังไม่มีประวัติในช่วงเวลานี้'}</b><span>ลองเลือกวัน${currentPrincipal?.role==='admin'?' เวลา หรือชื่อผู้ใช้งาน':'หรือช่วงเวลา'}ใหม่</span></div>`
@@ -7456,7 +7397,6 @@ function renderSessionList(d){
       ?'Nap & Refresh'
       :presentation==='sleep'?'Overnight Recovery':currentPrincipal?.role==='admin'?'รูปแบบยังไม่ยืนยัน':'ผลการพักครั้งนี้';
     const row = document.createElement('button'); row.className = `hist-row mode-${presentation}`;
-    const hr = sx.summary?.heart_rate_bpm;
     const identity=currentPrincipal?.role==='admin'
       ? `<span class="hist-person-label"><b>${historyEscape(identityLabel(sx))}</b><small>${historyEscape(sx.display_name||'')}</small></span>`:'';
     row.innerHTML =
@@ -7465,8 +7405,7 @@ function renderSessionList(d){
       `${sleepQualityCompact(
         sx.sleep_quality,sx.ended_at_utc,presentation,
         reportSafetyReviewRequired(sx),
-      )}` +
-      `<span>♥ ${currentPrincipal?.role==='admin'?'HR':'ชีพจร'} ${hr ? hr.avg + ' ครั้ง/นาที' : '--'}</span>`;
+      )}`;
     row.onclick = ()=>loadDetail(sx.account_key||d.account_key||d.username, sx.session_id, row);
     root.appendChild(row);
   });
@@ -7516,6 +7455,14 @@ const TERMINAL_OCCUPANCY_META={
   no_user_on_bed:{label:'ไม่มีผู้ใช้งานบนเตียง',code:'OFF',color:'#7cc7d8'},
   exited_zeep:{label:'ออกจาก ZEEP',code:'EXIT',color:'#f6b94a'},
 };
+
+function recoveryRestStateLabel(state){
+  const key=String(state||'').toLowerCase();
+  if(key==='wake')return 'พักขณะตื่น';
+  if(key==='n1')return 'เคลิ้ม';
+  if(['n2','n3','rem','nrem'].includes(key))return 'ช่วงหลับที่ประเมินได้';
+  return 'กำลังประเมินการพัก';
+}
 
 const REPORT_SLEEP_MODE_KEYS=new Set(['sleep','overnight']);
 const REPORT_RECOVERY_MODE_KEYS=new Set([
@@ -7652,9 +7599,24 @@ function reportProfileMarkup(report,presentation){
     :`${adminView?'State ที่เข้าคะแนน':'เวลาที่นำมาสรุปผล'} · ${fmtDur(profile.stateSeconds)}`;
   const centreLabel=presentation==='recovery'?'เวลาพักที่นับได้':'เวลานอนโดยประมาณ';
   const meaning=presentation==='recovery'
-    ?'<div class="profile-meaning-note">การพักนิ่งและผ่อนคลายมีคุณค่า แม้ยังไม่หลับ · Recovery Score ดูทั้งเวลาพัก ความนิ่งของร่างกาย และสภาพแวดล้อม</div>'
+    ?'<div class="profile-meaning-note">การพักนิ่งมีคุณค่า แม้ยังไม่หลับ</div>'
     :'<div class="profile-meaning-note">แสดงเวลาที่ระบบประเมินได้ในแต่ละช่วงของการนอน · NREM คือ N1 + N2 + N3</div>';
   return `<div class="stage-summary ${presentation==='recovery'?'recovery-profile-summary':''}"><div class="report-subhead"><span>${title}</span><small>${note}</small></div><div class="stage-summary-content"><div class="stage-donut" style="--stage-ring:conic-gradient(${segments.join(',')})"><span><b>${centreValue}</b><small>${centreLabel}</small></span></div><div class="stage-legend">${rows}${meaning}</div></div></div>`;
+}
+
+function reportStageGuideMarkup(presentation){
+  if(presentation!=='sleep')return '';
+  return `<details class="stage-guide report-stage-guide">
+    <summary>ความหมาย Sleep Stages สำหรับ Overnight</summary>
+    <div class="stage-guide-grid">
+      <div><b>W</b><strong>ตื่น</strong><span>ยังตื่นหรือกลับเข้าสู่สถานะตื่น</span></div>
+      <div><b>N1</b><strong>หลับตื้น / เคลิ้มหลับ</strong><span>ช่วงเริ่มเข้าสู่การนอน</span></div>
+      <div><b>N2</b><strong>หลับสนิทขึ้น</strong><span>การนอนเริ่มต่อเนื่องขึ้น</span></div>
+      <div><b>N3</b><strong>หลับลึก</strong><span>ช่วงหลับลึกที่ร่างกายได้พักต่อเนื่อง</span></div>
+      <div><b>REM</b><strong>ระยะ REM / หลับฝัน</strong><span>ช่วงหลับที่สมองทำงานมากขึ้น</span></div>
+    </div>
+    <div class="stage-guide-note">Sleep Stage เป็นค่าประเมินแนวโน้มจากข้อมูลที่ ZEEP บันทึกได้ โดย ZEEP ไม่ได้วัดการฟื้นตัวของร่างกาย ความฝัน หรือความจำโดยตรง</div>
+  </details>`;
 }
 
 function classificationAccountingMarkup(report,adminView,presentation){
@@ -7688,7 +7650,7 @@ function classificationAccountingMarkup(report,adminView,presentation){
     const offBed=Number(accounting.off_bed_s)||0;
     if(invariant.holds!==false){
       return offBed>0
-        ?`<div class="report-context-note user-off-bed-note"><b>ช่วงออกจากเตียง</b> · ${fmtDur(offBed)} · แยกจากเวลาพักที่ใช้สรุปผล</div>`
+        ?`<div class="report-context-note user-off-bed-note"><b>ช่วงออกจากเตียง</b> · ${fmtDur(offBed)} · ${recovery?'ไม่รวมในเวลาพักที่นับได้':'ไม่รวมในสัดส่วน Sleep Stage และใช้ประกอบความต่อเนื่อง'}</div>`
         :'';
     }
     return `<section class="classification-accounting-card user-time-summary">
@@ -7720,12 +7682,12 @@ function classificationAccountingMarkup(report,adminView,presentation){
       <div><span>Sensor บันทึก</span><b>${fmtDur(recording)}</b></div>
       <div><span>${recovery?'State (ข้อมูลประกอบ)':'แสดง State'}</span><b>${fmtDur(displayed)}</b></div>
       <div><span>${recovery?'เวลาพักที่นับได้':'ใช้คิดคะแนน'}</span><b>${fmtDur(eligible)}</b></div>
-      <div><span>${recovery?'ไม่นับเป็นเวลาพัก':'ไม่นับคะแนน'}</span><b>${fmtDur(excluded)}</b></div>
+      <div><span>${recovery?'ไม่นับเป็นเวลาพัก':'นอกสัดส่วน Stage'}</span><b>${fmtDur(excluded)}</b></div>
     </div>
     ${detailMarkup}
     <p>${recovery
       ?'Recovery Score ไม่บังคับให้หลับ · Sleep State ใช้ประกอบการอธิบายเท่านั้น ส่วนคะแนนใช้เวลาพัก ความนิ่ง HR/RR ความนิ่งร่างกาย และสภาพแวดล้อมร่วมกัน'
-      :'ทุกช่วง Recording ที่ยังไม่ยืนยัน OFF BED มี State และเข้าคะแนน · ถ้าหลักฐานยังไม่พอ จะคง State เดิมแบบ low-confidence และไม่ใช้เรียนรู้ Personal Baseline · OFF BED เท่านั้นที่ไม่เข้า Sleep Score'}</p>
+      :'ทุกช่วง Recording ที่ยังไม่ยืนยัน OFF BED มี State และเข้าคะแนน · ถ้าหลักฐานยังไม่พอ จะคง State เดิมแบบ low-confidence และไม่ใช้เรียนรู้ Personal Baseline · OFF BED ไม่เข้า Stage% แต่ใช้ประกอบความต่อเนื่อง'}</p>
   </section>`;
 }
 
@@ -7735,13 +7697,10 @@ function reportOverviewMetrics(report,presentation){
   let values;
   if(presentation==='recovery'){
     const target=quality.duration_target||{};
-    const eligible=target.eligible_rest_seconds==null
-      ?Number(sleep.recording_s)||0:Number(target.eligible_rest_seconds)||0;
     const completion=target.completion_pct==null?'--':`${Math.round(Number(target.completion_pct))}%`;
     const regularity=quality.physiology?.regularity_factor;
     const movement=quality.body_response?.movement_pct;
     values=[
-      ['◷','เวลาพักที่นับได้',fmtDur(eligible)],
       ['◎',adminView?'เทียบเป้าหมาย':'ครบตามเวลาเป้าหมาย',completion],
       ['♥',adminView?'ความนิ่ง HR/RR':'ความนิ่งของสัญญาณชีพ',regularity==null?'--':`${Math.round(100*Number(regularity))}%`],
       ['◇','ความนิ่งร่างกาย',movement==null?'--':`${Math.max(0,Math.round(100-Number(movement)))}%`],
@@ -7810,7 +7769,6 @@ function renderRespiratoryWellness(report,adminView=false){
   const age=summary.age_context||{};
   const baseline=summary.personal_baseline||{};
   const confidence=summary.confidence||{};
-  const recommendation=summary.recommendation||{};
   const finite=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value));
   const median=finite(observations.median_rr_brpm)
     ?`${Number(observations.median_rr_brpm).toFixed(1)} ครั้ง/นาที`:'—';
@@ -7870,7 +7828,7 @@ function renderRespiratoryWellness(report,adminView=false){
   return `<section class="restore-summary-card respiratory-wellness-card">
     <div class="restore-summary-head"><div><span>RESTING BREATHING</span><h3>การหายใจระหว่างพัก</h3><small>${adminView?'วิเคราะห์จาก RR ที่ผ่านคุณภาพสัญญาณ BCG':'ดูจากจังหวะและความสม่ำเสมอตลอดช่วงพัก'}</small></div><strong class="restore-status ${respiratoryWellnessTone(status.key)}">${historyEscape(statusLabel)}</strong></div>
     <p class="restore-status-meaning">${historyEscape(interpretation)}</p>
-    <div class="restore-summary-grid"><div class="restore-driver-group respiratory-observation"><b>สิ่งที่สังเกตได้</b><ul>${observationList}</ul></div><div class="restore-recommendation"><b>ลองทำครั้งถัดไป</b><p>${historyEscape(adminView&&recommendation.primary?recommendation.primary:'พักตามปกติและให้ ZEEP เรียนรู้รูปแบบของคุณเพิ่มอีกครั้ง')}</p></div></div>
+    <div class="restore-summary-grid"><div class="restore-driver-group respiratory-observation"><b>สิ่งที่สังเกตได้</b><ul>${observationList}</ul></div></div>
     <div class="restore-summary-meta"><span><b>ช่วงวัย</b>${historyEscape(ageText)}</span><span><b>รูปแบบประจำของคุณ</b>${historyEscape(baselineText)}</span><span><b>${adminView?'ความมั่นใจ':'ความชัดเจนของข้อมูล'}</b>${historyEscape(confidenceLabel)}</span></div>
     <p class="respiratory-age-guidance"><b>คำแนะนำตามช่วงอายุ</b> · ${historyEscape(ageGuidance)}</p>
     ${adminDetails}
@@ -7953,11 +7911,7 @@ function renderSessionOverview(report,hasRestoreSummary=false,presentationOverri
       :presentation==='sleep'
         ?`ใช้เวลาก่อนเริ่มหลับ ${sleep.sleep_onset_proxy_s==null?'--':fmtDur(sleep.sleep_onset_proxy_s)} · เข้าสู่ W · ตื่น ${sleep.wake_entries ?? sleep.awakenings ?? 0} ครั้ง`
         :'ยังไม่ตีความเป็น Sleep Score หรือ Recovery Score จนกว่าจะยืนยันรูปแบบการพัก')
-    :(presentation==='recovery'
-      ?'Nap & Refresh นับคุณค่าของการพักทั้งขณะตื่นและหลับ'
-      :presentation==='sleep'
-        ?`ประเมินเฉพาะการพัก Overnight ครั้งนี้ · ตื่น ${sleep.wake_entries ?? sleep.awakenings ?? 0} ครั้ง`
-        :'ยังไม่สรุปเป็น Overnight หรือ Nap & Refresh');
+    :'';
   const version=adminView&&report.version?` · ${historyEscape(report.version)}`:'';
   const respiratoryHtml=renderRespiratoryWellness(report,adminView);
   const overview=`<section class="session-report-overview mode-${presentation}">
@@ -7969,7 +7923,7 @@ function renderSessionOverview(report,hasRestoreSummary=false,presentationOverri
     </div>
     ${respiratoryHtml}
     ${guidanceHtml}
-    <div class="report-context-note">${footer}</div>
+    ${footer?`<div class="report-context-note">${footer}</div>`:''}
   </section>`;
   return adminView
     ?overview
@@ -8048,9 +8002,9 @@ function renderReport(rec){
         ? `HR/RR ใช้ได้ ${coverage.valid_hr_rr_pairs||0}/${coverage.sensor_rows} รอบ`
         : 'ใช้ผล Operational ที่บันทึกไว้กับ Session';
       const operationLabel='ยืนยัน OFF BED';
-      const scoreLabel='แยกออกจาก Sleep State และคะแนน';
+      const scoreLabel='ไม่รวมใน Sleep Stage · ใช้ประกอบความต่อเนื่อง';
       if(!adminView){
-        return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)}</div></div><div class="stage">ออกจากเตียง</div><div class="user-period-summary">ช่วงนี้แยกจากเวลาพัก</div></div>`;
+        return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)}</div></div><div class="stage">ออกจากเตียง</div><div class="user-period-summary">${presentation==='recovery'?'ไม่รวมในเวลาพักที่นับได้':'ไม่รวมใน Sleep Stage · ใช้ดูความต่อเนื่อง'}</div></div>`;
       }
       return `<div class="sleep-period terminal-occupancy-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)} · ${operationLabel}</div></div><div class="stage">${period.label||'OFF BED · ไม่มีผู้ใช้งานบนเตียง'}</div><div>${coverageText}<div class="mini">${scoreLabel}</div></div><div class="reason"><div class="sleep-period-env">${sensorTiles}</div><div class="sleep-period-note">${period.reason||'แยกสถานะการใชงานออกจากผล Sleep State'}</div></div></div>`;
     }
@@ -8058,7 +8012,9 @@ function renderReport(rec){
       const heldCopy=period.held_previous_state
         ?'แสดงต่อเนื่องจากช่วงก่อนหน้า'
         :'ประเมินจากแนวโน้มระหว่างการพัก';
-      return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)}</div></div><div class="stage">${userSleepStageLabel(period.state)}</div><div class="user-period-summary">${heldCopy}</div></div>`;
+      const stateLabel=presentation==='recovery'
+        ?recoveryRestStateLabel(period.state):userSleepStageLabel(period.state);
+      return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)}</div></div><div class="stage">${stateLabel}</div><div class="user-period-summary">${heldCopy}</div></div>`;
     }
     const holdMeta=period.held_previous_state
       ? `<div class="mini">คง State ก่อนหน้า ${period.continuity_hold_rounds||0} รอบ${period.provisional_rounds?` · provisional ${period.provisional_rounds} รอบ`:''} · ผู้ท้าชิงยังไม่ถูกนับเป็น State ใหม่</div>`
@@ -8122,6 +8078,7 @@ function renderReport(rec){
     </div>
     ${resultSummaryHtml}
     ${renderSessionOverview(rec.session_report,Boolean(resultSummaryHtml),presentation)}
+    ${reportStageGuideMarkup(presentation)}
     ${!adminView?timeAccounting:''}
     ${!adminView?timelineDetails:''}
     ${adminDiagnostics}

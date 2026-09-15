@@ -98,7 +98,7 @@ Overnight ใช้ cohort `overnight_7h`; Nap แยก `nap_30` และ `nap
 “ค่าที่ผู้ใช้ชอบ” จนกว่าจะมีการเลือกหรือ feedback ยืนยัน
 
 Personal comparison เปิดใช้ต่อเมื่อ provenance ตรงกันครบ 4 จุด: behavior policy
-`zeep-personal-behaviour-baseline-v1.1-formula-target-specific`, mode, target และ
+`zeep-personal-behaviour-baseline-v1.3-bounded-partitioned-finite-circular-time`, mode, target และ
 score formula version หากข้อใดไม่ตรง ระบบยังแสดงประวัติจริง แต่ไม่แสดงการเทียบ
 Baseline หรือ trend ข้ามรุ่น
 

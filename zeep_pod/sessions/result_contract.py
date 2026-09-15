@@ -248,9 +248,10 @@ def _released_score(
         "formula_version": quality.get("formula_version"),
         "quality_model_version": quality.get("version"),
         "validation_status": validation_status,
-        "clinical_validated": bool(
-            available and quality.get("clinical_validated") is True
-        ),
+        # ZEEP is released as a Wellness estimate.  A stale or malformed
+        # persisted result must never promote itself into a clinical claim at
+        # the public-contract boundary.
+        "clinical_validated": False,
         "reason": reason,
         "review_required": bool(
             mode_conflict

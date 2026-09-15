@@ -149,7 +149,7 @@ class AvailableUsageScore(ContractModel):
     formula_version: str | None = Field(...)
     quality_model_version: str | None = Field(...)
     validation_status: str | None = Field(...)
-    clinical_validated: bool
+    clinical_validated: Literal[False]
     reason: str | None = Field(...)
     review_required: bool
 
@@ -230,7 +230,7 @@ class PublicQuality(ContractModel):
     score_title: str | None = None
     score_scope: str | None = None
     validation_status: str | None = None
-    clinical_validated: bool | None = None
+    clinical_validated: Literal[False] | None = None
     quality_type: Literal["sleep", "rest_goal"] | None = None
     session_character: str | None = None
     sleep_detected: bool | None = None

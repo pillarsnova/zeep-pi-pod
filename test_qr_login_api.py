@@ -191,6 +191,23 @@ class QrLoginApiTests(unittest.TestCase):
         self.assertNotIn("access-token", r.text)
         self.assertNotIn("refresh-token", r.text)
 
+    def test_approved_preserves_the_selected_90_minute_nap_target(self) -> None:
+        self.install(approved_payload())
+        self.client.post("/api/auth/qr/session")
+        response = self.client.post(
+            "/api/auth/qr/poll",
+            json={
+                "login_id": LOGIN_ID,
+                "rest_mode": "nap_recovery",
+                "target_duration_minutes": 90,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        session = response.json()["session"]
+        self.assertEqual(session["rest_mode"], "nap_recovery")
+        self.assertEqual(session["target_duration_s"], 90 * 60)
+
     def test_approved_is_single_use_on_this_pod_too(self) -> None:
         """ZEEP consumed the ticket, so a replayed poll must not re-enter login."""
         self.install(approved_payload())

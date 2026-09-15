@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import statistics
 from collections.abc import Mapping
 from typing import Any
@@ -24,12 +25,17 @@ ENVIRONMENT_KEYS = (
 )
 
 
+def _finite_number(value: Any) -> bool:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(float(value))
+    except (OverflowError, TypeError, ValueError):
+        return False
+
+
 def _numbers(rows: list[Mapping[str, Any]], key: str) -> list[float]:
-    return [
-        float(row[key])
-        for row in rows
-        if isinstance(row.get(key), (int, float)) and not isinstance(row.get(key), bool)
-    ]
+    return [float(row[key]) for row in rows if _finite_number(row.get(key))]
 
 
 def _percentile(values: list[float], q: float) -> float | None:
@@ -57,6 +63,20 @@ def _typical_range(values: list[float]) -> list[float] | None:
 
 def _median(values: list[float], digits: int = 1) -> float | None:
     return round(statistics.median(values), digits) if values else None
+
+
+def _circular_mean_hour(values: list[float], digits: int = 2) -> float | None:
+    """Return a time-of-day mean without treating midnight as midday."""
+    if not values:
+        return None
+    angles = [2.0 * math.pi * (value % 24.0) / 24.0 for value in values]
+    x = sum(math.cos(angle) for angle in angles) / len(angles)
+    y = sum(math.sin(angle) for angle in angles) / len(angles)
+    if math.hypot(x, y) < 1e-12:
+        return None
+    hour = (math.atan2(y, x) % (2.0 * math.pi)) * 24.0 / (2.0 * math.pi)
+    rounded = round(hour, digits)
+    return 0.0 if rounded >= 24.0 else rounded
 
 
 def _formula_for(group: str) -> str:
@@ -127,12 +147,9 @@ def _best_rest_window(
         row
         for row in rows
         if row.get("score_formula_version") == formula
-        and isinstance(row.get("wellness_score"), (int, float))
-        and not isinstance(row.get("wellness_score"), bool)
-        and isinstance(row.get("start_local_hour"), (int, float))
-        and not isinstance(row.get("start_local_hour"), bool)
-        and isinstance(row.get("duration_s"), (int, float))
-        and not isinstance(row.get("duration_s"), bool)
+        and _finite_number(row.get("wellness_score"))
+        and _finite_number(row.get("start_local_hour"))
+        and _finite_number(row.get("duration_s"))
         and float(row.get("duration_s") or 0) > 0
     ]
     empty = empty_best_rest_window(group, target_key)
@@ -155,8 +172,7 @@ def _best_rest_window(
     environment = {
         key: round(float(best[key]), 1)
         for key in ENVIRONMENT_KEYS
-        if isinstance(best.get(key), (int, float))
-        and not isinstance(best.get(key), bool)
+        if _finite_number(best.get(key))
     }
     count = len(comparable)
     confidence = str(best.get("score_confidence_level") or "unknown")
@@ -213,14 +229,18 @@ def _cohort(
 ) -> dict[str, Any]:
     formula = _formula_for(group)
     reference_rows = [
-        row for row in rows if row.get("baseline_reference_eligible") is not False
+        row
+        for row in rows
+        if row.get("baseline_reference_eligible") is not False
+        and _finite_number(row.get("duration_s"))
+        and float(row.get("duration_s") or 0) > 0
+        and _finite_number(row.get("start_local_hour"))
     ]
     comparable = [
         row
         for row in reference_rows
         if row.get("score_formula_version") == formula
-        and isinstance(row.get("wellness_score"), (int, float))
-        and not isinstance(row.get("wellness_score"), bool)
+        and _finite_number(row.get("wellness_score"))
     ]
     scores = [float(row["wellness_score"]) for row in reversed(comparable)]
     score_range = _typical_range(scores)
@@ -229,9 +249,7 @@ def _cohort(
     onset = _numbers(reference_rows, "onset_proxy_s")
     start_hours = _numbers(reference_rows, "start_local_hour")
     return {
-        "status": (
-            "active" if len(reference_rows) >= minimum_sessions else "learning"
-        ),
+        "status": ("active" if len(reference_rows) >= minimum_sessions else "learning"),
         "sessions_used": len(reference_rows),
         "minimum_sessions": minimum_sessions,
         "session_ids": [str(row["session_id"]) for row in reference_rows],
@@ -267,7 +285,7 @@ def _cohort(
         "typical_duration_minutes": (
             round(statistics.median(durations) / 60.0, 1) if durations else None
         ),
-        "typical_start_local_hour": _median(start_hours, 2),
+        "typical_start_local_hour": _circular_mean_hour(start_hours),
         "typical_environment": {
             key: _median(_numbers(reference_rows, key)) for key in ENVIRONMENT_KEYS
         },

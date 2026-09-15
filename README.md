@@ -4,6 +4,8 @@ Code ownership, package boundaries and the incremental PEP 8 refactor are
 defined in [Pi 5 Software Architecture](docs/pi5-software-architecture.md).
 เอกสารปัจจุบันทั้งหมดดูที่ [Documentation Index](docs/README.md) และขั้นตอน
 ดูแลเครื่อง/Deploy ดูที่ [Operations Runbook](docs/pi5-operations-runbook.md)
+ส่วนภาพรวม Login ถึงผลลัพธ์และรายการตรวจ v1 ดูที่
+[v1 System Handover and Freeze Readiness](docs/zeep-v1-system-handover-and-freeze-readiness.md)
 
 จอควบคุมภายในตู้ ZEEP Pod สำหรับ Raspberry Pi 5 — ธีม J.A.R.V.I.S. HUD
 ใช้งานผ่านแท็บเล็ต/เบราว์เซอร์บน Wi-Fi hotspot ของ Pi ได้โดย**ไม่ต้องมีอินเทอร์เน็ต**
@@ -46,6 +48,9 @@ pi5/
 ├── generate_brainwaves.py  # สร้างเสียง brainwave 5 แบบ (Python stdlib ล้วน)
 ├── brainwave_audio.py      # Admin Sound Lab: render Preview แบบ versioned ไปยังลำโพง Pi
 ├── run.sh / run.bat        # bootstrap คำสั่งเดียว: venv + deps + เสียง + รัน
+├── approve_workstation.py  # อนุมัติเครื่องทีมหลังตรวจ disk encryption จริง
+├── start_work.sh           # pull develop + verified Pod snapshot บนเครื่องทีมที่อนุมัติ
+├── sync_pod_data.py        # read-only Pod sync; ไม่คัดลอก auth/runtime state
 ├── requirements.txt        # fastapi · uvicorn · pyserial · gpiozero
 ├── REMOTE-ACCESS.md        # แผนเปิดใช้ผ่าน URL (Tailscale / Cloudflare Tunnel)
 ├── research/evidence-library/ # ทะเบียนหลักฐาน Sleep/Health/WHO/VOC + downloader
@@ -76,7 +81,7 @@ Personal Baseline และข้อห้ามด้านคำกล่า�
 [ZEEP Respiratory Wellness v1.1](docs/zeep-respiratory-wellness-v1.md)
 
 หลักการใช้ภาษาสำหรับผู้ใช้ ข้อความความปลอดภัย และรายละเอียดสำหรับผู้ดูแล
-แยกไว้ที่ [ZEEP Product Language Guideline v1.0](docs/zeep-product-language-guideline-v1.md)
+แยกไว้ที่ [ZEEP Product Language Guideline v1.1](docs/zeep-product-language-guideline-v1.md)
 เพื่อให้ Dashboard, ประวัติการใช้งาน รายงาน และ Public API ใช้ความหมายเดียวกัน
 โดยไม่เปลี่ยน stable key, สูตรคะแนน หรือกฎความปลอดภัย
 
@@ -95,7 +100,7 @@ Case study ภาคสนามที่ตัดข้อมูลระบุ
 | `esp32_reader` (thread) | อ่าน JSON ทีละบรรทัดจาก USB serial → temperature / humidity / lux / sound |
 | `bcg_reader` (thread) | แกะ frame 66-byte ของ LSM-800-T → waveform / HR / RR / bed status · แยก "ช่วงเงียบปกติ" ออกจาก "หลุดจริง" |
 | `session_sampler` (thread) | เก็บ snapshot สิ่งแวดล้อม + ชีวสัญญาณทุก 10 วินาทีระหว่างมี Recording Session |
-| `estimate_sleep_state` | exploratory 5-state Wake/N1/N2/N3/REM ทุก 10 วินาที จาก rolling 6 ชุด · Recording เริ่มด้วย W และทุก non-OFF-BED interval มี score attribution · BCG/HR/RR/movement เป็นหลัก · environment 7 ปัจจัยเป็น context · pre-G2 · ไม่ใช้ควบคุมอุปกรณ์ |
+| `estimate_sleep_state` | exploratory 5-state Wake/N1/N2/N3/REM · Sensor snapshot 10 วินาที, Evidence/State epoch 30 วินาที · Recording เริ่มด้วย W และทุก non-OFF-BED interval มี score attribution · BCG/HR/RR/movement เป็นหลัก · environment 7 ปัจจัยเป็น context · ไม่ใช้ควบคุมอุปกรณ์ |
 | Profile/Session store | login/logout รายบุคคล · ประวัติย้อนหลัง · รายงาน · ลบข้อมูล (PDPA) |
 
 ## User / Admin และ Pod Session
@@ -159,7 +164,9 @@ Browser ─▶ POST /api/{door,pulse,output,music,labels,session} ─▶ GPIO / 
 ตัวประมาณดูที่ [ZEEP Sleep-State Baseline v1.8](docs/zeep-sleep-state-baseline-v1.0.md):
 Session/cycle เริ่มที่ Wake, ต้องผ่าน N1 ก่อน N2/N3/REM; N3 ไป REM ได้หลัง
 dwell/hysteresis แต่ REM ไป N3 ต้องผ่าน N2 กติกานี้เป็น ZEEP continuity guard ไม่ใช่ AASM scoring rule;
-G2 primary ontology แก้เป็น `W / N1 / N2 / N3 / REM` แบบ one-to-one กับ PSG;
+G2 primary ontology ใช้ `W / N1 / N2 / N3 / REM` เป็น crosswalk สำหรับเทียบ
+แบบ time-aligned กับ PSG; การใช้ชื่อเดียวกันไม่ได้หมายความว่า ZEEP เทียบเท่าหรือ
+แม่นยำเท่า PSG
 การยุบเป็น `Wake / NREM / REM` ใช้เป็น secondary robustness analysis เท่านั้น.
 
 ### API ทั้งหมด
@@ -218,6 +225,13 @@ run.bat                      :: Windows
 
 ตัวเลือกผ่าน environment: `PORT=8080 ./run.sh` · `SKIP_MUSIC=1` ·
 `BRAINWAVE_MINUTES=30` · `API_TOKEN=xxx`
+
+สำหรับทีมพัฒนาที่ต้องใช้ข้อมูลล่าสุดจาก Pod ให้เริ่มด้วย `./start_work.sh` แทน
+การคัดลอก `data/` ตรง ๆ คำสั่งนี้ใช้ได้เฉพาะ workstation ที่ได้รับอนุมัติและ
+เข้ารหัสดิสก์แล้ว รายละเอียดการอนุมัติ ตำแหน่ง snapshot และข้อมูลที่ไม่ถูกคัดลอก
+อยู่ใน [Operations Runbook](docs/pi5-operations-runbook.md)
+รุ่นแรกบังคับใช้บน macOS/FileVault และ Linux/LUKS เท่านั้น; Windows จะ fail closed
+จนกว่าจะมี BitLocker, ACL และ transport regression ครบ
 
 นโยบาย **ไม่มี mock ในระบบ**: เครื่องที่ไม่มี GPIO (เช่นโน้ตบุ๊กทีม) ปุ่มควบคุม
 door/ไฟ/aroma จะถูก**ปิดจริง**และการ์ดระบบแจ้ง "เชื่อมต่อไม่ได้" พร้อมสาเหตุ —
@@ -437,7 +451,7 @@ metadata เท่านั้นและไม่หักคะแนน ส�
 
 | หลักฐานเด่น | ผลแบบ exploratory |
 |---|---|
-| ยืนยันว่าไม่อยู่บนเตียง | **OFF BED** — Occupancy exception; ไม่ใช่ Sleep State และไม่เข้าคะแนน |
+| ยืนยันว่าไม่อยู่บนเตียง | **OFF BED** — ไม่ใช่ Sleep State และไม่เข้า Stage%; เวลานี้ยังใช้ประกอบความต่อเนื่อง/การออกจากเตียงในคะแนน |
 | ยังอยู่บนเตียงและขยับเด่น หรือ HR/RR ใกล้ awake baseline | **Wake** |
 | เพิ่งลดจาก Wake, movement ลด, อยู่ในช่วงเปลี่ยนผ่าน | **N1** |
 | HR/RR ลดและค่อนข้างสม่ำเสมอ | **N2** |
@@ -449,15 +463,20 @@ metadata เท่านั้นและไม่หักคะแนน ส�
 
 **กรอบวินัย:** N1/N2/N3/REM บนหน้าจอเป็น **proxy ไม่ใช่ EEG/EOG/EMG staging** —
 คลาสที่บันทึกคือ `wake/n1/n2/n3/rem` พร้อม estimator/evidence version; G2 primary
-เปรียบเทียบ W/N1/N2/N3/REM แบบ one-to-one ส่วนการยุบ N1/N2/N3 เป็น NREM เป็น
+ใช้ W/N1/N2/N3/REM เป็น crosswalk เพื่อเทียบแบบ time-aligned กับ PSG โดยไม่อ้าง
+ว่าเทียบเท่าหรือแม่นยำเท่า PSG ส่วนการยุบ N1/N2/N3 เป็น NREM เป็น
 secondary robustness analysis ตาม [ZEEP Sleep-State Baseline v1.8](docs/zeep-sleep-state-baseline-v1.0.md)
 **ห้ามใช้เป็นเงื่อนไขควบคุมอุปกรณ์** · ทุก record ติด `sleep_estimator` version
-เพื่อ provenance · แอปผู้บริโภคยังห้ามแสดง sleep state จนผ่าน G2
+เพื่อ provenance · หน้า User แสดงได้เฉพาะในชื่อ **ค่าประเมิน Sleep State จาก ZEEP**
+พร้อมขอบเขตว่าไม่ใช่ผล EEG/EOG/EMG หรือ AASM/PSG ส่วนคำกล่าวเชิงคลินิกยังต้อง
+รอ paired-PSG G2
 
-## AI Adaptive — Personal Baseline (เรียนรู้ 3–7 คืนแรก)
+## AI Adaptive — Personal Baseline และแนวโน้มรายบุคคล
 
-หลังผู้ใช้มี Overnight ที่เข้าเกณฑ์ครบ **3 Session** (เริ่มตั้งแต่ 1 ก.ย. 2569,
-แต่ละ Session >25 นาที, ตรวจพบ sleep ≥20 นาที และใช้ล่าสุดสูงสุด 7 Session)
+หลังผู้ใช้มี Overnight ที่เข้า physiology-baseline promotion cohort ครบ
+**3 Session** (เริ่มตั้งแต่ 1 ก.ย. 2569, แต่ละ Session >25 นาที, ตรวจพบ sleep
+≥20 นาที และใช้ล่าสุดสูงสุด 7 Session; ไม่ใช่เกณฑ์เผยแพร่ Sleep Score ซึ่งต้องเป็น
+Overnight ที่จบแล้วอย่างน้อย 5 ชั่วโมง)
 ระบบจะสรุปบริบทเฉพาะบุคคลจากข้อมูลของเขาเองใน SQLite:
 
 - Awake HR baseline (ช่วงขยับ/ช่วงแรกหลังขึ้นเตียง) · Sleeping median HR/RR ·
@@ -476,8 +495,11 @@ secondary robustness analysis ตาม [ZEEP Sleep-State Baseline v1.8](docs/ze
   [Adaptive Control Data Foundation v1](docs/adaptive-control-data-foundation-v1.md)
 - Baseline อัปเดตอัตโนมัติหลัง logout ทุกครั้ง · เก็บที่ `data/baselines.json`
   (ข้อมูลส่วนบุคคล — gitignored)
+- Physiology Baseline เริ่มมีบริบทเมื่อ Overnight เข้าเกณฑ์อย่างน้อย 3 ครั้งและใช้
+  rolling สูงสุด 7 ครั้ง ส่วนการเทียบคะแนนส่วนบุคคลเริ่มเมื่อมี Session ที่เทียบกันได้
+  7 ครั้ง และถือว่าเสถียรขึ้นที่ 14 ครั้ง ทั้งหมดต้องแยก Mode, Nap target และสูตร
 
-🔴 **ขอบเขตตาม KB**: ชั้นนี้ทำได้แค่ *เรียนรู้ / ปรับเกณฑ์การอ่านค่า / แนะนำ*
+🔴 **ขอบเขตตาม KB**: ชั้นนี้ทำได้แค่ *เรียนรู้ / สรุปแนวโน้ม / แนะนำ*
 — **ไม่สั่งอุปกรณ์อัตโนมัติจาก sleep state** จนกว่าจะผ่าน G2 และ Safety review
 การปลุกใด ๆ ต้องอิงเวลานาฬิกา ไม่ผูก stage
 

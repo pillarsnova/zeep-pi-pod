@@ -328,6 +328,40 @@ class ProfileGateApiTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(fake.patches, [], "a complete account must not be rewritten")
 
+    def test_password_login_preserves_the_selected_90_minute_nap_target(self) -> None:
+        self.install(dict(COMPLETE_ME))
+        response = self.client.post(
+            "/api/auth/login",
+            json={
+                "identifier": "fresh-user",
+                "password": "valid",
+                "rest_mode": "nap_recovery",
+                "target_duration_minutes": 90,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["session"]["target_duration_s"], 90 * 60)
+
+    def test_local_login_preserves_the_selected_90_minute_nap_target(self) -> None:
+        identifier = "local-nap-90@example.test"
+        ticket = pod_app.auth_sessions.issue_offline_ticket(identifier)
+        response = self.client.post(
+            "/api/session/login",
+            json={
+                "username": "local-nap-90",
+                "gender": "female",
+                "age_group": "30-44",
+                "offline_ticket": ticket,
+                "offline_identifier": identifier,
+                "rest_mode": "nap_recovery",
+                "target_duration_minutes": 90,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["session"]["target_duration_s"], 90 * 60)
+
     def test_blood_group_alone_never_triggers_the_form(self) -> None:
         self.install({**COMPLETE_ME, "bloodGroup": None})
         self.assertEqual(self.login().status_code, 200)
@@ -362,6 +396,24 @@ class ProfileGateApiTests(unittest.TestCase):
         self.assertEqual(health["blood_group"], "O")
         self.assertEqual(health["age_group"], "30-44")
         self.assertIsNotNone(pod_app._active_session)
+
+    def test_profile_completion_preserves_the_selected_90_minute_nap_target(
+        self,
+    ) -> None:
+        self.install(blank_me())
+        ticket = self.login().json()["detail"]["profile_ticket"]
+        response = self.client.post(
+            "/api/auth/profile/complete",
+            json={
+                "profile_ticket": ticket,
+                "rest_mode": "nap_recovery",
+                "target_duration_minutes": 90,
+                **form(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["session"]["target_duration_s"], 90 * 60)
 
     def test_an_unknown_blood_group_still_completes_the_login(self) -> None:
         fake = self.install(blank_me())

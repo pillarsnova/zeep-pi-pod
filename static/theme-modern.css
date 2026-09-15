@@ -377,10 +377,6 @@ body[data-role="admin"] .main-nav {
   background: var(--surface);
 }
 
-body[data-view="dashboard"] .dash-user-head {
-  display: none !important;
-}
-
 .dash-health-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
@@ -3519,28 +3515,6 @@ body[data-view="dashboard"] .dashboard-overview {
 .dash-personal-rest-result b { color: #8ce9d0; font-size: 12px; }
 .dash-personal-rest-result p { margin: 4px 0 0; color: #b4cbd2; font-size: 10px; line-height: 1.45; }
 
-.dash-personal-rest-environment {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 7px;
-}
-.dash-personal-rest-environment[hidden] { display: none; }
-.dash-personal-rest-environment > small { flex: 0 0 auto; color: #6f909c; font-size: 9px; }
-.dash-personal-rest-environment > div { display: flex; min-width: 0; flex-wrap: wrap; gap: 4px; }
-.dash-personal-rest-environment span {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  padding: 3px 6px;
-  border: 1px solid rgba(69, 125, 143, .22);
-  border-radius: 999px;
-  background: rgba(17, 47, 60, .45);
-  white-space: nowrap;
-}
-.dash-personal-rest-environment span small { color: #6f919c; font-size: 9px; }
-.dash-personal-rest-environment span b { color: #badce3; font-size: 9px; }
-
 .dash-personal-rest-guardrail {
   display: block;
   margin-top: 7px;
@@ -3727,7 +3701,7 @@ body[data-view="sessions"] .hist-list {
 
 body[data-view="sessions"] .hist-row {
   display: grid;
-  grid-template-columns: minmax(140px, 1.15fr) repeat(3, minmax(110px, 1fr));
+  grid-template-columns: minmax(140px, 1.15fr) repeat(2, minmax(110px, 1fr));
   min-height: 47px;
   gap: 10px;
   align-items: center;
@@ -4888,7 +4862,6 @@ body[data-view="sessions"] .hist-row > .hist-quality {
   .dash-personal-rest-status { grid-column: 2; justify-self: start; }
   .dash-personal-rest-body { grid-template-columns: 1fr; }
   .dash-personal-rest-time strong { font-size: 20px; }
-  .dash-personal-rest-environment { align-items: flex-start; flex-direction: column; }
   .dash-personal-rest-guardrail { text-align: left; }
 
   body[data-view="sessions"] .hist-row {
@@ -8312,17 +8285,26 @@ body:not([data-role="user"]) [data-user-panel] {
 
 body[data-view="monitor"] .admin-atmosphere-card {
   grid-column: 1 / -1;
-  order: 1;
+  order: 4;
   min-width: 0;
   padding: 22px;
   border-color: rgba(75, 136, 158, .34);
   background: linear-gradient(145deg, rgba(14, 36, 51, .98), rgba(7, 21, 32, .98));
 }
 
+body[data-view="monitor"] .monitor-analysis-card {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+body[data-view="monitor"] .safety-card { order: 0; }
 body[data-view="monitor"] .sensor-integrity,
-body[data-view="monitor"] .system { order: 2; }
-body[data-view="monitor"] .bcg { order: 3; }
-body[data-view="monitor"] .raw-monitor { order: 4; }
+body[data-view="monitor"] .system { order: 1; }
+body[data-view="monitor"] #dashSleepBaseline { order: 2; }
+body[data-view="monitor"] #adminLiveExplanation { order: 3; }
+body[data-view="monitor"] .adaptive-monitor { order: 5; }
+body[data-view="monitor"] .bcg { order: 6; }
+body[data-view="monitor"] .raw-monitor { order: 7; }
 
 .admin-atmosphere-head {
   display: flex;
@@ -8798,7 +8780,7 @@ body[data-view="monitor"] .raw-monitor { order: 4; }
   body[data-view="control"] .red-light-panel { grid-template-columns: 134px minmax(0, 1fr); }
 
   body[data-view="sessions"] .hist-row {
-    grid-template-columns: minmax(170px, 1.15fr) repeat(3, minmax(120px, 1fr));
+    grid-template-columns: minmax(170px, 1.15fr) repeat(2, minmax(120px, 1fr));
   }
 
   .monitor-alert-bar { grid-template-columns: 44px minmax(0, 1fr); }
@@ -9681,10 +9663,9 @@ body[data-view="control"] .comfort-output-sensor > span {
   }
 }
 
-/* Dashboard · Admin sleep-state baseline -------------------------------
- * Keep the five baseline bands on the overview page, but expose them only
- * to administrators. The active stage is highlighted from the same live
- * sleep-state payload used by the health card. */
+/* Monitor · Admin sleep-state baseline ---------------------------------
+ * Technical evidence stays in Monitor so Dashboard can remain a concise
+ * view of the person and live environment. */
 .admin-sleep-baseline {
   margin-top: 7px;
   padding: 9px;
@@ -14551,11 +14532,87 @@ body[data-view="sessions"][data-role="user"] .history-admin-filter {
   display: none !important;
 }
 
+.history-section {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid rgba(78, 143, 166, .2);
+  border-radius: 14px;
+  background: rgba(5, 20, 30, .52);
+}
+
+.history-section-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.history-section-head h4,
+.history-section-head small {
+  display: block;
+  margin: 0;
+}
+
+.history-section-head h4 {
+  color: #eafaff;
+  font-size: 13px;
+}
+
+.history-section-head small {
+  margin-top: 2px;
+  color: #819eae;
+  font-size: 9px;
+}
+
+.history-filter-section #historyToolbar {
+  margin-top: 0;
+}
+
+.history-journey-panel > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.history-journey-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.history-journey-panel > summary span,
+.history-journey-panel > summary b,
+.history-journey-panel > summary small {
+  display: block;
+}
+
+.history-journey-panel > summary b {
+  color: #dff8ff;
+  font-size: 12px;
+}
+
+.history-journey-panel > summary small {
+  margin-top: 2px;
+  color: #7f9ba8;
+  font-size: 9px;
+}
+
+.history-journey-panel > summary::after {
+  content: "เปิดดู";
+  float: right;
+  margin-top: -24px;
+  color: #65ddea;
+  font-size: 9px;
+}
+
+.history-journey-panel[open] > summary::after {
+  content: "ย่อ";
+}
+
 .history-summary {
   display: grid;
   grid-template-columns: minmax(190px, .72fr) minmax(0, 2fr);
   gap: 9px;
-  margin-top: 8px;
+  margin-top: 0;
   padding: 9px;
   border: 1px solid rgba(75, 202, 225, .24);
   border-radius: 14px;
@@ -14624,7 +14681,7 @@ body[data-view="sessions"][data-role="user"] .history-admin-filter {
 .history-user-journey {
   display: grid;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 0;
   padding: 10px;
   border: 1px solid rgba(104, 225, 218, .25);
   border-radius: 14px;
@@ -14786,75 +14843,11 @@ body[data-view="sessions"][data-role="user"] .history-admin-filter {
   font-size: 9px;
 }
 
-.history-participants {
-  margin-top: 8px;
-}
-
-.history-people-heading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding: 0 3px 5px;
-}
-
-.history-people-heading b {
-  color: #eafaff;
-  font-size: 12px;
-}
-
-.history-people-heading span {
-  color: #819eae;
-  font-size: 9px;
-}
-
-.history-people-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.history-person {
-  display: grid;
-  grid-template-columns: 34px minmax(90px, 1fr) auto;
-  gap: 7px;
-  align-items: center;
-  min-width: 0;
-  min-height: 52px;
-  padding: 6px 8px;
-  border: 1px solid rgba(80, 145, 170, .24);
-  border-radius: 11px;
-  color: inherit;
-  text-align: left;
-  background: rgba(9, 29, 41, .86);
-  cursor: pointer;
-}
-
-.history-person:hover,
-.history-person:focus-visible {
-  border-color: rgba(77, 220, 235, .6);
-  outline: none;
-  background: rgba(13, 45, 59, .94);
-}
-
-.history-person-avatar {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  color: #72e5f2;
-  font-weight: 900;
-  background: rgba(52, 190, 211, .13);
-}
-
-.history-person-copy,
 .hist-person-label {
   display: grid;
   min-width: 0;
 }
 
-.history-person-copy b,
-.history-person-copy small,
 .hist-person-label b,
 .hist-person-label small {
   overflow: hidden;
@@ -14862,30 +14855,19 @@ body[data-view="sessions"][data-role="user"] .history-admin-filter {
   white-space: nowrap;
 }
 
-.history-person-copy b,
 .hist-person-label b {
   color: #eafaff;
   font-size: 10px;
 }
 
-.history-person-copy small,
 .hist-person-label small {
   color: #809dab;
   font-size: 8px;
 }
 
-.history-person-mode-mix {
-  overflow: hidden;
-  color: #91b2bf;
-  font-size: 8px;
-  text-align: right;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 body[data-view="sessions"][data-role="admin"] .hist-row {
   grid-template-columns: minmax(145px, 1.25fr) minmax(100px, .8fr)
-    minmax(115px, .9fr) minmax(130px, 1fr) minmax(105px, .75fr);
+    minmax(115px, .9fr) minmax(130px, 1fr);
 }
 
 .history-empty {
@@ -14918,9 +14900,6 @@ body[data-view="sessions"][data-role="admin"] .hist-row {
     grid-column: 1 / span 2;
   }
 
-  .history-people-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 760px) {
@@ -14952,10 +14931,6 @@ body[data-view="sessions"][data-role="admin"] .hist-row {
 
   .history-summary-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .history-people-grid {
-    grid-template-columns: 1fr;
   }
 
   body[data-view="sessions"][data-role="admin"] .hist-row,

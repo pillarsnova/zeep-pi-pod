@@ -13,6 +13,28 @@ class UiComposerTests(unittest.TestCase):
             ui_composer.render(),
         )
 
+    def test_nap_target_is_explicit_and_shared_by_every_user_login_path(self):
+        runtime = ui_composer.render()
+        target_start = runtime.index('id="loginNapTarget"')
+        target_end = runtime.index("</select>", target_start)
+        target = runtime[target_start:target_end]
+
+        self.assertEqual(
+            re.findall(r'<option value="(\d+)"', target),
+            ["30", "90"],
+        )
+        self.assertIn('<option value="30" selected>', target)
+        self.assertIn("function selectedRestIntent()", runtime)
+        self.assertIn(
+            "target_duration_minutes:mode==='nap_recovery'?napTarget:null",
+            runtime,
+        )
+        self.assertIn(
+            "targetBlock.classList.toggle('login-off',!isNap)",
+            runtime,
+        )
+        self.assertEqual(runtime.count("...selectedRestIntent()"), 4)
+
     def test_aircon_temperature_is_direct_and_bounded_15_to_28(self):
         runtime = ui_composer.render()
         control_start = runtime.index('id="unifiedAirconTemp"')
@@ -105,11 +127,11 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("function renderPersonalRestBaseline", template)
         self.assertIn("session.personal_rest_baseline", template)
         self.assertIn("sleep.personal_behaviour", template)
-        self.assertIn("กำลังสร้าง Baseline ครั้งแรก", template)
-        self.assertIn("ช่วงเวลาที่ได้ผลดีจากครั้งก่อน", template)
+        self.assertIn("กำลังเรียนรู้ช่วงเวลาของคุณ", template)
+        self.assertIn("ช่วงเวลาจากครั้งก่อน", template)
         self.assertIn("เมื่อกลับมาใช้ครั้งที่ 2", template)
-        self.assertIn("baseline.environment_reference_available===true", template)
-        self.assertIn("ระบบจะให้คุณยืนยันก่อนปรับอุปกรณ์", template)
+        self.assertNotIn('id="dashPersonalRestEnvironment"', template)
+        self.assertIn("คุณยืนยันก่อนปรับอุปกรณ์", template)
         self.assertIn(".dash-personal-rest-baseline", css)
         self.assertNotIn("ปรับอุปกรณ์ให้อัตโนมัติ", template)
 
@@ -259,10 +281,9 @@ class UiComposerTests(unittest.TestCase):
             "ทุกช่วงที่อยู่บนเตียงถูกนำมาประเมินอย่างต่อเนื่อง",
             template,
         )
-        self.assertIn(
-            "'Nap & Refresh นับคุณค่าของการพักทั้งขณะตื่นและหลับ'",
-            template,
-        )
+        self.assertIn("function recoveryRestStateLabel(state)", template)
+        self.assertIn("if(key==='wake')return 'พักขณะตื่น';", template)
+        self.assertIn("if(key==='n1')return 'เคลิ้ม';", template)
         self.assertIn("NREM คือ N1 + N2 + N3", template)
         self.assertIn(
             "function recoveryProtocolBadge(report,adminView=false)", template
@@ -283,7 +304,7 @@ class UiComposerTests(unittest.TestCase):
         shell = (ui_composer.STATIC / "app-shell.js").read_text(encoding="utf-8")
 
         self.assertIn("title: 'ประวัติการใช้งาน'", shell)
-        self.assertIn("ดูผล Overnight Recovery และ Nap & Refresh", shell)
+        self.assertIn("เลือกช่วงเวลา แล้วดูผลการพักแต่ละครั้ง", shell)
         self.assertNotIn("ประวัติการนอน", shell)
         self.assertIn("<h3>ประวัติการใช้งาน</h3>", template)
         self.assertIn("USAGE HISTORY", template)
@@ -392,8 +413,8 @@ class UiComposerTests(unittest.TestCase):
 
         self.assertEqual(template.count('class="dash-sensor-grid"'), 1)
         self.assertEqual(template.count('id="dashAtmosphereCard"'), 1)
-        self.assertIn('id="adminLiveExplanation" data-admin-panel', template)
-        self.assertIn('id="dashSleepBaseline" data-admin-panel', template)
+        self.assertIn('id="adminLiveExplanation" data-pages="monitor"', template)
+        self.assertIn('id="dashSleepBaseline" data-pages="monitor"', template)
         self.assertIn('id="rawMonitorCard" data-pages="monitor"', template)
         self.assertIn(
             'body:not([data-role="admin"]) [data-admin-panel]',
@@ -434,7 +455,7 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("TIME ACCOUNTING", template)
         self.assertIn("เวลาของ Session ถูกจัดหมวดครบ", template)
         self.assertIn("ใช้คิดคะแนน", template)
-        self.assertIn("ไม่นับคะแนน", template)
+        self.assertIn("นอกสัดส่วน Stage", template)
         self.assertIn("accounting.provisional_hold_s", template)
         self.assertIn("accounting.initial_wait_s", template)
         self.assertIn("accounting.no_data_s", template)
@@ -451,9 +472,20 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("WAIT · กำลังยืนยันสถานะ", template)
         self.assertNotIn("period.decision_kind==='classification_gap'", template)
         self.assertNotIn("provisional เป็นส่วนหนึ่งของเวลาที่คง State", template)
-        self.assertIn("OFF BED เท่านั้นที่ไม่เข้า Sleep Score", template)
+        self.assertIn(
+            "OFF BED ไม่เข้า Stage% แต่ใช้ประกอบความต่อเนื่อง",
+            template,
+        )
         self.assertNotIn("WAIT · ไม่มีข้อมูลสถานะ", template)
         self.assertNotIn("Unclassified", template)
+
+    def test_missing_or_unsupported_age_never_becomes_an_adult_baseline(self):
+        template = ui_composer.render()
+
+        self.assertIn("if(!Number.isFinite(age)||age<18||age>100)return '';", template)
+        self.assertIn("ยังไม่ระบุช่วงอายุ", template)
+        self.assertNotIn("Number(u.age)||24", template)
+        self.assertNotRegex(template, r"age_group\s*\|\|\s*['\"]18-29['\"]")
 
     def test_user_copy_is_friendly_while_safety_language_stays_direct(self):
         template = ui_composer.render()
@@ -461,7 +493,10 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("const USER_PRODUCT_COPY=Object.freeze", template)
         self.assertIn("กำลังเชื่อมต่อข้อมูลล่าสุด", template)
         self.assertIn("กำลังยืนยันการเปลี่ยนแปลง", template)
-        self.assertIn("ช่วงนี้แยกจากเวลาพัก", template)
+        self.assertIn(
+            "ไม่รวมในสัดส่วน Sleep Stage และใช้ประกอบความต่อเนื่อง",
+            template,
+        )
         self.assertIn("ระยะเวลาใช้งาน", template)
         self.assertIn("data-admin-panel", template)
         self.assertIn("ระบบเข้าสู่โหมดปลอดภัย", template)
@@ -658,7 +693,7 @@ class UiComposerTests(unittest.TestCase):
     def test_user_sleep_and_profile_copy_hides_model_implementation(self):
         template = ui_composer.render()
 
-        guide_start = template.index('<details class="stage-guide">')
+        guide_start = template.index('<details class="stage-guide report-stage-guide">')
         guide_end = template.index("</details>", guide_start)
         guide = template[guide_start:guide_end]
         login_start = template.index("function renderLoginBaseline")
@@ -674,6 +709,7 @@ class UiComposerTests(unittest.TestCase):
         for technical_term in ("BCG", "HR/RR", "PSG"):
             with self.subTest(technical_term=technical_term):
                 self.assertNotIn(technical_term, guide)
+        self.assertIn("if(presentation!=='sleep')return '';", template)
         self.assertIn("เตรียมค่าเริ่มต้นที่เหมาะกับคุณ", login_copy)
         self.assertIn("เรียนรู้รูปแบบของคุณ", login_copy)
         self.assertNotIn("base-row", login_copy)
@@ -722,7 +758,7 @@ class UiComposerTests(unittest.TestCase):
     def test_history_has_one_longitudinal_profile_without_cross_mode_score(self):
         template = ui_composer.render()
         start = template.index("function renderUserJourney")
-        end = template.index("function renderHistoryParticipants", start)
+        end = template.index("function renderSessionList", start)
         renderer = template[start:end]
 
         self.assertEqual(template.count('id="historyUserJourney"'), 1)
@@ -732,6 +768,8 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("จำนวนครั้งที่ใช้ไม่ถูกตีความว่าเป็นความชอบ", renderer)
         self.assertNotIn("average_sleep_score+", renderer)
         self.assertNotIn("average_recovery_score+", renderer)
+        self.assertNotIn('id="historyParticipants"', template)
+        self.assertIn("HISTORY_JOURNEY_CACHE_MS", template)
 
 
 if __name__ == "__main__":

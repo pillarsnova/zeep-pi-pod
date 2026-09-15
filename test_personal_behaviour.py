@@ -370,6 +370,67 @@ class PersonalBehaviourTests(unittest.TestCase):
         self.assertEqual(context["by_target"]["nap_30"]["sessions_used"], 30)
         self.assertEqual(context["by_target"]["nap_90"]["sessions_used"], 7)
 
+    def test_non_finite_values_never_enter_behaviour_statistics(self) -> None:
+        valid = row(
+            "valid",
+            group="sleep",
+            score=82,
+            formula=SLEEP_SCORE_FORMULA_VERSION,
+            start_local_hour=22.5,
+            duration_s=7 * 3_600,
+        )
+        valid["temp_median"] = 23.0
+        invalid_score = row(
+            "invalid-score",
+            group="sleep",
+            score=float("nan"),
+            formula=SLEEP_SCORE_FORMULA_VERSION,
+            start_local_hour=23.0,
+            duration_s=7 * 3_600,
+        )
+        invalid_score["temp_median"] = float("inf")
+        invalid_session = row(
+            "invalid-session",
+            group="sleep",
+            score=99,
+            formula=SLEEP_SCORE_FORMULA_VERSION,
+            start_local_hour=float("inf"),
+            duration_s=float("nan"),
+        )
+
+        context = aggregate([valid, invalid_score, invalid_session])["sleep"]
+
+        self.assertEqual(context["sessions_used"], 2)
+        self.assertEqual(context["scores"], [82.0])
+        self.assertEqual(context["typical_duration_minutes"], 420.0)
+        self.assertEqual(context["typical_start_local_hour"], 22.75)
+        self.assertEqual(context["typical_environment"]["temp_median"], 23.0)
+        self.assertEqual(context["best_rest_window"]["score_value"], 82.0)
+
+    def test_typical_start_time_uses_circular_statistics_across_midnight(self) -> None:
+        rows = [
+            row(
+                "before-midnight",
+                group="sleep",
+                score=82,
+                formula=SLEEP_SCORE_FORMULA_VERSION,
+                start_local_hour=23.5,
+                duration_s=7 * 3_600,
+            ),
+            row(
+                "after-midnight",
+                group="sleep",
+                score=82,
+                formula=SLEEP_SCORE_FORMULA_VERSION,
+                start_local_hour=0.5,
+                duration_s=7 * 3_600,
+            ),
+        ]
+
+        context = aggregate(rows)["sleep"]
+
+        self.assertEqual(context["typical_start_local_hour"], 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,6 +3,7 @@
 import copy
 import time
 import unittest
+from unittest.mock import patch
 
 from testing_support import configure_app_test_environment
 
@@ -266,6 +267,43 @@ class SleepClassificationGateTests(unittest.TestCase):
         result = zeep.estimate_sleep_state()
         self.assert_inactive(result, "no_data")
         self.assertEqual(result["data_status"], "waiting_for_vitals")
+
+    def test_personal_candidate_is_not_reported_as_the_stage_source_when_disabled(self):
+        self.set_session(active=False, recording=False)
+        with zeep.state_lock:
+            zeep.state["session"].update(
+                {
+                    "account_key": "person@example.test",
+                    "age": 35,
+                    "age_group": "30-44",
+                    "gender": "female",
+                }
+            )
+        candidate = {"hr_awake": [50.0, 55.0]}
+        meta = {"source": "personal", "status": "active"}
+        with (
+            patch.object(
+                zeep.baselines,
+                "personalize_baseline",
+                return_value=(candidate, meta),
+            ),
+            patch.object(
+                zeep.baselines,
+                "behaviour_context",
+                return_value={
+                    "status": "active",
+                    "sessions_used": 3,
+                    "direct_stage_influence": False,
+                },
+            ),
+        ):
+            result = zeep.estimate_sleep_state()
+
+        self.assertFalse(zeep.PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED)
+        self.assertEqual(result["classification_source"], "age_gender_default")
+        self.assertEqual(result["baseline_candidate_source"], "personal")
+        self.assertEqual(result["personal_baseline_candidate"], candidate)
+        self.assertNotEqual(result["baseline"], candidate)
 
     def test_current_frame_requires_both_hr_and_rr(self):
         self.set_session(active=True, recording=True)

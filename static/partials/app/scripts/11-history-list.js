@@ -109,6 +109,8 @@ function sleepQualityCompact(q, ended, presentationOverride,safetyReviewOverride
 let historyRequestSeq=0;
 let historyJourneyRequestSeq=0;
 let historyDetailRequestSeq=0;
+const HISTORY_JOURNEY_CACHE_MS=60000;
+const historyJourneyCache=new Map();
 
 async function refreshHistory(btn){
   ensureHistoryFilterDefaults();
@@ -124,11 +126,9 @@ async function refreshHistory(btn){
     const adminView=currentPrincipal?.role==='admin';
     list.innerHTML=`<div class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังโหลดประวัติการใช้งาน</b><span>${adminView?'กำลังอ่าน Session จากเครื่อง Pi':'กำลังเตรียมรายการย้อนหลังของคุณ'}</span></div></div>`;
     document.getElementById('historySummary').innerHTML='<div class="mini">กำลังสรุปช่วงเวลาที่เลือก…</div>';
-    historyJourneyRequestSeq+=1;
     historyDetailRequestSeq+=1;
-    document.getElementById('historyUserJourney').innerHTML='';
-    document.getElementById('historyParticipants').innerHTML='';
-    document.getElementById('sessionDetail').innerHTML='';
+    document.getElementById('sessionDetail').innerHTML='<div class="history-empty"><b>เลือกรายการการพัก</b><span>ผลสรุปจะแสดงในส่วนนี้</span></div>';
+    refreshUserJourney();
     const params=historyFilterParams();
     const path=currentPrincipal?.role==='admin'
       ? `/api/admin/history?${params}`
@@ -149,7 +149,6 @@ async function refreshHistory(btn){
     const data=await r.json();
     if(requestSeq!==historyRequestSeq)return;
     renderSessionList(data);
-    refreshUserJourney();
   };
   return btn ? withBusy(btn, run) : run();
 }
@@ -275,7 +274,7 @@ function userRestoreMeaning(statusKey,presentation,unavailable){
     sleep_restore_very_good:'ภาพรวมการนอนคืนนี้เป็นไปได้ดีมาก',sleep_restore_good:'ภาพรวมการนอนคืนนี้เป็นไปได้ดี',
     pace_morning:'คืนนี้ได้พักในระดับหนึ่ง',prioritise_rest:'ครั้งนี้ยังมีบางจุดที่ช่วยให้การพักสบายขึ้นได้',
     rest_goal_full:'ช่วงพักนี้เป็นไปได้ดีมาก',rest_good:'ช่วงพักนี้เป็นไปได้ดี',
-    rest_partial:'ช่วงพักนี้ช่วยให้ร่างกายได้หยุดนิ่งและผ่อนคลาย',rest_more:'ครั้งนี้ยังมีบางจุดที่ลองปรับให้สบายขึ้นได้',
+    rest_partial:'ภาพรวมช่วงพักนี้พอใช้',rest_more:'ครั้งนี้ยังมีบางจุดที่ลองปรับให้สบายขึ้นได้',
   };
   return meanings[statusKey]||(presentation==='recovery'?'ดูผลช่วงพักนี้ร่วมกับความรู้สึกหลังพัก':'ดูภาพรวมคืนนี้ร่วมกับความรู้สึกหลังตื่น');
 }
@@ -461,11 +460,9 @@ function renderHistorySummary(d){
   const adminView=currentPrincipal?.role==='admin';
   const selected=document.getElementById('historyDateFrom').value===historyLocalToday()
     &&document.getElementById('historyDateTo').value===historyLocalToday();
-  const scope=adminView
-    ? `${summary.people_count||0} คน`
-    : `${summary.session_count||0} ครั้ง`;
+  const scope=adminView?`${summary.people_count||0} คน`:'ผลการพัก';
   const scopeNote=adminView
-    ?'นับการใช้งานที่จบแล้วและมีข้อมูล Sensor · Asia/Bangkok'
+    ?'Session ที่จบแล้วในช่วงที่เลือก · Asia/Bangkok'
     :'สรุปการพักที่บันทึกไว้ในช่วงนี้';
   root.innerHTML=`<div class="history-summary-heading"><span>${selected?'วันนี้':'ช่วงที่เลือก'}</span><b>${scope}</b><small>${scopeNote}</small></div>
     <div class="history-summary-metrics">
@@ -518,7 +515,7 @@ function renderUserJourney(payload){
     <div class="history-journey-note">Overnight และ Nap เรียนรู้แยกกัน · จำนวนครั้งที่ใช้ไม่ถูกตีความว่าเป็นความชอบ</div>`;
 }
 
-async function refreshUserJourney(){
+async function refreshUserJourney(force=false){
   const root=document.getElementById('historyUserJourney');
   if(!root||!currentPrincipal)return;
   const requestSeq=++historyJourneyRequestSeq;
@@ -526,6 +523,14 @@ async function refreshUserJourney(){
   const account=document.getElementById('historyUser')?.value||'';
   if(adminView&&!account){
     root.innerHTML='<div class="history-journey-empty compact"><b>เลือกผู้ใช้งานเพื่อดูภาพรวมสะสม</b><span>การ์ดนี้รวม Overnight Recovery และ Nap & Refresh ของคนเดียวกัน</span></div>';
+    return;
+  }
+  const principalKey=currentPrincipal.account_key||currentPrincipal.email
+    ||currentPrincipal.username||'';
+  const cacheKey=`${currentPrincipal.role}:${adminView?account:principalKey}`;
+  const cached=historyJourneyCache.get(cacheKey);
+  if(!force&&cached&&Date.now()-cached.savedAt<HISTORY_JOURNEY_CACHE_MS){
+    renderUserJourney(cached.payload);
     return;
   }
   root.innerHTML='<div class="mini">กำลังรวมรูปแบบการพักที่ผ่านมา…</div>';
@@ -537,6 +542,7 @@ async function refreshUserJourney(){
     const data=(await response.json()).data||{};
     const selected=document.getElementById('historyUser')?.value||'';
     if(requestSeq!==historyJourneyRequestSeq||(adminView&&selected!==account))return;
+    historyJourneyCache.set(cacheKey,{payload:data,savedAt:Date.now()});
     renderUserJourney(data);
   }catch{
     if(requestSeq!==historyJourneyRequestSeq)return;
@@ -544,36 +550,9 @@ async function refreshUserJourney(){
   }
 }
 
-function renderHistoryParticipants(d){
-  const root=document.getElementById('historyParticipants');
-  if(currentPrincipal?.role!=='admin'||!(d.participants||[]).length){
-    root.innerHTML='';return;
-  }
-  root.innerHTML=`<div class="history-people-heading"><b>ผู้ใช้งานและคะแนน</b><span>${d.participants.length} คนในช่วงที่เลือก</span></div><div class="history-people-grid">${d.participants.map(person=>{
-    const sleepCount=(person.scores||[]).filter(item=>item.score_type==='sleep_score').length;
-    const recoveryCount=(person.scores||[]).filter(item=>item.score_type==='recovery_score').length;
-    const withoutScore=(person.scores||[]).filter(item=>!item.available).length;
-    const modeText=[sleepCount?`Overnight ${sleepCount}`:'',recoveryCount?`Nap ${recoveryCount}`:'',withoutScore?`ยังไม่มีคะแนน ${withoutScore}`:''].filter(Boolean).join(' · ');
-    return `<button type="button" class="history-person" data-history-account="${historyEscape(person.account_key)}"><span class="history-person-avatar">${historyEscape(identityLabel(person,'?').slice(0,1).toUpperCase())}</span><span class="history-person-copy"><b>${historyEscape(identityLabel(person))}</b><small>${person.session_count} Session</small></span><span class="history-person-mode-mix">${historyEscape(modeText||'ยังไม่ยืนยันรูปแบบ')}</span></button>`;
-  }).join('')}</div>`;
-  root.querySelectorAll('[data-history-account]').forEach(button=>{
-    button.onclick=()=>selectHistoryPerson(button.dataset.historyAccount);
-  });
-}
-
-function selectHistoryPerson(accountKey){
-  const select=document.getElementById('historyUser');
-  if(select&&[...select.options].some(option=>option.value===accountKey)){
-    select.value=accountKey;
-    document.getElementById('historyNameFilter').value='';
-    refreshHistory();
-  }
-}
-
 function renderSessionList(d){
   const root = document.getElementById('sessionList'); root.innerHTML = '';
   renderHistorySummary(d);
-  renderHistoryParticipants(d);
   if (!d.sessions.length){
     root.innerHTML=currentPrincipal?.role==='admin'
       ?`<div class="history-empty"><b>${currentPrincipal?.role==='admin'?'ไม่พบ Session ในช่วงเวลานี้':'ยังไม่มีประวัติในช่วงเวลานี้'}</b><span>ลองเลือกวัน${currentPrincipal?.role==='admin'?' เวลา หรือชื่อผู้ใช้งาน':'หรือช่วงเวลา'}ใหม่</span></div>`
@@ -586,7 +565,6 @@ function renderSessionList(d){
       ?'Nap & Refresh'
       :presentation==='sleep'?'Overnight Recovery':currentPrincipal?.role==='admin'?'รูปแบบยังไม่ยืนยัน':'ผลการพักครั้งนี้';
     const row = document.createElement('button'); row.className = `hist-row mode-${presentation}`;
-    const hr = sx.summary?.heart_rate_bpm;
     const identity=currentPrincipal?.role==='admin'
       ? `<span class="hist-person-label"><b>${historyEscape(identityLabel(sx))}</b><small>${historyEscape(sx.display_name||'')}</small></span>`:'';
     row.innerHTML =
@@ -595,8 +573,7 @@ function renderSessionList(d){
       `${sleepQualityCompact(
         sx.sleep_quality,sx.ended_at_utc,presentation,
         reportSafetyReviewRequired(sx),
-      )}` +
-      `<span>♥ ${currentPrincipal?.role==='admin'?'HR':'ชีพจร'} ${hr ? hr.avg + ' ครั้ง/นาที' : '--'}</span>`;
+      )}`;
     row.onclick = ()=>loadDetail(sx.account_key||d.account_key||d.username, sx.session_id, row);
     root.appendChild(row);
   });

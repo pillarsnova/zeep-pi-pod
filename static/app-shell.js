@@ -18,8 +18,8 @@
   ]);
   const PAGE_DEFINITIONS = Object.freeze({
     dashboard: {
-      title: 'สุขภาพและสภาพแวดล้อม',
-      subtitle: 'ดูสุขภาพผู้ใช้งานและสภาพแวดล้อมภายในตู้',
+      title: 'ภาพรวมขณะพัก',
+      subtitle: 'ดูสัญญาณระหว่างพักและสภาพแวดล้อมภายใน ZEEP',
       document: 'Dashboard',
     },
     control: {
@@ -34,12 +34,12 @@
     },
     monitor: {
       title: 'Live System & Adaptive Learning',
-      subtitle: 'ตรวจ Sensor, Baseline, Version และ Shadow Decision แบบสด',
+      subtitle: 'ตรวจ Sensor, Baseline, Version และเหตุผลของระบบแบบสด',
       document: 'Adaptive Learning Monitor',
     },
     sessions: {
       title: 'ประวัติการใช้งาน',
-      subtitle: 'ดูผล Overnight Recovery และ Nap & Refresh ย้อนหลัง',
+      subtitle: 'เลือกช่วงเวลา แล้วดูผลการพักแต่ละครั้ง',
       document: 'Usage History & Reports',
     },
   });

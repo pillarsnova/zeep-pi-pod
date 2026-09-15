@@ -7,6 +7,7 @@ developer's mirrored production data can be polluted by test accounts.
 
 from __future__ import annotations
 
+import atexit
 import os
 import sys
 import tempfile
@@ -14,8 +15,8 @@ from pathlib import Path
 
 from access_control import hash_password
 
-
 _APP_TEST_ROOT = tempfile.TemporaryDirectory(prefix="zeep-app-tests-")
+atexit.register(_APP_TEST_ROOT.cleanup)
 
 
 def configure_app_test_environment() -> Path:

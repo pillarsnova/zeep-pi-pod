@@ -66,9 +66,13 @@ def build_stage_runs(
         stage = "off_bed" if sample_off_bed(sample) else sample.get("sleep")
         if stage not in STAGE_INDEX:
             continue
+        # ``provisional`` describes confidence in a challenger/new State.  A
+        # continuity-carried State can still be the explicit score owner of
+        # this occupied interval, so eligibility -- not the presentation flag
+        # -- is the authoritative inclusion decision.
         if stage != "off_bed" and (
             sample.get("sleep_score_eligible") is False
-            or bool(sample.get("sleep_provisional"))
+            or bool(sample.get("sleep_excluded_from_score"))
         ):
             continue
         if stage == current:

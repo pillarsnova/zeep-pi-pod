@@ -64,8 +64,9 @@ Phase ที่เก็บต้องต่างกันตาม Mode:
 - Nap: behavior, comfort และ environment ใช้ Nap เทียบ Nap; รุ่นปัจจุบันยังใช้
   `qualified_overnight_reference` สำหรับ HR/Movement จึงต้องแสดง provenance นี้
   และห้ามเรียกว่า Nap physiology baseline
-- การแยก Nap เป้าหมาย 30/90 นาทีเป็น **Target design**; โค้ดปัจจุบันยังรวมเป็น
-  `nap_recovery` และต้องแยก key ก่อนเริ่มเรียนรู้รายช่วงเวลา
+- Nap ใช้ public Mode เดียวคือ `nap_recovery` แต่ Personal Behaviour Baseline
+  แยก cohort ด้วย Target key `nap_30` และ `nap_90` แล้ว จึงไม่ปนคะแนนหรือ
+  ช่วงเวลาที่สังเกตได้ระหว่างสองเป้าหมาย
 
 ### 3.1 ข้อมูลที่ใช้เรียนรู้
 
@@ -322,8 +323,9 @@ Smart Response จึงแสดงได้เพียง `team_action_recomm
 
 เป้าหมายคือสงบ พักได้ตามเวลา และพร้อมกลับไปทำกิจกรรม; ผู้ใช้ไม่จำเป็นต้องหลับ
 
-- Target: แยก Baseline 30 และ 90 นาที; production ปัจจุบันยังรวมทั้งคู่เป็น
-  `nap_recovery` จึงยังห้ามอ้างว่าเรียนรู้แยกแล้ว
+- Target: public Mode ยังคงเป็น `nap_recovery` เดียว ส่วน Personal Behaviour
+  Baseline แยก `nap_30` และ `nap_90` แล้ว; แต่ละ cohort ต้องมีข้อมูลของตัวเอง
+  ก่อนแสดงการเปรียบเทียบหรือช่วงพักที่เคยสังเกตได้
 - เน้น HR/RR settling, movement, continuity, environment และ pre/post feedback
 - ไม่ไล่ N2/N3/REM และไม่หักคะแนนเพราะผู้ใช้ไม่หลับ
 - ช่วงท้ายเสนอแสง/เสียงกลับตามเวลาได้ แต่ยังต้องเป็น routine ที่ผู้ใช้ยืนยันไว้

@@ -15,6 +15,14 @@ const TERMINAL_OCCUPANCY_META={
   exited_zeep:{label:'ออกจาก ZEEP',code:'EXIT',color:'#f6b94a'},
 };
 
+function recoveryRestStateLabel(state){
+  const key=String(state||'').toLowerCase();
+  if(key==='wake')return 'พักขณะตื่น';
+  if(key==='n1')return 'เคลิ้ม';
+  if(['n2','n3','rem','nrem'].includes(key))return 'ช่วงหลับที่ประเมินได้';
+  return 'กำลังประเมินการพัก';
+}
+
 const REPORT_SLEEP_MODE_KEYS=new Set(['sleep','overnight']);
 const REPORT_RECOVERY_MODE_KEYS=new Set([
   'nap_recovery','general_rest','short_nap','cycle_nap','shift_rest','jet_lag',
@@ -150,9 +158,24 @@ function reportProfileMarkup(report,presentation){
     :`${adminView?'State ที่เข้าคะแนน':'เวลาที่นำมาสรุปผล'} · ${fmtDur(profile.stateSeconds)}`;
   const centreLabel=presentation==='recovery'?'เวลาพักที่นับได้':'เวลานอนโดยประมาณ';
   const meaning=presentation==='recovery'
-    ?'<div class="profile-meaning-note">การพักนิ่งและผ่อนคลายมีคุณค่า แม้ยังไม่หลับ · Recovery Score ดูทั้งเวลาพัก ความนิ่งของร่างกาย และสภาพแวดล้อม</div>'
+    ?'<div class="profile-meaning-note">การพักนิ่งมีคุณค่า แม้ยังไม่หลับ</div>'
     :'<div class="profile-meaning-note">แสดงเวลาที่ระบบประเมินได้ในแต่ละช่วงของการนอน · NREM คือ N1 + N2 + N3</div>';
   return `<div class="stage-summary ${presentation==='recovery'?'recovery-profile-summary':''}"><div class="report-subhead"><span>${title}</span><small>${note}</small></div><div class="stage-summary-content"><div class="stage-donut" style="--stage-ring:conic-gradient(${segments.join(',')})"><span><b>${centreValue}</b><small>${centreLabel}</small></span></div><div class="stage-legend">${rows}${meaning}</div></div></div>`;
+}
+
+function reportStageGuideMarkup(presentation){
+  if(presentation!=='sleep')return '';
+  return `<details class="stage-guide report-stage-guide">
+    <summary>ความหมาย Sleep Stages สำหรับ Overnight</summary>
+    <div class="stage-guide-grid">
+      <div><b>W</b><strong>ตื่น</strong><span>ยังตื่นหรือกลับเข้าสู่สถานะตื่น</span></div>
+      <div><b>N1</b><strong>หลับตื้น / เคลิ้มหลับ</strong><span>ช่วงเริ่มเข้าสู่การนอน</span></div>
+      <div><b>N2</b><strong>หลับสนิทขึ้น</strong><span>การนอนเริ่มต่อเนื่องขึ้น</span></div>
+      <div><b>N3</b><strong>หลับลึก</strong><span>ช่วงหลับลึกที่ร่างกายได้พักต่อเนื่อง</span></div>
+      <div><b>REM</b><strong>ระยะ REM / หลับฝัน</strong><span>ช่วงหลับที่สมองทำงานมากขึ้น</span></div>
+    </div>
+    <div class="stage-guide-note">Sleep Stage เป็นค่าประเมินแนวโน้มจากข้อมูลที่ ZEEP บันทึกได้ โดย ZEEP ไม่ได้วัดการฟื้นตัวของร่างกาย ความฝัน หรือความจำโดยตรง</div>
+  </details>`;
 }
 
 function classificationAccountingMarkup(report,adminView,presentation){
@@ -186,7 +209,7 @@ function classificationAccountingMarkup(report,adminView,presentation){
     const offBed=Number(accounting.off_bed_s)||0;
     if(invariant.holds!==false){
       return offBed>0
-        ?`<div class="report-context-note user-off-bed-note"><b>ช่วงออกจากเตียง</b> · ${fmtDur(offBed)} · แยกจากเวลาพักที่ใช้สรุปผล</div>`
+        ?`<div class="report-context-note user-off-bed-note"><b>ช่วงออกจากเตียง</b> · ${fmtDur(offBed)} · ${recovery?'ไม่รวมในเวลาพักที่นับได้':'ไม่รวมในสัดส่วน Sleep Stage และใช้ประกอบความต่อเนื่อง'}</div>`
         :'';
     }
     return `<section class="classification-accounting-card user-time-summary">
@@ -218,12 +241,12 @@ function classificationAccountingMarkup(report,adminView,presentation){
       <div><span>Sensor บันทึก</span><b>${fmtDur(recording)}</b></div>
       <div><span>${recovery?'State (ข้อมูลประกอบ)':'แสดง State'}</span><b>${fmtDur(displayed)}</b></div>
       <div><span>${recovery?'เวลาพักที่นับได้':'ใช้คิดคะแนน'}</span><b>${fmtDur(eligible)}</b></div>
-      <div><span>${recovery?'ไม่นับเป็นเวลาพัก':'ไม่นับคะแนน'}</span><b>${fmtDur(excluded)}</b></div>
+      <div><span>${recovery?'ไม่นับเป็นเวลาพัก':'นอกสัดส่วน Stage'}</span><b>${fmtDur(excluded)}</b></div>
     </div>
     ${detailMarkup}
     <p>${recovery
       ?'Recovery Score ไม่บังคับให้หลับ · Sleep State ใช้ประกอบการอธิบายเท่านั้น ส่วนคะแนนใช้เวลาพัก ความนิ่ง HR/RR ความนิ่งร่างกาย และสภาพแวดล้อมร่วมกัน'
-      :'ทุกช่วง Recording ที่ยังไม่ยืนยัน OFF BED มี State และเข้าคะแนน · ถ้าหลักฐานยังไม่พอ จะคง State เดิมแบบ low-confidence และไม่ใช้เรียนรู้ Personal Baseline · OFF BED เท่านั้นที่ไม่เข้า Sleep Score'}</p>
+      :'ทุกช่วง Recording ที่ยังไม่ยืนยัน OFF BED มี State และเข้าคะแนน · ถ้าหลักฐานยังไม่พอ จะคง State เดิมแบบ low-confidence และไม่ใช้เรียนรู้ Personal Baseline · OFF BED ไม่เข้า Stage% แต่ใช้ประกอบความต่อเนื่อง'}</p>
   </section>`;
 }
 
@@ -233,13 +256,10 @@ function reportOverviewMetrics(report,presentation){
   let values;
   if(presentation==='recovery'){
     const target=quality.duration_target||{};
-    const eligible=target.eligible_rest_seconds==null
-      ?Number(sleep.recording_s)||0:Number(target.eligible_rest_seconds)||0;
     const completion=target.completion_pct==null?'--':`${Math.round(Number(target.completion_pct))}%`;
     const regularity=quality.physiology?.regularity_factor;
     const movement=quality.body_response?.movement_pct;
     values=[
-      ['◷','เวลาพักที่นับได้',fmtDur(eligible)],
       ['◎',adminView?'เทียบเป้าหมาย':'ครบตามเวลาเป้าหมาย',completion],
       ['♥',adminView?'ความนิ่ง HR/RR':'ความนิ่งของสัญญาณชีพ',regularity==null?'--':`${Math.round(100*Number(regularity))}%`],
       ['◇','ความนิ่งร่างกาย',movement==null?'--':`${Math.max(0,Math.round(100-Number(movement)))}%`],
@@ -308,7 +328,6 @@ function renderRespiratoryWellness(report,adminView=false){
   const age=summary.age_context||{};
   const baseline=summary.personal_baseline||{};
   const confidence=summary.confidence||{};
-  const recommendation=summary.recommendation||{};
   const finite=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value));
   const median=finite(observations.median_rr_brpm)
     ?`${Number(observations.median_rr_brpm).toFixed(1)} ครั้ง/นาที`:'—';
@@ -368,7 +387,7 @@ function renderRespiratoryWellness(report,adminView=false){
   return `<section class="restore-summary-card respiratory-wellness-card">
     <div class="restore-summary-head"><div><span>RESTING BREATHING</span><h3>การหายใจระหว่างพัก</h3><small>${adminView?'วิเคราะห์จาก RR ที่ผ่านคุณภาพสัญญาณ BCG':'ดูจากจังหวะและความสม่ำเสมอตลอดช่วงพัก'}</small></div><strong class="restore-status ${respiratoryWellnessTone(status.key)}">${historyEscape(statusLabel)}</strong></div>
     <p class="restore-status-meaning">${historyEscape(interpretation)}</p>
-    <div class="restore-summary-grid"><div class="restore-driver-group respiratory-observation"><b>สิ่งที่สังเกตได้</b><ul>${observationList}</ul></div><div class="restore-recommendation"><b>ลองทำครั้งถัดไป</b><p>${historyEscape(adminView&&recommendation.primary?recommendation.primary:'พักตามปกติและให้ ZEEP เรียนรู้รูปแบบของคุณเพิ่มอีกครั้ง')}</p></div></div>
+    <div class="restore-summary-grid"><div class="restore-driver-group respiratory-observation"><b>สิ่งที่สังเกตได้</b><ul>${observationList}</ul></div></div>
     <div class="restore-summary-meta"><span><b>ช่วงวัย</b>${historyEscape(ageText)}</span><span><b>รูปแบบประจำของคุณ</b>${historyEscape(baselineText)}</span><span><b>${adminView?'ความมั่นใจ':'ความชัดเจนของข้อมูล'}</b>${historyEscape(confidenceLabel)}</span></div>
     <p class="respiratory-age-guidance"><b>คำแนะนำตามช่วงอายุ</b> · ${historyEscape(ageGuidance)}</p>
     ${adminDetails}
@@ -451,11 +470,7 @@ function renderSessionOverview(report,hasRestoreSummary=false,presentationOverri
       :presentation==='sleep'
         ?`ใช้เวลาก่อนเริ่มหลับ ${sleep.sleep_onset_proxy_s==null?'--':fmtDur(sleep.sleep_onset_proxy_s)} · เข้าสู่ W · ตื่น ${sleep.wake_entries ?? sleep.awakenings ?? 0} ครั้ง`
         :'ยังไม่ตีความเป็น Sleep Score หรือ Recovery Score จนกว่าจะยืนยันรูปแบบการพัก')
-    :(presentation==='recovery'
-      ?'Nap & Refresh นับคุณค่าของการพักทั้งขณะตื่นและหลับ'
-      :presentation==='sleep'
-        ?`ประเมินเฉพาะการพัก Overnight ครั้งนี้ · ตื่น ${sleep.wake_entries ?? sleep.awakenings ?? 0} ครั้ง`
-        :'ยังไม่สรุปเป็น Overnight หรือ Nap & Refresh');
+    :'';
   const version=adminView&&report.version?` · ${historyEscape(report.version)}`:'';
   const respiratoryHtml=renderRespiratoryWellness(report,adminView);
   const overview=`<section class="session-report-overview mode-${presentation}">
@@ -467,7 +482,7 @@ function renderSessionOverview(report,hasRestoreSummary=false,presentationOverri
     </div>
     ${respiratoryHtml}
     ${guidanceHtml}
-    <div class="report-context-note">${footer}</div>
+    ${footer?`<div class="report-context-note">${footer}</div>`:''}
   </section>`;
   return adminView
     ?overview
@@ -546,9 +561,9 @@ function renderReport(rec){
         ? `HR/RR ใช้ได้ ${coverage.valid_hr_rr_pairs||0}/${coverage.sensor_rows} รอบ`
         : 'ใช้ผล Operational ที่บันทึกไว้กับ Session';
       const operationLabel='ยืนยัน OFF BED';
-      const scoreLabel='แยกออกจาก Sleep State และคะแนน';
+      const scoreLabel='ไม่รวมใน Sleep Stage · ใช้ประกอบความต่อเนื่อง';
       if(!adminView){
-        return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)}</div></div><div class="stage">ออกจากเตียง</div><div class="user-period-summary">ช่วงนี้แยกจากเวลาพัก</div></div>`;
+        return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)}</div></div><div class="stage">ออกจากเตียง</div><div class="user-period-summary">${presentation==='recovery'?'ไม่รวมในเวลาพักที่นับได้':'ไม่รวมใน Sleep Stage · ใช้ดูความต่อเนื่อง'}</div></div>`;
       }
       return `<div class="sleep-period terminal-occupancy-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)} · ${operationLabel}</div></div><div class="stage">${period.label||'OFF BED · ไม่มีผู้ใช้งานบนเตียง'}</div><div>${coverageText}<div class="mini">${scoreLabel}</div></div><div class="reason"><div class="sleep-period-env">${sensorTiles}</div><div class="sleep-period-note">${period.reason||'แยกสถานะการใชงานออกจากผล Sleep State'}</div></div></div>`;
     }
@@ -556,7 +571,9 @@ function renderReport(rec){
       const heldCopy=period.held_previous_state
         ?'แสดงต่อเนื่องจากช่วงก่อนหน้า'
         :'ประเมินจากแนวโน้มระหว่างการพัก';
-      return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)}</div></div><div class="stage">${userSleepStageLabel(period.state)}</div><div class="user-period-summary">${heldCopy}</div></div>`;
+      const stateLabel=presentation==='recovery'
+        ?recoveryRestStateLabel(period.state):userSleepStageLabel(period.state);
+      return `<div class="sleep-period user-sleep-period"><div>${time}<div class="mini">${fmtDur(period.duration_s)}</div></div><div class="stage">${stateLabel}</div><div class="user-period-summary">${heldCopy}</div></div>`;
     }
     const holdMeta=period.held_previous_state
       ? `<div class="mini">คง State ก่อนหน้า ${period.continuity_hold_rounds||0} รอบ${period.provisional_rounds?` · provisional ${period.provisional_rounds} รอบ`:''} · ผู้ท้าชิงยังไม่ถูกนับเป็น State ใหม่</div>`
@@ -620,6 +637,7 @@ function renderReport(rec){
     </div>
     ${resultSummaryHtml}
     ${renderSessionOverview(rec.session_report,Boolean(resultSummaryHtml),presentation)}
+    ${reportStageGuideMarkup(presentation)}
     ${!adminView?timeAccounting:''}
     ${!adminView?timelineDetails:''}
     ${adminDiagnostics}

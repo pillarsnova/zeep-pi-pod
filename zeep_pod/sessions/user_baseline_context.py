@@ -78,23 +78,16 @@ def _window_identity(
     fallback_mode_group: str | None,
     fallback_target_key: str | None,
 ) -> tuple[str, str | None, tuple[str, str, str, float] | None, bool]:
-    mode_group = str(
-        source.get("mode_group") or fallback_mode_group or "unknown"
-    )
+    mode_group = str(source.get("mode_group") or fallback_mode_group or "unknown")
     if mode_group not in REST_WINDOW_SCORE_IDENTITIES:
         mode_group = "unknown"
     source_target = (
-        source.get("target_key")
-        if "target_key" in source
-        else fallback_target_key
+        source.get("target_key") if "target_key" in source else fallback_target_key
     )
     target_key = source_target if source_target in REST_WINDOW_TARGETS else None
     target_valid = bool(
         (mode_group == "sleep" and source_target in {None, "overnight_7h"})
-        or (
-            mode_group == "nap_recovery"
-            and source_target in {"nap_30", "nap_90"}
-        )
+        or (mode_group == "nap_recovery" and source_target in {"nap_30", "nap_90"})
     )
     return (
         mode_group,
@@ -148,9 +141,7 @@ def _window_environment(
         if (number := _number(environment.get(key))) is not None
     }
     available = bool(
-        outcome_supported
-        and source.get("environment_reference_available")
-        and filtered
+        outcome_supported and source.get("environment_reference_available") and filtered
     )
     return available, filtered if available else {}
 
@@ -213,9 +204,7 @@ def best_rest_window_context(
         "outcome_supported": outcome_supported,
         "environment_reference_available": environment_available,
         "environment": environment,
-        "environment_role": (
-            "observed_successful_session_not_confirmed_preference"
-        ),
+        "environment_role": ("observed_successful_session_not_confirmed_preference"),
         "affects_score": False,
         "affects_sleep_state": False,
         "current_session_excluded": True,

@@ -262,7 +262,15 @@ const USER_BED_STATUS_TH = {
 };
 
 function genderTh(g){ return ({male:'ชาย', female:'หญิง', other:'อื่น ๆ', unspecified:'ไม่ระบุ'})[g] || g || '-'; }
-function ageToGroup(age){ return age>=60?'60+':age>=45?'45-59':age>=30?'30-44':'18-29'; }
+function ageToGroup(value){
+  const age=Number(value);
+  if(!Number.isFinite(age)||age<18||age>100)return '';
+  return age>=60?'60+':age>=45?'45-59':age>=30?'30-44':'18-29';
+}
+function ageGroupDisplay(value){
+  return ['18-29','30-44','45-59','60+'].includes(String(value||''))
+    ?`อายุ ${value} ปี`:'ยังไม่ระบุช่วงอายุ';
+}
 function displayAge(se={}){
   const ref=se.health_reference||{},exact=Number(ref.age_years);
   if(Number.isFinite(exact)&&exact>0)return `อายุ ${Math.round(exact)} ปี`;
@@ -339,10 +347,10 @@ function renderLoginBaseline(){
    sleep_system_policy.py; label stays compact for the live Dashboard tile. */
 const SLEEP_TH = {
   wake:       {code:'W',   title:'ตื่น',meaning:'ช่วงที่ระบบประเมินว่ายังตื่นหรือกลับเข้าสู่สถานะตื่น',label:'ตื่น',cls:'wake'},
-  n1:         {code:'N1',  title:'หลับตื้น / เคลิ้มหลับ',meaning:'เริ่มเข้าสู่การนอน ร่างกายผ่อนคลาย และปลุกให้ตื่นได้ง่าย',label:'หลับตื้น',cls:'nrem'},
-  n2:         {code:'N2',  title:'หลับสนิทขึ้น / หลับตื้นต่อเนื่อง',meaning:'หัวใจและการหายใจช้าลง ร่างกายเข้าสู่การนอนที่ต่อเนื่องขึ้น',label:'หลับสนิทขึ้น',cls:'nrem'},
-  n3:         {code:'N3',  title:'หลับลึก',meaning:'ช่วงหลับลึกที่ร่างกายได้พักอย่างต่อเนื่อง',label:'หลับลึก',cls:'deep'},
-  rem:        {code:'REM', title:'ระยะ REM / หลับฝัน',meaning:'ช่วงหลับที่สมองยังทำงานมากขึ้นและมักมีความฝัน',label:'หลับฝัน',cls:'rem'},
+  n1:         {code:'N1',  title:'หลับตื้น / เคลิ้มหลับ',meaning:'ช่วงที่ระบบประเมินว่าเริ่มเข้าสู่การนอน ซึ่งมักปลุกตื่นได้ง่าย',label:'หลับตื้น',cls:'nrem'},
+  n2:         {code:'N2',  title:'หลับสนิทขึ้น / หลับตื้นต่อเนื่อง',meaning:'ช่วงที่ระบบประเมินว่าการนอนต่อเนื่องขึ้น โดยทั่วไปชีพจรและการหายใจอาจช้าลง',label:'หลับสนิทขึ้น',cls:'nrem'},
+  n3:         {code:'N3',  title:'หลับลึก',meaning:'ช่วงที่ระบบประเมินว่าเป็นหลับลึก',label:'หลับลึก',cls:'deep'},
+  rem:        {code:'REM', title:'ระยะ REM / หลับฝัน',meaning:'ช่วง REM ซึ่งมักสัมพันธ์กับความฝัน',label:'หลับฝัน',cls:'rem'},
   // ``nrem`` is kept only for rendering old history. The live estimator never
   // emits a generic NREM because ZEEP's current ontology is W/N1/N2/N3/REM.
   nrem:       {code:'NREM', label:'หลับ · ข้อมูลเดิม',cls:'nrem'},
@@ -401,7 +409,7 @@ function renderSleepState(sl={},session={},bcg={}){
   const base=sl.baseline||{}, names={wake:'W · ตื่น',n1:'N1',n2:'N2',n3:'N3',rem:'REM'};
   const baselineRows=order.filter(k=>base[k]).map(k=>`<tr class="${classificationActive&&sl.state===k?'current':''}"><td>${names[k]}</td><td>${base[k].hr[0]}–${base[k].hr[1]} BPM</td><td>${base[k].rr[0]}–${base[k].rr[1]} ครั้ง/นาที</td></tr>`).join('');
   const genderAdj=sl.gender_adjustment||{};
-  const baselineTable=baselineRows?`<div class="baseline-block"><div class="baseline-title"><strong>Wellness Baseline · อายุ ${sl.age_group || '18-29'} ปี · ${genderTh(sl.gender)}</strong><span>Age + Gender directional starting range</span></div><table class="baseline-table"><thead><tr><th>Sleep State</th><th>HR · Heart Rate</th><th>RR · Respiratory Rate</th></tr></thead><tbody>${baselineRows}</tbody></table></div>`:'';
+  const baselineTable=baselineRows?`<div class="baseline-block"><div class="baseline-title"><strong>Wellness Baseline · ${ageGroupDisplay(sl.age_group)} · ${genderTh(sl.gender)}</strong><span>Age + Gender directional starting range</span></div><table class="baseline-table"><thead><tr><th>Sleep State</th><th>HR · Heart Rate</th><th>RR · Respiratory Rate</th></tr></thead><tbody>${baselineRows}</tbody></table></div>`:'';
   const env=sl.environment||{}, q=sl.signal_quality||{};
   const envParts=[
     env.temperature_c!=null?`🌡 ${env.temperature_c}°C`:null,

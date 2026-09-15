@@ -19,9 +19,11 @@ SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.29-complete-occupied-epochs"
 SLEEP_EVIDENCE_VERSION = "zeep-sleep-state-evidence-v3.7-complete-occupied-epochs"
 ZEEP_SLEEP_BASELINE_VERSION = "zeep-sleep-state-baseline-v1.8-sep1-cutover"
 PERSONAL_BEHAVIOUR_BASELINE_VERSION = (
-    "zeep-personal-behaviour-baseline-v1.1-formula-target-specific"
+    "zeep-personal-behaviour-baseline-v1.3-bounded-partitioned-finite-circular-time"
 )
-PERSONAL_REST_WINDOW_BASELINE_VERSION = "zeep-personal-rest-window-v1.0"
+PERSONAL_REST_WINDOW_BASELINE_VERSION = (
+    "zeep-personal-rest-window-v1.2-bounded-partitioned-finite"
+)
 ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.18-scoreable-continuity"
 SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
 SLEEP_HISTORY_BACKFILL_VERSION = (
@@ -138,13 +140,18 @@ APPROVED_SCORE_FORMULA_VERSIONS_BY_GROUP = {
 }
 RESTORE_SUMMARY_VERSION = "zeep-restore-summary-v1.0"
 RESPIRATORY_WELLNESS_VERSION = "zeep-respiratory-wellness-v1.1"
-RESTORE_ACTION_BANDS_VERSION = "zeep-restore-action-bands-v1.0"
+RESTORE_ACTION_BANDS_VERSION = "zeep-restore-action-bands-v1.1-observational-copy"
 RESTORE_DRIVER_POLICY_VERSION = "zeep-restore-drivers-v1.0"
 RESTORE_BASELINE_COMPARISON_VERSION = "zeep-restore-personal-baseline-v1.0"
-RESTORE_RECOMMENDATION_VERSION = "zeep-restore-recommendation-v1.0"
+RESTORE_RECOMMENDATION_VERSION = "zeep-restore-recommendation-v1.1-observational-copy"
 RESTORE_BASELINE_MIN_COMPARISON_SESSIONS = 7
 RESTORE_BASELINE_STABLE_SESSIONS = 14
 RESTORE_TREND_MAX_SESSIONS = 30
+# Baseline rebuilds inspect lightweight Session metadata in one query, then
+# load at most this many detailed reports per canonical Mode/Target cohort.
+# Four times the published 30-Session trend window leaves room for rejected or
+# incomplete records without allowing detail-query cost to grow forever.
+PERSONAL_BASELINE_DETAIL_SCAN_PER_COHORT = RESTORE_TREND_MAX_SESSIONS * 4
 ENVIRONMENT_CONTEXT_POLICY_VERSION = (
     "zeep-environment-context-v2.1-optional-acoustic-input"
 )
@@ -264,6 +271,10 @@ def age_group(age: Any) -> str:
         value = int(age)
     except (TypeError, ValueError):
         return "unspecified"
+    # The current priors and evidence scope are adult-only.  Do not silently
+    # classify a minor (or an invalid negative age) with the 18-29 ranges.
+    if value < 18:
+        return "unspecified"
     if value < 30:
         return "18-29"
     if value < 45:
@@ -315,22 +326,22 @@ SLEEP_STAGE_PRESENTATION = {
     "n1": {
         "code": "N1",
         "title": "หลับตื้น / เคลิ้มหลับ",
-        "meaning": "เริ่มเข้าสู่การนอน ร่างกายผ่อนคลาย และปลุกให้ตื่นได้ง่าย",
+        "meaning": "ช่วงที่ระบบประเมินว่าเริ่มเข้าสู่การนอน ซึ่งมักปลุกตื่นได้ง่าย",
     },
     "n2": {
         "code": "N2",
         "title": "หลับสนิทขึ้น / หลับตื้นต่อเนื่อง",
-        "meaning": "หัวใจและการหายใจช้าลง ร่างกายเข้าสู่การนอนที่ต่อเนื่องขึ้น",
+        "meaning": "ช่วงที่ระบบประเมินว่าการนอนต่อเนื่องขึ้น โดยทั่วไปชีพจรและการหายใจอาจช้าลง",
     },
     "n3": {
         "code": "N3",
         "title": "หลับลึก",
-        "meaning": "ช่วงหลับลึกที่ร่างกายได้พักอย่างต่อเนื่อง",
+        "meaning": "ช่วงที่ระบบประเมินว่าเป็นหลับลึก",
     },
     "rem": {
         "code": "REM",
         "title": "ระยะ REM / หลับฝัน",
-        "meaning": "ช่วงหลับที่สมองยังทำงานมากขึ้นและมักมีความฝัน",
+        "meaning": "ช่วง REM ซึ่งมักสัมพันธ์กับความฝัน",
     },
 }
 
@@ -524,10 +535,11 @@ def continuity_hold_contract(
 # between valid classification windows. It no longer resets the confirmed
 # Sleep State/onset for the same active Session; only pending evidence is reset.
 SLEEP_CONTEXT_RESET_GAP_SECONDS = 60.0
-# Compatibility name for the bounded post-restart cache bridge. Recording
-# itself is never left blank: the preceding confirmed State remains scoreable
-# at low confidence until fresh evidence returns, while confirmed Bed Exit
-# overrides it immediately. The bridge never teaches Personal Baseline.
+# Compatibility threshold for the restart-specific cache/provenance bridge.
+# This is not a maximum for State attribution: after the bridge expires the
+# generic continuity policy still carries the preceding confirmed State at low
+# confidence until fresh evidence or confirmed Bed Exit arrives. Neither path
+# teaches Personal Baseline.
 SLEEP_RESTART_STATE_HOLD_SECONDS_DEFAULT = 60.0
 SLEEP_MIN_PAIRED_VITAL_COVERAGE = 0.80
 SLEEP_BUCKET_MIN_BCG_PACKETS = 8
@@ -570,7 +582,7 @@ PERSONAL_BASELINE_LEARNING_START_TIMEZONE = "Asia/Bangkok"
 PERSONAL_BASELINE_LEARNING_START_UTC = "2026-08-31T17:00:00+00:00"
 
 
-# Mode-aware duration targets apply only to the 15-point duration term. The
+# Mode-aware duration targets apply only to the 25-point duration term. The
 # 7-hour AASM/SRS recommendation is used for adult overnight/main sleep, not for
 # a nap, shift-rest, or short jet-lag rest.
 REST_MODE_DURATION_TARGETS_S = {
@@ -1473,6 +1485,10 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "estimator": SLEEP_ESTIMATOR_VERSION,
             "evidence": SLEEP_EVIDENCE_VERSION,
             "baseline": ZEEP_SLEEP_BASELINE_VERSION,
+            "personal_behaviour_baseline": PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+            "personal_rest_window_baseline": (
+                PERSONAL_REST_WINDOW_BASELINE_VERSION
+            ),
             "transition": ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
             "g2_ontology": SLEEP_G2_ONTOLOGY_VERSION,
             "historical_replay": SLEEP_HISTORY_BACKFILL_VERSION,
@@ -1521,6 +1537,9 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "restart_same_session_display": ("last_confirmed_scoreable_continuity"),
             "restart_display_hold_max_seconds": (
                 SLEEP_RESTART_STATE_HOLD_SECONDS_DEFAULT
+            ),
+            "restart_display_hold_role": (
+                "restart_cache_provenance_then_generic_scoreable_continuity"
             ),
             "restart_display_persisted_as_stage": True,
             "full_context_reset_triggers": [
@@ -1588,6 +1607,8 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             },
         },
         "personal_baseline_learning": {
+            "behaviour_policy_version": PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+            "rest_window_policy_version": PERSONAL_REST_WINDOW_BASELINE_VERSION,
             "completed_final_summary_required": True,
             "quality_type_required": "sleep",
             "sleep_detected_required": True,
@@ -1596,6 +1617,9 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "minimum_valid_hr_samples": PERSONAL_BASELINE_MIN_HR_SAMPLES,
             "minimum_nights": PERSONAL_BASELINE_MIN_NIGHTS,
             "rolling_max_nights": PERSONAL_BASELINE_MAX_NIGHTS,
+            "maximum_detail_scans_per_mode_target_cohort": (
+                PERSONAL_BASELINE_DETAIL_SCAN_PER_COHORT
+            ),
             "learning_start_local_date": PERSONAL_BASELINE_LEARNING_START_LOCAL_DATE,
             "learning_start_timezone": PERSONAL_BASELINE_LEARNING_START_TIMEZONE,
             "learning_start_utc": PERSONAL_BASELINE_LEARNING_START_UTC,

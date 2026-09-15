@@ -1,10 +1,10 @@
 """Per-user adaptive baselines — เรียนรู้ค่าเฉพาะบุคคลจากคืนแรก ๆ ของเขาเอง
 
 ขอบเขต (ตาม KB governance):
-- ใช้เพื่อ (1) ปรับเกณฑ์ sleep-state estimator รายบุคคล (2) วัดผลเทียบ baseline
-  ตัวเอง (3) สร้างคำแนะนำเชิง advisory เท่านั้น
-- 🔴 ห้ามนำผลไปสั่งอุปกรณ์แบบ real-time (closed-loop) ก่อนผ่าน G2 —
-  ดู docs/closed-loop-spec.md; การปลุกใช้เวลานาฬิกาเท่านั้น ไม่ผูกกับ stage
+- v1 ใช้เป็น Admin candidate/context สำหรับเทียบ Baseline ตัวเองและ
+  สร้างคำแนะนำเชิง advisory; ไม่เปลี่ยน Sleep State โดยตรง
+- ห้ามนำผลไปสั่งอุปกรณ์แบบ real-time; ขอบเขต v1 อยู่ที่
+  docs/adaptive-control-recommendation-plan-v1.md และการปลุกใช้เวลานาฬิกาเท่านั้น
 - ทุกค่าเป็น proxy จาก BCG (ไม่มี EEG) — measure, not promise
 """
 
@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 
 from sleep_system_policy import (
     NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
+    PERSONAL_BASELINE_DETAIL_SCAN_PER_COHORT,
     PERSONAL_BASELINE_LEARNING_START_LOCAL_DATE,
     PERSONAL_BASELINE_LEARNING_START_TIMEZONE,
     PERSONAL_BASELINE_LEARNING_START_UTC,
@@ -67,6 +68,50 @@ MAX_NIGHTS = PERSONAL_BASELINE_MAX_NIGHTS
 MIN_SESSION_SECONDS = PERSONAL_BASELINE_MIN_SESSION_SECONDS
 MIN_DETECTED_SLEEP_SECONDS = PERSONAL_BASELINE_MIN_DETECTED_SLEEP_SECONDS
 MIN_HR_SAMPLES = PERSONAL_BASELINE_MIN_HR_SAMPLES
+
+
+def _row_value(row: Any, key: str) -> Any:
+    """Read a sqlite Row or mapping without changing database adapters."""
+    return row.get(key) if hasattr(row, "get") else row[key]
+
+
+def _baseline_detail_cohort(row: Any) -> str | None:
+    """Return the canonical Mode/Target bucket used before detail reads."""
+    mode = _row_value(row, "rest_mode")
+    group = rest_mode_group(mode)
+    if group == "sleep":
+        return "sleep"
+    if group != "nap_recovery":
+        # Older rows may have no canonical mode in Session metadata while the
+        # reviewed final report carries it. Inspect a bounded unknown cohort;
+        # _behaviour_metrics still performs the authoritative mode/score check.
+        return "unresolved"
+    target = resolve_rest_target(
+        group,
+        _row_value(row, "target_duration_s"),
+    )
+    target_key = (
+        str(target.get("key"))
+        if target.get("available") is True and target.get("valid") is True
+        else "unverified"
+    )
+    return f"nap_recovery:{target_key}"
+
+
+def _bounded_baseline_detail_rows(sessions: list[Any]) -> list[Any]:
+    """Keep newest detail candidates per cohort with a deterministic bound."""
+    selected = []
+    counts: dict[str, int] = {}
+    for row in sessions:
+        cohort = _baseline_detail_cohort(row)
+        if cohort is None:
+            continue
+        count = counts.get(cohort, 0)
+        if count >= PERSONAL_BASELINE_DETAIL_SCAN_PER_COHORT:
+            continue
+        counts[cohort] = count + 1
+        selected.append(row)
+    return selected
 
 
 def _clip(value: float, lo: float, hi: float) -> float:
@@ -477,14 +522,9 @@ class BaselineStore:
             else str(mode or "auto")
         )
         metrics["rest_mode"] = resolved_mode
-        metrics["mode_group"] = (
-            str(mode.get("group"))
+        metrics["mode_group"] = rest_mode_group(
+            mode.get("group")
             if isinstance(mode, dict) and mode.get("group")
-            else "sleep"
-            if resolved_mode in {"sleep", "overnight"}
-            else "nap_recovery"
-            if resolved_mode
-            in {"short_nap", "cycle_nap", "nap", "nap_recovery", "shift_rest"}
             else resolved_mode
         )
         # รอบการนอน: ประมาณจากช่วงเวลาระหว่างจุดเริ่ม REM ที่ต่อเนื่องกัน
@@ -632,6 +672,7 @@ class BaselineStore:
             "FROM timeline WHERE session_id=? ORDER BY timestamp",
             (session_id,),
         )
+
         def median_field(name: str) -> Optional[float]:
             values = [float(row[name]) for row in timeline if row[name] is not None]
             return round(statistics.median(values), 2) if values else None
@@ -691,8 +732,7 @@ class BaselineStore:
             "score_formula_version": str(quality.get("formula_version") or "").strip(),
             "score_confidence_level": score_confidence_level,
             "baseline_reference_eligible": score_confidence_level != "low",
-            "outcome_reference_eligible": score_confidence_level
-            in {"medium", "high"},
+            "outcome_reference_eligible": score_confidence_level in {"medium", "high"},
             "environment_reference_eligible": score_confidence_level
             in {"medium", "high"},
             "temp_median": median_field("temperature"),
@@ -719,13 +759,17 @@ class BaselineStore:
             raise ValueError("username_key is required for Baseline rebuild")
         account_keys = self._account_keys_for(canonical_key)
         placeholders = ",".join("?" for _key in account_keys)
+        # Read lightweight metadata once, partition it by canonical Mode and
+        # Nap target, then cap expensive report/timeline reads per cohort. A
+        # busy Overnight history cannot hide Nap 30/90, and rebuild cost no
+        # longer grows without bound as an account accumulates Sessions.
         sessions = self.database.read_sessions(
             "SELECT session_id,duration,start_time,rest_mode,target_duration_s "
             "FROM sessions "
             f"WHERE lower(trim(username_key)) IN ({placeholders}) "
             "AND end_time IS NOT NULL AND duration>=? "
             "AND julianday(start_time)>=julianday(?) "
-            "ORDER BY julianday(start_time) DESC LIMIT ?",
+            "ORDER BY julianday(start_time) DESC",
             (
                 *account_keys,
                 min(
@@ -733,37 +777,33 @@ class BaselineStore:
                     NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
                 ),
                 PERSONAL_BASELINE_LEARNING_START_UTC,
-                RESTORE_TREND_MAX_SESSIONS * 4,
             ),
         )
+        detail_sessions = _bounded_baseline_detail_rows(list(sessions))
         nights = []
         behaviour_sessions = []
-        for row in sessions:
-            row_mode = row.get("rest_mode") if hasattr(row, "get") else row["rest_mode"]
+        for row in detail_sessions:
+            row_mode = _row_value(row, "rest_mode")
             behaviour = self._behaviour_metrics(
                 row["session_id"],
                 row["duration"],
                 row_mode,
-                (
-                    row.get("target_duration_s")
-                    if hasattr(row, "get")
-                    else row["target_duration_s"]
-                ),
-                row.get("start_time") if hasattr(row, "get") else row["start_time"],
+                _row_value(row, "target_duration_s"),
+                _row_value(row, "start_time"),
             )
             if behaviour:
                 behaviour_sessions.append(behaviour)
             duration = max(0.0, float(row["duration"] or 0.0))
             m = (
                 self._night_metrics(row["session_id"], row_mode)
-                if duration >= MIN_SESSION_SECONDS
+                if duration >= MIN_SESSION_SECONDS and len(nights) < MAX_NIGHTS
                 else None
             )
             if m:
                 m["session_id"] = row["session_id"]
                 m["duration_s"] = round(duration, 1)
                 nights.append(m)
-        physiology_nights = nights[:MAX_NIGHTS]
+        physiology_nights = nights
         record: dict[str, Any] = {
             "policy_version": ZEEP_SLEEP_BASELINE_VERSION,
             "behaviour_policy_version": PERSONAL_BEHAVIOUR_BASELINE_VERSION,
@@ -862,6 +902,8 @@ class BaselineStore:
                     record.get("policy_version") != ZEEP_SLEEP_BASELINE_VERSION
                     or record.get("behaviour_policy_version")
                     != PERSONAL_BEHAVIOUR_BASELINE_VERSION
+                    or record.get("rest_window_policy_version")
+                    != PERSONAL_REST_WINDOW_BASELINE_VERSION
                     or cutoff.get("utc") != PERSONAL_BASELINE_LEARNING_START_UTC
                 ):
                     continue
@@ -883,15 +925,8 @@ class BaselineStore:
     ) -> dict:
         """Return prior-only, same-mode behaviour without selecting a stage."""
         record = self.get(username_key) or {}
-        requested = str(rest_mode or "auto")
-        group = (
-            "sleep"
-            if requested in {"sleep", "overnight"}
-            else "nap_recovery"
-            if requested
-            in {"short_nap", "cycle_nap", "nap", "nap_recovery", "shift_rest"}
-            else requested
-        )
+        requested = str(rest_mode or "auto").strip().lower()
+        group = rest_mode_group(requested) or requested
         grouped = record.get("behaviour_by_mode")
         stored = grouped.get(group) if isinstance(grouped, dict) else None
         context = dict(stored) if isinstance(stored, dict) else {}

@@ -124,9 +124,16 @@
       <div class="pilot-welcome"><b>ยินดีต้อนรับสู่การทดสอบใช้งาน ZEEP</b><span>เลือกรูปแบบการพัก 1 แบบก่อนเริ่ม</span></div>
       <div class="muted">รูปแบบการทดสอบ</div>
       <select id="loginRestMode" onchange="renderRestModeHint()">
-        <option value="nap_recovery">Nap &amp; Refresh · ประมาณ 30 นาที</option>
+        <option value="nap_recovery">Nap &amp; Refresh · พักระหว่างวัน</option>
         <option value="sleep">Overnight Recovery · พักค้างคืน</option>
       </select>
+      <div id="loginNapTargetBlock" class="login-nap-target">
+        <label class="muted" for="loginNapTarget">เวลาพักเป้าหมาย</label>
+        <select id="loginNapTarget" onchange="renderRestModeHint()" aria-label="เวลาพักเป้าหมายสำหรับ Nap &amp; Refresh">
+          <option value="30" selected>30 นาที</option>
+          <option value="90">90 นาที</option>
+        </select>
+      </div>
       <div class="mini" id="loginRestModeHint">พักระหว่างวัน จะหลับ พักสายตา หรือทำสมาธิก็ได้</div>
       <details class="pilot-steps">
         <summary>ขั้นตอนก่อน–หลังการทดสอบ</summary>
@@ -319,16 +326,12 @@
   <div class="grid">
     <section class="card dashboard-overview" id="dashboardOverview" data-pages="dashboard" aria-label="สุขภาพผู้ใช้งานและ Sensor">
       <div class="tablet-deck-head">
-        <h3>สุขภาพและสภาพแวดล้อม</h3>
+        <h3>ข้อมูลล่าสุด</h3>
         <div class="dash-clock" role="timer" aria-label="เวลาปัจจุบันและเขตเวลาที่ใช้">
           <span class="dash-clock-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg></span>
           <span class="dash-clock-copy"><b id="dashClockTime">--:--:--</b><small id="dashClockDate">กำลังอ่านเวลา</small></span>
           <em id="dashClockZone">Timezone --</em>
         </div>
-      </div>
-      <div class="dash-user-head">
-        <div class="dash-user-main"><div class="dash-avatar" id="dashAvatar">Z</div><div><h3 id="dashUserName">ยังไม่เริ่ม Session</h3><p id="dashUserMeta">เลือกผู้ใช้งานเพื่อเริ่มติดตามสุขภาพและสภาพแวดล้อม</p></div></div>
-        <div class="dash-session-badge" id="dashSessionBadge">ยังไม่เริ่ม</div>
       </div>
       <section class="dash-profile-reference idle" id="dashProfileReference" aria-label="ข้อมูลอ้างอิงสุขภาพของผู้ใช้งาน">
         <div class="dash-profile-reference-head"><b>ข้อมูลสำหรับคำแนะนำของคุณ</b><small id="dashProfileSource">ข้อมูลจาก Profile ช่วยให้คำแนะนำเหมาะกับคุณมากขึ้น</small></div>
@@ -357,11 +360,7 @@
             <p id="dashPersonalRestAdvice">เมื่อกลับมาใช้ครั้งที่ 2 ZEEP จะเริ่มแนะนำช่วงเวลาที่เหมาะกับคุณ</p>
           </div>
         </div>
-        <div class="dash-personal-rest-environment" id="dashPersonalRestEnvironment" hidden>
-          <small>ค่าที่บันทึกได้ในช่วงพักนี้</small>
-          <div id="dashPersonalRestEnvironmentValues"></div>
-        </div>
-        <small class="dash-personal-rest-guardrail" id="dashPersonalRestGuardrail">ใช้เพื่อแนะนำเท่านั้น · ระบบจะให้คุณยืนยันก่อนปรับอุปกรณ์</small>
+        <small class="dash-personal-rest-guardrail" id="dashPersonalRestGuardrail">คำแนะนำส่วนบุคคล · คุณยืนยันก่อนปรับอุปกรณ์</small>
       </section>
       <div class="dashboard-zone-grid">
         <section class="dashboard-zone dashboard-health-zone" aria-label="สุขภาพผู้ใช้งาน">
@@ -392,38 +391,35 @@
           </div>
         </section>
       </div>
-      <section class="admin-sleep-baseline" id="dashSleepBaseline" data-admin-panel aria-label="Baseline ของสถานะการนอนทั้ง 5 ระดับ">
-        <div class="admin-sleep-baseline-head">
-          <div><span class="admin-sleep-baseline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 15.5A8 8 0 0 1 9 4.5 8.5 8.5 0 1 0 20 15.5Z"/><path d="M4 20h16M7 17v3m10-3v3"/></svg></span><div><b>Baseline สถานะการนอน</b><small>หลักฐาน 30 วินาที · สถานะยืนยันเมื่อแนวโน้มต่อเนื่อง 60 วินาที</small></div></div>
-          <span id="dashSleepBaselineSource">Age + Gender Baseline</span>
+      <div class="dash-foot"><span class="dash-foot-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></svg></span><span id="dashHealthNote">ข้อมูลช่วยดูแนวโน้มระหว่างพัก · ไม่ใช่การวินิจฉัย</span></div>
+    </section>
+
+    <section class="card admin-sleep-baseline monitor-analysis-card" id="dashSleepBaseline" data-pages="monitor" data-admin-panel aria-label="Baseline ของสถานะการนอนทั้ง 5 ระดับ">
+      <div class="admin-sleep-baseline-head">
+        <div><span class="admin-sleep-baseline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 15.5A8 8 0 0 1 9 4.5 8.5 8.5 0 1 0 20 15.5Z"/><path d="M4 20h16M7 17v3m10-3v3"/></svg></span><div><b>Baseline สถานะการนอน</b><small>หลักฐาน 30 วินาที · ยืนยันเมื่อแนวโน้มต่อเนื่อง 60 วินาที</small></div></div>
+        <span id="dashSleepBaselineSource">Age + Gender Baseline</span>
+      </div>
+      <div class="admin-sleep-baseline-grid" id="dashSleepBaselineGrid"><div class="admin-sleep-baseline-empty">กำลังรอข้อมูล Baseline</div></div>
+      <div class="admin-sleep-baseline-foot"><span id="dashSleepBaselineProgress">Sensor 10 วิ · Evidence 30 วิ · Confirm 60 วิ</span><span id="dashSleepBaselinePolicy">หลักฐานและสถานะยืนยันแยกจากกัน · ไม่ใช่ผล PSG</span></div>
+    </section>
+    <section class="card admin-live-explanation monitor-analysis-card" id="adminLiveExplanation" data-pages="monitor" data-admin-panel aria-label="สรุปสิ่งที่ต้องติดตามสำหรับผู้ดูแลระบบ">
+      <div class="admin-live-explanation-head">
+        <div class="admin-live-explanation-identity">
+          <span class="admin-live-explanation-icon" aria-hidden="true"><i></i><svg viewBox="0 0 24 24"><path d="M4 18V9m6 9V5m6 13v-7m4 7V3"/><path d="M3 21h18"/></svg></span>
+          <div><em>INSIGHTS &amp; ACTIONS</em><b>สรุปสิ่งที่ต้องติดตาม</b><small>แสดงความหมายและข้อสังเกตสำหรับ Admin</small></div>
         </div>
-        <div class="admin-sleep-baseline-grid" id="dashSleepBaselineGrid"><div class="admin-sleep-baseline-empty">กำลังรอข้อมูล Baseline</div></div>
-        <div class="admin-sleep-baseline-foot"><span id="dashSleepBaselineProgress">Sensor 10 วิ · Evidence 30 วิ · Confirm 60 วิ</span><span id="dashSleepBaselinePolicy">หลักฐานและสถานะยืนยันแยกจากกัน · ไม่ใช่ผล PSG</span></div>
-      </section>
-      <section class="admin-live-explanation" id="adminLiveExplanation" data-admin-panel aria-label="สรุปสิ่งที่ต้องติดตามสำหรับผู้ดูแลระบบ">
-        <div class="admin-live-explanation-head">
-          <div class="admin-live-explanation-identity">
-            <span class="admin-live-explanation-icon" aria-hidden="true"><i></i><svg viewBox="0 0 24 24"><path d="M4 18V9m6 9V5m6 13v-7m4 7V3"/><path d="M3 21h18"/></svg></span>
-            <div><em>INSIGHTS &amp; ACTIONS</em><b>สรุปสิ่งที่ต้องติดตาม</b><small>ค่าปัจจุบันอยู่ด้านบน · ส่วนนี้แสดงความหมายและข้อสังเกต</small></div>
-          </div>
-          <div class="admin-live-explanation-context" aria-label="ค่าจริง · เทียบ Baseline และเกณฑ์ของโหมด">
-            <div class="admin-live-explanation-basis"><span><i></i>ค่าปัจจุบัน</span><span>Baseline</span><span>เกณฑ์โหมด</span></div>
-            <strong id="adminExplanationMode">กำลังรอโหมด</strong>
-          </div>
+        <div class="admin-live-explanation-context" aria-label="ค่าจริง · เทียบ Baseline และเกณฑ์ของโหมด">
+          <div class="admin-live-explanation-basis"><span><i></i>ค่าปัจจุบัน</span><span>Baseline</span><span>เกณฑ์โหมด</span></div>
+          <strong id="adminExplanationMode">กำลังรอโหมด</strong>
         </div>
-        <div class="admin-live-explanation-grid">
-          <article class="admin-live-explanation-group admin-live-explanation-bio" aria-labelledby="adminBioExplanationTitle">
-            <div class="admin-live-explanation-group-head"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h4l2-4 4 9 2-5h6"/><path d="M12 21C5 17 3 13 3 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 9 2.5c0 3.5-2 7.5-9 11.5Z"/></svg></span><div><h4 id="adminBioExplanationTitle">สัญญาณชีพและการนอน</h4><small>แสดงความหมายของสถานะและค่าที่อยู่นอก Baseline</small></div><em>BIOMETRIC</em></div>
-            <div class="admin-live-explanation-list" id="adminBioExplanation"><div class="admin-live-explanation-empty">กำลังรอข้อมูล BCG, HR และ RR</div></div>
-          </article>
-          <article class="admin-live-explanation-group admin-live-explanation-environment" aria-labelledby="adminEnvironmentExplanationTitle">
-            <div class="admin-live-explanation-group-head"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8c4-4 8 4 12 0 2-2 3-2 4-2M4 13c4-4 8 4 12 0 2-2 3-2 4-2M4 18c4-4 8 4 12 0 2-2 3-2 4-2"/></svg></span><div><h4 id="adminEnvironmentExplanationTitle">สภาพแวดล้อมภายใน ZEEP</h4><small>สรุปภาพรวมเดียว · รายละเอียดค่าดูจากการ์ด Sensor ด้านบน</small></div><em>ENVIRONMENT</em></div>
-            <div class="admin-live-explanation-list environment" id="adminEnvironmentExplanation"><div class="admin-live-explanation-empty">กำลังรอข้อมูล Sensor</div></div>
-          </article>
-        </div>
-        <div class="admin-live-explanation-note"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></svg></span><div><b>WELLNESS INTERPRETATION</b><small>ใช้ติดตามแนวโน้มและตรวจระบบ · Sleep Stage เป็นค่าประเมินจาก BCG/HR/RR ไม่ใช่ผลยืนยันจาก PSG · Sensor ที่ไม่ Live จะไม่ถูกตีความ</small></div></div>
-      </section>
-      <div class="dash-foot"><span class="dash-foot-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></svg></span><span id="dashHealthNote">ข้อมูลจาก Sensor ใช้ติดตามแนวโน้มการนอน</span></div>
+      </div>
+      <div class="admin-live-explanation-grid single">
+        <article class="admin-live-explanation-group admin-live-explanation-bio" aria-labelledby="adminBioExplanationTitle">
+          <div class="admin-live-explanation-group-head"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h4l2-4 4 9 2-5h6"/><path d="M12 21C5 17 3 13 3 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 9 2.5c0 3.5-2 7.5-9 11.5Z"/></svg></span><div><h4 id="adminBioExplanationTitle">สัญญาณชีพและการนอน</h4><small>ความหมายของสถานะและค่าที่อยู่นอก Baseline</small></div><em>BIOMETRIC</em></div>
+          <div class="admin-live-explanation-list" id="adminBioExplanation"><div class="admin-live-explanation-empty">กำลังรอข้อมูล BCG, HR และ RR</div></div>
+        </article>
+      </div>
+      <div class="admin-live-explanation-note"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></svg></span><div><b>WELLNESS INTERPRETATION</b><small>ใช้ดูแนวโน้มและตรวจระบบ · Sleep Stage เป็นค่าประเมินจาก BCG/HR/RR ไม่ใช่ผล PSG</small></div></div>
     </section>
 
     <section class="card unified-control" id="unifiedControlCard" data-pages="control" aria-label="ศูนย์ควบคุมอุปกรณ์ทั้งหมด">
@@ -647,7 +643,7 @@
         </details>
       </div>
     </section>
-    <section class="card admin-atmosphere-card" id="adminAtmosphereCard" data-pages="dashboard" data-admin-panel aria-label="แผนปรับสภาพแวดล้อมสำหรับผู้ดูแลระบบ">
+    <section class="card admin-atmosphere-card" id="adminAtmosphereCard" data-pages="monitor" data-admin-panel aria-label="แผนปรับสภาพแวดล้อมสำหรับผู้ดูแลระบบ">
       <div class="admin-atmosphere-head">
         <div><div class="section-title">แผนปรับสภาพแวดล้อม</div><p>พอใช้ขึ้นไปถือว่าผ่านขั้นต่ำ · แสดงเฉพาะจุดที่ควรดูแลหรือปรับเพิ่ม · เกณฑ์ฉบับเต็มเปิดดูได้ด้านล่าง</p></div>
         <div class="admin-atmosphere-summary atmosphere-unknown" id="adminAtmosphereSummary"><span id="adminAtmosphereIcon">?</span><div><b id="adminAtmosphereLevel">รอข้อมูล</b><small id="adminAtmosphereCoverage">Sensor 0/7 เกณฑ์</small></div></div>
@@ -1081,43 +1077,46 @@
         <span class="history-self-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-history"/></svg></span>
         <div><b id="historyOwnerTitle">ประวัติการใช้งานของฉัน</b><small>เลือก Overnight Recovery หรือ Nap & Refresh เพื่อดูผลย้อนหลัง</small></div>
       </div>
-      <div id="historyToolbar" class="history-filter-panel" aria-label="ตัวกรองประวัติการใช้งาน">
-        <div class="history-filter-group history-date-group">
-          <button class="history-day-step" type="button" onclick="shiftHistoryRange(-1)" aria-label="เลื่อนช่วงวันย้อนหลัง"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-previous"/></svg></button>
-          <label><span>จากวันที่</span><input id="historyDateFrom" type="date" onchange="refreshHistory()"></label>
-          <label><span>ถึงวันที่</span><input id="historyDateTo" type="date" onchange="refreshHistory()"></label>
-          <button class="history-today-button" type="button" onclick="setHistoryToday()">วันนี้</button>
-          <button class="history-day-step" type="button" onclick="shiftHistoryRange(1)" aria-label="เลื่อนช่วงวันถัดไป"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-next"/></svg></button>
+      <section class="history-section history-filter-section" aria-labelledby="historyFilterTitle">
+        <div class="history-section-head"><div><h4 id="historyFilterTitle">เลือกช่วงเวลา</h4><small>เลือกวัน เวลา และผู้ใช้งานที่ต้องการดู</small></div></div>
+        <div id="historyToolbar" class="history-filter-panel" aria-label="ตัวกรองประวัติการใช้งาน">
+          <div class="history-filter-group history-date-group">
+            <button class="history-day-step" type="button" onclick="shiftHistoryRange(-1)" aria-label="เลื่อนช่วงวันย้อนหลัง"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-previous"/></svg></button>
+            <label><span>จากวันที่</span><input id="historyDateFrom" type="date"></label>
+            <label><span>ถึงวันที่</span><input id="historyDateTo" type="date"></label>
+            <button class="history-today-button" type="button" onclick="setHistoryToday()">วันนี้</button>
+            <button class="history-day-step" type="button" onclick="shiftHistoryRange(1)" aria-label="เลื่อนช่วงวันถัดไป"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-next"/></svg></button>
+          </div>
+          <div class="history-filter-group history-time-group">
+            <label><span>เวลาเริ่ม</span><input id="historyTimeFrom" type="time" value="00:00"></label>
+            <label><span>เวลาสิ้นสุด</span><input id="historyTimeTo" type="time" value="23:59"></label>
+          </div>
+          <div class="history-filter-group history-admin-filter admin-only">
+            <label class="history-name-search"><span>ค้นหาชื่อหรืออีเมล</span><input id="historyNameFilter" type="search" placeholder="ทุกคน" onkeydown="if(event.key==='Enter')refreshHistory()"></label>
+            <label class="history-person-select"><span>เลือกผู้ใช้งาน</span><select id="historyUser" aria-label="เลือกผู้ใช้ เรียงจาก Session ล่าสุด" title="เรียงจาก Session ล่าสุด"></select></label>
+          </div>
+          <div class="history-filter-actions">
+            <button class="btn ui-label-button" onclick="refreshHistory(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-refresh"/></svg><span>ค้นหา</span></button>
+            <button class="btn danger admin-only ui-label-button" onclick="deleteUser(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-trash"/></svg><span>ลบผู้ใช้</span></button>
+          </div>
         </div>
-        <div class="history-filter-group history-time-group">
-          <label><span>เวลาเริ่ม</span><input id="historyTimeFrom" type="time" value="00:00" onchange="refreshHistory()"></label>
-          <label><span>เวลาสิ้นสุด</span><input id="historyTimeTo" type="time" value="23:59" onchange="refreshHistory()"></label>
-        </div>
-        <div class="history-filter-group history-admin-filter admin-only">
-          <label class="history-name-search"><span>ค้นหาชื่อหรืออีเมล</span><input id="historyNameFilter" type="search" placeholder="ทุกคน" onkeydown="if(event.key==='Enter')refreshHistory()"></label>
-          <label class="history-person-select"><span>เลือกผู้ใช้งาน</span><select id="historyUser" aria-label="เลือกผู้ใช้ เรียงจาก Session ล่าสุด" title="เรียงจาก Session ล่าสุด" onchange="refreshHistory()"></select></label>
-        </div>
-        <div class="history-filter-actions">
-          <button class="btn ui-label-button" onclick="refreshHistory(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-refresh"/></svg><span>แสดงผล</span></button>
-          <button class="btn danger admin-only ui-label-button" onclick="deleteUser(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-trash"/></svg><span>ลบผู้ใช้</span></button>
-        </div>
-      </div>
-      <section id="historySummary" class="history-summary" aria-live="polite"><div class="mini">กำลังสรุปข้อมูลวันนี้…</div></section>
-      <section id="historyUserJourney" class="history-user-journey" aria-live="polite"></section>
-      <div id="historyParticipants" class="history-participants" aria-live="polite"></div>
-      <details class="stage-guide">
-        <summary>ความหมาย Sleep Stages สำหรับ Overnight</summary>
-        <div class="stage-guide-grid">
-          <div><b>W</b><strong>ตื่น</strong><span>ช่วงที่ระบบประเมินว่ายังตื่นหรือกลับเข้าสู่สถานะตื่น</span></div>
-          <div><b>N1</b><strong>หลับตื้น / เคลิ้มหลับ</strong><span>เริ่มเข้าสู่การนอน ร่างกายผ่อนคลาย และปลุกให้ตื่นได้ง่าย</span></div>
-          <div><b>N2</b><strong>หลับสนิทขึ้น / หลับตื้นต่อเนื่อง</strong><span>หัวใจและการหายใจช้าลง ร่างกายเข้าสู่การนอนที่ต่อเนื่องขึ้น</span></div>
-          <div><b>N3</b><strong>หลับลึก</strong><span>ช่วงหลับลึกที่ร่างกายได้พักอย่างต่อเนื่อง</span></div>
-          <div><b>REM</b><strong>ระยะ REM / หลับฝัน</strong><span>ช่วงหลับที่สมองยังทำงานมากขึ้นและมักมีความฝัน</span></div>
-        </div>
-        <div class="stage-guide-note">Sleep Stage เป็นค่าประเมินแนวโน้มจากข้อมูลที่ ZEEP บันทึกได้ โดย ZEEP ไม่ได้วัดการฟื้นตัวของร่างกาย ความฝัน หรือความจำโดยตรง</div>
+      </section>
+      <section class="history-section history-summary-section" aria-labelledby="historySummaryTitle">
+        <div class="history-section-head"><div><h4 id="historySummaryTitle">สรุปช่วงที่เลือก</h4><small>แยก Sleep Score และ Recovery Score ตามรูปแบบการพัก</small></div></div>
+        <div id="historySummary" class="history-summary" aria-live="polite"><div class="mini">กำลังสรุปข้อมูลวันนี้…</div></div>
+      </section>
+      <section class="history-section history-list-section" aria-labelledby="historyListTitle">
+        <div class="history-section-head"><div><h4 id="historyListTitle">รายการการพัก</h4><small>เลือกรายการเพื่อดูผลและ Timeline</small></div></div>
+        <div id="sessionList" class="hist-list"><div class="mini">กำลังโหลดประวัติการใช้งาน…</div></div>
+      </section>
+      <details class="history-section history-journey-panel">
+        <summary><span><b>แนวโน้มการพักที่ผ่านมา</b><small>รวม Overnight Recovery และ Nap &amp; Refresh ของคนเดียวกัน</small></span></summary>
+        <div id="historyUserJourney" class="history-user-journey" aria-live="polite"></div>
       </details>
-      <div id="sessionList" class="hist-list"><div class="mini">กำลังโหลดประวัติการใช้งาน…</div></div>
-      <div id="sessionDetail"></div>
+      <section class="history-section history-detail-section" aria-labelledby="historyDetailTitle">
+        <div class="history-section-head"><div><h4 id="historyDetailTitle">ผลรายการที่เลือก</h4><small>สรุปเชิงสุขภาพก่อน แล้วจึงเปิดดูรายละเอียดได้</small></div></div>
+        <div id="sessionDetail"><div class="history-empty"><b>เลือกรายการการพัก</b><span>ผลสรุปจะแสดงในส่วนนี้</span></div></div>
+      </section>
     </div>
   </div>
 </div>

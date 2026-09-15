@@ -831,6 +831,31 @@ class SessionResultContractTests(unittest.TestCase):
         self.assertIsNone(result["score"]["value"])
         self.assertFalse(result["score"]["clinical_validated"])
 
+    def test_stored_true_cannot_promote_a_wellness_score_to_clinical(self) -> None:
+        result = build_result_contract(
+            {
+                "ended_at_utc": "2026-09-11T00:00:00+00:00",
+                "rest_mode": "sleep",
+                "target_duration_s": 25_200,
+                "sleep_quality": {
+                    "available": True,
+                    "score": 88,
+                    "quality_type": "sleep",
+                    "score_title": "Sleep Score",
+                    "formula_version": SLEEP_SCORE_FORMULA_VERSION,
+                    "duration_target": {
+                        "key": "overnight_7h",
+                        "seconds": 25_200,
+                    },
+                    "clinical_validated": True,
+                },
+            }
+        )
+
+        self.assertTrue(result["score"]["available"])
+        self.assertEqual(result["score"]["value"], 88.0)
+        self.assertFalse(result["score"]["clinical_validated"])
+
     def test_score_identity_provenance_never_relabels_between_modes(self) -> None:
         cases = (
             (

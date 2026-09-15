@@ -4,6 +4,7 @@ logs/
 test-results/
 data/
 backup/
+private-data/
 # ad-hoc device-side backups/deploy staging — keep out of the repo (มีสำเนาในก้อน backup ประจำวันแล้ว)
 *.backup-*
 *.bak-*

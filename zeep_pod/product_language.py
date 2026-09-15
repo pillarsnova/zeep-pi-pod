@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-PRODUCT_LANGUAGE_VERSION = "zeep-product-language-v1.0"
+PRODUCT_LANGUAGE_VERSION = "zeep-product-language-v1.1"
 
 USER_SCORE_LEVELS = {
     "very_good": "ดีมาก",

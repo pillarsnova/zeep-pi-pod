@@ -1915,25 +1915,26 @@ class RbacApiTests(unittest.TestCase):
         self.assertIn("ข้อมูลจากบัญชีช่วยให้คำแนะนำเหมาะกับคุณมากขึ้น", ui)
         self.assertIn("เติมข้อมูลที่ยังว่างได้ในแอป", ui)
 
-    def test_admin_dashboard_adds_insight_without_repeating_every_live_value(
+    def test_admin_monitor_adds_insight_without_repeating_every_live_value(
         self,
     ) -> None:
-        """Admin gets actionable context while the current-value cards stay canonical."""
+        """Monitor owns technical context while Dashboard values stay canonical."""
         ui = (Path(__file__).resolve().parent / "static" / "index.html").read_text(
             encoding="utf-8"
         )
         css = (
             Path(__file__).resolve().parent / "static" / "theme-modern.css"
         ).read_text(encoding="utf-8")
-        self.assertIn('id="adminLiveExplanation" data-admin-panel', ui)
+        self.assertIn('id="adminLiveExplanation" data-pages="monitor"', ui)
         self.assertIn('id="adminBioExplanation"', ui)
-        self.assertIn('id="adminEnvironmentExplanation"', ui)
+        self.assertNotIn('id="adminEnvironmentExplanation"', ui)
+        self.assertEqual(ui.count('id="adminAtmosphereCard"'), 1)
         self.assertIn("function renderAdminLiveExplanation", ui)
         self.assertIn("adminBaselineComparison(hr,baseline.hr", ui)
         self.assertIn("adminBaselineComparison(rr,baseline.rr", ui)
         self.assertIn("rawHr!==null", ui)
         self.assertIn("rawRr!==null", ui)
-        self.assertIn("Sleep Stage เป็นค่าประเมินจาก BCG/HR/RR ไม่ใช่ผลยืนยันจาก PSG", ui)
+        self.assertIn("Sleep Stage เป็นค่าประเมินจาก BCG/HR/RR ไม่ใช่ผล PSG", ui)
         self.assertIn("SGP40 เป็น Adaptive VOC Index แบบสัมพัทธ์", ui)
         self.assertIn("ไม่ใช่เครื่องวัดเสียง Class 1", ui)
         self.assertIn("ค่าจริง · เทียบ Baseline และเกณฑ์ของโหมด", ui)
@@ -1942,9 +1943,7 @@ class RbacApiTests(unittest.TestCase):
         self.assertIn("INSIGHTS &amp; ACTIONS", ui)
         self.assertIn("Data-quality gate ยังไม่ครบ", ui)
         self.assertIn("สอดคล้องกับโมเดล", ui)
-        self.assertIn(
-            "environmentRoot.innerHTML=evaluations.length?adminExplanationRow", ui
-        )
+        self.assertNotIn("environmentRoot.innerHTML", ui)
         self.assertIn('<details class="admin-atmosphere-reference">', ui)
         self.assertIn("const actionRows=optimisationActions.map", ui)
         self.assertIn(".admin-atmosphere-reference-grid", css)

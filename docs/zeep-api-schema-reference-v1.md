@@ -211,7 +211,7 @@ observation ต้นทาง ไม่ใช่คำรับรองผล�
 
 | Field | Type | Nullable | ค่า/กฎ |
 |---|---|---|---|
-| `version` | `literal<string>` | ไม่ได้ | `zeep-personal-rest-window-v1.0` |
+| `version` | `literal<string>` | ไม่ได้ | `zeep-personal-rest-window-v1.2-bounded-partitioned-finite` |
 | `available` | `boolean` | ไม่ได้ | `true` เมื่อมี prior completed same-mode/current-formula observation; Nap ต้อง same-target ด้วย |
 | `status` | `enum<string>` | ไม่ได้ | `no_data`, `observed_once`, `learning`, `early`, `active`, `stable` |
 | `maturity_confidence` | `enum<string>` | ไม่ได้ | `none`, `low`, `medium`, `high`; 1 Session เป็น `low` |
@@ -771,6 +771,10 @@ direct_confirmed_s + continuity_carried_forward_s + off_bed_s = recording_s
 score_eligible_s = recording_s - off_bed_s
 ```
 
+`score_eligible_s` หมายถึงเวลาที่ผูกกับ W/N1/N2/N3/REM โดยตรง ไม่ได้หมายความ
+ว่า OFF BED ไม่มีผลต่อคะแนน: Sleep Score ใช้ OFF BED หลัง sleep onset ประกอบ
+continuity และ Recovery Score ใช้ presence/bed exits ประกอบ rest continuity
+
 `report.sleep.actual_scored_s` เท่ากับ `classification_accounting.score_eligible_s`
 ใน report รุ่นปัจจุบัน ส่วน `report.stages[]` ส่งทั้งค่าที่ใช้แสดงและค่าที่ใช้
 คิดคะแนนแยกกัน:
@@ -793,7 +797,8 @@ W/N1/N2/N3/REM (รวม continuity carry) ส่วน `physiological_evidence
 Client ต้องใช้ค่าชุด `score_eligible_*` เมื่อต้องอธิบายฐานของคะแนน และใช้
 `duration_s`/`pct_scored` เมื่อต้องแสดง Timeline เท่านั้น `WAIT` ใช้เฉพาะก่อน
 Recording, `NO DATA` เป็น QA/legacy label ไม่ใช่ State, และ `OFF BED` เป็นข้อยกเว้น
-เดียวที่ไม่เข้าคะแนน ห้ามสร้าง bucket `Unclassified`; provisional/missing/stale/
+เดียวที่ไม่เข้า Stage ratio แต่ยังมีผลต่อ continuity/presence ของคะแนน ห้ามสร้าง
+bucket `Unclassified`; provisional/missing/stale/
 restart carry ต้องยังแสดง State ก่อนหน้าและเข้าคะแนน แต่ต้องมี low-confidence และ
 `excluded_from_personal_baseline=true`
 
@@ -897,7 +902,7 @@ engineering shadow score
         "min_score": 70,
         "max_score": 84,
         "meaning": "เวลา ความต่อเนื่อง และรูปแบบการนอนที่ประเมินได้อยู่ในระดับดี",
-        "version": "zeep-restore-action-bands-v1.0"
+        "version": "zeep-restore-action-bands-v1.1-observational-copy"
       },
       "session_scope": {
         "mode": "sleep",
@@ -955,7 +960,7 @@ engineering shadow score
       "recommendation": {
         "primary": "รักษารูปแบบที่ได้ผลและติดตามแนวโน้มจากหลายคืน",
         "source_driver_key": null,
-        "version": "zeep-restore-recommendation-v1.0",
+        "version": "zeep-restore-recommendation-v1.1-observational-copy",
         "one_action_only": true,
         "automatic_actuation": false,
         "medical_advice": false
@@ -1013,7 +1018,7 @@ engineering shadow score
       "score_formula": "zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10",
       "score_quality_model": "zeep-rest-quality-v8.10-minimum-only-score-release",
       "restore_summary": "zeep-restore-summary-v1.0",
-      "product_language": "zeep-product-language-v1.0"
+      "product_language": "zeep-product-language-v1.1"
     },
     "result_provenance": {
       "source": "persisted_final_summary",
@@ -1105,7 +1110,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
         "min_score": 70,
         "max_score": 84,
         "meaning": "ร่างกายได้หยุดพักอย่างต่อเนื่องในระดับดี",
-        "version": "zeep-restore-action-bands-v1.0"
+        "version": "zeep-restore-action-bands-v1.1-observational-copy"
       },
       "session_scope": {
         "mode": "nap_recovery",
@@ -1161,7 +1166,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       "recommendation": {
         "primary": "รักษารูปแบบการพักที่ได้ผลและบันทึกความรู้สึกหลังพัก",
         "source_driver_key": null,
-        "version": "zeep-restore-recommendation-v1.0",
+        "version": "zeep-restore-recommendation-v1.1-observational-copy",
         "one_action_only": true,
         "automatic_actuation": false,
         "medical_advice": false
@@ -1221,7 +1226,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       "score_formula": "zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10",
       "score_quality_model": "zeep-rest-quality-v8.10-minimum-only-score-release",
       "restore_summary": "zeep-restore-summary-v1.0",
-      "product_language": "zeep-product-language-v1.0"
+      "product_language": "zeep-product-language-v1.1"
     },
     "result_provenance": {
       "source": "persisted_final_summary",
@@ -1304,7 +1309,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
         "min_score": null,
         "max_score": null,
         "meaning": "เลือกรูปแบบการพักเพื่อให้ ZEEP แสดงผลได้เหมาะสม",
-        "version": "zeep-restore-action-bands-v1.0"
+        "version": "zeep-restore-action-bands-v1.1-observational-copy"
       },
       "session_scope": {
         "mode": "unknown",
@@ -1343,7 +1348,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       "recommendation": {
         "primary": "ระบุรูปแบบการพักและตรวจความพร้อมของ Sensor ก่อนครั้งถัดไป",
         "source_driver_key": null,
-        "version": "zeep-restore-recommendation-v1.0",
+        "version": "zeep-restore-recommendation-v1.1-observational-copy",
         "one_action_only": true,
         "automatic_actuation": false,
         "medical_advice": false
@@ -1397,7 +1402,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       "score_formula": null,
       "score_quality_model": null,
       "restore_summary": "zeep-restore-summary-v1.0",
-      "product_language": "zeep-product-language-v1.0"
+      "product_language": "zeep-product-language-v1.1"
     },
     "result_provenance": {
       "source": "persisted_final_summary",

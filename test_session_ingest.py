@@ -561,6 +561,36 @@ class IngestStageEncodingTests(unittest.TestCase):
             delta=0.1,
         )
 
+    def test_scoreable_provisional_continuity_is_preserved_for_account_ingest(
+        self,
+    ) -> None:
+        record, rows = build_record(
+            ["wake"] * 6 + ["n2"] * 6 + ["n2"] * 6,
+            10.0,
+        )
+        for row in rows[12:18]:
+            row.update(
+                {
+                    "sleep_provisional": True,
+                    "sleep_held_previous_state": True,
+                    "sleep_score_eligible": True,
+                    "sleep_excluded_from_score": False,
+                }
+            )
+
+        result = app._build_ingest_payload(record, rows)["record"]
+
+        self.assertEqual(
+            [segment["stage_name"] for segment in result["segments"]],
+            ["wake", "n2"],
+        )
+        self.assertEqual(result["segments"][1]["epochs"], 12)
+        self.assertAlmostEqual(
+            result["total_epochs"] * 10.0 / 60.0,
+            result["total_scored_minutes"],
+            delta=0.1,
+        )
+
 
 class IngestCadenceTests(unittest.TestCase):
     """epoch_seconds comes from the Session, never from a hardcoded cadence."""

@@ -355,6 +355,20 @@ class UsageResponseModelTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             _validate(UsageSessionDetail, payload)
 
+    def test_available_score_rejects_clinical_validation_claim(self):
+        payload = deepcopy(self.detail)
+        payload["score"]["clinical_validated"] = True
+
+        with self.assertRaises(ValidationError):
+            _validate(UsageSessionDetail, payload)
+
+    def test_public_quality_rejects_clinical_validation_claim(self):
+        quality = public_quality_payload(_sleep_quality())
+        quality["clinical_validated"] = True
+
+        with self.assertRaises(ValidationError):
+            _validate(PublicQuality, quality)
+
     def test_detail_rejects_report_mode_mismatch(self):
         payload = deepcopy(self.detail)
         payload["report"]["rest_mode"]["label"] = "Wrong mode label"

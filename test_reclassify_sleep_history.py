@@ -5,6 +5,7 @@ from reclassify_sleep_history import (
     RawBcgWindow,
     adjusted_probabilities,
     audit_replayed_sequence,
+    baseline_provenance,
 )
 
 
@@ -364,6 +365,22 @@ class ReplayAuditTests(unittest.TestCase):
         ])
         self.assertFalse(audit["apply_gate"]["passed"])
         self.assertEqual(audit["arousal_proxy_validation"]["missing_proxy_count"], 1)
+
+    def test_replay_reports_candidate_without_claiming_personal_classification(self):
+        provenance = baseline_provenance({"source": "personal"})
+
+        self.assertEqual(provenance["baseline_candidate_source"], "personal")
+        self.assertEqual(
+            provenance["classification_source"],
+            "age_gender_default",
+        )
+        self.assertEqual(
+            provenance["personal_baseline_source"],
+            provenance["classification_source"],
+        )
+        self.assertFalse(
+            provenance["personal_baseline_stage_influence_enabled"]
+        )
 
 
 if __name__ == "__main__":

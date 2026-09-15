@@ -231,11 +231,11 @@ Historical `auto/unknown_legacy` ต้องส่ง `unresolved_score` แล
 | Session report | `zeep-session-report-v10.12-minimum-only-score-release` |
 | Sleep / Recovery quality | `zeep-rest-quality-v8.10-minimum-only-score-release` |
 | Restore Summary | `zeep-restore-summary-v1.0` |
-| Action bands | `zeep-restore-action-bands-v1.0` |
+| Action bands | `zeep-restore-action-bands-v1.1-observational-copy` |
 | Driver policy | `zeep-restore-drivers-v1.0` |
 | Baseline comparison | `zeep-restore-personal-baseline-v1.0` |
-| Recommendation | `zeep-restore-recommendation-v1.0` |
-| Product language | `zeep-product-language-v1.0` |
+| Recommendation | `zeep-restore-recommendation-v1.1-observational-copy` |
+| Product language | `zeep-product-language-v1.1` |
 | Sleep Score formula | `zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10` |
 | Recovery Score formula | `zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10` |
 

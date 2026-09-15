@@ -962,7 +962,7 @@ state: Dict[str, Any] = {
             "version": SAFETY_THRESHOLD_BASIS_VERSION,
             "approved": SAFETY_THRESHOLD_BASIS_APPROVED,
             "scope": "zeep_internal_operating_policy",
-            "document": "docs/zeep-atmosphere-operating-basis-v1.0.md",
+            "document": "docs/zeep-sleep-system-current.md#environment-operating-bands",
         },
         "thresholds": {
             "esp32_stale_s": ESP32_STALE_SECONDS,
@@ -2583,8 +2583,8 @@ def estimate_sleep_state() -> Dict[str, Any]:
     age_group = selected_age_group if selected_age_group in AGE_SLEEP_BASELINES else _age_group(age)
     age_baseline = AGE_SLEEP_BASELINES[age_group]
     baseline, gender_adjustment = _gender_adjusted_baseline(age_group, gender)
-    # Adaptive layer: เมื่อผู้ใช้มีคืนที่เรียนรู้ครบ (≥3 คืน) ให้เลื่อนช่วง HR/RR
-    # ตามค่าจริงของเขาเอง แทนการใช้ตัวเลขกลางกับทุกคน
+    # Build a reviewable HR/RR candidate after the minimum history. In v1 it is
+    # Admin context and is not a Stage source while direct influence is disabled.
     with state_lock:
         _account_key = state["session"].get("account_key")
     personal_meta = {"source": "age_gender_default", "status": "no_session"}
@@ -2596,6 +2596,15 @@ def estimate_sleep_state() -> Dict[str, Any]:
             "direct_stage_influence": PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED,
             "candidate_available": proposed_personal_baseline != baseline,
         }
+    baseline_candidate_source = personal_meta.get("source", "age_gender_default")
+    classification_source = "age_gender_default"
+    if (
+        PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED
+        and baseline_candidate_source == "personal"
+        and proposed_personal_baseline is not None
+    ):
+        baseline = proposed_personal_baseline
+        classification_source = "personal"
     personal_behaviour = (
         baselines.behaviour_context(_account_key, rest_mode, target_duration_s)
         if _account_key
@@ -2698,7 +2707,8 @@ def estimate_sleep_state() -> Dict[str, Any]:
             "validated_ibi_hrv": False,
             "eeg_k_complex_or_spindle": False,
         },
-        "classification_source": personal_meta.get("source", "age_gender_default"),
+        "classification_source": classification_source,
+        "baseline_candidate_source": baseline_candidate_source,
         "probabilities": {k: 0.0 for k in ("wake", "n1", "n2", "n3", "rem")},
         "classification_active": False,
         "confidence": "low",
@@ -6045,7 +6055,10 @@ def api_baseline(username: str, principal: Principal = Depends(require_user)):
         "username": username,
         "baseline": record,
         "recommendations": baselines.recommendations(key),
-        "guardrail": ("ระบบเรียนรู้/แนะนำ/ปรับเกณฑ์การอ่านค่าเท่านั้น — ไม่สั่งอุปกรณ์อัตโนมัติจาก sleep state ก่อนผ่าน G2 (docs/closed-loop-spec.md)"),
+        "guardrail": (
+            "ระบบเรียนรู้และแนะนำเท่านั้น — ไม่สั่งอุปกรณ์อัตโนมัติจาก Sleep State; "
+            "ดูขอบเขตที่ docs/adaptive-control-recommendation-plan-v1.md"
+        ),
     }
 
 
@@ -6820,7 +6833,12 @@ def _start_pod_session(
         use_mode_default=True,
     )
     if not target.get("available"):
-        raise HTTPException(422, "เป้าหมายระยะเวลาต้องเป็น 30 หรือ 90 นาที")
+        message = (
+            "Nap & Refresh ต้องเลือกเวลาพัก 30 หรือ 90 นาที"
+            if rest_mode == "nap_recovery"
+            else "เป้าหมายระยะเวลาของรูปแบบการพักไม่ถูกต้อง"
+        )
+        raise HTTPException(422, message)
     if age_group is not None and age_group not in AGE_SLEEP_BASELINES:
         raise HTTPException(422, "ช่วงอายุต้องเป็น 18-29, 30-44, 45-59 หรือ 60+")
     if age is None:

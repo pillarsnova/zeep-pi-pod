@@ -82,9 +82,7 @@ def _baseline_summary(
         "sessions_used": sessions,
         "minimum_sessions": minimum,
         "comparison_ready": bool(status == "active" and reference_count),
-        "provisional_recommendation_ready": bool(
-            best_window_ready and reference_count
-        ),
+        "provisional_recommendation_ready": bool(best_window_ready and reference_count),
         "reference_metrics": reference_count,
         "behaviour_reference_same_mode_only": True,
         "physiology_reference_scope": (
@@ -199,9 +197,7 @@ def _personal_reference_recommendations(
                 "domain": domain,
                 "level": "personal_baseline",
                 "title": f"{label}ต่างจากช่วงที่เคยพักได้ดี",
-                "evidence": (
-                    f"ปัจจุบัน {value:g} {unit} · ข้อมูลตั้งต้น {reference:g} {unit}"
-                ),
+                "evidence": (f"ปัจจุบัน {value:g} {unit} · ข้อมูลตั้งต้น {reference:g} {unit}"),
                 "candidate": f"ลอง{direction}{label}ให้ใกล้ {reference:g} {unit}",
                 "basis": "prior_completed_same_mode_best_rest_window",
                 "baseline_status": best_window.get("status"),

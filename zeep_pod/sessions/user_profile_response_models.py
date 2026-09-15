@@ -188,7 +188,7 @@ def _validate_window_environment(values: dict[str, Any]) -> None:
 
 
 class BestRestWindow(ContractModel):
-    version: Literal["zeep-personal-rest-window-v1.0"]
+    version: Literal["zeep-personal-rest-window-v1.2-bounded-partitioned-finite"]
     available: bool
     status: Literal[
         "no_data",
@@ -201,9 +201,7 @@ class BestRestWindow(ContractModel):
     maturity_confidence: Literal["none", "low", "medium", "high"]
     sessions_compared: int = Field(ge=0)
     first_visible_visit: Literal[2]
-    method: Literal[
-        "highest_current_formula_score_then_evidence_then_most_recent"
-    ]
+    method: Literal["highest_current_formula_score_then_evidence_then_most_recent"]
     same_mode_only: Literal[True]
     same_target_only: bool
     mode_group: Literal["sleep", "nap_recovery", "unknown"]
@@ -217,17 +215,18 @@ class BestRestWindow(ContractModel):
     score_type: Literal["sleep_score", "recovery_score"] | None = Field(...)
     score_title: Literal["Sleep Score", "Recovery Score"] | None = Field(...)
     score_value: float | None = Field(..., ge=0, le=100)
-    score_formula_version: Literal[
-        "zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10",
-        "zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10",
-    ] | None = Field(...)
+    score_formula_version: (
+        Literal[
+            "zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10",
+            "zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10",
+        ]
+        | None
+    ) = Field(...)
     evidence_quality: Literal["unknown", "low", "medium", "high"]
     outcome_supported: bool
     environment_reference_available: bool
     environment: BestRestWindowEnvironment
-    environment_role: Literal[
-        "observed_successful_session_not_confirmed_preference"
-    ]
+    environment_role: Literal["observed_successful_session_not_confirmed_preference"]
     affects_score: Literal[False]
     affects_sleep_state: Literal[False]
     current_session_excluded: Literal[True]

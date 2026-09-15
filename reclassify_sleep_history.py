@@ -923,6 +923,29 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def baseline_provenance(personal_meta: dict[str, Any]) -> dict[str, Any]:
+    """Describe the Baseline candidate separately from the classifier source."""
+    candidate_source = str(
+        personal_meta.get("source") or "age_gender_default"
+    ).strip()
+    classification_source = "age_gender_default"
+    if (
+        PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED
+        and candidate_source == "personal"
+    ):
+        classification_source = "personal"
+    return {
+        "classification_source": classification_source,
+        "baseline_candidate_source": candidate_source,
+        # Deprecated audit alias retained for older manifest readers. It now
+        # reports the source that actually classified the Epoch.
+        "personal_baseline_source": classification_source,
+        "personal_baseline_stage_influence_enabled": bool(
+            PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED
+        ),
+    }
+
+
 def main() -> None:
     args = parse_args()
     if args.apply:
@@ -1221,7 +1244,7 @@ def main() -> None:
         },
         "age_group": age_group,
         "gender": session.get("gender"),
-        "personal_baseline_source": personal_meta.get("source"),
+        **baseline_provenance(personal_meta),
         "backup": None,
     }
 

@@ -125,6 +125,24 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertTrue(manifest["awake_rest_sessions_excluded"])
         self.assertEqual(manifest["quality_type_required"], "sleep")
         self.assertFalse(manifest["direct_stage_influence_enabled"])
+        self.assertEqual(
+            manifest["behaviour_policy_version"],
+            policy.PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+        )
+        self.assertEqual(
+            manifest["rest_window_policy_version"],
+            policy.PERSONAL_REST_WINDOW_BASELINE_VERSION,
+        )
+        self.assertEqual(
+            manifest["maximum_detail_scans_per_mode_target_cohort"],
+            policy.PERSONAL_BASELINE_DETAIL_SCAN_PER_COHORT,
+        )
+
+    def test_population_age_prior_has_an_adult_only_boundary(self):
+        self.assertEqual(policy.age_group(17), "unspecified")
+        self.assertEqual(policy.age_group(18), "18-29")
+        self.assertEqual(policy.age_group(29), "18-29")
+        self.assertEqual(policy.age_group(30), "30-44")
 
     def test_report_uses_current_versions_and_aasm_seven_hour_target(self):
         self.assertEqual(report.SLEEP_QUALITY_VERSION, policy.SLEEP_QUALITY_VERSION)
@@ -228,10 +246,10 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
     def test_sleep_stage_meanings_are_consistent_across_policy_and_ui(self):
         expected = {
             "wake": ("W", "ตื่น", "ช่วงที่ระบบประเมินว่ายังตื่นหรือกลับเข้าสู่สถานะตื่น"),
-            "n1": ("N1", "หลับตื้น / เคลิ้มหลับ", "เริ่มเข้าสู่การนอน ร่างกายผ่อนคลาย และปลุกให้ตื่นได้ง่าย"),
-            "n2": ("N2", "หลับสนิทขึ้น / หลับตื้นต่อเนื่อง", "หัวใจและการหายใจช้าลง ร่างกายเข้าสู่การนอนที่ต่อเนื่องขึ้น"),
-            "n3": ("N3", "หลับลึก", "ช่วงหลับลึกที่ร่างกายได้พักอย่างต่อเนื่อง"),
-            "rem": ("REM", "ระยะ REM / หลับฝัน", "ช่วงหลับที่สมองยังทำงานมากขึ้นและมักมีความฝัน"),
+            "n1": ("N1", "หลับตื้น / เคลิ้มหลับ", "ช่วงที่ระบบประเมินว่าเริ่มเข้าสู่การนอน ซึ่งมักปลุกตื่นได้ง่าย"),
+            "n2": ("N2", "หลับสนิทขึ้น / หลับตื้นต่อเนื่อง", "ช่วงที่ระบบประเมินว่าการนอนต่อเนื่องขึ้น โดยทั่วไปชีพจรและการหายใจอาจช้าลง"),
+            "n3": ("N3", "หลับลึก", "ช่วงที่ระบบประเมินว่าเป็นหลับลึก"),
+            "rem": ("REM", "ระยะ REM / หลับฝัน", "ช่วง REM ซึ่งมักสัมพันธ์กับความฝัน"),
         }
         ui = (PI5_ROOT / "static" / "index.html").read_text(encoding="utf-8")
         snapshot = policy.sleep_policy_snapshot()
@@ -278,7 +296,9 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
             [25 * 60, 35 * 60],
         )
         ui = (PI5_ROOT / "static" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("Nap &amp; Refresh · ประมาณ 30 นาที", ui)
+        self.assertIn("Nap &amp; Refresh · พักระหว่างวัน", ui)
+        self.assertIn('<option value="30" selected>30 นาที</option>', ui)
+        self.assertIn('<option value="90">90 นาที</option>', ui)
         self.assertIn("Overnight Recovery · พักค้างคืน", ui)
         self.assertNotIn('option value="auto"', ui)
         self.assertNotIn('option value="recovery_readiness"', ui)
@@ -409,7 +429,9 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
             "historyTimeTo",
             "historyNameFilter",
             "historySummary",
-            "historyParticipants",
+            "historyUserJourney",
+            "sessionList",
+            "sessionDetail",
         ):
             self.assertIn(f'id="{element_id}"', ui)
         self.assertIn("/api/admin/history?", ui)

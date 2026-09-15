@@ -27,10 +27,13 @@ def build_status(
     if safety_review:
         return {
             "key": "safety_review",
-            "label": "ควรให้ทีมตรวจสอบสภาพแวดล้อม",
+            "label": "ตรวจสอบก่อนใช้งานครั้งถัดไป",
             "min_score": None,
             "max_score": None,
-            "meaning": "พบค่าเกินกรอบความปลอดภัยระหว่าง Session คะแนนยังแสดงได้แต่ไม่ใช้แทนการตรวจสอบ",
+            "meaning": (
+                "พบค่าบางช่วงแตะเกณฑ์ความปลอดภัย กรุณาแจ้งทีมงานและตรวจเหตุการณ์"
+                "ก่อนใช้งานครั้งถัดไป คะแนนแสดงเพื่อประกอบข้อมูลเท่านั้น"
+            ),
             "version": RESTORE_ACTION_BANDS_VERSION,
         }
     if limited_evidence and score is not None and group != "unknown":
@@ -84,7 +87,7 @@ def build_recommendation(
     if selected and selected.get("priority") == "safety_review":
         message = str(
             selected.get("action")
-            or "ตรวจเหตุการณ์ Safety และการตอบสนองของระบบก่อนใช้งานครั้งถัดไป"
+            or "กรุณาแจ้งทีมงานและตรวจเหตุการณ์ Safety ก่อนใช้งานครั้งถัดไป"
         )
     elif limited_evidence:
         message = "บันทึกความรู้สึกหลังพัก และใช้งานครั้งถัดไปตามปกติ"
@@ -100,9 +103,9 @@ def build_recommendation(
             "ทบทวนปัจจัยที่ได้คะแนนต่ำสุด แล้วเปรียบเทียบกับ Session ถัดไป",
         )
     elif group == "sleep":
-        message = "รักษารูปแบบที่ได้ผลและติดตามแนวโน้มจากหลายคืน"
+        message = "ลองคงรูปแบบการนอนครั้งนี้และติดตามแนวโน้มจากหลายคืน"
     elif group == "nap_recovery":
-        message = "รักษารูปแบบการพักที่ได้ผลและบันทึกความรู้สึกหลังพัก"
+        message = "ลองคงรูปแบบการพักครั้งนี้และบันทึกความรู้สึกหลังพัก"
     else:
         message = "เลือกรูปแบบการพักเพื่อรับคำแนะนำที่เหมาะกับครั้งนี้"
     return {
@@ -129,9 +132,9 @@ def session_scope(group: str) -> dict[str, Any]:
             else "ผลการพักครั้งนี้"
         ),
         "question": (
-            "การนอนครั้งนี้สนับสนุนการฟื้นตัวได้ดีเพียงใด"
+            "ข้อมูลการนอนครั้งนี้เป็นอย่างไร"
             if is_sleep
-            else "ช่วงพักนี้ร่างกายสงบและพักได้ตามเป้าหมายเพียงใด"
+            else "ช่วงพักนี้นิ่ง ต่อเนื่อง และใกล้เป้าหมายเพียงใด"
             if is_recovery
             else "เลือกรูปแบบการพักเพื่อดูผลสรุปที่เหมาะสม"
         ),

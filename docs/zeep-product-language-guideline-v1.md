@@ -1,7 +1,7 @@
-# ZEEP Product Language Guideline v1.0
+# ZEEP Product Language Guideline v1.1
 
 > **สถานะ:** ใช้กับ Dashboard, Control, ประวัติการใช้งาน, รายงาน และ Public API
-> **เวอร์ชัน:** `zeep-product-language-v1.0`
+> **เวอร์ชัน:** `zeep-product-language-v1.1`
 > **ขอบเขต:** การนำเสนอข้อความเท่านั้น ไม่เปลี่ยน Sensor, Sleep State, สูตรคะแนน,
 > Gate, threshold หรือข้อมูลดิบ
 
@@ -83,7 +83,8 @@ score eligibility หรือกฎความปลอดภัยภาย�
 
 ## 4. กฎที่ยังต้องตรงและชัด
 
-- เหตุประตู, ควัน, CO, CO₂ ถึงเกณฑ์หยุด, อุณหภูมิถึงเกณฑ์ Critical ของ Safety
+- เหตุประตู, CO₂ ถึงเกณฑ์ Critical และอุณหภูมิถึงเกณฑ์ Critical ที่ Pi runtime
+  ตรวจได้จริง ส่วน smoke/CO standalone ยังไม่อยู่ใน v1 software contract
   Supervisor และ Safe Mode
 - การยืนยันลบข้อมูลถาวรหรือจบ Session ของผู้อื่น
 - อาการหายใจลำบาก สะดุ้งหายใจ หรือมีผู้สังเกตว่าหยุดหายใจ ซึ่งควรแนะนำให้

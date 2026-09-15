@@ -1,9 +1,11 @@
 """Persistence regressions for versioned Session timeline evidence."""
 
+import io
 import json
 import sqlite3
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 
 from database import DatabaseManager
@@ -100,20 +102,23 @@ class SessionFinalizationTransactionTests(unittest.TestCase):
                 )
                 self.assertTrue(manager.flush())
 
-                manager.enqueue(
-                    "sessions",
-                    "session_finalize",
-                    {
-                        "session_id": "atomic-failure",
-                        "end_time": "2026-09-13T08:00:00+00:00",
-                        "duration": 28_800.0,
-                        "end_reason": "logout",
-                        # json.dumps fails after the row update and summary
-                        # delete, proving both mutations are rolled back.
-                        "final_summary": {"unsupported": object()},
-                    },
-                )
-                self.assertFalse(manager.flush())
+                writer_output = io.StringIO()
+                with redirect_stdout(writer_output):
+                    manager.enqueue(
+                        "sessions",
+                        "session_finalize",
+                        {
+                            "session_id": "atomic-failure",
+                            "end_time": "2026-09-13T08:00:00+00:00",
+                            "duration": 28_800.0,
+                            "end_reason": "logout",
+                            # json.dumps fails after the row update and summary
+                            # delete, proving both mutations are rolled back.
+                            "final_summary": {"unsupported": object()},
+                        },
+                    )
+                    self.assertFalse(manager.flush())
+                self.assertIn("[DB] writer error", writer_output.getvalue())
                 self.assertIn("TypeError", manager.health()["last_error"])
 
                 row = manager.read_sessions(

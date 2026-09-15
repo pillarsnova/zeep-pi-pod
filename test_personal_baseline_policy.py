@@ -6,8 +6,13 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from personal import MIN_DETECTED_SLEEP_SECONDS, BaselineStore
+from personal import (
+    MIN_DETECTED_SLEEP_SECONDS,
+    BaselineStore,
+    _bounded_baseline_detail_rows,
+)
 from sleep_system_policy import (
+    PERSONAL_BASELINE_DETAIL_SCAN_PER_COHORT,
     PERSONAL_BASELINE_LEARNING_START_UTC,
     PERSONAL_BEHAVIOUR_BASELINE_VERSION,
     PERSONAL_REST_WINDOW_BASELINE_VERSION,
@@ -46,12 +51,19 @@ class _BehaviourDatabaseStub:
         self.sessions = sessions
         self.summaries = summaries
         self.timelines = timelines
+        self.session_query = ""
+        self.final_summary_requests = []
 
     def read_sessions(self, sql, params=()):
         if "FROM sessions " in sql:
-            return list(self.sessions)
+            self.session_query = sql
+            rows = list(self.sessions)
+            if "LIMIT ?" in sql:
+                rows = rows[: int(params[-1])]
+            return rows
         session_id = params[0] if params else None
         if "type='final_summary'" in sql:
+            self.final_summary_requests.append(session_id)
             summary = self.summaries.get(session_id)
             return [{"value": json.dumps(summary)}] if summary else []
         if "type='sleep_stage'" in sql:
@@ -68,12 +80,17 @@ class _AliasDatabaseStub(_BehaviourDatabaseStub):
 
     def read_sessions(self, sql, params=()):
         if "FROM sessions " in sql:
-            self.requested_account_keys = tuple(params[:-3])
-            return [
+            self.session_query = sql
+            trailing_parameters = 3 if "LIMIT ?" in sql else 2
+            self.requested_account_keys = tuple(params[:-trailing_parameters])
+            rows = [
                 row
                 for row in self.sessions
                 if row["username_key"] in self.requested_account_keys
             ]
+            if "LIMIT ?" in sql:
+                rows = rows[: int(params[-1])]
+            return rows
         return super().read_sessions(sql, params)
 
 
@@ -223,6 +240,7 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
         record = {
             "policy_version": ZEEP_SLEEP_BASELINE_VERSION,
             "behaviour_policy_version": PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+            "rest_window_policy_version": PERSONAL_REST_WINDOW_BASELINE_VERSION,
             "learning_cutoff": {"utc": PERSONAL_BASELINE_LEARNING_START_UTC},
             "status": "learning",
         }
@@ -574,6 +592,7 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
         store.data["person@example.com"] = {
             "policy_version": ZEEP_SLEEP_BASELINE_VERSION,
             "behaviour_policy_version": PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+            "rest_window_policy_version": PERSONAL_REST_WINDOW_BASELINE_VERSION,
             "learning_cutoff": {"utc": PERSONAL_BASELINE_LEARNING_START_UTC},
             "behaviour_by_mode": {
                 "sleep": {
@@ -592,12 +611,64 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
         self.assertFalse(sleep["direct_stage_influence"])
         self.assertEqual(nap["status"], "no_data")
 
+    def test_behaviour_context_uses_canonical_legacy_mode_aliases(self):
+        store = self._store(
+            _summary(
+                quality_type="rest_goal",
+                sleep_detected=False,
+                estimated_sleep_s=0,
+            )
+        )
+        store.data["person@example.com"] = {
+            "policy_version": ZEEP_SLEEP_BASELINE_VERSION,
+            "behaviour_policy_version": PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+            "rest_window_policy_version": PERSONAL_REST_WINDOW_BASELINE_VERSION,
+            "learning_cutoff": {"utc": PERSONAL_BASELINE_LEARNING_START_UTC},
+            "behaviour_by_mode": {
+                "nap_recovery": {
+                    "status": "active",
+                    "sessions_used": 3,
+                    "by_target": {
+                        "nap_30": {
+                            "status": "active",
+                            "sessions_used": 3,
+                            "expected_onset_minutes": 5.0,
+                            "target_specific": True,
+                        },
+                    },
+                },
+            },
+        }
+
+        context = store.behaviour_context(
+            "person@example.com",
+            "meditation",
+            1_800,
+        )
+
+        self.assertEqual(context["mode_group"], "nap_recovery")
+        self.assertEqual(context["expected_onset_minutes"], 5.0)
+
     def test_get_rejects_a_previous_baseline_policy(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         store = BaselineStore(_DatabaseStub(None), Path(temporary.name))
         store.data["person@example.com"] = {
             "policy_version": "zeep-baseline-obsolete",
+            "learning_cutoff": {"utc": PERSONAL_BASELINE_LEARNING_START_UTC},
+            "status": "active",
+        }
+
+        self.assertIsNone(store.get("person@example.com"))
+
+    def test_get_rejects_a_previous_rest_window_policy(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        store = BaselineStore(_DatabaseStub(None), Path(temporary.name))
+        store.data["person@example.com"] = {
+            "policy_version": ZEEP_SLEEP_BASELINE_VERSION,
+            "behaviour_policy_version": PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+            "rest_window_policy_version": "obsolete",
             "learning_cutoff": {"utc": PERSONAL_BASELINE_LEARNING_START_UTC},
             "status": "active",
         }
@@ -973,3 +1044,114 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
         self.assertTrue(nap["respiratory_reference"]["prior_completed_sessions_only"])
         self.assertFalse(nap["respiratory_reference"]["affects_score"])
         self.assertFalse(nap["respiratory_reference"]["direct_stage_influence"])
+
+    def test_update_user_partitions_before_capping_each_mode_and_target(self):
+        sessions = []
+        summaries = {}
+        timelines = {}
+        newest = datetime(2026, 9, 15, 12, 0, tzinfo=UTC)
+        for index in range(121):
+            session_id = f"newer-sleep-{index}"
+            timestamp = (newest - timedelta(minutes=index)).isoformat()
+            sessions.append(
+                {
+                    "session_id": session_id,
+                    "duration": 5 * 3_600.0,
+                    "start_time": timestamp,
+                    "rest_mode": "sleep",
+                    "target_duration_s": 7 * 3_600.0,
+                }
+            )
+            summaries[session_id] = _behaviour_summary(
+                mode_group="sleep",
+                resolved="sleep",
+                rr=14.0,
+            )
+            timelines[session_id] = [
+                {
+                    "timestamp": timestamp,
+                    "temperature": 23.0,
+                    "humidity": 50.0,
+                    "co2": 700.0,
+                    "lux": 0.0,
+                    "sound": 38.0,
+                }
+            ]
+
+        nap_id = "older-nap-30"
+        nap_timestamp = (newest - timedelta(minutes=122)).isoformat()
+        sessions.append(
+            {
+                "session_id": nap_id,
+                "duration": 1_800.0,
+                "start_time": nap_timestamp,
+                "rest_mode": "nap_recovery",
+                "target_duration_s": 1_800.0,
+            }
+        )
+        summaries[nap_id] = _behaviour_summary(
+            mode_group="nap_recovery",
+            resolved="nap_recovery",
+            rr=16.0,
+        )
+        timelines[nap_id] = [
+            {
+                "timestamp": nap_timestamp,
+                "temperature": 24.0,
+                "humidity": 50.0,
+                "co2": 700.0,
+                "lux": 0.0,
+                "sound": 38.0,
+            }
+        ]
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        database = _BehaviourDatabaseStub(sessions, summaries, timelines)
+        store = BaselineStore(database, Path(temporary.name))
+
+        record = store.update_user("person@example.com")
+
+        self.assertNotIn("LIMIT", database.session_query.upper())
+        nap = record["behaviour_by_mode"]["nap_recovery"]["by_target"]["nap_30"]
+        self.assertEqual(nap["sessions_used"], 1)
+        self.assertEqual(nap["session_ids"], [nap_id])
+        requested = set(database.final_summary_requests)
+        self.assertIn(nap_id, requested)
+        self.assertNotIn("newer-sleep-120", requested)
+
+    def test_detail_scan_is_bounded_independently_per_mode_and_target(self):
+        rows = []
+        cohorts = (
+            ("sleep", 7 * 3_600),
+            ("nap_recovery", 30 * 60),
+            ("nap_recovery", 90 * 60),
+            ("nap_recovery", None),
+        )
+        for mode, target in cohorts:
+            label = f"{mode}-{target}"
+            for index in range(PERSONAL_BASELINE_DETAIL_SCAN_PER_COHORT + 5):
+                rows.append(
+                    {
+                        "session_id": f"{label}-{index}",
+                        "rest_mode": mode,
+                        "target_duration_s": target,
+                    }
+                )
+        rows.append(
+            {
+                "session_id": "unresolved-auto",
+                "rest_mode": "auto",
+                "target_duration_s": None,
+            }
+        )
+
+        selected = _bounded_baseline_detail_rows(rows)
+
+        self.assertEqual(
+            len(selected),
+            PERSONAL_BASELINE_DETAIL_SCAN_PER_COHORT * len(cohorts) + 1,
+        )
+        self.assertIn(
+            "unresolved-auto",
+            {row["session_id"] for row in selected},
+        )

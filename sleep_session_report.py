@@ -338,7 +338,8 @@ def _classification_accounting(
     A carried-forward State remains attributed to the last confirmed State
     and is scoreable; an unconfirmed challenger receives no new-State time.
     Missing/stale/restart intervals therefore remain continuous State time at
-    low confidence while confirmed OFF BED remains operational and unscored.
+    low confidence while confirmed OFF BED remains outside the Stage ratio but
+    can still affect the continuity/presence component.
     Measured physiological-evidence coverage is calculated separately, so a
     complete State timeline never pretends that missing HR/RR/BCG was observed.
 

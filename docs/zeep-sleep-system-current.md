@@ -23,7 +23,7 @@
 - Sleep Score จำกัดผลของ BCG Stage ไว้ 20 คะแนน: มีรูปแบบการนอนที่ประเมินได้ 10, N2 สูงสุด 4, N3 สูงสุด 3 และ REM สูงสุด 3; ไม่มี N3/REM จึงไม่กดคะแนนทั้งคืน และ **ไม่หักเมื่อ N3/REM สูง**
 - Raw/Timeline เดิมไม่ถูกแก้โดยการคำนวณรายงานใหม่; Historical Replay และ Rescore มี version/audit แยก
 - ช่วงจบ Session แยก `Wake` ของมนุษย์ออกจาก `ไม่มีผู้ใช้งานบนเตียง → ออกจาก ZEEP → จบ Session`; สองสถานะหลังเป็น Occupancy และไม่ปนเปอร์เซ็นต์ Sleep Stage
-- รายงานต้องปิดบัญชีเวลาทุก epoch: Recording ที่ยังไม่ยืนยัน `OFF BED` ต้องอยู่ใน W/N1/N2/N3/REM และเข้าคะแนนทั้งหมด หลักฐานที่ก้ำกึ่ง ขาด ไม่สด หรือขาดช่วงจาก restart จะคง State ก่อนหน้าแบบ low-confidence โดยไม่แต่ง Evidence probability และไม่ใช้ epoch นั้นเรียนรู้ Personal Baseline; `WAIT` ใช้เฉพาะ `waiting_bed` ก่อน Recording, `NO DATA` เป็น evidence-quality/legacy label ไม่ใช่ State bucket และ confirmed `OFF BED` เป็น operational exception เพียงชนิดเดียวที่ไม่เข้า Stage%, Score หรือ Baseline
+- รายงานต้องปิดบัญชีเวลาทุก epoch: Recording ที่ยังไม่ยืนยัน `OFF BED` ต้องอยู่ใน W/N1/N2/N3/REM และเข้าคะแนนทั้งหมด หลักฐานที่ก้ำกึ่ง ขาด ไม่สด หรือขาดช่วงจาก restart จะคง State ก่อนหน้าแบบ low-confidence โดยไม่แต่ง Evidence probability และไม่ใช้ epoch นั้นเรียนรู้ Personal Baseline; `WAIT` ใช้เฉพาะ `waiting_bed` ก่อน Recording, `NO DATA` เป็น evidence-quality/legacy label ไม่ใช่ State bucket และ confirmed `OFF BED` ไม่เข้า Stage% หรือ Baseline แต่ยังใช้ประกอบ continuity/presence ของคะแนน
 - สิ่งแวดล้อมคง key ภายใน 5 ระดับ `critical / poor / fair / good / excellent` แต่หน้าผู้ใช้แสดง `แนะนำให้ปรับตอนนี้ / ควรปรับ / พอใช้ / ดี / ยอดเยี่ยม`; **พอใช้ขึ้นไปผ่านขั้นต่ำ** และแสง/เสียงเปลี่ยนกรอบตาม Rest Mode
 - ข้อมูลก่อน `2026-09-01 00:00 Asia/Bangkok` ถูกตัดออกจาก Product history, Baseline, Replay และ Score รุ่นใหม่ แต่ Raw/Audit ยังเก็บไว้โดยไม่แก้ไข; หลัง cutover ระบบประเมินหลักฐานเป็นราย Epoch, ใช้ Tier เป็น Admin QA เท่านั้น และเขียน Derived result ได้เฉพาะรายการที่ไม่มี integrity blocker หลัง Product Owner ตรวจ allowlist โดย replay manifest และ immutable-Raw hash guard ต้องผ่าน
 
@@ -44,11 +44,13 @@
 | Session report | `zeep-session-report-v10.12-minimum-only-score-release` |
 | Restore Summary | `zeep-restore-summary-v1.0` |
 | Respiratory Wellness | `zeep-respiratory-wellness-v1.1` |
-| Restore action bands | `zeep-restore-action-bands-v1.0` |
+| Restore action bands | `zeep-restore-action-bands-v1.1-observational-copy` |
 | Restore driver policy | `zeep-restore-drivers-v1.0` |
 | Restore Personal Baseline | `zeep-restore-personal-baseline-v1.0` |
-| Personal rest-window baseline | `zeep-personal-rest-window-v1.0` |
-| Restore recommendation | `zeep-restore-recommendation-v1.0` |
+| Personal behaviour baseline | `zeep-personal-behaviour-baseline-v1.3-bounded-partitioned-finite-circular-time` |
+| Personal rest-window baseline | `zeep-personal-rest-window-v1.2-bounded-partitioned-finite` |
+| Restore recommendation | `zeep-restore-recommendation-v1.1-observational-copy` |
+| Product language | `zeep-product-language-v1.1` |
 | Environment context | `zeep-environment-context-v2.1-optional-acoustic-input` |
 | Environment Session aggregation | `zeep-environment-session-v1.0-sustained-decile` |
 | Terminal Wake boundary | `zeep-terminal-wake-boundary-v1.0` |
@@ -79,7 +81,7 @@ flowchart LR
     M["SPH0645"] --> C["Corroboration only"]
     E["Temp · RH · CO₂ · Lux · PM2.5 · VOC · Sound"] --> X["Context / confidence only"]
     F --> H{"Confirmed OFF BED?"}
-    H -->|"Yes"| O["OFF BED · occupancy exception · no Stage/Score/Baseline"]
+    H -->|"Yes"| O["OFF BED · no Stage/Baseline · continuity context"]
     H -->|"No"| Q{"Current evidence complete and fresh?"}
     Q -->|"No"| LC["Carry prior State · low confidence · score yes · baseline no"]
     Q -->|"Yes"| W["Rolling 6 buckets / 60 s"]
@@ -180,7 +182,8 @@ accuracy ดู [AASM Scoring Manual](https://learn.aasm.org/AssetListing/The-AA
   Gate มีหน้าที่อนุญาต **การเข้า State ใหม่** ไม่ได้ลบ State เดิม เมื่อหลักฐาน
   acquisition ขาดหรือไม่สดขณะยังไม่ยืนยัน OFF BED ระบบคง State ก่อนหน้าแบบ
   low-confidence ซึ่งเข้าคะแนนแต่ไม่เข้า Personal Baseline ส่วน confirmed OFF BED
-  เป็น occupancy exception ที่ไม่ใช่ Sleep Stage และไม่ถูกนับใน Score/Baseline
+  เป็น occupancy exception ที่ไม่ใช่ Sleep Stage และไม่เข้า Stage ratio/Baseline
+  แต่ยังใช้ประกอบ continuity/presence ของคะแนน
 - การเปิดใช้ 10 วินาทีเต็มรูปแบบระหว่าง Active Session ไม่แก้ Raw เดิม: checkpoint เก็บ `sample_cadence_segments` ว่าช่วงใดเป็น legacy 5 วินาที/ช่วงใดเป็น 10 วินาที และรายงานถ่วงน้ำหนักตามเวลาจริง จึงไม่ทำให้ TST, WASO, Stage ratio หรือค่าเฉลี่ย Sensor เพิ่ม/ลดเท่าตัวหลัง restart
 - Timestamp ของ Timeline ใช้เวลาที่เก็บ Session sample จริง ไม่ใช้ Sensor-frame timestamp ซ้ำ; ข้อมูล Sensor frame สำหรับ Sleep State ยังมี provenance ของรอบ 10 วินาทีแยกต่างหาก
 - ค่า HR/RR ที่ invalid ถูกคัดออกก่อนสร้าง Evidence และไม่ถูกแต่งเป็นค่าปกติ;
@@ -196,7 +199,7 @@ accuracy ดู [AASM Scoring Manual](https://learn.aasm.org/AssetListing/The-AA
 | มี State เดิม; ผู้ท้าชิงกำลังยืนยัน | แสดง State เดิมพร้อม pending/provisional metadata | นับให้ State เดิม; ไม่ให้ผู้ท้าชิง |
 | มี State เดิม; หลักฐานก้ำกึ่งหรือ transition ถูก Gate ปิด | คง State เดิมต่อเนื่องจนมีผู้ท้าชิงที่ผ่านครบ | นับให้ State เดิม |
 | HR/RR/BCG ขาด ไม่สด หรือขาดช่วงจาก restart ขณะยังไม่ยืนยัน OFF BED | คง State เดิมแบบ low-confidence พร้อม data-quality provenance | นับให้ State เดิม; ไม่เข้า Personal Baseline |
-| ยืนยันไม่มีผู้ใช้งานบนเตียง | `OFF BED` | ไม่ |
+| ยืนยันไม่มีผู้ใช้งานบนเตียง | `OFF BED` | ไม่เข้า Stage ratio; ใช้ประกอบ continuity/presence |
 | ผู้ท้าชิงผ่าน physiology, transition, dwell และ confirmation | เปลี่ยนเป็น State ใหม่ | เริ่มนับ State ใหม่ ณ epoch ที่ยืนยัน |
 
 ดังนั้นระบบไม่มีค่าผลลัพธ์ `Unclassified`: ทุก epoch หลังเริ่ม Recording อยู่ใน
@@ -259,7 +262,8 @@ probability ปลอมให้ State เดิม
     ไม่ใช่ AASM/PSG epoch และไม่เพิ่ม Wake duration, WASO, สัดส่วน Stage, คะแนน
     หรือ Personal Baseline; หาก State สุดท้ายเป็น Wake อยู่แล้วจะไม่สร้างซ้ำ
 13. confirmed `OFF BED · ไม่มีผู้ใช้งานบนเตียง` เป็น operational interval เพียง
-    ชนิดเดียวระหว่าง Recording ที่ไม่ใช่ Sleep Stage และไม่เข้าคะแนน ส่วนหลักฐาน
+    ชนิดเดียวระหว่าง Recording ที่ไม่ใช่ Sleep Stage และไม่เข้า Stage ratio แต่ใช้
+    ประกอบ continuity/presence ของคะแนน ส่วนหลักฐาน
     HR/RR/BCG ที่ขาด ไม่สด หรือขาดช่วงเป็น data-quality metadata ของ low-confidence
     carry ไม่ใช่ช่องว่าง State; `WAIT · กำลังยืนยันสถานะ` ใช้ได้เฉพาะก่อน Recording
 
@@ -300,7 +304,7 @@ baseline ภายใน Session ที่ผ่านเกณฑ์ ระบ�
 restart ไม่ถูกใช้สอน Baseline แม้ epoch นั้นยังเข้าคะแนน และการขาด Sensor บางช่วง
 ไม่ทำให้ต้องทิ้ง Session ทั้งรายการ
 
-Personal rest-window baseline (`zeep-personal-rest-window-v1.0`) เป็นคนละชั้นกับ
+Personal rest-window baseline (`zeep-personal-rest-window-v1.2-bounded-partitioned-finite`) เป็นคนละชั้นกับ
 Physiology Baseline และ aggregate behavior baseline: ระบบเผย `best_rest_window`
 ได้ใน visit 2 หลังมี prior completed Session ที่เข้าเกณฑ์ 1 ครั้ง โดยใช้เฉพาะ
 Mode เดียวกัน สูตรคะแนนปัจจุบัน และ target เดียวกัน (Nap แยก `nap_30`/`nap_90`)
@@ -323,6 +327,8 @@ timestamp และไม่ส่ง `best_rest_window` เข้า longitudin
 purpose-specific inference consent
 
 ### 2.6 Environment Context — ระดับที่ต้องแก้ไขและระดับที่คาดหวัง
+
+<a id="environment-operating-bands"></a>
 
 หลักตัดสินใช้ค่าที่ต่ำที่สุดของเกณฑ์ที่มีข้อมูล เพื่อไม่ให้ค่าที่ดีบดบังค่าที่ควรดูแล
 โดยอุณหภูมิ ความชื้น แสง CO₂ PM2.5 และ VOC เป็นเกณฑ์หลัก ส่วนเสียงเป็น
@@ -365,8 +371,10 @@ Live Dashboard ประเมินจาก Sensor ที่ `live` ทุก 
 Critical ยังคงอยู่เป็นบริบทตรวจสอบ หากเกิด Critical เพียงชั่วคราว รายงานจะระบุ
 transient โดยไม่เรียกทั้ง Session ว่า Critical ข้อมูลขาดคือ `รอข้อมูล/ตรวจ Sensor`
 ไม่ใช่ค่าปกติ กฎ aggregation นี้ไม่เปลี่ยน Safety Basis: CO₂ critical,
-temperature hard range, smoke/CO alarm และ Local Safety Supervisor ยังทำงานตาม
-threshold ที่อนุมัติแยกต่างหาก
+temperature hard range และ Local Safety Supervisor ยังทำงานตาม threshold ที่
+อนุมัติแยกต่างหาก ส่วน v1 ยังไม่มี input/output สำหรับ smoke หรือ CO alarm ใน
+Pi runtime; หาก Pod มีอุปกรณ์ standalone ต้องทดสอบและบันทึกแยก และห้ามอ้างว่า
+Dashboard ตรวจหรือสั่งการอุปกรณ์นั้น
 
 คำว่า `critical` ในย่อหน้านี้เป็น stable key สำหรับ Logic/API ส่วนหน้าผู้ใช้แสดง
 `แนะนำให้ปรับตอนนี้` ตาม
@@ -417,7 +425,8 @@ stateDiagram-v2
 6. Replay กำหนด W เป็น State แรกของ Recording และคง State ก่อนหน้าแบบ
    low-confidence สำหรับ epoch ที่ HR/RR/BCG ขาด ไม่สด หรือ transition ยังไม่ผ่าน;
    epoch เหล่านี้เข้าคะแนนแต่ไม่เข้า Personal Baseline ส่วน confirmed Bed Exit เป็น
-   `OFF BED` และเป็นข้อยกเว้นเดียวที่ไม่เข้า Stage/Score Tier และคำเตือนเชิงสัดส่วนเป็น
+   `OFF BED` และเป็นข้อยกเว้นเดียวที่ไม่เข้า Stage ratio แต่ยังใช้ประกอบคะแนนด้าน
+   continuity/presence ส่วน Tier และคำเตือนเชิงสัดส่วนเป็น
    Admin QA ไม่ใช่ allowlist ส่วนการเขียนย้อนหลังผ่าน
    `promote_sleep_history.py` ต้องไม่มี per-Session integrity blocker, อยู่ใน
    reviewed allowlist และยืนยัน hash ว่า Timeline/Raw BCG ไม่เปลี่ยน
@@ -794,6 +803,12 @@ migration หรือ retry ผู้ดูแลยังเห็นยอด
 - ต้องทำ paired-PSG G2, confusion matrix, sensitivity/specificity, agreement และ subgroup review ก่อนยกระดับ claim
 
 ## Evidence & citations
+
+รายการด้านล่างเป็นทั้ง canonical evidence และ background reading สำหรับอธิบาย
+แนวทางวิศวกรรม รายการที่ยังไม่มี Evidence ID ใน
+[`research/evidence-library/source-register.json`](../research/evidence-library/source-register.json)
+ไม่ใช่หลักฐานอนุมัติ runtime threshold หรือ claim โดยลำพัง; การเปลี่ยนระบบต้องอ้าง
+ทะเบียนหลักและผ่าน version/replay/regression review ก่อนเสมอ
 
 1. AASM/SRS. *Recommended Amount of Sleep for a Healthy Adult: A Joint Consensus Statement*. J Clin Sleep Med. 2015;11(6):591–592 — ผู้ใหญ่ควรนอน 7 ชั่วโมงขึ้นไปเป็นประจำ.  
    https://aasm.org/resources/pdf/pressroom/adult-sleep-duration-consensus.pdf

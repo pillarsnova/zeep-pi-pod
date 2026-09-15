@@ -474,6 +474,11 @@
     .login-card input[type=text],.login-card input[type=password],.login-card select{width:100%;
       background:var(--inset);border:1px solid var(--line);
       color:var(--text);padding:13px 14px;font-size:15px;font-family:inherit;margin-top:12px}
+    .login-nap-target{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;
+      align-items:center;margin-top:10px}
+    .login-nap-target.login-off{display:none}
+    .login-nap-target .muted{white-space:nowrap}
+    .login-card .login-nap-target select{min-height:44px;margin-top:0;padding:9px 12px}
     /* ช่องรหัสผ่าน + ปุ่มแสดง/ซ่อนซ้อนขวาใน */
     .pw-field{position:relative}
     .pw-field input{padding-right:74px}
@@ -785,10 +790,6 @@
     .main-nav{max-width:760px;margin-left:auto;margin-right:auto}.main-nav a{min-height:50px}
     .dashboard-overview,.unified-control{grid-column:1/-1}
     .dashboard-overview{padding:0;overflow:hidden;background:linear-gradient(145deg,#12283a,#0b1723 58%,#101a2c)}
-    .dash-user-head{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:20px 22px;border-bottom:1px solid #294657}
-    .dash-user-main{display:flex;align-items:center;gap:13px;min-width:0}.dash-avatar{display:grid;place-items:center;width:46px;height:46px;border-radius:14px;background:linear-gradient(145deg,#1d6680,#184054);color:#e8fbff;font-size:20px;font-weight:900}
-    .dash-user-main h3{margin:0;color:#f3fbff;font-size:20px}.dash-user-main p{margin:4px 0 0;color:#819aa7;font-size:10.5px}
-    .dash-session-badge{padding:8px 12px;border:1px solid #765c29;border-radius:999px;color:var(--amber);background:#251d0f;font-size:10px;font-weight:800;white-space:nowrap}.dash-session-badge.live{color:var(--good);border-color:#2e7258;background:#0e2a20}
     .dash-health-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:18px 22px 10px}.dash-health{padding:14px;border:1px solid #294557;border-radius:12px;background:#071521}.dash-health span{display:block;color:#748f9d;font-size:9.5px}.dash-health b{display:block;margin-top:8px;color:#f2fbff;font:800 22px "SF Mono",ui-monospace,monospace}.dash-health small{display:block;margin-top:5px;color:#607986;font-size:8.5px}
     .dash-sensors-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 22px;color:#a9c2cc;font-size:11px;font-weight:800}.dash-sensors-head span{color:#718b98;font-size:9px;font-weight:600}
     .dash-sensor-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;padding:0 22px 20px}.dash-sensor{position:relative;padding:11px;border:1px solid #243f50;border-radius:10px;background:#081722}.dash-sensor::after{content:"";position:absolute;right:9px;top:9px;width:7px;height:7px;border-radius:50%;background:var(--faint)}.dash-sensor.live::after{background:var(--good);box-shadow:0 0 8px #2effab88}.dash-sensor.offline::after{background:var(--bad)}.dash-sensor span{display:block;color:#718b98;font-size:8.5px}.dash-sensor b{display:block;margin-top:7px;color:#e9f7fb;font:800 15px "SF Mono",ui-monospace,monospace}.dash-foot{padding:11px 22px;border-top:1px solid #213b4b;color:#6f8793;font-size:9px}
@@ -802,8 +803,8 @@
     .device-inline{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.device-inline select{width:auto;min-width:84px;margin:0;padding:8px 25px 8px 10px;font-size:10px}.device-mini-btn{min-height:36px;padding:7px 10px;border:1px solid #355369;border-radius:9px;background:#102433;color:#b8d2dc;font-size:9px;cursor:pointer}.device-mini-btn:disabled{opacity:.4}.device-details{margin-top:8px;border-top:1px solid #1d3442}.device-details summary{padding-top:9px;color:#7794a1;font-size:9px;cursor:pointer}.bed-mini-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:9px}.bed-mini-grid button{min-height:38px}.unified-note{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding:10px 12px;border:1px solid #5d4a28;border-radius:10px;background:#1d180f;color:#d3b472;font-size:9px}.unified-note strong{color:#f1cc7d}
     .monitor-alert-bar{border-radius:12px}.monitor-advanced-btn.active{border-color:#4d8297;color:#dff8ff}.show-advanced-monitor #bcgCard,.show-advanced-monitor #rawMonitorCard{grid-column:1/-1}
     @media(max-width:980px){.controller-map{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-sensor-grid,.unified-sensor-strip{grid-template-columns:repeat(3,minmax(0,1fr))}.device-zone-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.device-zone.wide{grid-column:span 2}}
-    @media(max-width:700px){.dash-user-head,.unified-head{align-items:flex-start;flex-direction:column}.dash-health-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.device-zone-grid{grid-template-columns:1fr}.device-zone.wide{grid-column:auto}.unified-note{align-items:flex-start;flex-direction:column}.main-nav{position:sticky;top:6px;z-index:20;background:#07131ef2;backdrop-filter:blur(12px);border-radius:13px}.top .pills{width:100%}}
-    @media(max-width:480px){.controller-map{grid-template-columns:1fr 1fr}.controller-node{min-height:104px}.dash-health-grid,.dash-sensor-grid,.unified-sensor-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-user-head,.dash-health-grid,.dash-sensor-grid,.dash-foot{padding-left:14px;padding-right:14px}.unified-control{padding:14px}.smart-switch{min-width:72px}.main-nav a{font-size:10px}.nav-icon{font-size:15px}}
+    @media(max-width:700px){.unified-head{align-items:flex-start;flex-direction:column}.dash-health-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.device-zone-grid{grid-template-columns:1fr}.device-zone.wide{grid-column:auto}.unified-note{align-items:flex-start;flex-direction:column}.main-nav{position:sticky;top:6px;z-index:20;background:#07131ef2;backdrop-filter:blur(12px);border-radius:13px}.top .pills{width:100%}}
+    @media(max-width:480px){.controller-map{grid-template-columns:1fr 1fr}.controller-node{min-height:104px}.dash-health-grid,.dash-sensor-grid,.unified-sensor-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-health-grid,.dash-sensor-grid,.dash-foot{padding-left:14px;padding-right:14px}.unified-control{padding:14px}.smart-switch{min-width:72px}.main-nav a{font-size:10px}.nav-icon{font-size:15px}}
 
     /* ---------- JARVIS Human UI v4: clear hierarchy, large controls ---------- */
     :root{
@@ -831,7 +832,6 @@
     .card{border-color:#245064;border-radius:18px;clip-path:none;box-shadow:0 16px 42px #0004}.card::before,.card::after{width:18px;height:18px;opacity:.65}
     .section-title{font-size:14px;letter-spacing:.08em;text-transform:none}.muted{font-size:13px}.mini{font-size:12px}
     .btn,button,select,input{font-family:inherit}.btn{min-height:48px;padding:11px 17px;font-size:14px}.btn:focus-visible,.smart-switch:focus-visible,.device-mini-btn:focus-visible,.main-nav a:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #54e8ff66;outline-offset:2px}
-    body[data-view="dashboard"] .dash-user-head{display:none!important}
     .dashboard-overview{border-radius:20px;background:linear-gradient(145deg,#102b3d,#091825 62%,#111c30)}
     .dash-profile-reference{margin:0 22px 2px;padding:12px 14px;border:1px solid #284d60;border-radius:14px;background:#071722}.dash-profile-reference-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.dash-profile-reference-head b{color:#dff6fc;font-size:12px}.dash-profile-reference-head small{color:#6f8b98;font-size:9.5px}.dash-profile-reference-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}.dash-profile-fact{min-width:0;padding:8px 10px;border:1px solid #203e4e;border-radius:10px;background:#0a1b28}.dash-profile-fact span{display:block;color:#718e9b;font-size:9px}.dash-profile-fact strong{display:block;margin-top:4px;color:#eafaff;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dash-profile-fact.missing strong{color:#708894}.dash-profile-reference.idle{opacity:.55}
     .dash-health-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:14px 22px}.dash-health{min-height:116px;padding:17px;border-color:#2a5265;border-radius:14px;background:#071621}.dash-health span{font-size:12px}.dash-health b{margin-top:10px;font-size:28px}.dash-health small{font-size:11px;line-height:1.45}

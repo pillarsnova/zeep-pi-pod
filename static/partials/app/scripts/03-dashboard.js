@@ -33,11 +33,11 @@ function dashboardRangeScore(value,ranges){
 // criterion wins so a healthy reading cannot hide a genuinely bad one.
 const dashboardAtmosphereCriteria=Object.freeze([
   {id:'temperature',name:'อุณหภูมิ',deviceKey:'sht3x_dis',source:'SHT3x-DIS',unit:'°C',digits:1,target:'18–27°C',principle:'ประเมิน Thermal comfort จากอุณหภูมิจริงใน ZEEP',bands:'ยอดเยี่ยม 18–27 · ดี 17–28 · พอใช้ 16–29 · ควรปรับ 13–32 · ต้องดูแลเมื่ออยู่นอกช่วง',read:e=>e.temperature_c,score:v=>dashboardRangeScore(v,[[18,27],[17,28],[16,29],[13,32]]),control:'เครื่องปรับอากาศ',action:v=>v>27?'ลดอุณหภูมิที่เลือกหรือเปิดแอร์':v<18?'เพิ่มอุณหภูมิที่เลือกหรือลดความเย็น':'รักษาอุณหภูมิปัจจุบัน'},
-  {id:'humidity',name:'ความชื้น',deviceKey:'sht3x_dis',source:'SHT3x-DIS',unit:'%RH',digits:1,target:'40–60%RH',principle:'ป้องกันอากาศแห้งเกินไปหรือความชื้นสะสมและการควบแน่น',bands:'ยอดเยี่ยม 40–60 · ดี 35–65 · พอใช้ 30–70 · ควรปรับ 20–80 · ต้องดูแลเมื่ออยู่นอกช่วง',read:e=>e.humidity_rh,score:v=>dashboardRangeScore(v,[[40,60],[35,65],[30,70],[20,80]]),control:'ไอน้ำ · ระบบระบายอากาศ',action:v=>v>60?'ปิดไอน้ำและเร่งระบายอากาศ':v<40?'เปิดไอน้ำเป็นช่วงและติดตามค่า':'รักษาความชื้นปัจจุบัน'},
+  {id:'humidity',name:'ความชื้น',deviceKey:'sht3x_dis',source:'SHT3x-DIS',unit:'%RH',digits:1,target:'40–60%RH',principle:'ใช้สังเกตอากาศแห้ง ความชื้นสะสม และความเสี่ยงการควบแน่น',bands:'ยอดเยี่ยม 40–60 · ดี 35–65 · พอใช้ 30–70 · ควรปรับ 20–80 · ต้องดูแลเมื่ออยู่นอกช่วง',read:e=>e.humidity_rh,score:v=>dashboardRangeScore(v,[[40,60],[35,65],[30,70],[20,80]]),control:'ไอน้ำ · ระบบระบายอากาศ',action:v=>v>60?'ปิดไอน้ำและเร่งระบายอากาศ':v<40?'เปิดไอน้ำเป็นช่วงและติดตามค่า':'รักษาความชื้นปัจจุบัน'},
   {id:'light',name:'ความสว่าง',deviceKey:'opt3001',source:'OPT3001',unit:'lux',digits:1,target:'≤5 lux',principle:'ประเมินแสงรบกวนในโหมดเตรียมนอนและขณะนอน',bands:'ยอดเยี่ยม ≤5 · ดี ≤10 · พอใช้ ≤30 · ควรปรับ ≤100 · ต้องดูแล >100 lux',read:e=>e.lux,score:v=>dashboardUpperScore(v,[5,10,30,100]),control:'ไฟเพดาน · แสงแดง · ประตู',action:v=>v>5?'ลดหรือปิดไฟ ตรวจแสงรั่วและตำแหน่งประตู':'รักษาระดับแสงปัจจุบัน'},
   {id:'sound',name:'เสียง',deviceKey:'sph0645',source:'SPH0645LM4H-B',unit:'dBA',digits:1,target:'<40 dBA',requiredForOverall:false,principle:'รับค่า sound_dba ที่ Sensor Hub 1 ส่งจาก ESP32 โดยตรง',bands:'ยอดเยี่ยม <40 · ดี 40–45 · พอใช้ >45–50 · ควรปรับ >50–60 · ต้องดูแล >60 dBA',read:e=>e.sound_dba_est,score:v=>v<40?4:v<=45?3:v<=50?2:v<=60?1:0,control:'เสียงบรรยากาศ · พัดลม · คอมเพรสเซอร์',action:v=>v>=40?'ลดเสียงเพลงและตรวจพัดลม คอมเพรสเซอร์ หรือการสั่น':'รักษาระดับเสียงปัจจุบัน'},
   {id:'co2',name:'CO₂',deviceKey:'mhz19c',source:'MH-Z19C',unit:'ppm',digits:0,target:'≤800 ppm',principle:'ใช้ CO₂ เป็นตัวชี้การระบายอากาศ ไม่ใช่ค่าปริมาณออกซิเจน',bands:'ยอดเยี่ยม ≤800 · ดี ≤1,000 · พอใช้ ≤1,150 · ควรปรับ <1,300 · เกณฑ์หยุด ≥1,300 ppm',read:e=>e.co2_ppm,score:v=>v<=800?4:v<=1000?3:v<=1150?2:v<1300?1:0,control:'พัดลมลมเข้า · พัดลมลมออก',action:v=>v>800?'เพิ่มการเติมและระบายอากาศ พร้อมตรวจ Filter อุดตัน':'รักษาการหมุนเวียนอากาศปัจจุบัน'},
-  {id:'pm25',name:'PM2.5',deviceKey:'pms7003',source:'PMS7003',unit:'µg/m³',digits:1,target:'≤15 µg/m³',principle:'ตรวจประสิทธิภาพการกรองฝุ่นละเอียดและการรั่วของอากาศ',bands:'ยอดเยี่ยม ≤15 · ดี ≤25 · พอใช้ ≤37.5 · ควรปรับ ≤50 · ต้องดูแล >50 µg/m³',read:e=>e.pm2_5_ug_m3,score:v=>dashboardUpperScore(v,[15,25,37.5,50]),control:'Pre-Filter · HEPA · ซีลประตู',action:v=>v>15?'ตรวจหรือเปลี่ยน Pre/HEPA Filter และตรวจรอยรั่ว':'รักษาระบบกรองอากาศปัจจุบัน'},
+  {id:'pm25',name:'PM2.5',deviceKey:'pms7003',source:'PMS7003',unit:'µg/m³',digits:1,target:'≤15 µg/m³',principle:'ใช้สังเกตฝุ่นละเอียดและเป็นสัญญาณให้ตรวจระบบกรองหรือรอยรั่ว',bands:'ยอดเยี่ยม ≤15 · ดี ≤25 · พอใช้ ≤37.5 · ควรปรับ ≤50 · ต้องดูแล >50 µg/m³',read:e=>e.pm2_5_ug_m3,score:v=>dashboardUpperScore(v,[15,25,37.5,50]),control:'Pre-Filter · HEPA · ซีลประตู',action:v=>v>15?'ตรวจหรือเปลี่ยน Pre/HEPA Filter และตรวจรอยรั่ว':'รักษาระบบกรองอากาศปัจจุบัน'},
   {id:'voc',name:'VOC Index',deviceKey:'sgp40',source:'SGP40',unit:'',digits:0,target:'≤120',principle:'เทียบสารระเหยกับ Adaptive baseline ของ SGP40 ซึ่งปรับตัวใกล้ 100',bands:'ยอดเยี่ยม ≤120 · ดี ≤150 · พอใช้ ≤200 · ควรปรับ ≤300 · ต้องดูแล >300',read:e=>e.voc_index,score:v=>dashboardUpperScore(v,[120,150,200,300]),control:'กลิ่น · พัดลมระบาย · Carbon Filter',action:v=>v>120?'หยุดแหล่งกลิ่นหรือสารระเหย เร่งระบาย และตรวจ Carbon Filter':'รักษาการระบายอากาศปัจจุบัน'},
 ]);
 function assessDashboardAtmosphere(environment={},devices={}){
@@ -56,7 +56,7 @@ function assessDashboardAtmosphere(environment={},devices={}){
   const blockingUnavailable=unavailable.filter(metric=>metric.required_for_overall!==false);
   const advisoryUnavailable=unavailable.filter(metric=>metric.required_for_overall===false);
   const blockingMissingActions=blockingUnavailable.map(metric=>({type:'sensor',priority:'required',name:metric.name,current:'ไม่มีข้อมูล Live',target:metric.target,control:metric.source,action:`ตรวจการเชื่อมต่อ ${metric.source} และ freshness ก่อนประเมิน`,blocks_overall:true}));
-  const advisoryActions=advisoryUnavailable.map(metric=>({type:'sensor',priority:'advisory',name:metric.name,current:'ไม่มีข้อมูล Live',target:metric.target,control:metric.source,action:`ตรวจการเชื่อมต่อ ${metric.source} โดยภาพรวมยังทำงานต่อ`,blocks_overall:false}));
+  const advisoryActions=advisoryUnavailable.map(metric=>({type:'sensor',priority:'advisory',name:metric.name,current:'ไม่มีข้อมูล Live',target:metric.target,control:metric.source,action:`ตรวจการเชื่อมต่อ ${metric.source} · ภาพรวมยังประเมินจาก Sensor หลักที่พร้อม`,blocks_overall:false}));
   if(!metrics.length){
     return {key:'unknown',label:'รอข้อมูล',english:'Waiting',symbol:'?',description:'Sensor ยังไม่พร้อมสำหรับประเมินภาพรวม',reason:'รอข้อมูล Sensor 7 เกณฑ์',metrics,evaluations,actions:[...blockingMissingActions,...advisoryActions],required_actions:blockingMissingActions,advisory_actions:advisoryActions,assessment_quality:'insufficient'};
   }
@@ -194,9 +194,8 @@ function adminBaselineTone(value,range){
 }
 function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
   const bioRoot=document.getElementById('adminBioExplanation');
-  const environmentRoot=document.getElementById('adminEnvironmentExplanation');
   const modeRoot=document.getElementById('adminExplanationMode');
-  if(!bioRoot||!environmentRoot||!modeRoot)return;
+  if(!bioRoot||!modeRoot)return;
   const stageKey=sleep.classification_active===true?(sleep.confirmed_state||sleep.state):null;
   const stage=SLEEP_TH[stageKey]||SLEEP_TH.no_data;
   const baseline=(sleep.baseline||sleep.age_baseline||{})[stageKey]||{};
@@ -257,30 +256,7 @@ function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
   }));
   bioRoot.innerHTML=bioRows.join('');
 
-  const result=atmosphere||{key:'unknown',evaluations:[]};
-  const evaluations=Array.isArray(result.evaluations)?result.evaluations:[];
-  const unavailable=evaluations.filter(metric=>metric.status!=='live');
-  const blockingUnavailable=unavailable.filter(metric=>metric.required_for_overall!==false);
-  const advisoryUnavailable=unavailable.filter(metric=>metric.required_for_overall===false);
-  const required=evaluations.filter(metric=>(metric.status!=='live'&&metric.required_for_overall!==false)||metric.decision==='required'||Number(metric.score)<2);
-  const optimise=evaluations.filter(metric=>metric.status==='live'&&(metric.decision==='optimise'||Number(metric.score)===2));
-  const available=evaluations.filter(metric=>metric.status==='live').length;
-  const environmentTone=result.key&&result.key!=='unknown'?result.key:'unknown';
-  const environmentStatus=result.key==='unknown'?'รอข้อมูล':result.label||ADMIN_LEVEL_COPY[environmentTone]||environmentTone;
-  const environmentSummary=blockingUnavailable.length
-    ?`${blockingUnavailable.length} Sensor หลักไม่มีข้อมูล Live · ยังไม่ยืนยันภาพรวม`
-    :required.length?`${required.length} จุดต่ำกว่าเกณฑ์ขั้นต่ำ · เริ่มจาก ${required[0].name}`
-    :advisoryUnavailable.length?`ประเมินได้จาก ${available}/${evaluations.length||7} เกณฑ์ · ${advisoryUnavailable[0].name}เป็น Sensor เสริมที่ไม่มีข้อมูล`
-    :optimise.length?`ผ่านขั้นต่ำแล้ว · มี ${optimise.length} จุดที่ปรับให้ดีขึ้นได้`:`Sensor พร้อม ${available}/${evaluations.length||7} เกณฑ์ · ไม่พบจุดที่ต้องแก้`;
-  const environmentAction=required.length
-    ?(required[0].recommendation||`ตรวจ ${required[0].source||required[0].name}`)
-    :optimise.length?(optimise[0].recommendation||`ปรับ ${optimise[0].name}`)
-    :advisoryUnavailable.length?`ตรวจ ${advisoryUnavailable[0].source} ภายหลัง โดยภาพรวมและ Safety ยังทำงานต่อ`
-    :'รักษาการตั้งค่าปัจจุบันและติดตาม freshness ต่อเนื่อง';
-  environmentRoot.innerHTML=evaluations.length?adminExplanationRow({
-    tone:environmentTone,icon:'unknown',title:'ภาพรวมสภาพแวดล้อม',value:'',status:environmentStatus,
-    summary:environmentSummary,detail:`${environmentAction} · ค่าราย Sensor อยู่ด้านบน`,
-  }):'<div class="admin-live-explanation-empty">ยังไม่มีข้อมูล Sensor ที่ใช้แปลผลได้</div>';
+  const result=atmosphere||{};
   const modeLabel=({
     sleep:'Overnight Recovery',
     nap_recovery:'Nap & Refresh',
@@ -335,8 +311,6 @@ function renderPersonalRestBaseline(sleep={},session={}){
   const duration=document.getElementById('dashPersonalRestDuration');
   const score=document.getElementById('dashPersonalRestScore');
   const advice=document.getElementById('dashPersonalRestAdvice');
-  const environmentRoot=document.getElementById('dashPersonalRestEnvironment');
-  const environmentValues=document.getElementById('dashPersonalRestEnvironmentValues');
   const baseline=personalRestWindowSource(sleep,session);
   const count=Math.max(0,Math.floor(Number(baseline.sessions_compared)||0));
   const start=personalRestClock(baseline.start_local_minute);
@@ -345,23 +319,21 @@ function renderPersonalRestBaseline(sleep={},session={}){
   root.classList.toggle('idle',!session.active);
   root.classList.toggle('learning',session.active&&!available);
   root.classList.toggle('available',available);
-  environmentRoot.hidden=true;
-  environmentValues.replaceChildren();
   if(!session.active){
-    title.textContent='Baseline ช่วงเวลาพักของคุณ';
-    evidence.textContent='เข้าสู่ระบบเพื่อเริ่มเรียนรู้จากการพักของคุณ';
+    title.textContent='ช่วงเวลาพักที่เหมาะกับคุณ';
+    evidence.textContent='เข้าสู่ระบบเพื่อดูข้อมูลจากการพักครั้งก่อน';
     status.textContent='รอเริ่ม';
     mode.textContent='รูปแบบการพัก';
     time.textContent='--:-- – --:--';
     duration.textContent='ยังไม่มีข้อมูลช่วงเวลา';
     score.textContent='กำลังรอผลการพักครั้งแรก';
-    advice.textContent='เมื่อกลับมาใช้ครั้งที่ 2 ZEEP จะเริ่มแนะนำช่วงเวลาที่เหมาะกับคุณ';
+    advice.textContent='เมื่อกลับมาใช้ครั้งที่ 2 ZEEP จะแสดงช่วงเวลาจากครั้งก่อนเพื่อใช้เปรียบเทียบ';
     return;
   }
   mode.textContent=personalRestModeLabel(baseline,session);
   if(!available){
-    title.textContent='กำลังสร้าง Baseline ครั้งแรก';
-    evidence.textContent='ครั้งถัดไป ZEEP จะเริ่มแนะนำช่วงเวลาจากข้อมูลของคุณ';
+    title.textContent='กำลังเรียนรู้ช่วงเวลาของคุณ';
+    evidence.textContent='ครั้งถัดไป ZEEP จะเริ่มเปรียบเทียบกับข้อมูลครั้งนี้';
     status.textContent='ครั้งแรก';
     time.textContent='กำลังเรียนรู้';
     duration.textContent='บันทึกเฉพาะรูปแบบการพักครั้งนี้';
@@ -377,7 +349,7 @@ function renderPersonalRestBaseline(sleep={},session={}){
   };
   title.textContent=!outcomeSupported
     ?'ช่วงเวลาจากครั้งก่อน'
-    :observedOnce?'ช่วงเวลาที่ได้ผลดีจากครั้งก่อน':'ช่วงเวลาพักที่ได้ผลดีที่สุดของคุณ';
+    :observedOnce?'ช่วงเวลาจากครั้งก่อน':'ช่วงที่ได้คะแนนสูงสุดจากข้อมูลก่อนหน้า';
   evidence.textContent=!outcomeSupported
     ?'ข้อมูลเวลาพร้อมแล้ว · หลักฐานผลลัพธ์ยังจำกัด'
     :observedOnce
@@ -397,45 +369,13 @@ function renderPersonalRestBaseline(sleep={},session={}){
   advice.textContent=!outcomeSupported
     ?'ใช้เป็นข้อมูลเวลาเบื้องต้น และรอผลครั้งถัดไปก่อนแนะนำการปรับ'
     :tolerance
-      ?`หากสะดวก ลองเริ่มพักใกล้เวลานี้ ±${tolerance} นาที`
+      ?`หากสะดวก ลองเริ่มพักใกล้เวลานี้ ±${tolerance} นาที และบอกความรู้สึกหลังพัก`
       :'หากสะดวก ลองเริ่มพักใกล้ช่วงเวลานี้';
-  const environment=baseline.environment&&typeof baseline.environment==='object'
-    ?baseline.environment:{};
-  const environmentMetrics=[
-    ['temp_median','อุณหภูมิ','°C',1],['humidity_median','ความชื้น','%RH',1],
-    ['co2_median','CO₂','ppm',0],['lux_median','แสง','lux',1],
-    ['sound_median','เสียง','dBA',1],
-  ];
-  if(baseline.environment_reference_available===true){
-    environmentMetrics.forEach(([key,label,unit,digits])=>{
-      const value=Number(environment[key]);
-      if(environment[key]===null||environment[key]===undefined||environment[key]===''||!Number.isFinite(value))return;
-      const chip=document.createElement('span'),name=document.createElement('small'),reading=document.createElement('b');
-      name.textContent=label;
-      reading.textContent=`${value.toLocaleString('th-TH-u-nu-latn',{minimumFractionDigits:digits,maximumFractionDigits:digits})} ${unit}`;
-      chip.append(name,reading);environmentValues.append(chip);
-    });
-    environmentRoot.hidden=!environmentValues.childElementCount;
-  }
 }
 function renderSimpleDashboard(state={},environment={},bcg={},session={}){
   const active=!!session.active,recording=!!session.recording;
   const adminView=currentPrincipal?.role==='admin';
   renderHealthReference(session);
-  const avatar=document.getElementById('dashAvatar');
-  const account=active?identityLabel(session):'ยังไม่เริ่ม Session';
-  avatar.textContent=active?String(account||'Z').trim().slice(0,1).toUpperCase():'Z';
-  document.getElementById('dashUserName').textContent=account;
-  document.getElementById('dashUserMeta').textContent=active
-    ? `${genderTh(session.gender)} · ${displayAge(session)} · ${adminView
-      ?recording?`บันทึกแล้ว ${session.samples||0} จุด`:sessionStartGateText(session,state.system||{})
-      :recording?'กำลังบันทึกการพัก':'กำลังเตรียมเริ่มบันทึก'}`
-    : adminView?'เลือกผู้ใช้งานเพื่อเริ่มติดตามสุขภาพและสภาพแวดล้อม':'เข้าสู่ระบบเพื่อเริ่มการพัก';
-  const badge=document.getElementById('dashSessionBadge');
-  badge.textContent=adminView
-    ?recording?'● RECORDING':active?'WAITING FOR VITALS':'NO SESSION'
-    :recording?'● กำลังบันทึก':active?'กำลังเตรียม':'ยังไม่เริ่ม';
-  badge.classList.toggle('live',recording);
   const bcgLive=!!bcg.connected&&!bcg.stale,bcgStatus=Number(bcg.status_code),bcgRestored=bcg.restored_after_restart===true;
   const personOnBed=bcgLive&&[0,2,3,5].includes(bcgStatus);
   const vitalFallbackNote=adminView
@@ -492,7 +432,7 @@ function renderSimpleDashboard(state={},environment={},bcg={},session={}){
         :classificationActive
           ?'ประเมินจากแนวโน้มชีพจร การหายใจ และการพักนิ่ง'
           :sleep.evidence_active?'กำลังดูแนวโน้มให้ชัดขึ้น':'กำลังอ่านสัญญาณจากเตียง';
-  renderAdminSleepBaseline(sleep,session);
+  if(adminView)renderAdminSleepBaseline(sleep,session);
   const devices=environment.devices||{};
   setDashboardSensor('dashSensorTemp','dashTemp',environment.temperature_c,'°C',devices.sht3x_dis,1);
   setDashboardSensor('dashSensorHumidity','dashHumidity',environment.humidity_rh,'%RH',devices.sht3x_dis,1);
@@ -503,7 +443,7 @@ function renderSimpleDashboard(state={},environment={},bcg={},session={}){
   const soundMetric=soundDisplayMetric(environment);
   setDashboardSensor('dashSensorSound','dashSound',soundMetric.value,soundMetric.unit,devices.sph0645,soundMetric.digits);
   const atmosphere=renderDashboardAtmosphere(environment,devices);
-  renderAdminLiveExplanation({bcg,sleep,session,atmosphere});
+  if(adminView)renderAdminLiveExplanation({bcg,sleep,session,atmosphere});
   document.getElementById('dashSensorSummary').textContent=adminView
     ?`Sensor ${environment.live_count||0}/${environment.total_count||6} · ${environment.status||'offline'}`
     :`ข้อมูลพร้อม ${environment.live_count||0}/${environment.total_count||6}`;
@@ -563,7 +503,7 @@ function renderAdminSleepBaseline(sleep={},session={}){
   const personal=sleep.personal_baseline||{};
   sourceEl.textContent=sleep.classification_source==='personal'
     ? `Personal Baseline · ${personal.nights_used||0} คืน`
-    : `Age + Gender · ${sleep.age_group||session.age_group||'18-29'} ปี · ${genderTh(sleep.gender||session.gender)}`;
+    : `Age + Gender · ${ageGroupDisplay(sleep.age_group||session.age_group)} · ${genderTh(sleep.gender||session.gender)}`;
   const frame=current.sensor_frame||current.analysis_frame||{};
   const frameTime=frame.timestamp?new Date(frame.timestamp).toLocaleTimeString('th-TH',{hour12:false}):'--:--:--';
   const clock=sleep.sensor_frame_clock||{},confirmation=sleep.confirmation||{};

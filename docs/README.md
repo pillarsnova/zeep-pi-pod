@@ -4,7 +4,7 @@
 
 เจ้าของ: Pi 5 application team
 
-อัปเดตล่าสุด: 15 กันยายน 2026
+อัปเดตล่าสุด: 16 กันยายน 2026
 
 เอกสารในตารางนี้เป็นชุดที่ทีมใช้พัฒนา ตรวจสอบ และส่งมอบระบบปัจจุบัน
 เอกสารทดลองหรือรายงาน dry-run ที่ถูกแทนที่แล้วไม่เก็บปะปนใน working tree;
@@ -14,8 +14,9 @@
 
 | เรื่อง | เอกสารที่มีอำนาจ | ใช้สำหรับ |
 |---|---|---|
+| ส่งมอบและ Code Freeze | [v1 System Handover and Freeze Readiness](zeep-v1-system-handover-and-freeze-readiness.md) | Lifecycle ครบวงจร, invariant, test gate และรายการลงนามก่อน Freeze |
 | ภาพรวมระบบ | [Pi 5 Software Architecture](pi5-software-architecture.md) | ขอบเขต module, dependency และลำดับ refactor |
-| ปฏิบัติการเครื่อง | [Pi 5 Operations Runbook](pi5-operations-runbook.md) | Pull, test, deploy, backup, restart และ recovery |
+| ปฏิบัติการเครื่อง | [Pi 5 Operations Runbook](pi5-operations-runbook.md) | Pull, verified Pod sync, test, deploy, backup, restart และ recovery |
 | Sleep State และคะแนน | [Sleep System Current](zeep-sleep-system-current.md) | Runtime, replay, Sleep Score และ Recovery Score |
 | หลักฐาน Baseline | [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.0.md) | Feature, gate, transition และขอบเขตการกล่าวอ้าง |
 | Historical promotion | [Sleep History Promotion Policy v2](sleep-history-promotion-policy-v2.md) | Guard และ audit เมื่อเขียน derived result ย้อนหลัง |

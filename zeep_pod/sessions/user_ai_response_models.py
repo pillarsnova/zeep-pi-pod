@@ -19,7 +19,7 @@ ScoreFormulaVersion = Literal[
     "zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10",
 ]
 BaselinePolicyVersion = Literal[
-    "zeep-personal-behaviour-baseline-v1.1-formula-target-specific"
+    "zeep-personal-behaviour-baseline-v1.3-bounded-partitioned-finite-circular-time"
 ]
 BaselineStatus = Literal["no_data", "learning", "active", "target_required"]
 BaselineTargetKey = Literal["overnight_7h", "nap_30", "nap_90"]

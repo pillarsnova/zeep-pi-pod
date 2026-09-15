@@ -55,7 +55,7 @@ async function loadUsers(){
         document.querySelectorAll('.chip').forEach(x=>x.classList.remove('sel'));
         c.classList.add('sel');
         document.getElementById('loginName').value = u.username;
-        document.getElementById('loginAgeGroup').value = u.age_group || ageToGroup(Number(u.age)||24);
+        document.getElementById('loginAgeGroup').value = u.age_group || ageToGroup(u.age);
         renderLoginBaseline();
         selectGender(u.gender);
       };
@@ -188,14 +188,29 @@ function setLoginMode(mode){
   }
 }
 
-function renderRestModeHint(){
-  const select=document.getElementById('loginRestMode'),hint=document.getElementById('loginRestModeHint');
-  if(!select||!hint)return;
-  const descriptions={
-    sleep:'เหมาะกับการพักค้างคืนประมาณ 5 ชั่วโมงขึ้นไป · สรุปความต่อเนื่องและรูปแบบการนอน',
-    nap_recovery:'พักระหว่างวันประมาณ 30 นาที · จะหลับ พักสายตา หรือทำสมาธิก็ได้',
+function selectedRestIntent(){
+  const mode=document.getElementById('loginRestMode')?.value||'nap_recovery';
+  const requested=Number(document.getElementById('loginNapTarget')?.value);
+  const napTarget=requested===90?90:30;
+  return {
+    rest_mode:mode,
+    target_duration_minutes:mode==='nap_recovery'?napTarget:null,
   };
-  hint.textContent=descriptions[select.value]||descriptions.nap_recovery;
+}
+
+function renderRestModeHint(){
+  const hint=document.getElementById('loginRestModeHint');
+  const targetBlock=document.getElementById('loginNapTargetBlock');
+  if(!hint||!targetBlock)return;
+  const intent=selectedRestIntent(),isNap=intent.rest_mode==='nap_recovery';
+  targetBlock.classList.toggle('login-off',!isNap);
+  if(!isNap){
+    hint.textContent='เหมาะกับการพักค้างคืนประมาณ 5 ชั่วโมงขึ้นไป · สรุปความต่อเนื่องและรูปแบบการนอน';
+    return;
+  }
+  hint.textContent=intent.target_duration_minutes===90
+    ?'พัก 90 นาที · จะหลับหรือพักอย่างเป็นธรรมชาติก็ได้'
+    :'พัก 30 นาที · จะหลับ พักสายตา หรือทำสมาธิก็ได้';
 }
 function toggleLoginMode(){
   if(loginAudience==='user'&&offlineTicket)setLoginMode(loginMode === 'zeep' ? 'local' : 'zeep');
@@ -281,7 +296,7 @@ async function startQrSession(){
 async function pollQrLogin(){
   qrLogin.timer = null;
   if (!qrLogin.loginId) return;
-  const body = {login_id:qrLogin.loginId, rest_mode:document.getElementById('loginRestMode').value};
+  const body = {login_id:qrLogin.loginId, ...selectedRestIntent()};
   const ageBlock = document.getElementById('loginAgeBlock');
   if (!ageBlock.classList.contains('login-off')){
     const ageGroup = document.getElementById('loginAgeGroup').value;
@@ -452,7 +467,7 @@ async function submitProfileForm(btn){
   const body = {
     profile_ticket:profileGate.ticket, gender:profileGate.gender, date_of_birth:dob,
     height_cm:height, weight_kg:weight, blood_group:profileGate.blood || null,
-    rest_mode:document.getElementById('loginRestMode').value,
+    ...selectedRestIntent(),
   };
   await withBusy(btn, async ()=>{
     let r, d = null;
@@ -551,7 +566,7 @@ async function doZeepLogin(btn){
   const password = document.getElementById('loginPassword').value;
   if (!identifier || !password){ showLoginError('กรอกอีเมลหรือชื่อผู้ใช้และรหัสผ่านให้ครบ'); return; }
   const ageBlock = document.getElementById('loginAgeBlock');
-  const body = {identifier, password, rest_mode:document.getElementById('loginRestMode').value};
+  const body = {identifier, password, ...selectedRestIntent()};
   // ช่องช่วงอายุจะโผล่เฉพาะรอบที่ server ตอบ age_group_required มา → ส่งกลับไปด้วย
   if (!ageBlock.classList.contains('login-off')){
     const ageGroup = document.getElementById('loginAgeGroup').value;
@@ -602,7 +617,7 @@ async function doLocalLogin(btn){
     try{
       response=await fetch('/api/session/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
         username:name,gender:selectedGender,age_group:ageGroup,offline_ticket:offlineTicket,
-        offline_identifier:offlineIdentifier,rest_mode:document.getElementById('loginRestMode').value
+        offline_identifier:offlineIdentifier,...selectedRestIntent()
       })});
     }catch{showLoginError('ยังเชื่อมต่อระบบไม่ได้ กรุณาลองอีกครั้ง');return;}
     let result={};try{result=await response.json();}catch{}

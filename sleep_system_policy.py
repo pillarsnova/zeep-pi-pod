@@ -21,6 +21,7 @@ ZEEP_SLEEP_BASELINE_VERSION = "zeep-sleep-state-baseline-v1.8-sep1-cutover"
 PERSONAL_BEHAVIOUR_BASELINE_VERSION = (
     "zeep-personal-behaviour-baseline-v1.1-formula-target-specific"
 )
+PERSONAL_REST_WINDOW_BASELINE_VERSION = "zeep-personal-rest-window-v1.0"
 ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.18-scoreable-continuity"
 SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
 SLEEP_HISTORY_BACKFILL_VERSION = (
@@ -1603,6 +1604,18 @@ def sleep_policy_snapshot() -> dict[str, Any]:
                 PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED
             ),
             "current_role": "report_and_confidence_context_only",
+            "best_rest_window": {
+                "version": PERSONAL_REST_WINDOW_BASELINE_VERSION,
+                "available_from_prior_sessions": 1,
+                "first_visible_visit": 2,
+                "same_mode_only": True,
+                "same_nap_target_only": True,
+                "selection": (
+                    "highest_current_formula_score_then_evidence_then_most_recent"
+                ),
+                "automatic_device_control": False,
+                "requires_user_confirmation": True,
+            },
         },
         "strong_wake_override": True,
         "classification_gate": {

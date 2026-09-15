@@ -340,6 +340,29 @@
           <div class="dash-profile-fact" id="dashProfileBlood"><span>กรุ๊ปเลือด</span><strong>—</strong></div>
         </div>
       </section>
+      <section class="dash-personal-rest-baseline idle" id="dashPersonalRestBaseline" aria-label="Baseline ช่วงเวลาพักส่วนบุคคล" aria-live="polite">
+        <div class="dash-personal-rest-head">
+          <span class="dash-personal-rest-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/><path d="M18.5 5.5 20 4"/></svg></span>
+          <div><b id="dashPersonalRestTitle">Baseline ช่วงเวลาพักของคุณ</b><small id="dashPersonalRestEvidence">เข้าสู่ระบบเพื่อเริ่มเรียนรู้จากการพักของคุณ</small></div>
+          <span class="dash-personal-rest-status" id="dashPersonalRestStatus">รอเริ่ม</span>
+        </div>
+        <div class="dash-personal-rest-body">
+          <div class="dash-personal-rest-time">
+            <small id="dashPersonalRestMode">รูปแบบการพัก</small>
+            <strong id="dashPersonalRestTime">--:-- – --:--</strong>
+            <span id="dashPersonalRestDuration">ยังไม่มีข้อมูลช่วงเวลา</span>
+          </div>
+          <div class="dash-personal-rest-result">
+            <b id="dashPersonalRestScore">กำลังรอผลการพักครั้งแรก</b>
+            <p id="dashPersonalRestAdvice">เมื่อกลับมาใช้ครั้งที่ 2 ZEEP จะเริ่มแนะนำช่วงเวลาที่เหมาะกับคุณ</p>
+          </div>
+        </div>
+        <div class="dash-personal-rest-environment" id="dashPersonalRestEnvironment" hidden>
+          <small>ค่าที่บันทึกได้ในช่วงพักนี้</small>
+          <div id="dashPersonalRestEnvironmentValues"></div>
+        </div>
+        <small class="dash-personal-rest-guardrail" id="dashPersonalRestGuardrail">ใช้เพื่อแนะนำเท่านั้น · ระบบจะให้คุณยืนยันก่อนปรับอุปกรณ์</small>
+      </section>
       <div class="dashboard-zone-grid">
         <section class="dashboard-zone dashboard-health-zone" aria-label="สุขภาพผู้ใช้งาน">
           <div class="dashboard-zone-head"><div><span class="dashboard-zone-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M3 12h4l2-4 4 9 2-5h6"/><path d="M12 21C5 17 3 13 3 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 9 2.5c0 3.5-2 7.5-9 11.5Z"/></svg></span>สุขภาพผู้ใช้งาน</div><span>ข้อมูลระหว่างพัก</span></div>

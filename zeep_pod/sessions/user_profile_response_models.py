@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, root_validator
 
+from sleep_system_policy import (
+    RESTORE_BASELINE_MIN_COMPARISON_SESSIONS,
+    RESTORE_BASELINE_STABLE_SESSIONS,
+)
 from zeep_pod.sessions._response_model_base import ContractModel
 from zeep_pod.sessions.usage_response_models import ApiResponseBase
 
@@ -63,6 +67,182 @@ class UserScoreTrend(ContractModel):
     method: Literal["latest_vs_previous_same_formula"]
 
 
+class BestRestWindowEnvironment(ContractModel):
+    temp_median: float | None = None
+    humidity_median: float | None = None
+    co2_median: float | None = None
+    lux_median: float | None = None
+    sound_median: float | None = None
+
+
+WINDOW_OBSERVATION_FIELDS = (
+    "start_local_minute",
+    "end_local_minute",
+    "duration_minutes",
+    "start_tolerance_minutes",
+    "score_type",
+    "score_title",
+    "score_value",
+    "score_formula_version",
+)
+WINDOW_SCORE_IDENTITIES = {
+    "sleep": (
+        "sleep_score",
+        "Sleep Score",
+        "zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10",
+        30.0,
+    ),
+    "nap_recovery": (
+        "recovery_score",
+        "Recovery Score",
+        "zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10",
+        15.0,
+    ),
+}
+
+
+def _contract_window_maturity(sessions: int) -> tuple[str, str]:
+    if sessions <= 0:
+        return "no_data", "none"
+    if sessions == 1:
+        return "observed_once", "low"
+    if sessions < 3:
+        return "learning", "low"
+    if sessions < RESTORE_BASELINE_MIN_COMPARISON_SESSIONS:
+        return "early", "low"
+    if sessions < RESTORE_BASELINE_STABLE_SESSIONS:
+        return "active", "medium"
+    return "stable", "high"
+
+
+def _validate_window_presence(values: dict[str, Any]) -> None:
+    available = values["available"]
+    sessions = values["sessions_compared"]
+    expected_status, expected_maturity = _contract_window_maturity(sessions)
+    if values["status"] != expected_status:
+        raise ValueError("status must match sessions_compared")
+    if values["maturity_confidence"] != expected_maturity:
+        raise ValueError("maturity confidence must match sessions_compared")
+    complete = all(values[field] is not None for field in WINDOW_OBSERVATION_FIELDS)
+    empty = all(values[field] is None for field in WINDOW_OBSERVATION_FIELDS)
+    if available and (sessions < 1 or not complete):
+        raise ValueError("available window requires a complete observation")
+    if not available and (sessions or not empty):
+        raise ValueError("unavailable window cannot contain an observation")
+
+
+def _validate_window_mode(values: dict[str, Any]) -> None:
+    available = values["available"]
+    mode = values["mode_group"]
+    target = values["target_key"]
+    same_target = values["same_target_only"]
+    if mode == "sleep" and (same_target or target not in {None, "overnight_7h"}):
+        raise ValueError("sleep window cannot claim Nap target isolation")
+    if mode == "nap_recovery":
+        if not same_target or target not in {None, "nap_30", "nap_90"}:
+            raise ValueError("Nap window must use a valid target-specific identity")
+        if available and target is None:
+            raise ValueError("available Nap window requires nap_30 or nap_90")
+    if mode == "unknown" and (available or target is not None or same_target):
+        raise ValueError("unknown mode cannot publish a rest window")
+
+
+def _validate_window_score(values: dict[str, Any]) -> None:
+    if not values["available"]:
+        if values["crosses_midnight"]:
+            raise ValueError("unavailable window cannot cross midnight")
+        return
+    expected = WINDOW_SCORE_IDENTITIES[values["mode_group"]]
+    actual = (
+        values["score_type"],
+        values["score_title"],
+        values["score_formula_version"],
+        values["start_tolerance_minutes"],
+    )
+    if actual != expected:
+        raise ValueError("score identity must match the rest mode")
+    expected_crossing = values["end_local_minute"] <= values["start_local_minute"]
+    if values["crosses_midnight"] != expected_crossing:
+        raise ValueError("crosses_midnight must match the time window")
+
+
+def _validate_window_environment(values: dict[str, Any]) -> None:
+    environment = values["environment"]
+    has_value = any(
+        getattr(environment, field) is not None
+        for field in (
+            "temp_median",
+            "humidity_median",
+            "co2_median",
+            "lux_median",
+            "sound_median",
+        )
+    )
+    if values["environment_reference_available"]:
+        if not values["outcome_supported"] or not has_value:
+            raise ValueError("environment reference requires a supported observation")
+    elif has_value:
+        raise ValueError("hidden environment reference must be empty")
+    if values["outcome_supported"] and not values["available"]:
+        raise ValueError("unsupported window cannot publish an outcome")
+
+
+class BestRestWindow(ContractModel):
+    version: Literal["zeep-personal-rest-window-v1.0"]
+    available: bool
+    status: Literal[
+        "no_data",
+        "observed_once",
+        "learning",
+        "early",
+        "active",
+        "stable",
+    ]
+    maturity_confidence: Literal["none", "low", "medium", "high"]
+    sessions_compared: int = Field(ge=0)
+    first_visible_visit: Literal[2]
+    method: Literal[
+        "highest_current_formula_score_then_evidence_then_most_recent"
+    ]
+    same_mode_only: Literal[True]
+    same_target_only: bool
+    mode_group: Literal["sleep", "nap_recovery", "unknown"]
+    target_key: Literal["overnight_7h", "nap_30", "nap_90"] | None = Field(...)
+    timezone: Literal["Asia/Bangkok"]
+    start_local_minute: float | None = Field(..., ge=0, lt=1440)
+    end_local_minute: float | None = Field(..., ge=0, lt=1440)
+    duration_minutes: float | None = Field(..., ge=0)
+    crosses_midnight: bool
+    start_tolerance_minutes: Literal[15.0, 30.0] | None = Field(...)
+    score_type: Literal["sleep_score", "recovery_score"] | None = Field(...)
+    score_title: Literal["Sleep Score", "Recovery Score"] | None = Field(...)
+    score_value: float | None = Field(..., ge=0, le=100)
+    score_formula_version: Literal[
+        "zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10",
+        "zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10",
+    ] | None = Field(...)
+    evidence_quality: Literal["unknown", "low", "medium", "high"]
+    outcome_supported: bool
+    environment_reference_available: bool
+    environment: BestRestWindowEnvironment
+    environment_role: Literal[
+        "observed_successful_session_not_confirmed_preference"
+    ]
+    affects_score: Literal[False]
+    affects_sleep_state: Literal[False]
+    current_session_excluded: Literal[True]
+    automatic_device_control: Literal[False]
+    requires_user_confirmation: Literal[True]
+
+    @root_validator(skip_on_failure=True)
+    def observation_contract_must_be_consistent(cls, values: dict[str, Any]):
+        _validate_window_presence(values)
+        _validate_window_mode(values)
+        _validate_window_score(values)
+        _validate_window_environment(values)
+        return values
+
+
 class UserModeBaseline(ContractModel):
     status: str
     sessions_used: int = Field(ge=0)
@@ -70,6 +250,7 @@ class UserModeBaseline(ContractModel):
     typical_duration_minutes: float | None = Field(..., ge=0)
     typical_start_local_hour: float | None = Field(..., ge=0, le=24)
     typical_environment: dict[str, float]
+    best_rest_window: BestRestWindow
     reference_scope: Literal[
         "prior_completed_same_mode_sessions_only",
         "prior_completed_same_mode_and_target_sessions_only",
@@ -205,6 +386,8 @@ def _resolve_forward_references() -> None:
         ObservedHistory,
         UserRecentScore,
         UserScoreTrend,
+        BestRestWindowEnvironment,
+        BestRestWindow,
         UserModeBaseline,
         UserTargetHistory,
         UserModeHistory,

@@ -30,6 +30,7 @@ from sleep_system_policy import (
     PERSONAL_BASELINE_MIN_NIGHTS,
     PERSONAL_BASELINE_MIN_SESSION_SECONDS,
     PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+    PERSONAL_REST_WINDOW_BASELINE_VERSION,
     PRE_CONTINUITY_SESSION_REPORT_VERSION,
     PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
     PRE_MINIMUM_ONLY_SESSION_REPORT_VERSION,
@@ -52,7 +53,10 @@ from zeep_pod.identity.account_aliases import (
     normalize_account_key,
     verified_legacy_account_keys,
 )
-from zeep_pod.sessions.personal_behaviour import aggregate_behaviour_by_mode
+from zeep_pod.sessions.personal_behaviour import (
+    aggregate_behaviour_by_mode,
+    empty_best_rest_window,
+)
 from zeep_pod.sessions.score_identity import assess_score_identity
 from zeep_pod.sessions.target_provenance import assess_target_provenance
 
@@ -495,6 +499,7 @@ class BaselineStore:
         duration_s: float,
         session_mode: Any = None,
         target_duration_s: Any = None,
+        start_time: Any = None,
     ) -> Optional[dict]:
         """Extract mode-aware behaviour without requiring detected sleep.
 
@@ -525,8 +530,15 @@ class BaselineStore:
         # target-specific Personal Baseline until a reviewed workflow exists.
         if protocol_status.get("review_required") is True:
             return None
-        if (quality.get("score_confidence") or {}).get("level") == "low":
+        environment_assessment = report.get("environment_assessment") or {}
+        if (
+            quality.get("safety_review_required") is True
+            or environment_assessment.get("safety_review_required") is True
+        ):
             return None
+        score_confidence_level = str(
+            (quality.get("score_confidence") or {}).get("level") or "unknown"
+        )
         explicit_mode = final_summary.get("rest_mode")
         report_mode = report.get("rest_mode")
         session_mode_present = session_mode is not None and bool(
@@ -620,15 +632,16 @@ class BaselineStore:
             "FROM timeline WHERE session_id=? ORDER BY timestamp",
             (session_id,),
         )
-        if not timeline:
-            return None
-
         def median_field(name: str) -> Optional[float]:
             values = [float(row[name]) for row in timeline if row[name] is not None]
             return round(statistics.median(values), 2) if values else None
 
         local_zone = ZoneInfo(PERSONAL_BASELINE_LEARNING_START_TIMEZONE)
-        first = datetime.fromisoformat(timeline[0]["timestamp"]).astimezone(local_zone)
+        timestamp = timeline[0]["timestamp"] if timeline else start_time
+        try:
+            first = datetime.fromisoformat(str(timestamp)).astimezone(local_zone)
+        except (TypeError, ValueError):
+            return None
         detected_sleep_s = quality.get(
             "estimated_sleep_s", night.get("estimated_sleep_s")
         )
@@ -676,6 +689,12 @@ class BaselineStore:
             "detected_sleep_s": round(detected_sleep_s, 1),
             "wellness_score": quality.get("score"),
             "score_formula_version": str(quality.get("formula_version") or "").strip(),
+            "score_confidence_level": score_confidence_level,
+            "baseline_reference_eligible": score_confidence_level != "low",
+            "outcome_reference_eligible": score_confidence_level
+            in {"medium", "high"},
+            "environment_reference_eligible": score_confidence_level
+            in {"medium", "high"},
             "temp_median": median_field("temperature"),
             "humidity_median": median_field("humidity"),
             "co2_median": median_field("co2"),
@@ -730,6 +749,7 @@ class BaselineStore:
                     if hasattr(row, "get")
                     else row["target_duration_s"]
                 ),
+                row.get("start_time") if hasattr(row, "get") else row["start_time"],
             )
             if behaviour:
                 behaviour_sessions.append(behaviour)
@@ -747,6 +767,7 @@ class BaselineStore:
         record: dict[str, Any] = {
             "policy_version": ZEEP_SLEEP_BASELINE_VERSION,
             "behaviour_policy_version": PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+            "rest_window_policy_version": PERSONAL_REST_WINDOW_BASELINE_VERSION,
             "intended_use": "personal_wellness_baseline_not_diagnosis",
             "updated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "learning_cutoff": {
@@ -921,10 +942,21 @@ class BaselineStore:
                     "formula_version": None,
                 },
                 "score_formula_versions": [],
+                "best_rest_window": empty_best_rest_window(
+                    group,
+                    target.get("key") if target.get("available") else None,
+                ),
                 "direct_stage_influence": False,
                 "role": "expectation_report_and_confidence_context_only",
             }
         context["baseline_policy_version"] = record.get("behaviour_policy_version")
+        context.setdefault(
+            "best_rest_window",
+            empty_best_rest_window(
+                group,
+                target.get("key") if target.get("available") else None,
+            ),
+        )
         context["target_specific"] = bool(context.get("target_specific"))
         context["mode_group"] = group
         context["source"] = (
@@ -933,6 +965,22 @@ class BaselineStore:
             else "prior_completed_same_mode_sessions_only"
         )
         return context
+
+    def ensure_rest_window_current(self, username_key: str) -> dict:
+        """Lazily rebuild one account after the rest-window schema changes."""
+        record = self.get(username_key)
+        if (
+            isinstance(record, dict)
+            and record.get("rest_window_policy_version")
+            == PERSONAL_REST_WINDOW_BASELINE_VERSION
+        ):
+            return record
+        try:
+            return self.update_user(username_key)
+        except Exception:
+            # Read paths remain available if a one-time derived-data refresh
+            # cannot complete; the bounded projection will fail closed.
+            return record or {}
 
     def personalize_baseline(
         self, username_key: str, age_baseline: dict

@@ -10,6 +10,7 @@ from personal import MIN_DETECTED_SLEEP_SECONDS, BaselineStore
 from sleep_system_policy import (
     PERSONAL_BASELINE_LEARNING_START_UTC,
     PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+    PERSONAL_REST_WINDOW_BASELINE_VERSION,
     PRE_NAP_TIMING_SESSION_REPORT_VERSION,
     PRE_NAP_TIMING_SLEEP_QUALITY_VERSION,
     PREVIOUS_SESSION_REPORT_VERSION,
@@ -603,6 +604,32 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
 
         self.assertIsNone(store.get("person@example.com"))
 
+    def test_rest_window_schema_is_lazily_rebuilt_for_an_existing_user(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        store = BaselineStore(_DatabaseStub(None), Path(temporary.name))
+        store.data["person@example.com"] = {
+            "policy_version": ZEEP_SLEEP_BASELINE_VERSION,
+            "behaviour_policy_version": PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+            "learning_cutoff": {"utc": PERSONAL_BASELINE_LEARNING_START_UTC},
+            "status": "learning",
+        }
+
+        record = store.ensure_rest_window_current("person@example.com")
+
+        self.assertEqual(
+            record["rest_window_policy_version"],
+            PERSONAL_REST_WINDOW_BASELINE_VERSION,
+        )
+
+    def test_longitudinal_api_uses_the_versioned_lazy_baseline_snapshot(self):
+        source = Path("app.py").read_text(encoding="utf-8")
+
+        self.assertIn(
+            "baseline_snapshot=baselines.ensure_rest_window_current",
+            source,
+        )
+
     def test_behaviour_metrics_preserve_the_stored_formula_version(self):
         summary = {
             "rest_mode": "sleep",
@@ -720,6 +747,81 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
         )
 
         self.assertIsNone(metrics)
+
+    def test_safety_review_session_does_not_train_personal_rest_window(self):
+        summary = _behaviour_summary(
+            mode_group="nap_recovery",
+            resolved="short_nap",
+            rr=16.0,
+        )
+        summary["session_report"]["environment_assessment"] = {
+            "safety_review_required": True,
+        }
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        store = BaselineStore(_DatabaseStub(summary), Path(temporary.name))
+
+        metrics = store._behaviour_metrics(
+            "safety-review",
+            1_800,
+            "nap_recovery",
+            1_800,
+            "2026-09-10T06:00:00+00:00",
+        )
+
+        self.assertIsNone(metrics)
+
+    def test_low_confidence_result_keeps_time_but_not_environment_reference(self):
+        summary = _behaviour_summary(
+            mode_group="nap_recovery",
+            resolved="short_nap",
+            rr=16.0,
+        )
+        summary["session_report"]["quality"]["score_confidence"] = {
+            "level": "low",
+        }
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        store = BaselineStore(_DatabaseStub(summary), Path(temporary.name))
+
+        metrics = store._behaviour_metrics(
+            "limited-evidence",
+            1_800,
+            "nap_recovery",
+            1_800,
+            "2026-09-10T06:00:00+00:00",
+        )
+
+        self.assertIsNotNone(metrics)
+        self.assertEqual(metrics["start_local_hour"], 13.0)
+        self.assertFalse(metrics["baseline_reference_eligible"])
+        self.assertFalse(metrics["outcome_reference_eligible"])
+        self.assertFalse(metrics["environment_reference_eligible"])
+
+    def test_missing_confidence_is_observation_only_not_supported_outcome(self):
+        summary = _behaviour_summary(
+            mode_group="nap_recovery",
+            resolved="short_nap",
+            rr=16.0,
+        )
+        summary["session_report"]["quality"].pop("score_confidence", None)
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        store = BaselineStore(_DatabaseStub(summary), Path(temporary.name))
+
+        metrics = store._behaviour_metrics(
+            "legacy-confidence-missing",
+            1_800,
+            "nap_recovery",
+            1_800,
+            "2026-09-10T06:00:00+00:00",
+        )
+
+        self.assertIsNotNone(metrics)
+        self.assertEqual(metrics["score_confidence_level"], "unknown")
+        self.assertTrue(metrics["baseline_reference_eligible"])
+        self.assertFalse(metrics["outcome_reference_eligible"])
+        self.assertFalse(metrics["environment_reference_eligible"])
 
     def test_nap_target_mismatch_never_trains_target_baseline(self):
         summary = _behaviour_summary(

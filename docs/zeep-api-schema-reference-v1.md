@@ -4,16 +4,17 @@
 
 **สถานะ:** Integration contract v1 (read-only, raw-free)
 
-**ปรับปรุงล่าสุด:** 2026-09-13
+**ปรับปรุงล่าสุด:** 2026-09-15
 **ฐานข้อมูล:** ผล Session ที่ Finalize แล้วเท่านั้น
 
 เอกสารนี้เป็นคู่มืออ้างอิงสำหรับทีม Backend, Mobile, Web และ QA ของ
 `Usage Session API` โดยระบุเส้นทาง, การยืนยันตัวตน, response envelope,
 ชนิดข้อมูล, enum, nullable rules และกฎการแสดงผล `restore_summary` อย่างเป็น
 ทางการ หาก implementation และเอกสารขัดกัน ให้ยึด Pydantic models ใน
-[`restore_response_models.py`](../zeep_pod/sessions/restore_response_models.py)
-[`usage_response_models.py`](../zeep_pod/sessions/usage_response_models.py) และ
-[`presentation_response_models.py`](../zeep_pod/sessions/presentation_response_models.py)
+[`restore_response_models.py`](../zeep_pod/sessions/restore_response_models.py),
+[`usage_response_models.py`](../zeep_pod/sessions/usage_response_models.py),
+[`presentation_response_models.py`](../zeep_pod/sessions/presentation_response_models.py) และ
+[`user_profile_response_models.py`](../zeep_pod/sessions/user_profile_response_models.py)
 ร่วมกับ OpenAPI ของ API ที่ deploy จริงเป็น source of truth แล้วแก้เอกสารนี้
 ตามโมเดลใน release เดียวกัน
 
@@ -182,6 +183,87 @@ Session เพื่อให้เป็น payload ที่ตรวจสอ
 Client ต้องตรวจ `schema`, `api_version`, `kind` และ `data.contract_version`
 ก่อน parse field เฉพาะรุ่น และควรเก็บ `request_id` ไว้สำหรับ debug โดยไม่ log
 ข้อมูลส่วนตัวทั้งก้อน
+
+### 4.1 Longitudinal personal rest window
+
+`GET /api/v1/usage-sessions/longitudinal` ส่ง `best_rest_window` ภายใต้
+`data.modes.sleep.baseline` และแต่ละรายการใน
+`data.modes.nap_recovery.targets[].baseline` เป็น observation จาก completed
+Session ก่อนหน้าเท่านั้น โดยต้องเป็น Mode เดียวกัน ใช้สูตรคะแนนปัจจุบัน และสำหรับ
+Nap ต้องเป็น target เดียวกัน จึงเริ่ม `available=true` ได้ตั้งแต่ครั้งที่ผู้ใช้มาใช้
+ครั้งที่ 2 หลังมี Session ที่เข้าเกณฑ์แล้ว 1 ครั้ง (`first_visible_visit=2` และ
+`current_session_excluded=true`)
+
+เมื่อ Profile เก่าถูกเปิดผ่าน endpoint นี้ ระบบจะตรวจ version และ rebuild derived
+Baseline ของบัญชีนั้นแบบ lazy หนึ่งครั้ง จึงไม่ต้องรอเริ่ม Session ใหม่และไม่แก้
+Raw data, Sleep State หรือคะแนนเดิม
+
+ถ้า observation มี evidence ต่ำ ระบบยังแสดงเวลาเป็น “ช่วงเวลาจากครั้งก่อน” ได้
+แต่ต้องคง `outcome_supported=false`, ไม่ส่ง environment reference และไม่สร้าง
+คำแนะนำปรับอุปกรณ์จากรายการนั้น
+
+การเลือกรายการอ้างอิงเป็น deterministic ไม่ใช้ AI: เลือกคะแนนสูตรปัจจุบันสูงสุด
+ก่อน จากนั้นเลือก evidence confidence สูงกว่า และ input ที่ใหม่กว่าตามลำดับ
+(`method=highest_current_formula_score_then_evidence_then_most_recent`)
+ผลนี้บอกเพียงว่า “ช่วงเวลานี้เคยให้ผลที่รองรับได้” ไม่พิสูจน์ว่าเป็นเวลาที่ผู้ใช้ชอบ
+ไม่พิสูจน์เหตุและผล และ `outcome_supported=true` เป็นเพียง eligibility ของ
+observation ต้นทาง ไม่ใช่คำรับรองผลลัพธ์ครั้งถัดไป
+
+| Field | Type | Nullable | ค่า/กฎ |
+|---|---|---|---|
+| `version` | `literal<string>` | ไม่ได้ | `zeep-personal-rest-window-v1.0` |
+| `available` | `boolean` | ไม่ได้ | `true` เมื่อมี prior completed same-mode/current-formula observation; Nap ต้อง same-target ด้วย |
+| `status` | `enum<string>` | ไม่ได้ | `no_data`, `observed_once`, `learning`, `early`, `active`, `stable` |
+| `maturity_confidence` | `enum<string>` | ไม่ได้ | `none`, `low`, `medium`, `high`; 1 Session เป็น `low` |
+| `sessions_compared` | `integer >= 0` | ไม่ได้ | จำนวน prior eligible Session ที่นำมาเลือก |
+| `first_visible_visit` | `literal<2>` | ไม่ได้ | observation แรกแสดงได้ใน visit 2 |
+| `method` | `literal<string>` | ไม่ได้ | `highest_current_formula_score_then_evidence_then_most_recent` |
+| `same_mode_only` | `literal<true>` | ไม่ได้ | ห้ามเทียบข้าม Overnight/Nap |
+| `same_target_only` | `boolean` | ไม่ได้ | `true` สำหรับ Nap target-specific |
+| `mode_group` | `enum<string>` | ไม่ได้ | `sleep`, `nap_recovery`; cold start อาจเป็น `unknown` |
+| `target_key` | `enum<string>` | ได้ | `overnight_7h`, `nap_30`, `nap_90` หรือ `null` |
+| `timezone` | `literal<string>` | ไม่ได้ | `Asia/Bangkok` |
+| `start_local_minute` | `number 0..<1440` | ได้ | นาทีของวันท้องถิ่น; `null` เมื่อ unavailable |
+| `end_local_minute` | `number 0..<1440` | ได้ | นาทีของวันท้องถิ่น; `null` เมื่อ unavailable |
+| `duration_minutes` | `number >= 0` | ได้ | ระยะเวลาที่สังเกต; `null` เมื่อ unavailable |
+| `crosses_midnight` | `boolean` | ไม่ได้ | ช่วงเวลาข้ามเที่ยงคืนหรือไม่ |
+| `start_tolerance_minutes` | `15\|30` | ได้ | tolerance การแสดงช่วงเริ่ม; `null` เมื่อ unavailable |
+| `score_type` | `enum<string>` | ได้ | `sleep_score`, `recovery_score` หรือ `null` |
+| `score_title` | `enum<string>` | ได้ | `Sleep Score`, `Recovery Score` หรือ `null` |
+| `score_value` | `number 0..100` | ได้ | คะแนนของ observation ที่เลือก; ไม่คำนวณหรือแก้คะแนนใด |
+| `score_formula_version` | `enum<string>` | ได้ | สูตรปัจจุบันของ Score ที่เลือก หรือ `null` |
+| `evidence_quality` | `enum<string>` | ไม่ได้ | `unknown`, `low`, `medium`, `high` |
+| `outcome_supported` | `boolean` | ไม่ได้ | observation ต้นทางผ่าน eligibility; ไม่ใช่ preference/causal claim |
+| `environment_reference_available` | `boolean` | ไม่ได้ | มี environment observation ที่อนุญาตให้แสดงหรือไม่ |
+| `environment` | `BestRestWindowEnvironment` | ไม่ได้ | object แบบ strict; อาจว่างเมื่อไม่มีข้อมูล |
+| `environment_role` | `literal<string>` | ไม่ได้ | `observed_successful_session_not_confirmed_preference` |
+| `affects_score` | `literal<false>` | ไม่ได้ | ห้ามเปลี่ยน Sleep Score/Recovery Score |
+| `affects_sleep_state` | `literal<false>` | ไม่ได้ | ห้ามเปลี่ยน W/N1/N2/N3/REM |
+| `current_session_excluded` | `literal<true>` | ไม่ได้ | ไม่ใช้ Session ที่กำลังแสดง/กำลังทำเป็น reference |
+| `automatic_device_control` | `literal<false>` | ไม่ได้ | ห้ามสั่งอุปกรณ์อัตโนมัติ |
+| `requires_user_confirmation` | `literal<true>` | ไม่ได้ | ผู้ใช้ต้องยืนยันก่อนนำช่วงนี้ไปใช้ |
+
+`BestRestWindowEnvironment` เป็น object แบบ strict ดังนี้:
+
+| Field | Type | Nullable | ความหมาย |
+|---|---|---|---|
+| `temp_median` | `number` | ได้ | ค่ากลางอุณหภูมิที่สังเกต |
+| `humidity_median` | `number` | ได้ | ค่ากลางความชื้นที่สังเกต |
+| `co2_median` | `number` | ได้ | ค่ากลาง CO₂ ที่สังเกต |
+| `lux_median` | `number` | ได้ | ค่ากลางแสงที่สังเกต |
+| `sound_median` | `number` | ได้ | ค่ากลางเสียงที่สังเกต |
+
+ทุก field อาจไม่มีใน object เมื่อไม่มี observation และ key อื่นถูกปฏิเสธโดย
+strict response model
+
+ภายใน `best_rest_window` จะไม่ส่ง Session ID, source Session ID หรือ exact source
+timestamp โดยส่งเพียงนาทีของวันท้องถิ่นและ timezone ที่จำเป็นต่อการแสดงผล
+อย่างไรก็ตาม response longitudinal ทั้งก้อนยังเป็น linkable Personal Wellness Data
+ตามบัญชีผู้ใช้ ไม่ใช่ข้อมูล anonymous
+นอกจากนี้ `best_rest_window` ไม่ถูกส่งใน
+`GET /api/v1/usage-sessions/longitudinal/ai-context` ตราบใดที่ยังไม่มี
+purpose-specific inference consent จึงห้ามใช้กับ AI inference, การควบคุมอัตโนมัติ,
+คะแนน หรือ Sleep State
 
 ## 5. List data schema (`usage_session_list`)
 
@@ -1425,9 +1507,11 @@ Restore Summary และ public report แล้วในโมดูลต่�
 
 - `zeep_pod/sessions/restore_response_models.py`
 - `zeep_pod/sessions/usage_response_models.py`
+- `zeep_pod/sessions/presentation_response_models.py`
+- `zeep_pod/sessions/user_profile_response_models.py`
 - `zeep_pod/sessions/response_models.py` สำหรับ public re-export
 
-FastAPI ผูก model เหล่านี้เป็น `response_model` ของ Usage Session ทั้งห้า
+FastAPI ผูก model เหล่านี้เป็น `response_model` ของ Usage Session ทั้งเจ็ด
 endpoint และสร้าง machine-readable schema ที่ `/openapi.json` อัตโนมัติ
 
 หลักที่ models บังคับใช้:
@@ -1441,6 +1525,8 @@ endpoint และสร้าง machine-readable schema ที่ `/openapi.js
 - ตัวอย่าง canonical ของ Overnight, Nap และ unavailable อยู่ในหัวข้อ 10;
   ส่วน `/openapi.json` เป็นแหล่ง machine-readable ของ type และ constraint
 - ทดสอบ privacy allowlist ว่าไม่มี raw/credential/engineering shadow field
+- ทดสอบ `best_rest_window` ว่า strict, เริ่มได้จาก prior matching Session 1 ครั้ง,
+  ไม่เผย source identity/timestamp และไม่หลุดเข้า AI context
 - ทดสอบ mode mismatch ว่า canonical mode คงเดิมแต่ score unavailable
 - ทดสอบทุก endpoint ว่าได้ `Cache-Control: private, no-store`
 
@@ -1455,5 +1541,9 @@ OpenAPI ที่ deploy จริงควรเป็นเอกสาร mac
 - [ ] `available=false` ไม่มี shadow score และไม่มี positive score-derived claim
 - [ ] `freshness_delta`/`activity_readiness` มีเฉพาะ questionnaire ที่วัดจริง
 - [ ] ไม่มีคำวินิจฉัยหรือคำรับรอง readiness ทั้งวัน/ขับรถ/แข่งขัน
+- [ ] `best_rest_window` ไม่มี Session ID/exact source timestamp, ไม่ถูกส่งเข้า AI
+      context และไม่มีผลต่อ Score, Sleep State หรือ automatic control
+- [ ] UI อธิบาย `best_rest_window` เป็น observation ที่ต้องให้ผู้ใช้ยืนยัน
+      ไม่ใช่ preference หรือ causal claim
 - [ ] response และ log ไม่ถูก cache/shared หรือส่งต่อข้าม account
 - [ ] เก็บ `request_id` ได้โดยไม่เก็บ payload สุขภาพทั้งก้อน

@@ -3434,6 +3434,128 @@ body[data-view="dashboard"] .dashboard-overview {
   background: var(--surface);
 }
 
+.dash-personal-rest-baseline {
+  margin-top: 7px;
+  padding: 10px 12px;
+  overflow: hidden;
+  border: 1px solid rgba(78, 198, 218, .3);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 92% 12%, rgba(48, 219, 236, .1), transparent 32%),
+    rgba(9, 27, 39, .94);
+  box-shadow: inset 0 1px rgba(255, 255, 255, .025);
+}
+
+.dash-personal-rest-head {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+}
+
+.dash-personal-rest-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  color: #68ddeb;
+  background: rgba(39, 143, 166, .18);
+}
+
+.dash-personal-rest-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.dash-personal-rest-head b,
+.dash-personal-rest-head small { display: block; }
+.dash-personal-rest-head b { color: #eaf9fc; font-size: 13px; }
+.dash-personal-rest-head small { margin-top: 2px; color: #7896a2; font-size: 10px; }
+
+.dash-personal-rest-status {
+  padding: 4px 8px;
+  border: 1px solid rgba(83, 205, 220, .28);
+  border-radius: 999px;
+  color: #90e5ee;
+  background: rgba(31, 126, 146, .13);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.dash-personal-rest-body {
+  display: grid;
+  grid-template-columns: minmax(180px, .75fr) minmax(0, 1.25fr);
+  gap: 10px;
+  margin-top: 9px;
+}
+
+.dash-personal-rest-time,
+.dash-personal-rest-result {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(71, 121, 139, .22);
+  border-radius: 10px;
+  background: rgba(5, 19, 29, .54);
+}
+
+.dash-personal-rest-time small,
+.dash-personal-rest-time strong,
+.dash-personal-rest-time span,
+.dash-personal-rest-result b,
+.dash-personal-rest-result p { display: block; }
+.dash-personal-rest-time small { color: #78a2ae; font-size: 10px; font-weight: 700; }
+.dash-personal-rest-time strong {
+  margin-top: 2px;
+  color: #f1fbfd;
+  font-size: clamp(17px, 2vw, 23px);
+  line-height: 1.12;
+  letter-spacing: .015em;
+  white-space: nowrap;
+}
+.dash-personal-rest-time span { margin-top: 3px; color: #78929d; font-size: 10px; }
+.dash-personal-rest-result b { color: #8ce9d0; font-size: 12px; }
+.dash-personal-rest-result p { margin: 4px 0 0; color: #b4cbd2; font-size: 10px; line-height: 1.45; }
+
+.dash-personal-rest-environment {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 7px;
+}
+.dash-personal-rest-environment[hidden] { display: none; }
+.dash-personal-rest-environment > small { flex: 0 0 auto; color: #6f909c; font-size: 9px; }
+.dash-personal-rest-environment > div { display: flex; min-width: 0; flex-wrap: wrap; gap: 4px; }
+.dash-personal-rest-environment span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 1px solid rgba(69, 125, 143, .22);
+  border-radius: 999px;
+  background: rgba(17, 47, 60, .45);
+  white-space: nowrap;
+}
+.dash-personal-rest-environment span small { color: #6f919c; font-size: 9px; }
+.dash-personal-rest-environment span b { color: #badce3; font-size: 9px; }
+
+.dash-personal-rest-guardrail {
+  display: block;
+  margin-top: 7px;
+  color: #5e7f8b;
+  font-size: 9px;
+  text-align: right;
+}
+.dash-personal-rest-baseline.idle { opacity: .62; }
+.dash-personal-rest-baseline.learning .dash-personal-rest-time strong { color: #9ab5be; }
+
 .dashboard-zone-grid {
   display: grid;
   grid-template-columns: minmax(0, .9fr) minmax(0, 1.4fr);
@@ -4766,6 +4888,13 @@ body[data-view="sessions"] .hist-row > .hist-quality {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-rows: auto;
   }
+
+  .dash-personal-rest-head { grid-template-columns: 30px minmax(0, 1fr); }
+  .dash-personal-rest-status { grid-column: 2; justify-self: start; }
+  .dash-personal-rest-body { grid-template-columns: 1fr; }
+  .dash-personal-rest-time strong { font-size: 20px; }
+  .dash-personal-rest-environment { align-items: flex-start; flex-direction: column; }
+  .dash-personal-rest-guardrail { text-align: left; }
 
   body[data-view="sessions"] .hist-row {
     grid-template-columns: 1fr 1fr;

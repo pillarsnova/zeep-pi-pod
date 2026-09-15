@@ -160,6 +160,76 @@ class AdaptiveLearningTests(unittest.TestCase):
             "adaptive-test-session:1234:sound",
         )
 
+    def test_second_visit_window_can_propose_but_never_execute_adjustments(self):
+        behaviour = {
+            "status": "learning",
+            "sessions_used": 1,
+            "minimum_sessions": 3,
+            "best_rest_window": {
+                "available": True,
+                "status": "observed_once",
+                "outcome_supported": True,
+                "environment_reference_available": True,
+                "environment": {
+                    "temp_median": 22.0,
+                    "humidity_median": 50.0,
+                    "co2_median": 700.0,
+                    "lux_median": 0.1,
+                    "sound_median": 34.0,
+                },
+            },
+        }
+
+        result = build_adaptive_learning_snapshot(
+            live_snapshot(),
+            behaviour=behaviour,
+        )
+
+        self.assertTrue(result["baseline"]["provisional_recommendation_ready"])
+        temperature = next(
+            item for item in result["live_features"] if item["key"] == "temperature"
+        )
+        self.assertEqual(temperature["reference"], 22.0)
+        personal = [
+            item
+            for item in result["candidate_recommendations"]
+            if item.get("level") == "personal_baseline"
+        ]
+        self.assertTrue(personal)
+        self.assertTrue(all(item["executable"] is False for item in personal))
+        self.assertTrue(
+            all(item["requires_user_confirmation"] is True for item in personal)
+        )
+        self.assertFalse(result["control_policy"]["automatic_actuation"])
+
+    def test_unsupported_window_never_drives_adaptive_reference(self) -> None:
+        behaviour = {
+            "typical_environment": {"temp_median": 24.0},
+            "best_rest_window": {
+                "available": True,
+                "outcome_supported": False,
+                "environment_reference_available": True,
+                "environment": {"temp_median": 19.0},
+            },
+        }
+
+        result = build_adaptive_learning_snapshot(
+            live_snapshot(),
+            behaviour=behaviour,
+        )
+
+        temperature = next(
+            item for item in result["live_features"] if item["key"] == "temperature"
+        )
+        self.assertEqual(temperature["reference"], 24.0)
+        self.assertFalse(result["baseline"]["provisional_recommendation_ready"])
+        self.assertFalse(
+            any(
+                item.get("level") == "personal_baseline"
+                for item in result["candidate_recommendations"]
+            )
+        )
+
     def test_stale_or_missing_values_are_not_converted_to_zero(self) -> None:
         snapshot = live_snapshot()
         snapshot["sensor_frame"]["stale"] = True
@@ -262,6 +332,14 @@ class AdaptiveLearningTests(unittest.TestCase):
         snapshot["adaptive_learning"] = {"private": True}
         snapshot["events_tail"] = [{"internal": True}]
         snapshot["system"] = {"uptime_s": 2, "gpio_pins": {"door": 1}}
+        snapshot["sleep"]["personal_behaviour"] = {
+            "session_ids": ["private-source-session"],
+        }
+        snapshot["session"]["personal_rest_baseline"] = {
+            "available": False,
+            "current_session_excluded": True,
+            "source_session_id": "must-not-leak",
+        }
         snapshot["sensor"]["bcg"].update(
             {
                 "samples": [1, 2],
@@ -277,6 +355,35 @@ class AdaptiveLearningTests(unittest.TestCase):
         self.assertNotIn("events_tail", result)
         self.assertNotIn("gpio_pins", result["system"])
         self.assertNotIn("samples", result["sensor"]["bcg"])
+        self.assertNotIn("personal_behaviour", result["sleep"])
+        self.assertIn("personal_rest_baseline", result["session"])
+        self.assertNotIn(
+            "source_session_id",
+            result["session"]["personal_rest_baseline"],
+        )
+
+    def test_idle_consumer_never_receives_the_previous_occupants_window(self) -> None:
+        snapshot = live_snapshot()
+        snapshot["session"]["active"] = False
+        snapshot["session"]["personal_rest_baseline"] = {
+            "available": True,
+            "score_value": 99,
+        }
+        snapshot["sleep"]["personal_behaviour"] = {
+            "best_rest_window": {
+                "available": True,
+                "score_value": 99,
+            }
+        }
+
+        result = project_consumer_snapshot(
+            snapshot,
+            {"role": "user"},
+        )
+
+        window = result["session"]["personal_rest_baseline"]
+        self.assertFalse(window["available"])
+        self.assertIsNone(window["score_value"])
 
 
 if __name__ == "__main__":

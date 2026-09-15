@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import unittest
 
+from pydantic import ValidationError
+
 from sleep_system_policy import (
     PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+    PERSONAL_REST_WINDOW_BASELINE_VERSION,
     RECOVERY_SCORE_FORMULA_VERSION,
 )
 from zeep_pod.sessions.user_learning_profile import build_user_learning_profile
+from zeep_pod.sessions.user_profile_response_models import UserLearningProfile
 
 
 def session(
@@ -186,6 +190,138 @@ class UserLearningProfileTests(unittest.TestCase):
         self.assertNotIn("score_typical_range", result["modes"]["sleep"]["baseline"])
         self.assertFalse(result["ai_contract"]["questionnaire_answers_used"])
         self.assertFalse(result["ai_contract"]["automatic_actuation_allowed"])
+
+    def test_best_rest_window_is_a_prior_target_specific_observation(self) -> None:
+        baseline = {
+            "behaviour_policy_version": PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+            "behaviour_by_mode": {
+                "nap_recovery": {
+                    "by_target": {
+                        "nap_30": {
+                            "status": "learning",
+                            "sessions_used": 1,
+                            "minimum_sessions": 3,
+                            "target_specific": True,
+                            "target_key": "nap_30",
+                            "score_reference": {
+                                "status": "learning",
+                                "sessions_used": 1,
+                                "minimum_sessions": 7,
+                                "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
+                            },
+                            "best_rest_window": {
+                                "version": PERSONAL_REST_WINDOW_BASELINE_VERSION,
+                                "available": True,
+                                "status": "observed_once",
+                                "maturity_confidence": "low",
+                                "sessions_compared": 1,
+                                "same_target_only": True,
+                                "mode_group": "nap_recovery",
+                                "target_key": "nap_30",
+                                "timezone": "Asia/Bangkok",
+                                "start_local_minute": 780,
+                                "end_local_minute": 810,
+                                "duration_minutes": 30,
+                                "crosses_midnight": False,
+                                "start_tolerance_minutes": 15,
+                                "score_type": "recovery_score",
+                                "score_title": "Recovery Score",
+                                "score_value": 82,
+                                "score_formula_version": (
+                                    RECOVERY_SCORE_FORMULA_VERSION
+                                ),
+                                "evidence_quality": "high",
+                                "outcome_supported": True,
+                                "environment_reference_available": True,
+                                "environment": {"temp_median": 23.0},
+                            },
+                        }
+                    }
+                }
+            },
+        }
+        rows = [
+            session(
+                "prior-nap",
+                "nap_recovery",
+                82,
+                "2026-09-14T06:00:00+00:00",
+                formula=RECOVERY_SCORE_FORMULA_VERSION,
+                target_minutes=30,
+            )
+        ]
+
+        result = self.build(rows, baseline=baseline)
+        window = result["modes"]["nap_recovery"]["targets"][0]["baseline"][
+            "best_rest_window"
+        ]
+
+        self.assertTrue(window["available"])
+        self.assertEqual(window["sessions_compared"], 1)
+        self.assertEqual(window["first_visible_visit"], 2)
+        self.assertEqual(
+            window["method"],
+            "highest_current_formula_score_then_evidence_then_most_recent",
+        )
+        self.assertTrue(window["same_mode_only"])
+        self.assertTrue(window["same_target_only"])
+        self.assertEqual(window["target_key"], "nap_30")
+        self.assertEqual(
+            window["environment_role"],
+            "observed_successful_session_not_confirmed_preference",
+        )
+        self.assertFalse(window["affects_score"])
+        self.assertFalse(window["affects_sleep_state"])
+        self.assertTrue(window["current_session_excluded"])
+        self.assertFalse(window["automatic_device_control"])
+        self.assertTrue(window["requires_user_confirmation"])
+        self.assertNotIn("session_id", window)
+        self.assertNotIn("ended_at_utc", window)
+        self.assertNotIn("source_timestamp", window)
+
+        validate = getattr(UserLearningProfile, "model_validate", None)
+        if validate is not None:
+            validate(result)
+        else:  # pragma: no cover - exercised on the Pi's Pydantic v1 image
+            UserLearningProfile.parse_obj(result)
+
+    def test_best_rest_window_model_rejects_unapproved_fields(self) -> None:
+        result = self.build([])
+        window = result["modes"]["sleep"]["baseline"]["best_rest_window"]
+        self.assertFalse(window["available"])
+        self.assertEqual(window["first_visible_visit"], 2)
+        window["source_session_id"] = "must-not-leak"
+        window["source_started_at_utc"] = "2026-09-14T06:00:00+00:00"
+
+        validate = getattr(UserLearningProfile, "model_validate", None)
+        with self.assertRaises(ValidationError):
+            if validate is not None:
+                validate(result)
+            else:  # pragma: no cover - exercised on the Pi's Pydantic v1 image
+                UserLearningProfile.parse_obj(result)
+
+        window.pop("source_session_id")
+        window.pop("source_started_at_utc")
+        window["environment"]["future_private_metric"] = 123
+        with self.assertRaises(ValidationError):
+            if validate is not None:
+                validate(result)
+            else:  # pragma: no cover - exercised on the Pi's Pydantic v1 image
+                UserLearningProfile.parse_obj(result)
+
+    def test_best_rest_window_model_rejects_incoherent_maturity(self) -> None:
+        result = self.build([])
+        window = result["modes"]["sleep"]["baseline"]["best_rest_window"]
+        window["status"] = "stable"
+        window["maturity_confidence"] = "high"
+        window["sessions_compared"] = 99
+
+        validate = getattr(UserLearningProfile, "model_validate", None)
+        with self.assertRaises(ValidationError):
+            if validate is not None:
+                validate(result)
+            else:  # pragma: no cover - exercised on the Pi's Pydantic v1 image
+                UserLearningProfile.parse_obj(result)
 
     def test_empty_history_has_a_clear_cold_start(self) -> None:
         result = self.build([])

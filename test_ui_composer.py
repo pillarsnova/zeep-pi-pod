@@ -73,6 +73,22 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("metric.delta==null?Number.NaN:Number(metric.delta)", template)
         self.assertIn("function adaptiveReferenceScope(scope)", template)
 
+    def test_dashboard_personal_rest_window_starts_on_second_visit(self):
+        template = ui_composer.render()
+        css = (ui_composer.STATIC / "theme-modern.css").read_text(encoding="utf-8")
+
+        self.assertIn('id="dashPersonalRestBaseline"', template)
+        self.assertIn("function renderPersonalRestBaseline", template)
+        self.assertIn("session.personal_rest_baseline", template)
+        self.assertIn("sleep.personal_behaviour", template)
+        self.assertIn("กำลังสร้าง Baseline ครั้งแรก", template)
+        self.assertIn("ช่วงเวลาที่ได้ผลดีจากครั้งก่อน", template)
+        self.assertIn("เมื่อกลับมาใช้ครั้งที่ 2", template)
+        self.assertIn("baseline.environment_reference_available===true", template)
+        self.assertIn("ระบบจะให้คุณยืนยันก่อนปรับอุปกรณ์", template)
+        self.assertIn(".dash-personal-rest-baseline", css)
+        self.assertNotIn("ปรับอุปกรณ์ให้อัตโนมัติ", template)
+
     def test_sound_ui_uses_direct_canonical_esp32_value(self):
         template = ui_composer.render()
         self.assertIn("const raw=environment.sound_dba_est;", template)

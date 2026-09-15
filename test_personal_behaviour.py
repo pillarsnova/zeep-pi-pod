@@ -4,6 +4,7 @@ import unittest
 
 from sleep_system_policy import (
     PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+    PERSONAL_REST_WINDOW_BASELINE_VERSION,
     RECOVERY_SCORE_FORMULA_VERSION,
     RESTORE_BASELINE_MIN_COMPARISON_SESSIONS,
     SLEEP_SCORE_FORMULA_VERSION,
@@ -13,7 +14,10 @@ from zeep_pod.sessions.restore_summary_baseline import (
     build_baseline_summary,
     build_trend_summary,
 )
-from zeep_pod.sessions.user_baseline_context import baseline_context
+from zeep_pod.sessions.user_baseline_context import (
+    baseline_context,
+    best_rest_window_context,
+)
 
 
 def row(
@@ -23,15 +27,39 @@ def row(
     score: float,
     formula: str,
     target_key: str | None = None,
+    start_local_hour: float = 13.0,
+    duration_s: float | None = None,
+    confidence: str = "high",
+    baseline_reference_eligible: bool = True,
+    outcome_reference_eligible: bool | None = None,
+    environment_reference_eligible: bool | None = None,
 ) -> dict:
     return {
         "session_id": session_id,
         "mode_group": group,
         "target_key": target_key,
-        "duration_s": 1_800 if target_key == "nap_30" else 5_400,
-        "start_local_hour": 13.0,
+        "duration_s": (
+            duration_s
+            if duration_s is not None
+            else 1_800
+            if target_key == "nap_30"
+            else 5_400
+        ),
+        "start_local_hour": start_local_hour,
         "wellness_score": score,
         "score_formula_version": formula,
+        "score_confidence_level": confidence,
+        "baseline_reference_eligible": baseline_reference_eligible,
+        "outcome_reference_eligible": (
+            confidence in {"medium", "high"}
+            if outcome_reference_eligible is None
+            else outcome_reference_eligible
+        ),
+        "environment_reference_eligible": (
+            confidence in {"medium", "high"}
+            if environment_reference_eligible is None
+            else environment_reference_eligible
+        ),
         "temp_median": 23.0,
         "respiratory_rr_median": 14.0,
     }
@@ -58,6 +86,131 @@ class PersonalBehaviourTests(unittest.TestCase):
                 self.assertEqual(context["status"], "no_data")
                 self.assertTrue(context["target_specific"])
                 self.assertEqual(context["target_key"], key)
+                window = context["best_rest_window"]
+                self.assertEqual(
+                    window["version"],
+                    PERSONAL_REST_WINDOW_BASELINE_VERSION,
+                )
+                self.assertFalse(window["available"])
+                self.assertEqual(window["first_visible_visit"], 2)
+
+    def test_sleep_window_does_not_claim_nap_target_isolation(self) -> None:
+        context = baseline_context(
+            {"behaviour_by_mode": {}},
+            "sleep",
+            "overnight_7h",
+        )
+
+        self.assertFalse(context["best_rest_window"]["same_target_only"])
+
+    def test_incoherent_stored_window_fails_closed(self) -> None:
+        window = best_rest_window_context(
+            {
+                "version": PERSONAL_REST_WINDOW_BASELINE_VERSION,
+                "available": True,
+                "status": "stable",
+                "maturity_confidence": "high",
+                "sessions_compared": 99,
+                "mode_group": "nap_recovery",
+                "target_key": "overnight_7h",
+                "start_local_minute": 780,
+                "end_local_minute": 810,
+                "duration_minutes": 30,
+                "score_type": "sleep_score",
+                "score_title": "Sleep Score",
+                "score_value": 99,
+                "score_formula_version": SLEEP_SCORE_FORMULA_VERSION,
+                "outcome_supported": True,
+            }
+        )
+
+        self.assertFalse(window["available"])
+        self.assertEqual(window["status"], "no_data")
+        self.assertEqual(window["sessions_compared"], 0)
+        self.assertIsNone(window["score_value"])
+
+    def test_one_prior_session_becomes_an_observational_second_visit_window(self):
+        context = aggregate(
+            [
+                row(
+                    "prior-night",
+                    group="sleep",
+                    score=86,
+                    formula=SLEEP_SCORE_FORMULA_VERSION,
+                    start_local_hour=22.5,
+                    duration_s=8 * 3_600,
+                )
+            ]
+        )["sleep"]
+        window = context["best_rest_window"]
+
+        self.assertTrue(window["available"])
+        self.assertEqual(window["status"], "observed_once")
+        self.assertEqual(window["maturity_confidence"], "low")
+        self.assertEqual(window["sessions_compared"], 1)
+        self.assertEqual(window["start_local_minute"], 22 * 60 + 30)
+        self.assertEqual(window["end_local_minute"], 6 * 60 + 30)
+        self.assertTrue(window["crosses_midnight"])
+        self.assertEqual(window["score_type"], "sleep_score")
+        self.assertFalse(window["affects_score"])
+        self.assertFalse(window["affects_sleep_state"])
+        self.assertFalse(window["automatic_device_control"])
+        self.assertTrue(window["requires_user_confirmation"])
+        self.assertNotIn("session_id", window)
+
+    def test_best_window_prefers_score_then_evidence_then_recency(self):
+        rows = [
+            row(
+                "new-low",
+                group="sleep",
+                score=90,
+                formula=SLEEP_SCORE_FORMULA_VERSION,
+                start_local_hour=23.0,
+                confidence="low",
+                baseline_reference_eligible=False,
+            ),
+            row(
+                "older-high",
+                group="sleep",
+                score=90,
+                formula=SLEEP_SCORE_FORMULA_VERSION,
+                start_local_hour=22.0,
+                confidence="high",
+            ),
+            row(
+                "lower",
+                group="sleep",
+                score=89,
+                formula=SLEEP_SCORE_FORMULA_VERSION,
+                start_local_hour=21.0,
+            ),
+        ]
+        window = aggregate(rows)["sleep"]["best_rest_window"]
+
+        self.assertEqual(window["start_local_minute"], 22 * 60)
+        self.assertEqual(window["evidence_quality"], "high")
+        self.assertTrue(window["outcome_supported"])
+        self.assertTrue(window["environment_reference_available"])
+
+    def test_low_evidence_can_show_time_but_not_drive_environment(self):
+        window = aggregate(
+            [
+                row(
+                    "limited",
+                    group="nap_recovery",
+                    target_key="nap_30",
+                    score=75,
+                    formula=RECOVERY_SCORE_FORMULA_VERSION,
+                    confidence="low",
+                    baseline_reference_eligible=False,
+                )
+            ]
+        )["nap_recovery"]["by_target"]["nap_30"]["best_rest_window"]
+
+        self.assertTrue(window["available"])
+        self.assertFalse(window["outcome_supported"])
+        self.assertFalse(window["environment_reference_available"])
+        self.assertEqual(window["environment"], {})
 
     def test_old_formulas_do_not_inflate_current_score_maturity(self) -> None:
         rows = [
@@ -119,6 +272,7 @@ class PersonalBehaviourTests(unittest.TestCase):
 
         self.assertEqual(context["scores"], [])
         self.assertEqual(context["score_reference"]["status"], "target_required")
+        self.assertFalse(context["best_rest_window"]["available"])
         self.assertEqual(
             context["by_target"]["nap_30"]["scores"],
             [83.0, 82.0, 81.0, 80.0],

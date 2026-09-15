@@ -162,6 +162,7 @@ from zeep_pod.sessions.sleep_transition_state import (
 )
 from zeep_pod.sessions.report_share import ReportShareRegistry, create_report_share_router
 from zeep_pod.sessions.usage_api import create_usage_sessions_router
+from zeep_pod.sessions.user_baseline_context import rest_window
 from maintenance_registry import maintenance_contract_snapshot
 from migration import migrate_jsonl
 from personal import BaselineStore
@@ -6013,7 +6014,7 @@ app.include_router(
         profiles_snapshot=lambda: _load_profiles(),
         profiles_lock=profile_lock,
         timezone_name=POD_TIMEZONE or "Asia/Bangkok",
-        baseline_snapshot=lambda account_key: baselines.get(account_key),
+        baseline_snapshot=baselines.ensure_rest_window_current,
     )
 )
 
@@ -6941,6 +6942,7 @@ def _start_pod_session(
         profiles[key] = profile
         _save_profiles(profiles)
 
+    rest_baseline = rest_window(baselines, key, rest_mode, target["seconds"])
     session_id = f"s-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:6]}"
     # This is the cross-pod atomic gate.  With a remote coordinator configured,
     # the same immutable ZEEP subject cannot acquire a second pod concurrently.
@@ -7056,6 +7058,7 @@ def _start_pod_session(
                 "wellness_context_available": bool(session_wellness_context),
                 "rest_mode": rest_mode,
                 "target_duration_s": target["seconds"],
+                "personal_rest_baseline": rest_baseline,
                 "session_id": session_id,
                 "started_at": time.time(),
                 "samples": 0,

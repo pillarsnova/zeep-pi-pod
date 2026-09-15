@@ -12,7 +12,7 @@
 - ระบบเก็บ Sensor ทุก 10 วินาที สรุป `sleep_stage_evidence` ทุก 30 วินาที และเปลี่ยน State เมื่อผู้ท้าชิงผ่าน Gate พร้อมยืนยัน 2 epoch/60 วินาที (N2 ใช้ 4 epoch/120 วินาที) เมื่อเริ่ม Recording ระบบยึด `W` เป็น State แรกทันที; ทุกช่วงที่ยังไม่ยืนยัน `OFF BED` ต้องมี W/N1/N2/N3/REM โดยผู้ท้าชิงที่ยังไม่ชัดจะคง State ก่อนหน้าและนับคะแนนให้ State เดิมจนกว่าจะยืนยัน State ใหม่สำเร็จ
 - Sleep-onset Guard คง W อย่างน้อย 5 นาทีแรก; หลังจากนั้น N1 ต้องมีเตียงนิ่ง ไม่มี vital rise และ HR/RR แสดงการลดลงหรือ plateau ที่ต่ำกว่าช่วงตั้งต้นอย่างสอดคล้องกัน เวลาเพียงอย่างเดียวสร้าง N1 ไม่ได้
 - หลักฐานทั้ง 5 State ถูกปรับให้อยู่บนงบ 0..1 เท่ากัน; หากผู้ชนะ <45% หรือห่างอันดับสอง <8% ระบบจะไม่เปิด State ใหม่ แต่คง State ที่ยืนยันก่อนหน้าอย่างต่อเนื่องจนกว่าผู้ท้าชิงจะผ่าน Gate; N3 ใช้เกณฑ์เดียวกันหลังผ่าน waveform/movement/CV/regularity/relative-drop gate
-- พฤติกรรมย้อนหลังเรียนรู้แยกตามบัญชีและ Rest Mode จากอย่างน้อย 3 Session ก่อนหน้า เช่น latency, ช่วงเวลา, ระยะเวลา และสิ่งแวดล้อมที่มักพบ; ใช้เป็น expectation/report/recommendation context เท่านั้น (`direct_stage_influence=false`) และใช้ข้อมูลอดีตแบบ forward-only ตั้งแต่ 1 ก.ย. 2569
+- พฤติกรรมย้อนหลังเรียนรู้แยกตามบัญชีและ Rest Mode: `best_rest_window` เริ่มแสดงใน visit 2 จาก completed Session ก่อนหน้า 1 ครั้งที่ Mode/target เดียวกัน ส่วน aggregate baseline เช่น latency, ระยะเวลา และสิ่งแวดล้อมที่มักพบยังต้องมีอย่างน้อย 3 Session; ทั้งสองเป็น observation/context ไม่ใช่ preference หรือเหตุและผล ไม่มีผลต่อ Score/Sleep State/automatic control และใช้ข้อมูลอดีตแบบ forward-only ตั้งแต่ 1 ก.ย. 2569
 - BCG + Bed Status เป็นหลัก; SPH0645 ช่วยยืนยัน disturbance เมื่อตรงเวลากับ BCG/movement; Sensor อากาศอธิบายสิ่งรบกวนและ confidence เท่านั้น
 - Login ได้ก่อน แต่จะยังไม่สร้าง Session/Timeline จนกว่าอยู่บนเตียงครบ 20 วินาที และมี HR+RR สดในช่วง sanity ต่อเนื่อง 3 BCG packets ใหม่
 - การพลิกตัว ขยับแขนขา หรือขยับผ้าห่มขณะยังอยู่บนเตียงเป็น `sleep-compatible movement` และไม่เปลี่ยนเป็น Wake โดยลำพัง
@@ -47,6 +47,7 @@
 | Restore action bands | `zeep-restore-action-bands-v1.0` |
 | Restore driver policy | `zeep-restore-drivers-v1.0` |
 | Restore Personal Baseline | `zeep-restore-personal-baseline-v1.0` |
+| Personal rest-window baseline | `zeep-personal-rest-window-v1.0` |
 | Restore recommendation | `zeep-restore-recommendation-v1.0` |
 | Environment context | `zeep-environment-context-v2.1-optional-acoustic-input` |
 | Environment Session aggregation | `zeep-environment-session-v1.0-sustained-decile` |
@@ -298,6 +299,28 @@ baseline ภายใน Session ที่ผ่านเกณฑ์ ระบ�
 และ `excluded_from_personal_baseline=false`; low-confidence carry จากหลักฐานขาด/ไม่สด/
 restart ไม่ถูกใช้สอน Baseline แม้ epoch นั้นยังเข้าคะแนน และการขาด Sensor บางช่วง
 ไม่ทำให้ต้องทิ้ง Session ทั้งรายการ
+
+Personal rest-window baseline (`zeep-personal-rest-window-v1.0`) เป็นคนละชั้นกับ
+Physiology Baseline และ aggregate behavior baseline: ระบบเผย `best_rest_window`
+ได้ใน visit 2 หลังมี prior completed Session ที่เข้าเกณฑ์ 1 ครั้ง โดยใช้เฉพาะ
+Mode เดียวกัน สูตรคะแนนปัจจุบัน และ target เดียวกัน (Nap แยก `nap_30`/`nap_90`)
+พร้อมตัด current Session ออกเสมอ การเลือกเป็น deterministic ด้วย
+`highest_current_formula_score_then_evidence_then_most_recent`: คะแนนสูงสุดก่อน,
+จากนั้น evidence confidence สูงกว่า แล้วจึง input ที่ใหม่กว่า ไม่ใช้ AI inference
+
+ช่วงเวลาที่ได้เป็นเพียง observation ของ Session ที่เคยให้ outcome ที่รองรับได้
+(`outcome_supported`) ไม่พิสูจน์ preference หรือเหตุและผล แม้มี environment
+reference ก็หมายถึงสิ่งแวดล้อมที่สังเกตใน Session นั้น ไม่ใช่ค่าที่ผู้ใช้ชอบ
+ถ้าหลักฐานต่ำ ระบบแสดงได้เพียง “ช่วงเวลาจากครั้งก่อน” โดยไม่ใช้ environment
+เป็นคำแนะนำจนกว่า observation ที่รองรับได้จะมีอยู่จริง
+เมื่อ observation รองรับได้ Adaptive Monitor จะเทียบค่าปัจจุบันกับอุณหภูมิ,
+ความชื้น, CO₂, แสง และเสียงของช่วงนั้น แล้วเสนอการปรับแบบ review-only;
+ข้อเสนอทุกข้อ `executable=false` และต้องให้ผู้ใช้ยืนยันก่อนเสมอ
+ผู้ใช้ต้องยืนยันก่อนนำไปใช้ (`requires_user_confirmation=true`) และ contract บังคับ
+`affects_score=false`, `affects_sleep_state=false`,
+`automatic_device_control=false` API ไม่เผย source Session ID หรือ exact source
+timestamp และไม่ส่ง `best_rest_window` เข้า longitudinal AI context ขณะที่ยังไม่มี
+purpose-specific inference consent
 
 ### 2.6 Environment Context — ระดับที่ต้องแก้ไขและระดับที่คาดหวัง
 
@@ -652,6 +675,7 @@ health record เดิม การแก้ derived record จริงยั�
 | Live state + 10 s cadence | `app.py` | `test_sleep_baseline_policy.py` |
 | Shared scorer | `sleep_stage_scoring.py` | baseline/signal tests |
 | Adaptive baseline รายบุคคล | `personal.py` | หลัง cutover, Session >25 นาที, completed `quality_type=sleep`, detected sleep ≥20 นาที; เรียนเฉพาะ epoch ที่ `excluded_from_personal_baseline=false` และกัน low-confidence carry ออก; ใช้ context-only; `test_personal_baseline_policy.py` |
+| Personal rest-window observation | `zeep_pod/sessions/personal_behaviour.py`, `zeep_pod/sessions/user_baseline_context.py`, `zeep_pod/sessions/user_profile_response_models.py` | prior completed same-mode/same-target only; visible visit 2; no source ID/exact timestamp/AI context/score/state/control; `test_user_learning_profile.py`, `test_usage_session_api.py` |
 | Historical shadow replay | `audit_sleep_history_shadow.py` | `test_audit_sleep_history_shadow.py` |
 | Mode-aware score/report | `sleep_session_report.py` | `test_sleep_session_report.py` |
 | Derived report rescore | `rescore_session_reports.py` | dry-run + DB audit event |

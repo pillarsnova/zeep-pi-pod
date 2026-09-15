@@ -7,7 +7,11 @@ from collections.abc import Mapping
 from typing import Any
 
 from sleep_system_policy import (
+    PERSONAL_BASELINE_LEARNING_START_TIMEZONE,
+    PERSONAL_REST_WINDOW_BASELINE_VERSION,
     RECOVERY_SCORE_FORMULA_VERSION,
+    RESTORE_BASELINE_MIN_COMPARISON_SESSIONS,
+    RESTORE_BASELINE_STABLE_SESSIONS,
     SLEEP_SCORE_FORMULA_VERSION,
 )
 
@@ -84,6 +88,120 @@ def _respiratory_reference(
     }
 
 
+def empty_best_rest_window(
+    group: str,
+    target_key: str | None = None,
+) -> dict[str, Any]:
+    """Return the stable cold-start contract for a personal rest window."""
+    return {
+        "version": PERSONAL_REST_WINDOW_BASELINE_VERSION,
+        "available": False,
+        "status": "no_data",
+        "maturity_confidence": "none",
+        "sessions_compared": 0,
+        "first_visible_visit": 2,
+        "method": "highest_current_formula_score_then_evidence_then_most_recent",
+        "same_mode_only": True,
+        "same_target_only": group == "nap_recovery",
+        "mode_group": group,
+        "target_key": target_key,
+        "timezone": PERSONAL_BASELINE_LEARNING_START_TIMEZONE,
+        "outcome_supported": False,
+        "affects_score": False,
+        "affects_sleep_state": False,
+        "current_session_excluded": True,
+        "automatic_device_control": False,
+        "requires_user_confirmation": True,
+    }
+
+
+def _best_rest_window(
+    rows: list[Mapping[str, Any]],
+    *,
+    group: str,
+    target_key: str | None,
+) -> dict[str, Any]:
+    """Select one prior result without calling it a proven preference."""
+    formula = _formula_for(group)
+    comparable = [
+        row
+        for row in rows
+        if row.get("score_formula_version") == formula
+        and isinstance(row.get("wellness_score"), (int, float))
+        and not isinstance(row.get("wellness_score"), bool)
+        and isinstance(row.get("start_local_hour"), (int, float))
+        and not isinstance(row.get("start_local_hour"), bool)
+        and isinstance(row.get("duration_s"), (int, float))
+        and not isinstance(row.get("duration_s"), bool)
+        and float(row.get("duration_s") or 0) > 0
+    ]
+    empty = empty_best_rest_window(group, target_key)
+    if not comparable:
+        return empty
+
+    # Rows arrive newest first. Evidence quality breaks a score tie before
+    # ``max`` preserves recency for otherwise equal candidates.
+    confidence_rank = {"high": 2, "medium": 1, "low": 0, "unknown": 0}
+    best = max(
+        comparable,
+        key=lambda row: (
+            float(row["wellness_score"]),
+            confidence_rank.get(str(row.get("score_confidence_level")), 0),
+        ),
+    )
+    start_minutes = int(round(float(best["start_local_hour"]) * 60.0)) % 1440
+    duration_minutes = round(float(best["duration_s"]) / 60.0, 1)
+    end_minutes = int(round(start_minutes + duration_minutes)) % 1440
+    environment = {
+        key: round(float(best[key]), 1)
+        for key in ENVIRONMENT_KEYS
+        if isinstance(best.get(key), (int, float))
+        and not isinstance(best.get(key), bool)
+    }
+    count = len(comparable)
+    confidence = str(best.get("score_confidence_level") or "unknown")
+    environment_eligible = bool(
+        best.get("environment_reference_eligible") is True and environment
+    )
+    return {
+        **empty,
+        "available": True,
+        "status": (
+            "observed_once"
+            if count == 1
+            else "learning"
+            if count < 3
+            else "early"
+            if count < RESTORE_BASELINE_MIN_COMPARISON_SESSIONS
+            else "active"
+            if count < RESTORE_BASELINE_STABLE_SESSIONS
+            else "stable"
+        ),
+        "maturity_confidence": (
+            "low"
+            if count < RESTORE_BASELINE_MIN_COMPARISON_SESSIONS
+            else "medium"
+            if count < RESTORE_BASELINE_STABLE_SESSIONS
+            else "high"
+        ),
+        "sessions_compared": count,
+        "start_local_minute": start_minutes,
+        "end_local_minute": end_minutes,
+        "duration_minutes": duration_minutes,
+        "crosses_midnight": end_minutes <= start_minutes,
+        "start_tolerance_minutes": 30 if group == "sleep" else 15,
+        "score_type": "sleep_score" if group == "sleep" else "recovery_score",
+        "score_title": "Sleep Score" if group == "sleep" else "Recovery Score",
+        "score_value": round(float(best["wellness_score"]), 1),
+        "score_formula_version": formula,
+        "evidence_quality": confidence,
+        "outcome_supported": bool(best.get("outcome_reference_eligible")),
+        "environment_reference_available": environment_eligible,
+        "environment": environment if environment_eligible else {},
+        "environment_role": "observed_successful_session_not_confirmed_preference",
+    }
+
+
 def _cohort(
     rows: list[Mapping[str, Any]],
     *,
@@ -94,9 +212,12 @@ def _cohort(
     target_key: str | None = None,
 ) -> dict[str, Any]:
     formula = _formula_for(group)
+    reference_rows = [
+        row for row in rows if row.get("baseline_reference_eligible") is not False
+    ]
     comparable = [
         row
-        for row in rows
+        for row in reference_rows
         if row.get("score_formula_version") == formula
         and isinstance(row.get("wellness_score"), (int, float))
         and not isinstance(row.get("wellness_score"), bool)
@@ -104,14 +225,16 @@ def _cohort(
     scores = [float(row["wellness_score"]) for row in reversed(comparable)]
     score_range = _typical_range(scores)
     score_count = len(scores)
-    durations = _numbers(rows, "duration_s")
-    onset = _numbers(rows, "onset_proxy_s")
-    start_hours = _numbers(rows, "start_local_hour")
+    durations = _numbers(reference_rows, "duration_s")
+    onset = _numbers(reference_rows, "onset_proxy_s")
+    start_hours = _numbers(reference_rows, "start_local_hour")
     return {
-        "status": "active" if len(rows) >= minimum_sessions else "learning",
-        "sessions_used": len(rows),
+        "status": (
+            "active" if len(reference_rows) >= minimum_sessions else "learning"
+        ),
+        "sessions_used": len(reference_rows),
         "minimum_sessions": minimum_sessions,
-        "session_ids": [str(row["session_id"]) for row in rows],
+        "session_ids": [str(row["session_id"]) for row in reference_rows],
         "target_specific": target_specific,
         "target_key": target_key,
         "scores": scores,
@@ -146,11 +269,16 @@ def _cohort(
         ),
         "typical_start_local_hour": _median(start_hours, 2),
         "typical_environment": {
-            key: _median(_numbers(rows, key)) for key in ENVIRONMENT_KEYS
+            key: _median(_numbers(reference_rows, key)) for key in ENVIRONMENT_KEYS
         },
         "respiratory_reference": _respiratory_reference(
-            rows,
+            reference_rows,
             score_minimum_sessions,
+        ),
+        "best_rest_window": _best_rest_window(
+            rows,
+            group=group,
+            target_key=target_key,
         ),
         "direct_stage_influence": False,
         "role": "expectation_report_and_confidence_context_only",
@@ -184,6 +312,9 @@ def aggregate_behaviour_by_mode(
             context["scores"] = []
             context["score_median"] = None
             context["score_typical_range"] = None
+            # Nap 30 and Nap 90 answer different rest goals. The parent cohort
+            # is navigation/QA only and must never publish a mixed-target window.
+            context["best_rest_window"] = empty_best_rest_window(group)
             context["score_reference"] = {
                 **context["score_reference"],
                 "status": "target_required",

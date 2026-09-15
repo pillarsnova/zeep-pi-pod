@@ -71,11 +71,20 @@ def _baseline_summary(
     personal_active = bool(
         baseline.get("direct_stage_influence") and baseline.get("source") == "personal"
     )
+    best_window = behaviour.get("best_rest_window") or {}
+    best_window_ready = bool(
+        best_window.get("available")
+        and best_window.get("outcome_supported")
+        and best_window.get("environment_reference_available")
+    )
     return {
         "status": status,
         "sessions_used": sessions,
         "minimum_sessions": minimum,
         "comparison_ready": bool(status == "active" and reference_count),
+        "provisional_recommendation_ready": bool(
+            best_window_ready and reference_count
+        ),
         "reference_metrics": reference_count,
         "behaviour_reference_same_mode_only": True,
         "physiology_reference_scope": (
@@ -91,6 +100,7 @@ def _baseline_summary(
         "active_stage_source": "personal" if personal_active else "age_gender",
         "personal_stage_candidate": baseline.get("status") or "no_data",
         "personal_direct_stage_influence": personal_active,
+        "best_rest_window": dict(best_window),
     }
 
 
@@ -144,6 +154,62 @@ def _recommendations(
         for item in smart.get("recommendations") or []
         if isinstance(item, dict)
     ]
+
+
+def _personal_reference_recommendations(
+    metrics: list[dict[str, Any]],
+    behaviour: dict[str, Any],
+    observation_id: str,
+) -> list[dict[str, Any]]:
+    """Translate a qualified prior Session into review-only device guidance."""
+    best_window = behaviour.get("best_rest_window") or {}
+    if not (
+        best_window.get("available") is True
+        and best_window.get("outcome_supported") is True
+        and best_window.get("environment_reference_available") is True
+    ):
+        return []
+
+    settings = {
+        "temperature": ("aircon", "อุณหภูมิ", True),
+        "humidity": ("humidity", "ความชื้น", True),
+        "co2": ("ventilation", "CO₂", False),
+        "light": ("light", "แสง", False),
+        "sound": ("sound", "เสียง", False),
+    }
+    recommendations = []
+    for metric in metrics:
+        key = metric.get("key")
+        setting = settings.get(key)
+        comparison = metric.get("comparison")
+        if setting is None or comparison not in {"above_reference", "below_reference"}:
+            continue
+        domain, label, allow_both_directions = setting
+        if not allow_both_directions and comparison == "below_reference":
+            continue
+        value = finite_number(metric.get("value"))
+        reference = finite_number(metric.get("reference"))
+        if value is None or reference is None:
+            continue
+        direction = "ลด" if value > reference else "เพิ่ม"
+        unit = str(metric.get("unit") or "")
+        recommendations.append(
+            {
+                "decision_id": f"{observation_id}:personal:{key}",
+                "domain": domain,
+                "level": "personal_baseline",
+                "title": f"{label}ต่างจากช่วงที่เคยพักได้ดี",
+                "evidence": (
+                    f"ปัจจุบัน {value:g} {unit} · ข้อมูลตั้งต้น {reference:g} {unit}"
+                ),
+                "candidate": f"ลอง{direction}{label}ให้ใกล้ {reference:g} {unit}",
+                "basis": "prior_completed_same_mode_best_rest_window",
+                "baseline_status": best_window.get("status"),
+                "requires_user_confirmation": True,
+                "executable": False,
+            }
+        )
+    return recommendations
 
 
 def _device_intent(snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -301,10 +367,14 @@ def build_adaptive_learning_snapshot(
         "live_features": metrics,
         "sleep_estimator": _sleep_estimator(sleep),
         "device_intent": _device_intent(snapshot),
-        "candidate_recommendations": _recommendations(
-            snapshot,
-            observation_id,
-        ),
+        "candidate_recommendations": [
+            *_personal_reference_recommendations(
+                metrics,
+                behaviour_data,
+                observation_id,
+            ),
+            *_recommendations(snapshot, observation_id),
+        ],
         "blockers": _blockers(snapshot, quality),
         "versions": _versions(snapshot),
         "guardrails": [

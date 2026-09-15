@@ -8,6 +8,8 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.testclient import TestClient
 
 from sleep_system_policy import (
+    PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+    PERSONAL_REST_WINDOW_BASELINE_VERSION,
     RECOVERY_SCORE_FORMULA_VERSION,
     SLEEP_SCORE_FORMULA_VERSION,
 )
@@ -366,6 +368,7 @@ class UsageSessionApiTests(unittest.TestCase):
             "a@example.test": {"email": "a@example.test"},
             "b@example.test": {"email": "b@example.test"},
         }
+        self.baselines: dict[str, dict] = {}
 
         def require_user(
             x_test_account: str | None = Header(default=None),
@@ -409,7 +412,7 @@ class UsageSessionApiTests(unittest.TestCase):
                 profiles_snapshot=lambda: self.profiles,
                 profiles_lock=threading.Lock(),
                 timezone_name="Asia/Bangkok",
-                baseline_snapshot=lambda _account_key: None,
+                baseline_snapshot=lambda account_key: self.baselines.get(account_key),
             )
         )
         self.client = TestClient(app)
@@ -529,6 +532,162 @@ class UsageSessionApiTests(unittest.TestCase):
         self.assertEqual(data["modes"]["nap_recovery"]["session_count"], 0)
         self.assertFalse(data["ai_contract"]["identity_input_allowed"])
         self.assertFalse(data["ai_contract"]["automatic_actuation_allowed"])
+
+    def test_longitudinal_exposes_prior_best_rest_window_without_source_identity(
+        self,
+    ) -> None:
+        self.baselines["b@example.test"] = {
+            "behaviour_policy_version": PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+            "behaviour_by_mode": {
+                "nap_recovery": {
+                    "by_target": {
+                        "nap_30": {
+                            "status": "learning",
+                            "sessions_used": 1,
+                            "minimum_sessions": 3,
+                            "target_specific": True,
+                            "target_key": "nap_30",
+                            "score_reference": {
+                                "status": "learning",
+                                "sessions_used": 1,
+                                "minimum_sessions": 7,
+                                "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
+                            },
+                            "best_rest_window": {
+                                "version": PERSONAL_REST_WINDOW_BASELINE_VERSION,
+                                "available": True,
+                                "status": "observed_once",
+                                "maturity_confidence": "low",
+                                "sessions_compared": 1,
+                                "same_target_only": True,
+                                "mode_group": "nap_recovery",
+                                "target_key": "nap_30",
+                                "timezone": "Asia/Bangkok",
+                                "start_local_minute": 780,
+                                "end_local_minute": 810,
+                                "duration_minutes": 30,
+                                "crosses_midnight": False,
+                                "start_tolerance_minutes": 15,
+                                "score_type": "recovery_score",
+                                "score_title": "Recovery Score",
+                                "score_value": 78,
+                                "score_formula_version": (
+                                    RECOVERY_SCORE_FORMULA_VERSION
+                                ),
+                                "evidence_quality": "high",
+                                "outcome_supported": True,
+                                "environment_reference_available": True,
+                                "environment": {"temp_median": 23.0},
+                                "source_session_id": "must-not-leak",
+                                "source_started_at_utc": (
+                                    "2026-09-10T18:00:00+00:00"
+                                ),
+                            },
+                        }
+                    }
+                }
+            },
+        }
+
+        response = self.client.get(
+            "/api/v1/usage-sessions/longitudinal",
+            headers=self._headers("b@example.test"),
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        data = response.json()["data"]
+        target = next(
+            item
+            for item in data["modes"]["nap_recovery"]["targets"]
+            if item["minutes"] == 30
+        )
+        window = target["baseline"]["best_rest_window"]
+        self.assertTrue(window["available"])
+        self.assertEqual(window["sessions_compared"], 1)
+        self.assertEqual(window["first_visible_visit"], 2)
+        self.assertEqual(
+            window["method"],
+            "highest_current_formula_score_then_evidence_then_most_recent",
+        )
+        self.assertEqual(window["maturity_confidence"], "low")
+        self.assertEqual(window["mode_group"], "nap_recovery")
+        self.assertEqual(window["target_key"], "nap_30")
+        self.assertEqual(window["timezone"], "Asia/Bangkok")
+        self.assertTrue(window["outcome_supported"])
+        self.assertFalse(window["affects_score"])
+        self.assertFalse(window["affects_sleep_state"])
+        self.assertTrue(window["current_session_excluded"])
+        self.assertFalse(window["automatic_device_control"])
+        self.assertTrue(window["requires_user_confirmation"])
+        self.assertEqual(
+            window["environment_role"],
+            "observed_successful_session_not_confirmed_preference",
+        )
+        serialized = str(window)
+        self.assertNotIn("source_session_id", serialized)
+        self.assertNotIn("source_started_at_utc", serialized)
+        self.assertNotIn("must-not-leak", serialized)
+        self.assertFalse(data["ai_contract"]["personalized_inference_allowed"])
+
+        ai_response = self.client.get(
+            "/api/v1/usage-sessions/longitudinal/ai-context",
+            headers=self._headers("b@example.test"),
+        )
+        self.assertEqual(ai_response.status_code, 200, ai_response.text)
+        self.assertNotIn("best_rest_window", str(ai_response.json()["data"]))
+
+    def test_openapi_best_rest_window_is_strict_and_source_anonymous(self) -> None:
+        schema = self._openapi()["components"]["schemas"]["BestRestWindow"]
+        properties = schema["properties"]
+
+        first_visit_schema = properties["first_visible_visit"]
+        first_visit = first_visit_schema.get(
+            "const",
+            (first_visit_schema.get("enum") or [None])[0],
+        )
+        method_schema = properties["method"]
+        method = method_schema.get(
+            "const",
+            (method_schema.get("enum") or [None])[0],
+        )
+        self.assertEqual(first_visit, 2)
+        self.assertEqual(
+            method,
+            "highest_current_formula_score_then_evidence_then_most_recent",
+        )
+        for field in (
+            "maturity_confidence",
+            "mode_group",
+            "timezone",
+            "outcome_supported",
+            "affects_score",
+            "affects_sleep_state",
+            "current_session_excluded",
+        ):
+            self.assertIn(field, properties)
+        for forbidden in (
+            "session_id",
+            "source_session_id",
+            "started_at_utc",
+            "source_started_at_utc",
+            "source_timestamp",
+        ):
+            self.assertNotIn(forbidden, properties)
+        self.assertFalse(schema.get("additionalProperties", True))
+        environment_schema = self._openapi()["components"]["schemas"][
+            "BestRestWindowEnvironment"
+        ]
+        self.assertEqual(
+            set(environment_schema["properties"]),
+            {
+                "temp_median",
+                "humidity_median",
+                "co2_median",
+                "lux_median",
+                "sound_median",
+            },
+        )
+        self.assertFalse(environment_schema.get("additionalProperties", True))
 
     def test_user_cannot_request_another_longitudinal_profile(self) -> None:
         headers = self._headers("a@example.test")

@@ -280,7 +280,16 @@ def _feature_value_maps(
     frame = snapshot.get("sensor_frame") or {}
     sleep = snapshot.get("sleep") or {}
     devices = environment.get("devices") or {}
-    typical = behaviour.get("typical_environment") or {}
+    best_window = behaviour.get("best_rest_window") or {}
+    best_environment = (
+        best_window.get("environment") or {}
+        if (
+            best_window.get("outcome_supported") is True
+            and best_window.get("environment_reference_available") is True
+        )
+        else {}
+    )
+    typical = best_environment or behaviour.get("typical_environment") or {}
     respiratory = behaviour.get("respiratory_reference") or {}
     rr_reference = respiratory.get("median_rr_brpm")
     if finite_number(rr_reference) is None:

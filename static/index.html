@@ -1189,6 +1189,29 @@
           <div class="dash-profile-fact" id="dashProfileBlood"><span>กรุ๊ปเลือด</span><strong>—</strong></div>
         </div>
       </section>
+      <section class="dash-personal-rest-baseline idle" id="dashPersonalRestBaseline" aria-label="Baseline ช่วงเวลาพักส่วนบุคคล" aria-live="polite">
+        <div class="dash-personal-rest-head">
+          <span class="dash-personal-rest-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/><path d="M18.5 5.5 20 4"/></svg></span>
+          <div><b id="dashPersonalRestTitle">Baseline ช่วงเวลาพักของคุณ</b><small id="dashPersonalRestEvidence">เข้าสู่ระบบเพื่อเริ่มเรียนรู้จากการพักของคุณ</small></div>
+          <span class="dash-personal-rest-status" id="dashPersonalRestStatus">รอเริ่ม</span>
+        </div>
+        <div class="dash-personal-rest-body">
+          <div class="dash-personal-rest-time">
+            <small id="dashPersonalRestMode">รูปแบบการพัก</small>
+            <strong id="dashPersonalRestTime">--:-- – --:--</strong>
+            <span id="dashPersonalRestDuration">ยังไม่มีข้อมูลช่วงเวลา</span>
+          </div>
+          <div class="dash-personal-rest-result">
+            <b id="dashPersonalRestScore">กำลังรอผลการพักครั้งแรก</b>
+            <p id="dashPersonalRestAdvice">เมื่อกลับมาใช้ครั้งที่ 2 ZEEP จะเริ่มแนะนำช่วงเวลาที่เหมาะกับคุณ</p>
+          </div>
+        </div>
+        <div class="dash-personal-rest-environment" id="dashPersonalRestEnvironment" hidden>
+          <small>ค่าที่บันทึกได้ในช่วงพักนี้</small>
+          <div id="dashPersonalRestEnvironmentValues"></div>
+        </div>
+        <small class="dash-personal-rest-guardrail" id="dashPersonalRestGuardrail">ใช้เพื่อแนะนำเท่านั้น · ระบบจะให้คุณยืนยันก่อนปรับอุปกรณ์</small>
+      </section>
       <div class="dashboard-zone-grid">
         <section class="dashboard-zone dashboard-health-zone" aria-label="สุขภาพผู้ใช้งาน">
           <div class="dashboard-zone-head"><div><span class="dashboard-zone-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M3 12h4l2-4 4 9 2-5h6"/><path d="M12 21C5 17 3 13 3 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 9 2.5c0 3.5-2 7.5-9 11.5Z"/></svg></span>สุขภาพผู้ใช้งาน</div><span>ข้อมูลระหว่างพัก</span></div>
@@ -3338,6 +3361,133 @@ function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
   })[result.mode]||session.rest_mode||'รอ Mode';
   modeRoot.textContent=`โหมด · ${modeLabel}`;
 }
+const personalRestModeLabels=Object.freeze({
+  sleep:'Overnight Recovery',
+  nap_recovery:'Nap & Refresh',
+});
+function personalRestModeLabel(baseline={},session={}){
+  const group=baseline.mode_group||session.rest_mode;
+  const target=baseline.target_key||session.rest_target_key;
+  const label=personalRestModeLabels[group]||'รูปแบบการพัก';
+  if(target==='nap_30')return `${label} · 30 นาที`;
+  if(target==='nap_90')return `${label} · 90 นาที`;
+  return label;
+}
+function personalRestClock(value){
+  const number=Number(value);
+  if(value===null||value===undefined||value===''||!Number.isFinite(number))return '--:--';
+  const minutes=((Math.round(number)%1440)+1440)%1440;
+  return `${String(Math.floor(minutes/60)).padStart(2,'0')}:${String(minutes%60).padStart(2,'0')}`;
+}
+function personalRestDuration(minutes){
+  const number=Number(minutes);
+  if(minutes===null||minutes===undefined||minutes===''||!Number.isFinite(number)||number<=0)return 'ยังไม่มีข้อมูลช่วงเวลา';
+  const total=Math.round(number),hours=Math.floor(total/60),remaining=total%60;
+  if(!hours)return `พัก ${total} นาที`;
+  return `พัก ${hours} ชม.${remaining?` ${remaining} นาที`:''}`;
+}
+function personalRestWindowSource(sleep={},session={}){
+  const sessionSource=session.personal_rest_baseline;
+  const sleepSource=sleep.personal_behaviour;
+  const source=sessionSource&&typeof sessionSource==='object'
+    ?sessionSource:sleepSource&&typeof sleepSource==='object'?sleepSource:{};
+  return source.best_rest_window&&typeof source.best_rest_window==='object'
+    ?source.best_rest_window:source;
+}
+function renderPersonalRestBaseline(sleep={},session={}){
+  const root=document.getElementById('dashPersonalRestBaseline');
+  if(!root)return;
+  const title=document.getElementById('dashPersonalRestTitle');
+  const evidence=document.getElementById('dashPersonalRestEvidence');
+  const status=document.getElementById('dashPersonalRestStatus');
+  const mode=document.getElementById('dashPersonalRestMode');
+  const time=document.getElementById('dashPersonalRestTime');
+  const duration=document.getElementById('dashPersonalRestDuration');
+  const score=document.getElementById('dashPersonalRestScore');
+  const advice=document.getElementById('dashPersonalRestAdvice');
+  const environmentRoot=document.getElementById('dashPersonalRestEnvironment');
+  const environmentValues=document.getElementById('dashPersonalRestEnvironmentValues');
+  const baseline=personalRestWindowSource(sleep,session);
+  const count=Math.max(0,Math.floor(Number(baseline.sessions_compared)||0));
+  const start=personalRestClock(baseline.start_local_minute);
+  const end=personalRestClock(baseline.end_local_minute);
+  const available=baseline.available===true&&start!=='--:--'&&end!=='--:--';
+  root.classList.toggle('idle',!session.active);
+  root.classList.toggle('learning',session.active&&!available);
+  root.classList.toggle('available',available);
+  environmentRoot.hidden=true;
+  environmentValues.replaceChildren();
+  if(!session.active){
+    title.textContent='Baseline ช่วงเวลาพักของคุณ';
+    evidence.textContent='เข้าสู่ระบบเพื่อเริ่มเรียนรู้จากการพักของคุณ';
+    status.textContent='รอเริ่ม';
+    mode.textContent='รูปแบบการพัก';
+    time.textContent='--:-- – --:--';
+    duration.textContent='ยังไม่มีข้อมูลช่วงเวลา';
+    score.textContent='กำลังรอผลการพักครั้งแรก';
+    advice.textContent='เมื่อกลับมาใช้ครั้งที่ 2 ZEEP จะเริ่มแนะนำช่วงเวลาที่เหมาะกับคุณ';
+    return;
+  }
+  mode.textContent=personalRestModeLabel(baseline,session);
+  if(!available){
+    title.textContent='กำลังสร้าง Baseline ครั้งแรก';
+    evidence.textContent='ครั้งถัดไป ZEEP จะเริ่มแนะนำช่วงเวลาจากข้อมูลของคุณ';
+    status.textContent='ครั้งแรก';
+    time.textContent='กำลังเรียนรู้';
+    duration.textContent='บันทึกเฉพาะรูปแบบการพักครั้งนี้';
+    score.textContent='พักอย่างเป็นธรรมชาติได้เลย';
+    advice.textContent='ผล Session นี้จะเป็นข้อมูลตั้งต้นสำหรับการกลับมาใช้ครั้งที่ 2';
+    return;
+  }
+  const observedOnce=count===1||baseline.status==='observed_once';
+  const outcomeSupported=baseline.outcome_supported===true;
+  const statusLabels={
+    observed_once:'ข้อมูลตั้งต้น',learning:'กำลังเรียนรู้',early:'เริ่มเห็นรูปแบบ',
+    active:'Baseline พร้อมใช้',stable:'Baseline คงที่',
+  };
+  title.textContent=!outcomeSupported
+    ?'ช่วงเวลาจากครั้งก่อน'
+    :observedOnce?'ช่วงเวลาที่ได้ผลดีจากครั้งก่อน':'ช่วงเวลาพักที่ได้ผลดีที่สุดของคุณ';
+  evidence.textContent=!outcomeSupported
+    ?'ข้อมูลเวลาพร้อมแล้ว · หลักฐานผลลัพธ์ยังจำกัด'
+    :observedOnce
+      ?'ข้อมูลตั้งต้นจาก 1 Session ก่อนหน้า'
+      :`เปรียบเทียบจาก ${count.toLocaleString('th-TH-u-nu-latn')} Sessions ก่อนหน้า`;
+  status.textContent=statusLabels[baseline.status]||'ข้อมูลส่วนบุคคล';
+  time.textContent=`${start} – ${end}`;
+  duration.textContent=personalRestDuration(baseline.duration_minutes);
+  const scoreNumber=Number(baseline.score_value);
+  const scoreTitle=baseline.score_title||(baseline.score_type==='sleep_score'?'Sleep Score':'Recovery Score');
+  score.textContent=!outcomeSupported
+    ?'หลักฐานผลลัพธ์ยังไม่พอสำหรับแนะนำ'
+    :Number.isFinite(scoreNumber)
+    ?`${scoreTitle} ${scoreNumber.toLocaleString('th-TH-u-nu-latn',{maximumFractionDigits:1})}`
+    :'ผลการพักที่ใช้สร้างข้อมูลตั้งต้น';
+  const tolerance=Math.max(0,Math.round(Number(baseline.start_tolerance_minutes)||0));
+  advice.textContent=!outcomeSupported
+    ?'ใช้เป็นข้อมูลเวลาเบื้องต้น และรอผลครั้งถัดไปก่อนแนะนำการปรับ'
+    :tolerance
+      ?`หากสะดวก ลองเริ่มพักใกล้เวลานี้ ±${tolerance} นาที`
+      :'หากสะดวก ลองเริ่มพักใกล้ช่วงเวลานี้';
+  const environment=baseline.environment&&typeof baseline.environment==='object'
+    ?baseline.environment:{};
+  const environmentMetrics=[
+    ['temp_median','อุณหภูมิ','°C',1],['humidity_median','ความชื้น','%RH',1],
+    ['co2_median','CO₂','ppm',0],['lux_median','แสง','lux',1],
+    ['sound_median','เสียง','dBA',1],
+  ];
+  if(baseline.environment_reference_available===true){
+    environmentMetrics.forEach(([key,label,unit,digits])=>{
+      const value=Number(environment[key]);
+      if(environment[key]===null||environment[key]===undefined||environment[key]===''||!Number.isFinite(value))return;
+      const chip=document.createElement('span'),name=document.createElement('small'),reading=document.createElement('b');
+      name.textContent=label;
+      reading.textContent=`${value.toLocaleString('th-TH-u-nu-latn',{minimumFractionDigits:digits,maximumFractionDigits:digits})} ${unit}`;
+      chip.append(name,reading);environmentValues.append(chip);
+    });
+    environmentRoot.hidden=!environmentValues.childElementCount;
+  }
+}
 function renderSimpleDashboard(state={},environment={},bcg={},session={}){
   const active=!!session.active,recording=!!session.recording;
   const adminView=currentPrincipal?.role==='admin';
@@ -3373,6 +3523,7 @@ function renderSimpleDashboard(state={},environment={},bcg={},session={}){
     ?BCG_STATUS_TH[bcg.status_code]||bcg.status_text||'รอสัญญาณจากเตียง'
     :USER_BED_STATUS_TH[bcg.status_code]||'กำลังอ่านสถานะเตียง';
   const sleep=state.sleep||{};
+  renderPersonalRestBaseline(sleep,session);
   const restartSleepHold=sleep.display_only_after_restart===true
     &&sleep.held_previous_state===true&&sleep.classification_active===true;
   const vitalPairValid=bcg.heart_rate_bpm!=null&&bcg.respiration_rate!=null

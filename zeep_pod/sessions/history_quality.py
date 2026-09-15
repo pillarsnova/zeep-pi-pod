@@ -9,6 +9,8 @@ from sleep_system_policy import (
     NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
     PRE_CONTINUITY_SESSION_REPORT_VERSION,
     PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
+    PRE_NAP_TIMING_SESSION_REPORT_VERSION,
+    PRE_NAP_TIMING_SLEEP_QUALITY_VERSION,
     PRE_RECOVERY_TIMING_SESSION_REPORT_VERSION,
     PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION,
     PRE_RESPIRATORY_SESSION_REPORT_VERSION,
@@ -106,6 +108,14 @@ def _compatible_versioned_quality(
         and report.get("version") == SESSION_REPORT_VERSION
     ):
         return quality
+    if (
+        quality.get("version") == PRE_NAP_TIMING_SLEEP_QUALITY_VERSION
+        and report.get("version") == PRE_NAP_TIMING_SESSION_REPORT_VERSION
+    ):
+        return {
+            **quality,
+            "compatible_pre_nap_timing_result": True,
+        }
     if (
         quality.get("version") == PRE_WELLNESS_BALANCE_SLEEP_QUALITY_VERSION
         and report.get("version") == PRE_WELLNESS_BALANCE_SESSION_REPORT_VERSION

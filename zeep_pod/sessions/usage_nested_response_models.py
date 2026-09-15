@@ -53,6 +53,7 @@ class UsageProtocolStatus(ContractModel):
     review_required: bool | None = None
     score_releasable: bool | None = None
     minimum_score_seconds: float | None = Field(default=None, ge=0)
+    timing_review_threshold_seconds: float | None = Field(default=None, ge=0)
     legacy_hard_max_seconds: float | None = Field(default=None, ge=0)
     extended_max_seconds: float | None = Field(default=None, ge=0)
     target: ProtocolTargetSnapshot | None = None

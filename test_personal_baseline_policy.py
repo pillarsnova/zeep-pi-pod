@@ -10,6 +10,8 @@ from personal import MIN_DETECTED_SLEEP_SECONDS, BaselineStore
 from sleep_system_policy import (
     PERSONAL_BASELINE_LEARNING_START_UTC,
     PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+    PRE_NAP_TIMING_SESSION_REPORT_VERSION,
+    PRE_NAP_TIMING_SLEEP_QUALITY_VERSION,
     PREVIOUS_SESSION_REPORT_VERSION,
     PREVIOUS_SLEEP_QUALITY_VERSION,
     RECOVERY_SCORE_FORMULA_VERSION,
@@ -50,7 +52,7 @@ class _BehaviourDatabaseStub:
         session_id = params[0] if params else None
         if "type='final_summary'" in sql:
             summary = self.summaries.get(session_id)
-            return ([{"value": json.dumps(summary)}] if summary else [])
+            return [{"value": json.dumps(summary)}] if summary else []
         if "type='sleep_stage'" in sql:
             return []
         if "FROM timeline" in sql:
@@ -159,38 +161,45 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
                 index + 1,
                 tzinfo=UTC,
             ).isoformat()
-            sessions.append({
-                "session_id": session_id,
-                "username_key": account_key,
-                "duration": 1_800.0,
-                "start_time": timestamp,
-                "rest_mode": "short_nap",
-                "target_duration_s": 1_800.0,
-            })
+            sessions.append(
+                {
+                    "session_id": session_id,
+                    "username_key": account_key,
+                    "duration": 1_800.0,
+                    "start_time": timestamp,
+                    "rest_mode": "short_nap",
+                    "target_duration_s": 1_800.0,
+                }
+            )
             summaries[session_id] = _behaviour_summary(
                 mode_group="nap_recovery",
                 resolved="short_nap",
                 rr=16.0,
             )
-            timelines[session_id] = [{
-                "timestamp": timestamp,
-                "temperature": 24.0,
-                "humidity": 50.0,
-                "co2": 700.0,
-                "lux": 0.0,
-                "sound": 38.0,
-                "heart_rate": 62.0,
-                "respiration_rate": 16.0,
-                "bed_status": "On bed",
-            }]
+            timelines[session_id] = [
+                {
+                    "timestamp": timestamp,
+                    "temperature": 24.0,
+                    "humidity": 50.0,
+                    "co2": 700.0,
+                    "lux": 0.0,
+                    "sound": 38.0,
+                    "heart_rate": 62.0,
+                    "respiration_rate": 16.0,
+                    "bed_status": "On bed",
+                }
+            ]
         database = _AliasDatabaseStub(sessions, summaries, timelines)
         return BaselineStore(database, data_dir), database
 
     def test_awake_rest_session_never_trains_sleep_baseline(self):
-        store = self._store(_summary(
-            quality_type="rest_goal", sleep_detected=False,
-            estimated_sleep_s=0,
-        ))
+        store = self._store(
+            _summary(
+                quality_type="rest_goal",
+                sleep_detected=False,
+                estimated_sleep_s=0,
+            )
+        )
         self.assertIsNone(store._night_metrics("rest-session"))
 
     def test_delete_user_removes_derived_baseline_from_disk(self):
@@ -305,9 +314,7 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
             set(database.requested_account_keys),
             {canonical, legacy},
         )
-        target = record["behaviour_by_mode"]["nap_recovery"]["by_target"][
-            "nap_30"
-        ]
+        target = record["behaviour_by_mode"]["nap_recovery"]["by_target"]["nap_30"]
         self.assertEqual(target["sessions_used"], 2)
         self.assertIn(canonical, store.data)
         self.assertEqual(
@@ -339,9 +346,7 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
         record = store.update_user(canonical)
 
         self.assertEqual(database.requested_account_keys, (canonical,))
-        target = record["behaviour_by_mode"]["nap_recovery"]["by_target"][
-            "nap_30"
-        ]
+        target = record["behaviour_by_mode"]["nap_recovery"]["by_target"]["nap_30"]
         self.assertEqual(target["sessions_used"], 1)
         self.assertEqual(
             store.profile_for(canonical)["verified_legacy_account_keys"],
@@ -367,9 +372,7 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
         record = store.update_user(canonical)
 
         self.assertEqual(database.requested_account_keys, (canonical,))
-        target = record["behaviour_by_mode"]["nap_recovery"]["by_target"][
-            "nap_30"
-        ]
+        target = record["behaviour_by_mode"]["nap_recovery"]["by_target"]["nap_30"]
         self.assertEqual(target["sessions_used"], 1)
 
     def test_duplicate_claim_is_allowed_only_for_one_shared_public_id(self):
@@ -396,9 +399,7 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
             set(database.requested_account_keys),
             {canonical, legacy},
         )
-        target = record["behaviour_by_mode"]["nap_recovery"]["by_target"][
-            "nap_30"
-        ]
+        target = record["behaviour_by_mode"]["nap_recovery"]["by_target"]["nap_30"]
         self.assertEqual(target["sessions_used"], 2)
 
     def test_missing_final_report_never_trains_sleep_baseline(self):
@@ -408,10 +409,13 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
         self.assertIsNone(store._night_metrics("unfinished-session"))
 
     def test_too_little_detected_sleep_is_not_a_learning_night(self):
-        store = self._store(_summary(
-            quality_type="sleep", sleep_detected=True,
-            estimated_sleep_s=MIN_DETECTED_SLEEP_SECONDS - 5,
-        ))
+        store = self._store(
+            _summary(
+                quality_type="sleep",
+                sleep_detected=True,
+                estimated_sleep_s=MIN_DETECTED_SLEEP_SECONDS - 5,
+            )
+        )
         self.assertIsNone(store._night_metrics("micro-sleep-session"))
 
     def test_mode_conflict_never_trains_physiology_or_score_trend(self):
@@ -463,22 +467,23 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
                 "rest_mode": {"group": "sleep", "resolved": "overnight"},
             },
         }
-        timeline = [{
-            "timestamp": f"2026-09-01T00:{index:02d}:00+00:00",
-            "temperature": 24.0,
-            "humidity": 50.0,
-            "co2": 700.0,
-            "lux": 0.0,
-            "sound": 38.0,
-            "heart_rate": 62.0 + (index % 2),
-            "respiration_rate": 14.0,
-            "bed_status": "On bed",
-        } for index in range(30)]
+        timeline = [
+            {
+                "timestamp": f"2026-09-01T00:{index:02d}:00+00:00",
+                "temperature": 24.0,
+                "humidity": 50.0,
+                "co2": 700.0,
+                "lux": 0.0,
+                "sound": 38.0,
+                "heart_rate": 62.0 + (index % 2),
+                "respiration_rate": 14.0,
+                "bed_status": "On bed",
+            }
+            for index in range(30)
+        ]
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        store = BaselineStore(
-            _DatabaseStub(summary, timeline), Path(temporary.name)
-        )
+        store = BaselineStore(_DatabaseStub(summary, timeline), Path(temporary.name))
 
         metrics = store._night_metrics("previous-overnight")
 
@@ -507,34 +512,40 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
         timeline = []
         for index in range(36):
             timestamp = origin + timedelta(seconds=(index + 1) * 10)
-            timeline.append({
-                "timestamp": timestamp.isoformat(),
-                "temperature": 24.0,
-                "humidity": 50.0,
-                "co2": 700.0,
-                "lux": 0.0,
-                "sound": 38.0,
-                "heart_rate": 100.0 if index < 6 else 60.0,
-                "respiration_rate": 20.0 if index < 6 else 14.0,
-                "bed_status": "On bed",
-            })
+            timeline.append(
+                {
+                    "timestamp": timestamp.isoformat(),
+                    "temperature": 24.0,
+                    "humidity": 50.0,
+                    "co2": 700.0,
+                    "lux": 0.0,
+                    "sound": 38.0,
+                    "heart_rate": 100.0 if index < 6 else 60.0,
+                    "respiration_rate": 20.0 if index < 6 else 14.0,
+                    "bed_status": "On bed",
+                }
+            )
         stage_events = []
         for index in range(12):
             start = origin + timedelta(seconds=index * 30)
             end = start + timedelta(seconds=30)
             excluded = index < 2
-            stage_events.append({
-                "timestamp": end.isoformat(),
-                "value": json.dumps({
-                    "state": "n2",
-                    "attribution_start": start.isoformat(),
-                    "attribution_end": end.isoformat(),
-                    "sample_interval_s": 30,
-                    "provisional": excluded,
-                    "score_eligible": not excluded,
-                    "excluded_from_personal_baseline": excluded,
-                }),
-            })
+            stage_events.append(
+                {
+                    "timestamp": end.isoformat(),
+                    "value": json.dumps(
+                        {
+                            "state": "n2",
+                            "attribution_start": start.isoformat(),
+                            "attribution_end": end.isoformat(),
+                            "sample_interval_s": 30,
+                            "provisional": excluded,
+                            "score_eligible": not excluded,
+                            "excluded_from_personal_baseline": excluded,
+                        }
+                    ),
+                }
+            )
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         store = BaselineStore(
@@ -552,10 +563,13 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
         )
 
     def test_behaviour_context_is_partitioned_by_mode_and_never_selects_stage(self):
-        store = self._store(_summary(
-            quality_type="sleep", sleep_detected=True,
-            estimated_sleep_s=MIN_DETECTED_SLEEP_SECONDS,
-        ))
+        store = self._store(
+            _summary(
+                quality_type="sleep",
+                sleep_detected=True,
+                estimated_sleep_s=MIN_DETECTED_SLEEP_SECONDS,
+            )
+        )
         store.data["person@example.com"] = {
             "policy_version": ZEEP_SLEEP_BASELINE_VERSION,
             "behaviour_policy_version": PERSONAL_BEHAVIOUR_BASELINE_VERSION,
@@ -609,14 +623,16 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
                 "rest_mode": {"group": "sleep", "resolved": "overnight"},
             },
         }
-        timeline = [{
-            "timestamp": "2026-09-10T22:00:00+00:00",
-            "temperature": 24.0,
-            "humidity": 50.0,
-            "co2": 700.0,
-            "lux": 0.0,
-            "sound": 38.0,
-        }]
+        timeline = [
+            {
+                "timestamp": "2026-09-10T22:00:00+00:00",
+                "temperature": 24.0,
+                "humidity": 50.0,
+                "co2": 700.0,
+                "lux": 0.0,
+                "sound": 38.0,
+            }
+        ]
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         store = BaselineStore(
@@ -636,6 +652,75 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
             "zeep-sleep-score-v1.0-reviewed",
         )
 
+    def test_behaviour_metrics_accept_pre_nap_timing_versions(self):
+        summary = _behaviour_summary(
+            mode_group="nap_recovery",
+            resolved="short_nap",
+            rr=16.0,
+        )
+        report = summary["session_report"]
+        quality = report["quality"]
+        quality["version"] = PRE_NAP_TIMING_SLEEP_QUALITY_VERSION
+        report["version"] = PRE_NAP_TIMING_SESSION_REPORT_VERSION
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        store = BaselineStore(
+            _DatabaseStub(
+                summary,
+                [
+                    {
+                        "timestamp": "2026-09-10T06:00:00+00:00",
+                        "temperature": 24.0,
+                        "humidity": 50.0,
+                        "co2": 700.0,
+                        "lux": 0.0,
+                        "sound": 38.0,
+                    }
+                ],
+            ),
+            Path(temporary.name),
+        )
+
+        metrics = store._behaviour_metrics(
+            "pre-nap-timing",
+            1_800,
+            "nap_recovery",
+            1_800,
+        )
+
+        self.assertIsNotNone(metrics)
+        self.assertEqual(metrics["wellness_score"], quality["score"])
+
+    def test_review_required_nap_does_not_train_personal_baseline(self):
+        summary = _behaviour_summary(
+            mode_group="nap_recovery",
+            resolved="short_nap",
+            rr=16.0,
+        )
+        quality = summary["session_report"]["quality"]
+        quality["rest_mode"] = {
+            "protocol_status": {
+                "status": "implausible_outlier",
+                "review_required": True,
+                "score_releasable": True,
+            },
+        }
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        store = BaselineStore(
+            _DatabaseStub(summary),
+            Path(temporary.name),
+        )
+
+        metrics = store._behaviour_metrics(
+            "review-required",
+            121 * 60,
+            "nap_recovery",
+            1_800,
+        )
+
+        self.assertIsNone(metrics)
+
     def test_nap_target_mismatch_never_trains_target_baseline(self):
         summary = _behaviour_summary(
             mode_group="nap_recovery",
@@ -647,14 +732,16 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
         store = BaselineStore(
             _DatabaseStub(
                 summary,
-                [{
-                    "timestamp": "2026-09-10T06:00:00+00:00",
-                    "temperature": 24.0,
-                    "humidity": 50.0,
-                    "co2": 700.0,
-                    "lux": 0.0,
-                    "sound": 38.0,
-                }],
+                [
+                    {
+                        "timestamp": "2026-09-10T06:00:00+00:00",
+                        "temperature": 24.0,
+                        "humidity": 50.0,
+                        "co2": 700.0,
+                        "lux": 0.0,
+                        "sound": 38.0,
+                    }
+                ],
             ),
             Path(temporary.name),
         )
@@ -679,14 +766,16 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
         store = BaselineStore(
             _DatabaseStub(
                 summary,
-                [{
-                    "timestamp": "2026-09-10T06:00:00+00:00",
-                    "temperature": 24.0,
-                    "humidity": 50.0,
-                    "co2": 700.0,
-                    "lux": 0.0,
-                    "sound": 38.0,
-                }],
+                [
+                    {
+                        "timestamp": "2026-09-10T06:00:00+00:00",
+                        "temperature": 24.0,
+                        "humidity": 50.0,
+                        "co2": 700.0,
+                        "lux": 0.0,
+                        "sound": 38.0,
+                    }
+                ],
             ),
             Path(temporary.name),
         )
@@ -708,41 +797,57 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
         start = datetime(2026, 9, 1, tzinfo=UTC)
 
         def add_session(session_id, index, mode_group, resolved, rr, confidence):
-            sessions.append({
-                "session_id": session_id,
-                "duration": 1_800.0,
-                "start_time": (start + timedelta(days=index)).isoformat(),
-            })
+            sessions.append(
+                {
+                    "session_id": session_id,
+                    "duration": 1_800.0,
+                    "start_time": (start + timedelta(days=index)).isoformat(),
+                }
+            )
             summaries[session_id] = _behaviour_summary(
                 mode_group=mode_group,
                 resolved=resolved,
                 rr=rr,
                 confidence=confidence,
             )
-            timelines[session_id] = [{
-                "timestamp": (start + timedelta(days=index)).isoformat(),
-                "temperature": 24.0,
-                "humidity": 50.0,
-                "co2": 700.0,
-                "lux": 0.0,
-                "sound": 38.0,
-                "heart_rate": 62.0,
-                "respiration_rate": rr,
-                "bed_status": "On bed",
-            }]
+            timelines[session_id] = [
+                {
+                    "timestamp": (start + timedelta(days=index)).isoformat(),
+                    "temperature": 24.0,
+                    "humidity": 50.0,
+                    "co2": 700.0,
+                    "lux": 0.0,
+                    "sound": 38.0,
+                    "heart_rate": 62.0,
+                    "respiration_rate": rr,
+                    "bed_status": "On bed",
+                }
+            ]
 
         for index in range(7):
             add_session(
-                f"nap-{index}", index, "nap_recovery", "short_nap",
-                17.0, "high",
+                f"nap-{index}",
+                index,
+                "nap_recovery",
+                "short_nap",
+                17.0,
+                "high",
             )
             add_session(
-                f"sleep-{index}", index + 10, "sleep", "overnight",
-                13.0, "high",
+                f"sleep-{index}",
+                index + 10,
+                "sleep",
+                "overnight",
+                13.0,
+                "high",
             )
         add_session(
-            "nap-low-quality", 20, "nap_recovery", "short_nap",
-            30.0, "low",
+            "nap-low-quality",
+            20,
+            "nap_recovery",
+            "short_nap",
+            30.0,
+            "low",
         )
 
         temporary = tempfile.TemporaryDirectory()
@@ -763,8 +868,6 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
         self.assertEqual(sleep["respiratory_reference"]["sessions_used"], 7)
         self.assertEqual(sleep["respiratory_reference"]["median_rr_brpm"], 13.0)
         self.assertTrue(nap["respiratory_reference"]["same_mode_only"])
-        self.assertTrue(
-            nap["respiratory_reference"]["prior_completed_sessions_only"]
-        )
+        self.assertTrue(nap["respiratory_reference"]["prior_completed_sessions_only"])
         self.assertFalse(nap["respiratory_reference"]["affects_score"])
         self.assertFalse(nap["respiratory_reference"]["direct_stage_influence"])

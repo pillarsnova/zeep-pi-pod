@@ -38,10 +38,10 @@
 | Semi-Markov transition | `zeep-semimarkov-30s-v1.18-scoreable-continuity` |
 | G2 ontology | `g2-aasm-5class-v1.0` |
 | Historical replay | `zeep-sleep-history-reclass-v28-complete-occupied-epochs` |
-| Sleep / Recovery quality | `zeep-rest-quality-v8.8-wellness-score-balance` |
+| Sleep / Recovery quality | `zeep-rest-quality-v8.9-nap-timing-advisory` |
 | Sleep Score formula | `zeep-sleep-score-v2.0-wellness-25-35-20-10-10` |
 | Recovery Score formula | `zeep-recovery-score-v3.0-wellness-soft-25-35-30-10` |
-| Session report | `zeep-session-report-v10.10-wellness-score-balance` |
+| Session report | `zeep-session-report-v10.11-nap-timing-advisory` |
 | Restore Summary | `zeep-restore-summary-v1.0` |
 | Respiratory Wellness | `zeep-respiratory-wellness-v1.1` |
 | Restore action bands | `zeep-restore-action-bands-v1.0` |
@@ -423,7 +423,7 @@ stateDiagram-v2
 physiology evidence ก่อนเสมอ การอนุญาต graph นี้ไม่ได้หมายความว่า BCG เทียบเท่า PSG
 ซึ่งยังต้องใช้ EEG/EOG/chin EMG จริง
 
-## 4. Sleep / Recovery Quality v8.8
+## 4. Sleep / Recovery Quality v8.9
 
 ### 4.1 สมการภาพรวม
 
@@ -482,8 +482,8 @@ HR/RR, Movement หรือ Environment ใหม่; Raw `Get out of bed` ช�
 มีเพียง confirmed OFF BED เท่านั้นที่ไม่นับ หากข้อมูลเก่าไม่มี State attribution
 จะใช้ On bed/Moving/Weak
 breathing/Snoring หรือ HR/RR คู่ที่ผ่าน sanity range เป็น fallback เมื่อครบเป้าหมาย
-ได้เต็ม 25 และไม่หักคะแนนเพียงเพราะพักนานกว่าเป้าหมาย หากยังไม่เกิน lifecycle
-guard 120 นาที ความต่างจากเป้าหมาย 30/90 นาทีจะเป็น Admin QA flag แต่ไม่ปิด
+ได้เต็ม 25 และไม่หักคะแนนเพียงเพราะพักนานกว่าเป้าหมาย ความต่างจากเป้าหมาย
+30/90 นาที รวมถึงการเกิน lifecycle boundary 120 นาที เป็น Admin QA flag แต่ไม่ปิด
 Recovery Score; หากข้อมูลเดิมไม่มีเป้าหมาย ระบบจะไม่เดาเป้าหมายและไม่เผยแพร่
 Recovery Score จนกว่าผู้ดูแลจะระบุเป้าหมายที่มีหลักฐานรองรับ
 
@@ -516,13 +516,17 @@ wall-clock ของ Session จะถึง 10 นาทีแล้ว; จึ
 `out_of_protocol=>45` ซึ่งต้อง review ในมุมมอง Admin แต่ยังคำนวณ Recovery
 Score จากเวลาพักจริงและหลักฐาน Sensor ได้ เป้าหมาย 90 นาทีใช้
 `recommended=75–105` และ `extended` ถึง 120 นาที; Session เกิน 120 นาทีเป็น
-`implausible_outlier` และไม่เผยแพร่คะแนน
+`implausible_outlier` สำหรับ Admin ตรวจ Mode/Session lifecycle แต่ยังเผยแพร่
+Recovery Score เมื่อเวลาพักขั้นต่ำและหลักฐาน HR/RR ผ่าน
+API ใช้ `timing_review_threshold_seconds=7200` สำหรับขอบเขต QA และคง
+`legacy_hard_max_seconds` เป็น compatibility alias เท่านั้น; Client ต้องยึด
+`score.available`/`score_releasable` ไม่ใช่ชื่อ field เดิมในการซ่อนคะแนน
 
 ข้อมูลเดิมที่ไม่มี target ไม่ถูกเดา: 10–45 นาทีแสดง `TARGET_UNKNOWN`, 45–120
 นาทีแสดง `TARGET_UNKNOWN/extended` หากมี Recovery Score รุ่นที่รองรับ ระบบคง
 คะแนนเดิมพร้อมธง Admin review โดยไม่คำนวณใหม่และไม่นำไปปนกับ Baseline/แนวโน้ม
 ของ Nap 30 หรือ 90 นาที หากไม่มีคะแนนที่ตรวจสอบรุ่นได้จึงแสดงว่าไม่มีคะแนนตามจริง
-ส่วน Session มากกว่า 120 นาทีถือเป็น outlier ที่ปิดคะแนน
+ส่วน Session มากกว่า 120 นาทีถือเป็น outlier ที่ต้องตรวจ แต่ไม่ปิดคะแนนเพียงลำพัง
 
 คำว่า 7 ชั่วโมงในระบบหมายถึง AASM/SRS adult overnight recommendation threshold
 ไม่ใช่ “ZEEP target 7.5 ชั่วโมง” และไม่ใช้ลงโทษการงีบหรือการพักจากเข้าเวร
@@ -570,7 +574,7 @@ W/N1/N2/N3/REM ทั้งสองสายแสดง `score_title`, `qualit
   Environment ตามเวลา; ข้อมูลเสริมที่หายไม่ปิดคะแนนแต่ลดระดับความมั่นใจ
 - Arousal proxy ไม่ใช่ EEG cortical arousal และ Cycle proxy ไม่ใช่ AASM cycle count
 
-## 5. Session Report v10.10
+## 5. Session Report v10.11
 
 เมื่อจบ Session ระบบสร้างและ persist รายงานจากข้อมูลชุดเดียวกับ Timeline:
 

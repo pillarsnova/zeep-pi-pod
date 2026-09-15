@@ -216,7 +216,7 @@ Historical `auto/unknown_legacy` ต้องส่ง `unresolved_score` แล
 
 | ชั้น | Version |
 |---|---|
-| Session report | `zeep-session-report-v10.10-wellness-score-balance` |
+| Session report | `zeep-session-report-v10.11-nap-timing-advisory` |
 | Restore Summary | `zeep-restore-summary-v1.0` |
 | Action bands | `zeep-restore-action-bands-v1.0` |
 | Driver policy | `zeep-restore-drivers-v1.0` |
@@ -226,9 +226,10 @@ Historical `auto/unknown_legacy` ต้องส่ง `unresolved_score` แล
 | Sleep Score formula | `zeep-sleep-score-v2.0-wellness-25-35-20-10-10` |
 | Recovery Score formula | `zeep-recovery-score-v3.0-wellness-soft-25-35-30-10` |
 
-การเพิ่ม Summary ทำให้ Session Report เปลี่ยน version แต่ไม่เปลี่ยนสูตร
-หรือคะแนนเดิม จึงคงคู่ Report/Quality รุ่นก่อนหน้าไว้ใน approved history
-สำหรับ Baseline และการเปิดรายงานเก่า
+นโยบาย v10.11/v8.9 เปลี่ยนการเกิน 120 นาทีจากตัวปิด Recovery Score เป็นธง
+Admin QA โดยไม่เปลี่ยนสูตร v3.0 และไม่ให้ Session ที่รอตรวจสอน Personal Baseline
+อัตโนมัติ ระบบจึงคงคู่ Report/Quality รุ่นก่อนหน้าไว้ใน approved history สำหรับ
+การเปิดรายงานเก่า
 
 ## 11. ขอบเขตการพัฒนาถัดไป
 

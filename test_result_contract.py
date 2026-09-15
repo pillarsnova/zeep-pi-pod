@@ -89,16 +89,23 @@ class SessionResultContractTests(unittest.TestCase):
             "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
             "version": "sleep-quality-test",
             "review_required": True,
+            "duration_target": {
+                "key": "nap_90",
+                "label": "Nap & Refresh · 90 นาที",
+                "seconds": 5400,
+            },
             "rest_mode": {
                 "group": "nap_recovery",
                 "label": "Nap & Refresh",
                 "protocol_status": {
                     "available": True,
                     "canonical_mode": "nap_recovery",
-                    "observed_seconds": 7200,
-                    "status": "out_of_protocol",
+                    "observed_seconds": 7260,
+                    "status": "implausible_outlier",
                     "review_required": True,
                     "score_releasable": True,
+                    "timing_review_threshold_seconds": 7200,
+                    "legacy_hard_max_seconds": 7200,
                 },
             },
         }
@@ -107,6 +114,7 @@ class SessionResultContractTests(unittest.TestCase):
             {
                 "ended_at_utc": "2026-09-11T00:00:00+00:00",
                 "rest_mode": "nap_recovery",
+                "target_duration_s": 5400,
                 "sleep_quality": quality,
             }
         )
@@ -115,6 +123,12 @@ class SessionResultContractTests(unittest.TestCase):
         self.assertTrue(result["score"]["review_required"])
         self.assertTrue(result["mode"]["review_required"])
         self.assertTrue(result["mode"]["protocol_review_required"])
+        self.assertEqual(
+            result["mode"]["target"]["protocol_status"][
+                "timing_review_threshold_seconds"
+            ],
+            7200,
+        )
         self.assertEqual(
             result["mode"]["validation_status"],
             "mode_confirmed",
@@ -431,7 +445,9 @@ class SessionResultContractTests(unittest.TestCase):
             "target_metadata_conflict",
         )
 
-    def test_session_target_seconds_canonicalize_a_wrong_equal_seconds_key(self) -> None:
+    def test_session_target_seconds_canonicalize_a_wrong_equal_seconds_key(
+        self,
+    ) -> None:
         result = build_result_contract(
             {
                 "ended_at_utc": "2026-09-11T00:00:00+00:00",

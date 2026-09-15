@@ -7,6 +7,7 @@
   ดู docs/closed-loop-spec.md; การปลุกใช้เวลานาฬิกาเท่านั้น ไม่ผูกกับ stage
 - ทุกค่าเป็น proxy จาก BCG (ไม่มี EEG) — measure, not promise
 """
+
 from __future__ import annotations
 
 import json
@@ -31,6 +32,8 @@ from sleep_system_policy import (
     PERSONAL_BEHAVIOUR_BASELINE_VERSION,
     PRE_CONTINUITY_SESSION_REPORT_VERSION,
     PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
+    PRE_NAP_TIMING_SESSION_REPORT_VERSION,
+    PRE_NAP_TIMING_SLEEP_QUALITY_VERSION,
     PRE_RESPIRATORY_SESSION_REPORT_VERSION,
     PRE_RESTORE_SESSION_REPORT_VERSION,
     RESTORE_BASELINE_MIN_COMPARISON_SESSIONS,
@@ -222,7 +225,9 @@ class BaselineStore:
         # is the versioned source of truth that separates those use cases.
         events = self.database.read_sessions(
             "SELECT value FROM events WHERE session_id=? AND type='final_summary' "
-            "ORDER BY timestamp DESC LIMIT 1", (session_id,))
+            "ORDER BY timestamp DESC LIMIT 1",
+            (session_id,),
+        )
         if not events:
             return None
         try:
@@ -236,11 +241,11 @@ class BaselineStore:
         quality = night.get("sleep_quality") or report.get("quality") or {}
         explicit_mode = final_summary.get("rest_mode")
         report_mode = report.get("rest_mode")
-        session_mode_present = (
-            session_mode is not None and bool(str(session_mode).strip())
+        session_mode_present = session_mode is not None and bool(
+            str(session_mode).strip()
         )
-        explicit_mode_present = (
-            explicit_mode is not None and bool(str(explicit_mode).strip())
+        explicit_mode_present = explicit_mode is not None and bool(
+            str(explicit_mode).strip()
         )
         mode = (
             session_mode
@@ -262,7 +267,8 @@ class BaselineStore:
         )
         resolved_mode = (
             mode.get("group") or mode.get("requested") or mode.get("resolved")
-            if isinstance(mode, dict) else mode
+            if isinstance(mode, dict)
+            else mode
         )
         approved_versions = is_approved_sleep_result_version(
             report.get("version"), quality.get("version")
@@ -274,7 +280,9 @@ class BaselineStore:
             and quality.get("available") is True
         ):
             return None
-        detected_sleep_s = quality.get("estimated_sleep_s", night.get("estimated_sleep_s"))
+        detected_sleep_s = quality.get(
+            "estimated_sleep_s", night.get("estimated_sleep_s")
+        )
         try:
             detected_sleep_s = float(detected_sleep_s or 0.0)
         except (TypeError, ValueError, OverflowError):
@@ -288,7 +296,9 @@ class BaselineStore:
         timeline = self.database.read_sessions(
             "SELECT timestamp,temperature,humidity,co2,lux,sound,pm2_5,voc_index,"
             "heart_rate,respiration_rate,bed_status "
-            "FROM timeline WHERE session_id=? ORDER BY timestamp", (session_id,))
+            "FROM timeline WHERE session_id=? ORDER BY timestamp",
+            (session_id,),
+        )
         stage_events = self.database.read_sessions(
             "SELECT timestamp,value FROM events WHERE session_id=? "
             "AND type='sleep_stage' ORDER BY timestamp,id",
@@ -346,32 +356,29 @@ class BaselineStore:
             position = event_epoch(row["timestamp"])
             if position is None:
                 return None
-            return next((
-                stage for start, end, stage in eligible_intervals
-                if start < position <= end + 0.001
-            ), None)
+            return next(
+                (
+                    stage
+                    for start, end, stage in eligible_intervals
+                    if start < position <= end + 0.001
+                ),
+                None,
+            )
 
         if stage_events:
             # Current-version Sessions explicitly carry baseline eligibility.
             # Honour it: provisional and continuity-carried rows never teach
             # the personal physiology model even when their display State is
             # retained for timeline completeness.
-            staged_timeline = [
-                (row, eligible_stage(row)) for row in timeline
-            ]
+            staged_timeline = [(row, eligible_stage(row)) for row in timeline]
             quiet_rows = [
-                row for row, stage in staged_timeline
+                row
+                for row, stage in staged_timeline
                 if stage in {"n1", "n2", "n3", "rem"}
-                and row["bed_status"] in (
-                    "On bed", "Snoring", "Weak breathing"
-                )
+                and row["bed_status"] in ("On bed", "Snoring", "Weak breathing")
             ]
-            wake_rows = [
-                row for row, stage in staged_timeline if stage == "wake"
-            ]
-            eligible_rows = [
-                row for row, stage in staged_timeline if stage is not None
-            ]
+            wake_rows = [row for row, stage in staged_timeline if stage == "wake"]
+            eligible_rows = [row for row, stage in staged_timeline if stage is not None]
             moving_rows = [
                 row for row in eligible_rows if row["bed_status"] == "Moving"
             ]
@@ -380,15 +387,13 @@ class BaselineStore:
             # Compatibility for an older approved Session whose event schema
             # predates explicit eligibility metadata.
             quiet_rows = [
-                row for row in timeline if row["bed_status"] in (
-                    "On bed", "Snoring", "Weak breathing"
-                )
+                row
+                for row in timeline
+                if row["bed_status"] in ("On bed", "Snoring", "Weak breathing")
             ]
             wake_rows = list(timeline[:20])
             eligible_rows = list(timeline)
-            moving_rows = [
-                row for row in timeline if row["bed_status"] == "Moving"
-            ]
+            moving_rows = [row for row in timeline if row["bed_status"] == "Moving"]
             baseline_stage_filter = "legacy_approved_timeline_fallback"
         quiet_hr = [r["heart_rate"] for r in quiet_rows if r["heart_rate"]]
         if len(quiet_hr) < MIN_HR_SAMPLES:
@@ -396,7 +401,7 @@ class BaselineStore:
         # rolling CV (6 จุด × 10 วินาที ≈ 1 นาที) — ความ "เรียบ" ของ HR ตอนนิ่ง
         cvs = []
         for i in range(len(quiet_hr) - 5):
-            win = quiet_hr[i:i + 6]
+            win = quiet_hr[i : i + 6]
             mean = sum(win) / len(win)
             if mean > 0:
                 cvs.append(statistics.pstdev(win) / mean)
@@ -415,7 +420,9 @@ class BaselineStore:
         low_stable = _percentile(quiet_hr, 0.10)
         metrics = {
             "hr_quiet_median": round(statistics.median(quiet_hr), 1),
-            "hr_awake_median": round(statistics.median(awake_hr), 1) if awake_hr else None,
+            "hr_awake_median": round(statistics.median(awake_hr), 1)
+            if awake_hr
+            else None,
             "hr_low_stable": round(low_stable, 1) if low_stable else None,
             "hr_sleep_p25": round(_percentile(quiet_hr, 0.25), 1),
             "cv_p25": round(_percentile(cvs, 0.25), 4) if cvs else None,
@@ -425,10 +432,13 @@ class BaselineStore:
             "rr_low_stable": round(_percentile(rrs, 0.10), 1) if rrs else None,
             "move_ratio": (
                 round(len(moving_rows) / len(eligible_rows), 3)
-                if eligible_rows else None
+                if eligible_rows
+                else None
             ),
             "temp_median": round(statistics.median(temps), 1) if temps else None,
-            "humidity_median": round(statistics.median(humidity), 1) if humidity else None,
+            "humidity_median": round(statistics.median(humidity), 1)
+            if humidity
+            else None,
             "co2_median": round(statistics.median(co2), 1) if co2 else None,
             "lux_median": round(statistics.median(lux), 1) if lux else None,
             "sound_median": round(statistics.median(sound), 1) if sound else None,
@@ -436,8 +446,12 @@ class BaselineStore:
         # เวลาที่มักหลับ/ตื่น (ชั่วโมงท้องถิ่นแบบทศนิยม) จาก timeline จริง
         try:
             local_zone = ZoneInfo(PERSONAL_BASELINE_LEARNING_START_TIMEZONE)
-            first = datetime.fromisoformat(timeline[0]["timestamp"]).astimezone(local_zone)
-            last = datetime.fromisoformat(timeline[-1]["timestamp"]).astimezone(local_zone)
+            first = datetime.fromisoformat(timeline[0]["timestamp"]).astimezone(
+                local_zone
+            )
+            last = datetime.fromisoformat(timeline[-1]["timestamp"]).astimezone(
+                local_zone
+            )
             metrics["bed_hour"] = round(first.hour + first.minute / 60, 2)
             metrics["rise_hour"] = round(last.hour + last.minute / 60, 2)
         except Exception:
@@ -451,17 +465,20 @@ class BaselineStore:
         metrics["wellness_score"] = night.get("wellness_score")
         metrics["detected_sleep_s"] = round(detected_sleep_s, 1)
         metrics["baseline_stage_filter"] = baseline_stage_filter
-        resolved_mode = str(
-            mode.get("resolved") or mode.get("requested") or "auto"
-        ) if isinstance(mode, dict) else str(mode or "auto")
+        resolved_mode = (
+            str(mode.get("resolved") or mode.get("requested") or "auto")
+            if isinstance(mode, dict)
+            else str(mode or "auto")
+        )
         metrics["rest_mode"] = resolved_mode
         metrics["mode_group"] = (
             str(mode.get("group"))
             if isinstance(mode, dict) and mode.get("group")
-            else "sleep" if resolved_mode in {"sleep", "overnight"}
-            else "nap_recovery" if resolved_mode in {
-                "short_nap", "cycle_nap", "nap", "nap_recovery", "shift_rest"
-            }
+            else "sleep"
+            if resolved_mode in {"sleep", "overnight"}
+            else "nap_recovery"
+            if resolved_mode
+            in {"short_nap", "cycle_nap", "nap", "nap_recovery", "shift_rest"}
             else resolved_mode
         )
         # รอบการนอน: ประมาณจากช่วงเวลาระหว่างจุดเริ่ม REM ที่ต่อเนื่องกัน
@@ -486,7 +503,9 @@ class BaselineStore:
         """
         events = self.database.read_sessions(
             "SELECT value FROM events WHERE session_id=? AND type='final_summary' "
-            "ORDER BY timestamp DESC LIMIT 1", (session_id,))
+            "ORDER BY timestamp DESC LIMIT 1",
+            (session_id,),
+        )
         if not events:
             return None
         try:
@@ -498,13 +517,19 @@ class BaselineStore:
         night = final_summary.get("night_summary") or {}
         report = final_summary.get("session_report") or {}
         quality = night.get("sleep_quality") or report.get("quality") or {}
+        protocol_status = (quality.get("rest_mode") or {}).get("protocol_status") or {}
+        # A result can remain useful to the participant while its Mode/lifecycle
+        # timing still needs Admin review. Do not let that outlier teach the
+        # target-specific Personal Baseline until a reviewed workflow exists.
+        if protocol_status.get("review_required") is True:
+            return None
         explicit_mode = final_summary.get("rest_mode")
         report_mode = report.get("rest_mode")
-        session_mode_present = (
-            session_mode is not None and bool(str(session_mode).strip())
+        session_mode_present = session_mode is not None and bool(
+            str(session_mode).strip()
         )
-        explicit_mode_present = (
-            explicit_mode is not None and bool(str(explicit_mode).strip())
+        explicit_mode_present = explicit_mode is not None and bool(
+            str(explicit_mode).strip()
         )
         mode = (
             session_mode
@@ -530,24 +555,29 @@ class BaselineStore:
             else str(mode or "auto")
         )
         group = rest_mode_group(
-            mode.get("group") if isinstance(mode, dict) and mode.get("group")
+            mode.get("group")
+            if isinstance(mode, dict) and mode.get("group")
             else resolved
         )
         current_versions = (
             report.get("version") == SESSION_REPORT_VERSION
             and quality.get("version") == SLEEP_QUALITY_VERSION
         )
+        compatible_pre_nap_timing_versions = (
+            report.get("version") == PRE_NAP_TIMING_SESSION_REPORT_VERSION
+            and quality.get("version") == PRE_NAP_TIMING_SLEEP_QUALITY_VERSION
+        )
         compatible_current_quality_versions = (
             report.get("version") == PRE_RESPIRATORY_SESSION_REPORT_VERSION
             and quality.get("version") == SLEEP_QUALITY_VERSION
         )
         compatible_previous_versions = (
-            report.get("version") in {
+            report.get("version")
+            in {
                 PRE_CONTINUITY_SESSION_REPORT_VERSION,
                 PRE_RESTORE_SESSION_REPORT_VERSION,
             }
-            and quality.get("version")
-            == PRE_CONTINUITY_SLEEP_QUALITY_VERSION
+            and quality.get("version") == PRE_CONTINUITY_SLEEP_QUALITY_VERSION
         )
         approved_untouched_sleep = (
             group == "sleep"
@@ -561,6 +591,7 @@ class BaselineStore:
             and quality.get("available") is True
             and (
                 current_versions
+                or compatible_pre_nap_timing_versions
                 or compatible_current_quality_versions
                 or compatible_previous_versions
                 or approved_untouched_sleep
@@ -577,7 +608,9 @@ class BaselineStore:
             return None
         timeline = self.database.read_sessions(
             "SELECT timestamp,temperature,humidity,co2,lux,sound "
-            "FROM timeline WHERE session_id=? ORDER BY timestamp", (session_id,))
+            "FROM timeline WHERE session_id=? ORDER BY timestamp",
+            (session_id,),
+        )
         if not timeline:
             return None
 
@@ -587,7 +620,9 @@ class BaselineStore:
 
         local_zone = ZoneInfo(PERSONAL_BASELINE_LEARNING_START_TIMEZONE)
         first = datetime.fromisoformat(timeline[0]["timestamp"]).astimezone(local_zone)
-        detected_sleep_s = quality.get("estimated_sleep_s", night.get("estimated_sleep_s"))
+        detected_sleep_s = quality.get(
+            "estimated_sleep_s", night.get("estimated_sleep_s")
+        )
         try:
             detected_sleep_s = max(0.0, float(detected_sleep_s or 0.0))
         except (TypeError, ValueError, OverflowError):
@@ -599,14 +634,10 @@ class BaselineStore:
             else {}
         )
         respiratory_confidence = (
-            respiratory.get("confidence") or {}
-            if isinstance(respiratory, dict)
-            else {}
+            respiratory.get("confidence") or {} if isinstance(respiratory, dict) else {}
         )
         respiratory_status = (
-            respiratory.get("status") or {}
-            if isinstance(respiratory, dict)
-            else {}
+            respiratory.get("status") or {} if isinstance(respiratory, dict) else {}
         )
         respiratory_available = bool(
             isinstance(respiratory, dict)
@@ -635,9 +666,7 @@ class BaselineStore:
             "sleep_detected": bool(detected_sleep_s > 0),
             "detected_sleep_s": round(detected_sleep_s, 1),
             "wellness_score": quality.get("score"),
-            "score_formula_version": str(
-                quality.get("formula_version") or ""
-            ).strip(),
+            "score_formula_version": str(quality.get("formula_version") or "").strip(),
             "temp_median": median_field("temperature"),
             "humidity_median": median_field("humidity"),
             "co2_median": median_field("co2"),
@@ -677,15 +706,12 @@ class BaselineStore:
                 ),
                 PERSONAL_BASELINE_LEARNING_START_UTC,
                 RESTORE_TREND_MAX_SESSIONS * 4,
-            ))
+            ),
+        )
         nights = []
         behaviour_sessions = []
         for row in sessions:
-            row_mode = (
-                row.get("rest_mode")
-                if hasattr(row, "get")
-                else row["rest_mode"]
-            )
+            row_mode = row.get("rest_mode") if hasattr(row, "get") else row["rest_mode"]
             behaviour = self._behaviour_metrics(
                 row["session_id"],
                 row["duration"],
@@ -727,31 +753,38 @@ class BaselineStore:
             "nights": physiology_nights,
         }
         if physiology_nights:
-            agg = lambda key: [n[key] for n in physiology_nights if n.get(key) is not None]  # noqa: E731
-            med = lambda key: (round(statistics.median(agg(key)), 4)  # noqa: E731
-                               if agg(key) else None)
-            record.update({
-                # ค่าที่ engine ใช้ตัดสิน (ชื่อ field ตรงกับ SleepEngine)
-                "hr_awake_median": med("hr_awake_median"),
-                "hr_sleep_median": med("hr_quiet_median"),
-                "hr_low_stable": med("hr_low_stable"),
-                "rr_sleep_median": med("rr_median"),
-                "rr_low_stable": med("rr_low_stable"),
-                "cv_p25": med("cv_p25"),
-                "cv_median": med("cv_median"),
-                "cv_p75": med("cv_p75"),
-                "move_ratio_median": med("move_ratio"),
-                "cycle_seconds_median": med("cycle_seconds"),
-                "bed_hour_median": med("bed_hour"),
-                "rise_hour_median": med("rise_hour"),
-                # ค่าเชิงผลลัพธ์ไว้เทียบความคืบหน้า
-                "temp_median": med("temp_median"),
-                "onset_proxy_median_s": med("onset_proxy_s"),
-                "disruptions_median": med("disruptions"),
-                "efficiency_median": med("efficiency"),
-                "deep_ratio_median": med("deep_ratio"),
-                "rem_ratio_median": med("rem_ratio"),
-            })
+            agg = lambda key: [
+                n[key] for n in physiology_nights if n.get(key) is not None
+            ]  # noqa: E731
+            med = lambda key: (
+                round(statistics.median(agg(key)), 4)  # noqa: E731
+                if agg(key)
+                else None
+            )
+            record.update(
+                {
+                    # ค่าที่ engine ใช้ตัดสิน (ชื่อ field ตรงกับ SleepEngine)
+                    "hr_awake_median": med("hr_awake_median"),
+                    "hr_sleep_median": med("hr_quiet_median"),
+                    "hr_low_stable": med("hr_low_stable"),
+                    "rr_sleep_median": med("rr_median"),
+                    "rr_low_stable": med("rr_low_stable"),
+                    "cv_p25": med("cv_p25"),
+                    "cv_median": med("cv_median"),
+                    "cv_p75": med("cv_p75"),
+                    "move_ratio_median": med("move_ratio"),
+                    "cycle_seconds_median": med("cycle_seconds"),
+                    "bed_hour_median": med("bed_hour"),
+                    "rise_hour_median": med("rise_hour"),
+                    # ค่าเชิงผลลัพธ์ไว้เทียบความคืบหน้า
+                    "temp_median": med("temp_median"),
+                    "onset_proxy_median_s": med("onset_proxy_s"),
+                    "disruptions_median": med("disruptions"),
+                    "efficiency_median": med("efficiency"),
+                    "deep_ratio_median": med("deep_ratio"),
+                    "rem_ratio_median": med("rem_ratio"),
+                }
+            )
         # Behaviour is partitioned by mode and is descriptive only.  Mixing a
         # 30-minute nap with an overnight Session would make expected latency,
         # duration and environment meaningless.  At least three prior Sessions
@@ -762,15 +795,21 @@ class BaselineStore:
             score_minimum_sessions=RESTORE_BASELINE_MIN_COMPARISON_SESSIONS,
             max_sessions=RESTORE_TREND_MAX_SESSIONS,
         )
-        if record["status"] == "active" and record.get("cv_p25") and record.get("cv_p75"):
+        if (
+            record["status"] == "active"
+            and record.get("cv_p25")
+            and record.get("cv_p75")
+        ):
             # เกณฑ์ส่วนบุคคล: DEEP = เรียบกว่า "ช่วงเรียบสุดของตัวเอง" เล็กน้อย,
             # REM = แกว่งกว่าช่วงบนของตัวเองชัดเจน · clip กันหลุดโลก + กันชนกัน
             cv_deep = _clip(record["cv_p25"] * 0.9, 0.015, 0.040)
             cv_rem = _clip(record["cv_p75"] * 1.6, 0.050, 0.090)
             if cv_rem < cv_deep + 0.02:
                 cv_rem = cv_deep + 0.02
-            record["thresholds"] = {"cv_deep": round(cv_deep, 4),
-                                    "cv_rem": round(cv_rem, 4)}
+            record["thresholds"] = {
+                "cv_deep": round(cv_deep, 4),
+                "cv_rem": round(cv_rem, 4),
+            }
         with self.lock:
             self.data[canonical_key] = record
             self._save_locked()
@@ -790,12 +829,10 @@ class BaselineStore:
                 # Never let a pre-cutover baseline silently influence a new
                 # pilot Session while asynchronous rebuild is pending.
                 if (
-                    record.get("policy_version")
-                    != ZEEP_SLEEP_BASELINE_VERSION
+                    record.get("policy_version") != ZEEP_SLEEP_BASELINE_VERSION
                     or record.get("behaviour_policy_version")
                     != PERSONAL_BEHAVIOUR_BASELINE_VERSION
-                    or cutoff.get("utc")
-                    != PERSONAL_BASELINE_LEARNING_START_UTC
+                    or cutoff.get("utc") != PERSONAL_BASELINE_LEARNING_START_UTC
                 ):
                     continue
                 return record
@@ -818,10 +855,11 @@ class BaselineStore:
         record = self.get(username_key) or {}
         requested = str(rest_mode or "auto")
         group = (
-            "sleep" if requested in {"sleep", "overnight"}
-            else "nap_recovery" if requested in {
-                "short_nap", "cycle_nap", "nap", "nap_recovery", "shift_rest"
-            }
+            "sleep"
+            if requested in {"sleep", "overnight"}
+            else "nap_recovery"
+            if requested
+            in {"short_nap", "cycle_nap", "nap", "nap_recovery", "shift_rest"}
             else requested
         )
         grouped = record.get("behaviour_by_mode")
@@ -835,11 +873,7 @@ class BaselineStore:
                 if isinstance(by_target, dict) and target.get("available")
                 else None
             )
-            context = (
-                dict(target_context)
-                if isinstance(target_context, dict)
-                else {}
-            )
+            context = dict(target_context) if isinstance(target_context, dict) else {}
         if not context:
             context = {
                 "status": "no_data",
@@ -852,9 +886,7 @@ class BaselineStore:
                 "respiratory_reference": {
                     "status": "no_data",
                     "sessions_used": 0,
-                    "minimum_sessions": (
-                        RESTORE_BASELINE_MIN_COMPARISON_SESSIONS
-                    ),
+                    "minimum_sessions": (RESTORE_BASELINE_MIN_COMPARISON_SESSIONS),
                     "median_rr_brpm": None,
                     "typical_range_rr_brpm": None,
                     "regularity_median": None,
@@ -870,9 +902,7 @@ class BaselineStore:
                 "score_reference": {
                     "status": "learning",
                     "sessions_used": 0,
-                    "minimum_sessions": (
-                        RESTORE_BASELINE_MIN_COMPARISON_SESSIONS
-                    ),
+                    "minimum_sessions": (RESTORE_BASELINE_MIN_COMPARISON_SESSIONS),
                     "median": None,
                     "typical_range": None,
                     "method": "median_and_interquartile_range",
@@ -885,12 +915,8 @@ class BaselineStore:
                 "direct_stage_influence": False,
                 "role": "expectation_report_and_confidence_context_only",
             }
-        context["baseline_policy_version"] = record.get(
-            "behaviour_policy_version"
-        )
-        context["target_specific"] = bool(
-            context.get("target_specific")
-        )
+        context["baseline_policy_version"] = record.get("behaviour_policy_version")
+        context["target_specific"] = bool(context.get("target_specific"))
         context["mode_group"] = group
         context["source"] = (
             "prior_completed_same_mode_and_target_sessions_only"
@@ -899,7 +925,9 @@ class BaselineStore:
         )
         return context
 
-    def personalize_baseline(self, username_key: str, age_baseline: dict) -> tuple[dict, dict]:
+    def personalize_baseline(
+        self, username_key: str, age_baseline: dict
+    ) -> tuple[dict, dict]:
         """Build a reviewable personal HR/RR baseline candidate.
 
         The caller must honour ``PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED``.
@@ -939,21 +967,25 @@ class BaselineStore:
             }
             for stage, ranges in age_baseline.items()
         }
-        meta.update({
-            "source": "personal",
-            "hr_shift": hr_shift,
-            "rr_shift": rr_shift,
-            "hr_sleep_median": hr_sleep,
-            "hr_awake_median": hr_awake,
-            "hr_low_stable": record.get("hr_low_stable"),
-            "cv_p25": record.get("cv_p25"),
-            "cv_p75": record.get("cv_p75"),
-            "move_ratio_median": record.get("move_ratio_median"),
-            "bed_hour_median": record.get("bed_hour_median"),
-            "rise_hour_median": record.get("rise_hour_median"),
-            "note": (f"ปรับจากค่าเฉลี่ยของคุณเอง {record['nights_used']} คืนล่าสุด "
-                     f"(HR เลื่อน {hr_shift:+.1f} bpm)"),
-        })
+        meta.update(
+            {
+                "source": "personal",
+                "hr_shift": hr_shift,
+                "rr_shift": rr_shift,
+                "hr_sleep_median": hr_sleep,
+                "hr_awake_median": hr_awake,
+                "hr_low_stable": record.get("hr_low_stable"),
+                "cv_p25": record.get("cv_p25"),
+                "cv_p75": record.get("cv_p75"),
+                "move_ratio_median": record.get("move_ratio_median"),
+                "bed_hour_median": record.get("bed_hour_median"),
+                "rise_hour_median": record.get("rise_hour_median"),
+                "note": (
+                    f"ปรับจากค่าเฉลี่ยของคุณเอง {record['nights_used']} คืนล่าสุด "
+                    f"(HR เลื่อน {hr_shift:+.1f} bpm)"
+                ),
+            }
+        )
         return adjusted, meta
 
     def recommendations(self, username_key: str) -> list[str]:
@@ -961,27 +993,40 @@ class BaselineStore:
         record = self.get(username_key)
         tips: list[str] = []
         if not record or record["nights_used"] == 0:
-            return ["ยังไม่มี Session ที่เรียนรู้ได้ — ต้องบันทึกมากกว่า 25 นาทีและมี HR/RR ครบตามเกณฑ์ "
-                    f"สัก {MIN_NIGHTS} คืน ระบบจะเริ่มปรับค่าตามตัวคุณ"]
+            return [
+                "ยังไม่มี Session ที่เรียนรู้ได้ — ต้องบันทึกมากกว่า 25 นาทีและมี HR/RR ครบตามเกณฑ์ "
+                f"สัก {MIN_NIGHTS} คืน ระบบจะเริ่มปรับค่าตามตัวคุณ"
+            ]
         if record["status"] == "learning":
-            tips.append(f"กำลังเรียนรู้ค่าของคุณ: {record['nights_used']}/{MIN_NIGHTS} คืน "
-                        "— ระหว่างนี้ใช้เกณฑ์กลางไปก่อน")
+            tips.append(
+                f"กำลังเรียนรู้ค่าของคุณ: {record['nights_used']}/{MIN_NIGHTS} คืน "
+                "— ระหว่างนี้ใช้เกณฑ์กลางไปก่อน"
+            )
         onset = record.get("onset_proxy_median_s")
         if onset and onset > 30 * 60:
-            tips.append("ช่วงที่ผ่านมาใช้เวลากว่าจะนิ่ง ~"
-                        f"{round(onset / 60)} นาที — ลองเปิด 'ก่อนนอน · Wind-down Mix' "
-                        "ก่อนขึ้นเตียง แล้วดูว่าตัวเลขคืนถัดไปเปลี่ยนไหม")
+            tips.append(
+                "ช่วงที่ผ่านมาใช้เวลากว่าจะนิ่ง ~"
+                f"{round(onset / 60)} นาที — ลองเปิด 'ก่อนนอน · Wind-down Mix' "
+                "ก่อนขึ้นเตียง แล้วดูว่าตัวเลขคืนถัดไปเปลี่ยนไหม"
+            )
         disruptions = record.get("disruptions_median")
         if disruptions and disruptions >= 2:
-            tips.append(f"มีช่วงสะดุดกลางคืนเฉลี่ย ~{round(disruptions)} ครั้ง/คืน — "
-                        "ลองเสียง 'ฝนพรำ' แบบวนซ้ำเพื่อกลบเสียงรบกวน แล้วเทียบผล")
+            tips.append(
+                f"มีช่วงสะดุดกลางคืนเฉลี่ย ~{round(disruptions)} ครั้ง/คืน — "
+                "ลองเสียง 'ฝนพรำ' แบบวนซ้ำเพื่อกลบเสียงรบกวน แล้วเทียบผล"
+            )
         temp = record.get("temp_median")
         if temp:
-            tips.append(f"คืนที่บันทึกได้ อุณหภูมิในตู้ของคุณอยู่ราว {temp}°C — "
-                        "จดค่านี้ไว้เทียบเมื่อปรับสภาพแวดล้อม")
+            tips.append(
+                f"คืนที่บันทึกได้ อุณหภูมิในตู้ของคุณอยู่ราว {temp}°C — จดค่านี้ไว้เทียบเมื่อปรับสภาพแวดล้อม"
+            )
         if record.get("thresholds"):
-            tips.append("ระบบมี baseline ส่วนบุคคลไว้ประกอบรายงานและความเชื่อมั่นแล้ว "
-                        "แต่ยังไม่ใช้เลือก Sleep State โดยตรง")
-        tips.append("คำแนะนำเป็น advisory จากข้อมูลของคุณเอง — ไม่ใช่คำสัญญาผล "
-                    "และระบบไม่สั่งอุปกรณ์อัตโนมัติจาก sleep state (รอ G2)")
+            tips.append(
+                "ระบบมี baseline ส่วนบุคคลไว้ประกอบรายงานและความเชื่อมั่นแล้ว "
+                "แต่ยังไม่ใช้เลือก Sleep State โดยตรง"
+            )
+        tips.append(
+            "คำแนะนำเป็น advisory จากข้อมูลของคุณเอง — ไม่ใช่คำสัญญาผล "
+            "และระบบไม่สั่งอุปกรณ์อัตโนมัติจาก sleep state (รอ G2)"
+        )
         return tips

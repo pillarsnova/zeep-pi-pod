@@ -12,6 +12,8 @@ from sleep_system_policy import (
     PERSONAL_BEHAVIOUR_BASELINE_VERSION,
     PRE_CONTINUITY_SESSION_REPORT_VERSION,
     PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
+    PRE_NAP_TIMING_SESSION_REPORT_VERSION,
+    PRE_NAP_TIMING_SLEEP_QUALITY_VERSION,
     PRE_RECOVERY_TIMING_SESSION_REPORT_VERSION,
     PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION,
     PRE_RESPIRATORY_SESSION_REPORT_VERSION,
@@ -521,10 +523,17 @@ class RestoreSummaryTests(unittest.TestCase):
     def test_report_version_bump_preserves_previous_approved_pair(self):
         self.assertEqual(
             SESSION_REPORT_VERSION,
-            "zeep-session-report-v10.10-wellness-score-balance",
+            "zeep-session-report-v10.11-nap-timing-advisory",
         )
         self.assertIn(
             (SESSION_REPORT_VERSION, SLEEP_QUALITY_VERSION),
+            APPROVED_SLEEP_RESULT_VERSION_PAIRS,
+        )
+        self.assertIn(
+            (
+                PRE_NAP_TIMING_SESSION_REPORT_VERSION,
+                PRE_NAP_TIMING_SLEEP_QUALITY_VERSION,
+            ),
             APPROVED_SLEEP_RESULT_VERSION_PAIRS,
         )
         self.assertIn(
@@ -583,6 +592,27 @@ class RestoreSummaryTests(unittest.TestCase):
 
         self.assertEqual(released["score"], 74)
         self.assertTrue(released["compatible_pre_restore_result"])
+
+    def test_pre_nap_timing_score_remains_display_compatible(self):
+        quality = {
+            "available": True,
+            "score": 82,
+            "quality_type": "rest_goal",
+            "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
+            "version": PRE_NAP_TIMING_SLEEP_QUALITY_VERSION,
+        }
+        final_summary = {
+            "rest_mode": "nap_recovery",
+            "session_report": {
+                "version": PRE_NAP_TIMING_SESSION_REPORT_VERSION,
+                "rest_mode": {"group": "nap_recovery"},
+            },
+        }
+
+        released = released_historical_quality(final_summary, quality)
+
+        self.assertEqual(released["score"], 82)
+        self.assertTrue(released["compatible_pre_nap_timing_result"])
 
     def test_pre_continuity_nap_score_remains_display_compatible(self):
         quality = {

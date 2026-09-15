@@ -15,25 +15,23 @@ from typing import Any
 SLEEP_PIPELINE_CONTRACT_VERSION = (
     "zeep-sleep-health-pipeline-v1.12-complete-occupied-epochs"
 )
-SLEEP_ESTIMATOR_VERSION = (
-    "bcg-audio-bed-5state-v1.29-complete-occupied-epochs"
-)
-SLEEP_EVIDENCE_VERSION = (
-    "zeep-sleep-state-evidence-v3.7-complete-occupied-epochs"
-)
+SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.29-complete-occupied-epochs"
+SLEEP_EVIDENCE_VERSION = "zeep-sleep-state-evidence-v3.7-complete-occupied-epochs"
 ZEEP_SLEEP_BASELINE_VERSION = "zeep-sleep-state-baseline-v1.8-sep1-cutover"
 PERSONAL_BEHAVIOUR_BASELINE_VERSION = (
     "zeep-personal-behaviour-baseline-v1.1-formula-target-specific"
 )
-ZEEP_SLEEP_TRANSITION_POLICY_VERSION = (
-    "zeep-semimarkov-30s-v1.18-scoreable-continuity"
-)
+ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.18-scoreable-continuity"
 SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
 SLEEP_HISTORY_BACKFILL_VERSION = (
     "zeep-sleep-history-reclass-v28-complete-occupied-epochs"
 )
-SESSION_REPORT_VERSION = "zeep-session-report-v10.10-wellness-score-balance"
-SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.8-wellness-score-balance"
+SESSION_REPORT_VERSION = "zeep-session-report-v10.11-nap-timing-advisory"
+SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.9-nap-timing-advisory"
+PRE_NAP_TIMING_SESSION_REPORT_VERSION = (
+    "zeep-session-report-v10.10-wellness-score-balance"
+)
+PRE_NAP_TIMING_SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.8-wellness-score-balance"
 PRE_WELLNESS_BALANCE_SESSION_REPORT_VERSION = (
     "zeep-session-report-v10.9-recovery-timing-advisory"
 )
@@ -46,10 +44,8 @@ PRE_RECOVERY_TIMING_SESSION_REPORT_VERSION = (
 PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION = (
     "zeep-rest-quality-v8.6-state-evidence-coverage-split"
 )
-SLEEP_SCORE_FORMULA_VERSION = (
-    "zeep-sleep-score-v2.0-wellness-25-35-20-10-10"
-)
-# v10.9 keeps Nap timing deviations as Admin QA instead of withholding an
+SLEEP_SCORE_FORMULA_VERSION = "zeep-sleep-score-v2.0-wellness-25-35-20-10-10"
+# v10.11 keeps Nap timing deviations as Admin QA instead of withholding an
 # otherwise supported Recovery Score. The point formula itself is unchanged.
 # v10.8 adds a claim-bounded respiratory Wellness interpretation without
 # changing Sleep State or either score. v10.7 guarantees five-state attribution
@@ -60,72 +56,74 @@ SLEEP_SCORE_FORMULA_VERSION = (
 PRE_RESPIRATORY_SESSION_REPORT_VERSION = (
     "zeep-session-report-v10.7-complete-occupied-epochs"
 )
-PRE_COMPLETE_SESSION_REPORT_VERSION = (
-    "zeep-session-report-v10.6-continuity-accounting"
-)
+PRE_COMPLETE_SESSION_REPORT_VERSION = "zeep-session-report-v10.6-continuity-accounting"
 PRE_COMPLETE_SLEEP_QUALITY_VERSION = (
     "zeep-rest-quality-v8.5-continuity-score-eligibility"
 )
 PRE_RESTORE_SESSION_REPORT_VERSION = (
     "zeep-session-report-v10.4-recovery-target-guardrails"
 )
-PRE_CONTINUITY_SESSION_REPORT_VERSION = (
-    "zeep-session-report-v10.5-restore-summary"
-)
+PRE_CONTINUITY_SESSION_REPORT_VERSION = "zeep-session-report-v10.5-restore-summary"
 PRE_CONTINUITY_SLEEP_QUALITY_VERSION = (
     "zeep-rest-quality-v8.4-recovery-target-guardrails"
 )
 PREVIOUS_SESSION_REPORT_VERSION = "zeep-session-report-v10.3-nap-goal-duration"
 PREVIOUS_SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.3-nap-goal-duration"
-APPROVED_SLEEP_RESULT_VERSION_PAIRS = frozenset({
-    (SESSION_REPORT_VERSION, SLEEP_QUALITY_VERSION),
-    (
-        PRE_WELLNESS_BALANCE_SESSION_REPORT_VERSION,
-        PRE_WELLNESS_BALANCE_SLEEP_QUALITY_VERSION,
-    ),
-    (
-        PRE_RECOVERY_TIMING_SESSION_REPORT_VERSION,
-        PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION,
-    ),
-    (
-        PRE_RESPIRATORY_SESSION_REPORT_VERSION,
-        PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION,
-    ),
-    (
-        PRE_COMPLETE_SESSION_REPORT_VERSION,
-        PRE_COMPLETE_SLEEP_QUALITY_VERSION,
-    ),
-    (
-        PRE_CONTINUITY_SESSION_REPORT_VERSION,
-        PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
-    ),
-    (
-        PRE_RESTORE_SESSION_REPORT_VERSION,
-        PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
-    ),
-    (PREVIOUS_SESSION_REPORT_VERSION, PREVIOUS_SLEEP_QUALITY_VERSION),
-})
-RECOVERY_SCORE_FORMULA_VERSION = (
-    "zeep-recovery-score-v3.0-wellness-soft-25-35-30-10"
+APPROVED_SLEEP_RESULT_VERSION_PAIRS = frozenset(
+    {
+        (SESSION_REPORT_VERSION, SLEEP_QUALITY_VERSION),
+        (
+            PRE_NAP_TIMING_SESSION_REPORT_VERSION,
+            PRE_NAP_TIMING_SLEEP_QUALITY_VERSION,
+        ),
+        (
+            PRE_WELLNESS_BALANCE_SESSION_REPORT_VERSION,
+            PRE_WELLNESS_BALANCE_SLEEP_QUALITY_VERSION,
+        ),
+        (
+            PRE_RECOVERY_TIMING_SESSION_REPORT_VERSION,
+            PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION,
+        ),
+        (
+            PRE_RESPIRATORY_SESSION_REPORT_VERSION,
+            PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION,
+        ),
+        (
+            PRE_COMPLETE_SESSION_REPORT_VERSION,
+            PRE_COMPLETE_SLEEP_QUALITY_VERSION,
+        ),
+        (
+            PRE_CONTINUITY_SESSION_REPORT_VERSION,
+            PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
+        ),
+        (
+            PRE_RESTORE_SESSION_REPORT_VERSION,
+            PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
+        ),
+        (PREVIOUS_SESSION_REPORT_VERSION, PREVIOUS_SLEEP_QUALITY_VERSION),
+    }
 )
+RECOVERY_SCORE_FORMULA_VERSION = "zeep-recovery-score-v3.0-wellness-soft-25-35-30-10"
 APPROVED_SCORE_FORMULA_VERSIONS_BY_GROUP = {
-    "sleep": frozenset({
-        "zeep-sleep-score-v1.0-reviewed",
-        SLEEP_SCORE_FORMULA_VERSION,
-    }),
-    "nap_recovery": frozenset({
-        "zeep-recovery-score-v2.0-reviewed",
-        "zeep-recovery-score-v2.1-complete-rest-25-35-30-10",
-        RECOVERY_SCORE_FORMULA_VERSION,
-    }),
+    "sleep": frozenset(
+        {
+            "zeep-sleep-score-v1.0-reviewed",
+            SLEEP_SCORE_FORMULA_VERSION,
+        }
+    ),
+    "nap_recovery": frozenset(
+        {
+            "zeep-recovery-score-v2.0-reviewed",
+            "zeep-recovery-score-v2.1-complete-rest-25-35-30-10",
+            RECOVERY_SCORE_FORMULA_VERSION,
+        }
+    ),
 }
 RESTORE_SUMMARY_VERSION = "zeep-restore-summary-v1.0"
 RESPIRATORY_WELLNESS_VERSION = "zeep-respiratory-wellness-v1.1"
 RESTORE_ACTION_BANDS_VERSION = "zeep-restore-action-bands-v1.0"
 RESTORE_DRIVER_POLICY_VERSION = "zeep-restore-drivers-v1.0"
-RESTORE_BASELINE_COMPARISON_VERSION = (
-    "zeep-restore-personal-baseline-v1.0"
-)
+RESTORE_BASELINE_COMPARISON_VERSION = "zeep-restore-personal-baseline-v1.0"
 RESTORE_RECOMMENDATION_VERSION = "zeep-restore-recommendation-v1.0"
 RESTORE_BASELINE_MIN_COMPARISON_SESSIONS = 7
 RESTORE_BASELINE_STABLE_SESSIONS = 14
@@ -140,22 +138,34 @@ TERMINAL_WAKE_POLICY_VERSION = "zeep-terminal-wake-boundary-v1.0"
 
 
 ZEEP_SLEEP_STATES = ("wake", "n1", "n2", "n3", "rem")
-ZEEP_OFF_BED_DATA_STATUSES = frozenset({
-    "empty_bed",
-    "confirmed_off_bed",
-    "confirmed_or_dominant_off_bed",
-    "off_bed",
-    "no_session",
-})
+ZEEP_OFF_BED_DATA_STATUSES = frozenset(
+    {
+        "empty_bed",
+        "confirmed_off_bed",
+        "confirmed_or_dominant_off_bed",
+        "off_bed",
+        "no_session",
+    }
+)
 # Vendor labels remain useful presentation/ingest vocabulary, but a raw label
 # alone is not a confirmed occupancy boundary. Projectors may latch OFF BED only
 # from a canonical status above or an explicit confirmed bed-exit evidence item.
-ZEEP_OFF_BED_LABELS = frozenset({
-    "get out of bed", "off bed", "off_bed", "empty bed",
-})
-ZEEP_ON_BED_LABELS = frozenset({
-    "on bed", "moving", "weak breathing", "snoring",
-})
+ZEEP_OFF_BED_LABELS = frozenset(
+    {
+        "get out of bed",
+        "off bed",
+        "off_bed",
+        "empty bed",
+    }
+)
+ZEEP_ON_BED_LABELS = frozenset(
+    {
+        "on bed",
+        "moving",
+        "weak breathing",
+        "snoring",
+    }
+)
 ZEEP_ON_BED_STATUS_CODES = frozenset({0, 2, 3, 5})
 
 # Broad, overlapping population priors used until sufficient personal history
@@ -163,45 +173,71 @@ ZEEP_ON_BED_STATUS_CODES = frozenset({0, 2, 3, 5})
 # not clinical Sleep Stage boundaries. Live and replay import this same table.
 AGE_SLEEP_BASELINES = {
     "unspecified": {
-        "wake": {"hr": (65, 94), "rr": (13, 21)}, "n1": {"hr": (61, 85), "rr": (12, 19)},
-        "n2": {"hr": (56, 79), "rr": (11, 18)}, "n3": {"hr": (50, 72), "rr": (10, 17)},
+        "wake": {"hr": (65, 94), "rr": (13, 21)},
+        "n1": {"hr": (61, 85), "rr": (12, 19)},
+        "n2": {"hr": (56, 79), "rr": (11, 18)},
+        "n3": {"hr": (50, 72), "rr": (10, 17)},
         "rem": {"hr": (59, 90), "rr": (12, 21)},
     },
     "18-29": {
-        "wake": {"hr": (65, 88), "rr": (13, 20)}, "n1": {"hr": (61, 80), "rr": (12, 18)},
-        "n2": {"hr": (56, 74), "rr": (11, 17)}, "n3": {"hr": (50, 67), "rr": (10, 16)},
+        "wake": {"hr": (65, 88), "rr": (13, 20)},
+        "n1": {"hr": (61, 80), "rr": (12, 18)},
+        "n2": {"hr": (56, 74), "rr": (11, 17)},
+        "n3": {"hr": (50, 67), "rr": (10, 16)},
         "rem": {"hr": (59, 84), "rr": (12, 20)},
     },
     "30-44": {
-        "wake": {"hr": (66, 90), "rr": (13, 20)}, "n1": {"hr": (62, 81), "rr": (12, 18)},
-        "n2": {"hr": (57, 75), "rr": (11, 17)}, "n3": {"hr": (51, 68), "rr": (10, 16)},
+        "wake": {"hr": (66, 90), "rr": (13, 20)},
+        "n1": {"hr": (62, 81), "rr": (12, 18)},
+        "n2": {"hr": (57, 75), "rr": (11, 17)},
+        "n3": {"hr": (51, 68), "rr": (10, 16)},
         "rem": {"hr": (60, 86), "rr": (12, 20)},
     },
     "45-59": {
-        "wake": {"hr": (67, 92), "rr": (13, 21)}, "n1": {"hr": (63, 83), "rr": (12, 19)},
-        "n2": {"hr": (58, 77), "rr": (11, 18)}, "n3": {"hr": (52, 70), "rr": (10, 17)},
+        "wake": {"hr": (67, 92), "rr": (13, 21)},
+        "n1": {"hr": (63, 83), "rr": (12, 19)},
+        "n2": {"hr": (58, 77), "rr": (11, 18)},
+        "n3": {"hr": (52, 70), "rr": (10, 17)},
         "rem": {"hr": (61, 88), "rr": (12, 21)},
     },
     "60+": {
-        "wake": {"hr": (68, 94), "rr": (13, 21)}, "n1": {"hr": (64, 85), "rr": (12, 19)},
-        "n2": {"hr": (59, 79), "rr": (11, 18)}, "n3": {"hr": (53, 72), "rr": (10, 17)},
+        "wake": {"hr": (68, 94), "rr": (13, 21)},
+        "n1": {"hr": (64, 85), "rr": (12, 19)},
+        "n2": {"hr": (59, 79), "rr": (11, 18)},
+        "n3": {"hr": (53, 72), "rr": (10, 17)},
         "rem": {"hr": (62, 90), "rr": (12, 21)},
     },
 }
 AGE_GROUP_DEFAULT_AGE = {"18-29": 24, "30-44": 37, "45-59": 52, "60+": 65}
 GENDER_BASELINE_ADJUSTMENTS = {
-    "male": {"label": "ชาย", "hr_offset": 0, "rr_offset": 0,
-             "rem_variability_weight": 1.10,
-             "note": "REM sympathetic/HR variability weighting สูงขึ้นเล็กน้อย"},
-    "female": {"label": "หญิง", "hr_offset": 2, "rr_offset": 0,
-               "rem_variability_weight": 1.00,
-               "note": "HR starting range +2 BPM; RR คงเดิม"},
-    "other": {"label": "อื่น ๆ", "hr_offset": 0, "rr_offset": 0,
-              "rem_variability_weight": 1.00,
-              "note": "ใช้ neutral baseline จนมี Personal Baseline"},
-    "unspecified": {"label": "ไม่ระบุ", "hr_offset": 0, "rr_offset": 0,
-                    "rem_variability_weight": 1.00,
-                    "note": "ใช้ neutral baseline จนมี Personal Baseline"},
+    "male": {
+        "label": "ชาย",
+        "hr_offset": 0,
+        "rr_offset": 0,
+        "rem_variability_weight": 1.10,
+        "note": "REM sympathetic/HR variability weighting สูงขึ้นเล็กน้อย",
+    },
+    "female": {
+        "label": "หญิง",
+        "hr_offset": 2,
+        "rr_offset": 0,
+        "rem_variability_weight": 1.00,
+        "note": "HR starting range +2 BPM; RR คงเดิม",
+    },
+    "other": {
+        "label": "อื่น ๆ",
+        "hr_offset": 0,
+        "rr_offset": 0,
+        "rem_variability_weight": 1.00,
+        "note": "ใช้ neutral baseline จนมี Personal Baseline",
+    },
+    "unspecified": {
+        "label": "ไม่ระบุ",
+        "hr_offset": 0,
+        "rr_offset": 0,
+        "rem_variability_weight": 1.00,
+        "note": "ใช้ neutral baseline จนมี Personal Baseline",
+    },
 }
 
 
@@ -221,24 +257,34 @@ def age_group(age: Any) -> str:
 
 
 def gender_adjusted_baseline(
-    selected_age_group: str, gender: Any,
+    selected_age_group: str,
+    gender: Any,
 ) -> tuple[dict[str, dict[str, tuple[float, float]]], dict[str, Any]]:
     """Return the shared broad HR/RR prior plus demographic provenance."""
-    group = selected_age_group if selected_age_group in AGE_SLEEP_BASELINES else "unspecified"
+    group = (
+        selected_age_group
+        if selected_age_group in AGE_SLEEP_BASELINES
+        else "unspecified"
+    )
     gender_key = str(gender or "unspecified").strip().lower()
-    adjustment = dict(GENDER_BASELINE_ADJUSTMENTS.get(
-        gender_key, GENDER_BASELINE_ADJUSTMENTS["unspecified"]
-    ))
+    adjustment = dict(
+        GENDER_BASELINE_ADJUSTMENTS.get(
+            gender_key, GENDER_BASELINE_ADJUSTMENTS["unspecified"]
+        )
+    )
     adjusted = {}
     for stage, ranges in AGE_SLEEP_BASELINES[group].items():
         adjusted[stage] = {
-            "hr": tuple(float(value) + float(adjustment["hr_offset"])
-                        for value in ranges["hr"]),
-            "rr": tuple(float(value) + float(adjustment["rr_offset"])
-                        for value in ranges["rr"]),
+            "hr": tuple(
+                float(value) + float(adjustment["hr_offset"]) for value in ranges["hr"]
+            ),
+            "rr": tuple(
+                float(value) + float(adjustment["rr_offset"]) for value in ranges["rr"]
+            ),
         }
     adjustment.update({"gender_key": gender_key, "age_group": group})
     return adjusted, adjustment
+
 
 # Canonical Thai presentation copy for every surface that explains a confirmed
 # Sleep State.  These labels describe ZEEP's five-state wellness estimate; they
@@ -295,12 +341,16 @@ SLEEP_ALLOWED_TRANSITIONS = {
 # A replayed sequence may contain a direct sleep->Wake only when the same
 # analysis window has the required strong-Wake proxy. These pairs can never be
 # accepted, even with that override.
-SLEEP_PROHIBITED_TRANSITIONS = frozenset({
-    ("wake", "n2"), ("wake", "n3"), ("wake", "rem"),
-    ("n1", "n3"),
-    ("n3", "n1"),
-    ("rem", "n3"),
-})
+SLEEP_PROHIBITED_TRANSITIONS = frozenset(
+    {
+        ("wake", "n2"),
+        ("wake", "n3"),
+        ("wake", "rem"),
+        ("n1", "n3"),
+        ("n3", "n1"),
+        ("rem", "n3"),
+    }
+)
 
 # Sensors are retained every 10 seconds, three frames form one evidence epoch,
 # and two consecutive evidence epochs are required before changing the
@@ -331,7 +381,11 @@ SLEEP_STAGE_CONFIRMATION_SECONDS = {
 # Epoch until a challenger is confirmed, so no carry Epoch is provisional.
 SLEEP_PROVISIONAL_HOLD_EPOCHS = 0
 SLEEP_STAGE_MIN_DWELL_SECONDS = {
-    "wake": 10.0, "n1": 30.0, "n2": 60.0, "n3": 60.0, "rem": 60.0,
+    "wake": 10.0,
+    "n1": 30.0,
+    "n2": 60.0,
+    "n3": 60.0,
+    "rem": 60.0,
 }
 
 # Quiet wake and N1 overlap strongly in contactless BCG.  A new Session must
@@ -444,9 +498,7 @@ def continuity_hold_contract(
         "excluded_from_stage_statistics": False,
         "excluded_from_personal_baseline": True,
         "state_source": (
-            "initial_awake_anchor"
-            if initial_anchor
-            else "carry_previous_confirmed"
+            "initial_awake_anchor" if initial_anchor else "carry_previous_confirmed"
         ),
     }
 
@@ -540,7 +592,9 @@ RECOVERY_SCORE_COMPONENT_MAX_POINTS = {
     "environment_support": 10.0,
 }
 # Wellness balance keeps valid, ordinary rest away from a technical zero while
-# preserving the release gates above.  These factors are product-scoring
+# preserving the minimum-evidence release gates above. Timing deviations above
+# the selected Nap protocol remain Admin QA and do not withhold a supported
+# Recovery Score. These factors are product-scoring
 # transforms, not clinical normal ranges or claims of recovery.
 WELLNESS_PHYSIOLOGY_NEUTRAL_FLOOR = 0.60
 WELLNESS_MISSING_COMPONENT_NEUTRAL_FACTOR = 0.75
@@ -571,8 +625,7 @@ REST_SESSION_GROUPS = {
         "score_title": "Recovery Score",
         "score_scope": "คะแนนสนับสนุนการฟื้นตัวจาก Sensor",
         "description": (
-            "พักระหว่างวันตามเป้าหมาย 30 หรือ 90 นาที "
-            "จะหลับ พักสายตา หรือทำสมาธิก็ได้"
+            "พักระหว่างวันตามเป้าหมาย 30 หรือ 90 นาที จะหลับ พักสายตา หรือทำสมาธิก็ได้"
         ),
         "sleep_required": False,
     },
@@ -590,8 +643,11 @@ REST_MODE_PROTOCOLS = {
         "full_credit_target_seconds": 7 * 3600,
         "phases": ["settle", "protected_sleep", "gentle_wake"],
         "primary_outcomes": [
-            "sleep_onset", "sleep_continuity", "sleep_architecture",
-            "wake_events", "morning_freshness",
+            "sleep_onset",
+            "sleep_continuity",
+            "sleep_architecture",
+            "wake_events",
+            "morning_freshness",
         ],
     },
     "nap_recovery": {
@@ -606,8 +662,11 @@ REST_MODE_PROTOCOLS = {
         "timing_review_blocks_score": False,
         "phases": ["settle", "rest_or_nap", "gentle_close"],
         "primary_outcomes": [
-            "rest_continuity", "hr_rr_settling", "stillness",
-            "sleep_observed_optional", "post_rest_refresh_self_report",
+            "rest_continuity",
+            "hr_rr_settling",
+            "stillness",
+            "sleep_observed_optional",
+            "post_rest_refresh_self_report",
         ],
     },
 }
@@ -697,7 +756,9 @@ def resolve_rest_target(
             "label": "Overnight Recovery · 7 ชั่วโมง",
             "seconds": target,
             "minutes": target / 60,
-            "source": "persisted" if persisted_seconds is not None else "policy_default",
+            "source": "persisted"
+            if persisted_seconds is not None
+            else "policy_default",
             "review_required": False,
             "supported_seconds": [target],
         }
@@ -709,7 +770,11 @@ def resolve_rest_target(
     ):
         value = float(persisted_seconds)
     matched = next(
-        (target for target in supported if value is not None and abs(value - target) <= 1),
+        (
+            target
+            for target in supported
+            if value is not None and abs(value - target) <= 1
+        ),
         None,
     )
     source = "persisted"
@@ -751,6 +816,7 @@ def resolve_rest_target(
         "extended_max_seconds": option["extended_max_seconds"],
     }
 
+
 # Environment is an explanatory context layer, not Sleep-Stage evidence.  A
 # value passes the ZEEP operating expectation at ``fair`` or above.  Internal
 # keys stay stable for scoring and audit, while labels use calm product copy.
@@ -761,27 +827,44 @@ def resolve_rest_target(
 ENVIRONMENT_ACCEPTABLE_MIN_LEVEL = "fair"
 ENVIRONMENT_LEVELS = {
     "critical": {
-        "rank": 0, "label": "แนะนำให้ปรับตอนนี้", "english": "Critical", "symbol": "!",
+        "rank": 0,
+        "label": "แนะนำให้ปรับตอนนี้",
+        "english": "Critical",
+        "symbol": "!",
         "decision": "required",
         "description": "พบค่าที่ควรตรวจและปรับสภาพแวดล้อมตอนนี้",
     },
     "poor": {
-        "rank": 1, "label": "ควรปรับ", "english": "Poor", "symbol": "↓",
+        "rank": 1,
+        "label": "ควรปรับ",
+        "english": "Poor",
+        "symbol": "↓",
         "decision": "required",
         "description": "มีปัจจัยที่ควรปรับเพื่อให้พักสบายขึ้น",
     },
     "fair": {
-        "rank": 2, "label": "พอใช้", "english": "Fair", "symbol": "–",
+        "rank": 2,
+        "label": "พอใช้",
+        "english": "Fair",
+        "symbol": "–",
         "decision": "optimise",
         "description": "ใช้งานได้ และยังปรับให้สบายขึ้นได้",
     },
     "good": {
-        "rank": 3, "label": "ดี", "english": "Good", "symbol": "✓",
-        "decision": "maintain", "description": "เหมาะสมกับรูปแบบการพัก รักษาค่าปัจจุบัน",
+        "rank": 3,
+        "label": "ดี",
+        "english": "Good",
+        "symbol": "✓",
+        "decision": "maintain",
+        "description": "เหมาะสมกับรูปแบบการพัก รักษาค่าปัจจุบัน",
     },
     "excellent": {
-        "rank": 4, "label": "ยอดเยี่ยม", "english": "Excellent", "symbol": "★",
-        "decision": "maintain", "description": "อยู่ในเป้าหมายสูงสุดของ ZEEP",
+        "rank": 4,
+        "label": "ยอดเยี่ยม",
+        "english": "Excellent",
+        "symbol": "★",
+        "decision": "maintain",
+        "description": "อยู่ในเป้าหมายสูงสุดของ ZEEP",
     },
 }
 # ``fair`` is already the minimum acceptable ZEEP operating level, so its
@@ -819,10 +902,7 @@ def summarize_environment_session_levels(level_keys: list[str]) -> dict[str, Any
         0,
         min(
             count - 1,
-            int(
-                count * ENVIRONMENT_SESSION_SUSTAINED_FLOOR_QUANTILE
-                + 0.999999
-            ) - 1,
+            int(count * ENVIRONMENT_SESSION_SUSTAINED_FLOOR_QUANTILE + 0.999999) - 1,
         ),
     )
     sustained_rank = ranks[floor_index]
@@ -854,15 +934,21 @@ def summarize_environment_session_levels(level_keys: list[str]) -> dict[str, Any
         ),
     }
 
+
 # Each list is ordered Excellent -> Good -> Fair -> Poor.  Values outside the
 # last band are Critical.  Temperature, RH and air-quality bands remain common
 # to all modes; light and sound reflect the selected experience.  These are
 # versioned internal operating bands, not universal medical thresholds.
 ENVIRONMENT_CONTEXT_CRITERIA = {
     "temperature": {
-        "sample_key": "temp", "environment_key": "temperature_c",
-        "device_key": "sht3x_dis", "source": "SHT3x-DIS",
-        "label": "อุณหภูมิ", "unit": "°C", "digits": 1, "kind": "range",
+        "sample_key": "temp",
+        "environment_key": "temperature_c",
+        "device_key": "sht3x_dis",
+        "source": "SHT3x-DIS",
+        "label": "อุณหภูมิ",
+        "unit": "°C",
+        "digits": 1,
+        "kind": "range",
         "bands": [[18.0, 27.0], [17.0, 28.0], [16.0, 29.0], [13.0, 32.0]],
         # Keep Safety provenance separate from the four Wellness bands.  These
         # values match the approved default Pi-local Safety Supervisor basis.
@@ -874,9 +960,14 @@ ENVIRONMENT_CONTEXT_CRITERIA = {
         "principle": "Thermal comfort จากอุณหภูมิจริงใน ZEEP",
     },
     "humidity": {
-        "sample_key": "hum", "environment_key": "humidity_rh",
-        "device_key": "sht3x_dis", "source": "SHT3x-DIS",
-        "label": "ความชื้น", "unit": "%RH", "digits": 1, "kind": "range",
+        "sample_key": "hum",
+        "environment_key": "humidity_rh",
+        "device_key": "sht3x_dis",
+        "source": "SHT3x-DIS",
+        "label": "ความชื้น",
+        "unit": "%RH",
+        "digits": 1,
+        "kind": "range",
         "bands": [[40.0, 60.0], [35.0, 65.0], [30.0, 70.0], [20.0, 80.0]],
         "action_low": "เปิดไอน้ำเป็นช่วงและติดตามค่าความชื้น",
         "action_high": "ปิดไอน้ำและเพิ่มการระบายอากาศ",
@@ -884,9 +975,14 @@ ENVIRONMENT_CONTEXT_CRITERIA = {
         "principle": "ติดตามความแห้ง ความชื้นสะสม และการควบแน่น",
     },
     "light": {
-        "sample_key": "lux", "environment_key": "lux",
-        "device_key": "opt3001", "source": "OPT3001",
-        "label": "ความสว่าง", "unit": "lux", "digits": 1, "kind": "upper",
+        "sample_key": "lux",
+        "environment_key": "lux",
+        "device_key": "opt3001",
+        "source": "OPT3001",
+        "label": "ความสว่าง",
+        "unit": "lux",
+        "digits": 1,
+        "kind": "upper",
         "mode_bands": {
             "sleep": [5.0, 10.0, 30.0, 100.0],
             "nap_recovery": [10.0, 30.0, 100.0, 300.0],
@@ -898,9 +994,14 @@ ENVIRONMENT_CONTEXT_CRITERIA = {
         "principle": "แสงที่เหมาะขึ้นกับการนอน งีบ ผ่อนคลาย หรือช่วงเตรียมพร้อม",
     },
     "sound": {
-        "sample_key": "dba", "environment_key": "sound_dba_est",
-        "device_key": "sph0645", "source": "SPH0645",
-        "label": "เสียง", "unit": "dBA", "digits": 1, "kind": "upper",
+        "sample_key": "dba",
+        "environment_key": "sound_dba_est",
+        "device_key": "sph0645",
+        "source": "SPH0645",
+        "label": "เสียง",
+        "unit": "dBA",
+        "digits": 1,
+        "kind": "upper",
         # Acoustic comfort remains visible and contributes whenever a valid
         # firmware LAeq(A) measurement exists. It is not a life-safety input,
         # so a missing/invalid microphone must degrade coverage without
@@ -918,9 +1019,14 @@ ENVIRONMENT_CONTEXT_CRITERIA = {
         "principle": "แยกเสียงรบกวนจากเสียงที่ผู้ใช้เลือกตามวัตถุประสงค์ของโหมด",
     },
     "co2": {
-        "sample_key": "co2", "environment_key": "co2_ppm",
-        "device_key": "mhz19c", "source": "MH-Z19C",
-        "label": "CO₂", "unit": "ppm", "digits": 0, "kind": "upper",
+        "sample_key": "co2",
+        "environment_key": "co2_ppm",
+        "device_key": "mhz19c",
+        "source": "MH-Z19C",
+        "label": "CO₂",
+        "unit": "ppm",
+        "digits": 0,
+        "kind": "upper",
         "bands": [800.0, 1000.0, 1150.0, 1300.0],
         "critical_at_or_above": 1300.0,
         "action_high": "เพิ่มการเติมและระบายอากาศ พร้อมตรวจ Filter",
@@ -928,18 +1034,28 @@ ENVIRONMENT_CONTEXT_CRITERIA = {
         "principle": "ตัวชี้การระบายอากาศ ไม่ใช่ค่าปริมาณออกซิเจน",
     },
     "pm25": {
-        "sample_key": "pm2_5", "environment_key": "pm2_5_ug_m3",
-        "device_key": "pms7003", "source": "PMS7003",
-        "label": "PM2.5", "unit": "µg/m³", "digits": 1, "kind": "upper",
+        "sample_key": "pm2_5",
+        "environment_key": "pm2_5_ug_m3",
+        "device_key": "pms7003",
+        "source": "PMS7003",
+        "label": "PM2.5",
+        "unit": "µg/m³",
+        "digits": 1,
+        "kind": "upper",
         "bands": [15.0, 25.0, 37.5, 50.0],
         "action_high": "ตรวจหรือเปลี่ยน Pre/HEPA Filter และตรวจรอยรั่ว",
         "control": "Pre-Filter · HEPA · ซีลประตู",
         "principle": "ติดตามฝุ่นละเอียด การกรอง และการรั่วของอากาศ",
     },
     "voc": {
-        "sample_key": "voc", "environment_key": "voc_index",
-        "device_key": "sgp40", "source": "SGP40",
-        "label": "VOC Index", "unit": "", "digits": 0, "kind": "upper",
+        "sample_key": "voc",
+        "environment_key": "voc_index",
+        "device_key": "sgp40",
+        "source": "SGP40",
+        "label": "VOC Index",
+        "unit": "",
+        "digits": 0,
+        "kind": "upper",
         "bands": [120.0, 150.0, 200.0, 300.0],
         "action_high": "หยุดแหล่งกลิ่น เร่งระบาย และตรวจ Carbon Filter",
         "control": "กลิ่น · พัดลมระบาย · Carbon Filter",
@@ -948,10 +1064,15 @@ ENVIRONMENT_CONTEXT_CRITERIA = {
 }
 
 _ENVIRONMENT_MODE_ALIASES = {
-    "auto": "sleep", "overnight": "sleep", "sleep": "sleep",
-    "short_nap": "nap_recovery", "cycle_nap": "nap_recovery",
-    "shift_rest": "nap_recovery", "jet_lag": "nap_recovery",
-    "nap_recovery": "nap_recovery", "general_rest": "nap_recovery",
+    "auto": "sleep",
+    "overnight": "sleep",
+    "sleep": "sleep",
+    "short_nap": "nap_recovery",
+    "cycle_nap": "nap_recovery",
+    "shift_rest": "nap_recovery",
+    "jet_lag": "nap_recovery",
+    "nap_recovery": "nap_recovery",
+    "general_rest": "nap_recovery",
     **REST_MODE_LEGACY_ALIASES,
 }
 
@@ -970,7 +1091,9 @@ def environment_criterion(metric: str, rest_mode: Any) -> dict[str, Any]:
     result["key"] = metric
     result["mode"] = environment_mode_group(rest_mode)
     selected = (source.get("mode_bands") or {}).get(result["mode"], source.get("bands"))
-    result["selected_bands"] = [list(value) if isinstance(value, list) else value for value in selected]
+    result["selected_bands"] = [
+        list(value) if isinstance(value, list) else value for value in selected
+    ]
     result.pop("mode_bands", None)
     return result
 
@@ -979,7 +1102,10 @@ def environment_level_for_value(metric: str, value: float, rest_mode: Any) -> st
     """Classify one live value against the selected internal operating bands."""
     criterion = environment_criterion(metric, rest_mode)
     bands = criterion["selected_bands"]
-    if criterion.get("critical_at_or_above") is not None and value >= criterion["critical_at_or_above"]:
+    if (
+        criterion.get("critical_at_or_above") is not None
+        and value >= criterion["critical_at_or_above"]
+    ):
         return "critical"
     ordered_levels = ("excellent", "good", "fair", "poor")
     if criterion["kind"] == "range":
@@ -1013,10 +1139,13 @@ def environment_policy_snapshot(rest_mode: Any = "sleep") -> dict[str, Any]:
         criterion = environment_criterion(key, mode)
         criterion["excellent_target"] = _environment_band_text(criterion, 0)
         criterion["acceptable_floor"] = _environment_band_text(criterion, 2)
-        criterion["bands_text"] = " · ".join(
-            f"{ENVIRONMENT_LEVELS[level]['label']} {_environment_band_text(criterion, index)}"
-            for index, level in enumerate(("excellent", "good", "fair", "poor"))
-        ) + " · แนะนำให้ปรับตอนนี้เมื่ออยู่นอกช่วง"
+        criterion["bands_text"] = (
+            " · ".join(
+                f"{ENVIRONMENT_LEVELS[level]['label']} {_environment_band_text(criterion, index)}"
+                for index, level in enumerate(("excellent", "good", "fair", "poor"))
+            )
+            + " · แนะนำให้ปรับตอนนี้เมื่ออยู่นอกช่วง"
+        )
         criteria.append(criterion)
     return {
         "version": ENVIRONMENT_CONTEXT_POLICY_VERSION,
@@ -1024,8 +1153,10 @@ def environment_policy_snapshot(rest_mode: Any = "sleep") -> dict[str, Any]:
         "requested_mode": str(rest_mode or "auto"),
         "auto_mode_policy": "conservative_sleep_until_resolved",
         "acceptable_min_level": ENVIRONMENT_ACCEPTABLE_MIN_LEVEL,
-        "levels": [dict(ENVIRONMENT_LEVELS[key], key=key) for key in
-                   ("critical", "poor", "fair", "good", "excellent")],
+        "levels": [
+            dict(ENVIRONMENT_LEVELS[key], key=key)
+            for key in ("critical", "poor", "fair", "good", "excellent")
+        ],
         "session_aggregation": {
             "version": ENVIRONMENT_SESSION_AGGREGATION_VERSION,
             "method": "sustained_lower_decile_of_sample_levels",
@@ -1047,29 +1178,32 @@ def assess_environment_values(
 ) -> dict[str, Any]:
     """Assess current Pod values using the same policy as Session reports."""
     policy = environment_policy_snapshot(rest_mode)
-    devices = environment.get("devices") if isinstance(environment.get("devices"), dict) else {}
+    devices = (
+        environment.get("devices")
+        if isinstance(environment.get("devices"), dict)
+        else {}
+    )
     evaluations = []
     for criterion in policy["criteria"]:
         raw = environment.get(criterion["environment_key"])
-        numeric = (
-            isinstance(raw, (int, float)) and not isinstance(raw, bool)
-        )
+        numeric = isinstance(raw, (int, float)) and not isinstance(raw, bool)
         device = devices.get(criterion["device_key"], {})
-        live = numeric and (
-            not require_live_devices or device.get("status") == "live"
-        )
+        live = numeric and (not require_live_devices or device.get("status") == "live")
         base = {
-            "id": criterion["key"], "key": criterion["key"],
-            "name": criterion["label"], "label": criterion["label"],
-            "device_key": criterion["device_key"], "source": criterion["source"],
-            "unit": criterion["unit"], "digits": criterion["digits"],
+            "id": criterion["key"],
+            "key": criterion["key"],
+            "name": criterion["label"],
+            "label": criterion["label"],
+            "device_key": criterion["device_key"],
+            "source": criterion["source"],
+            "unit": criterion["unit"],
+            "digits": criterion["digits"],
             "target": criterion["excellent_target"],
             "expected_floor": criterion["acceptable_floor"],
-            "bands": criterion["bands_text"], "principle": criterion["principle"],
+            "bands": criterion["bands_text"],
+            "principle": criterion["principle"],
             "control": criterion["control"],
-            "required_for_overall": bool(
-                criterion.get("required_for_overall", True)
-            ),
+            "required_for_overall": bool(criterion.get("required_for_overall", True)),
         }
         if not live:
             # A restart cache may carry the last validated numeric value while
@@ -1079,14 +1213,21 @@ def assess_environment_values(
             display = (
                 f"{float(raw):.{criterion['digits']}f}"
                 f"{(' ' + criterion['unit']) if criterion['unit'] else ''}"
-                if numeric else "--"
+                if numeric
+                else "--"
             )
-            evaluations.append({
-                **base, "status": "unavailable",
-                "device_status": device.get("status", "no_data"),
-                "value": float(raw) if numeric else None, "display": display,
-                "decision": "sensor_check", "score": None, "level": None,
-            })
+            evaluations.append(
+                {
+                    **base,
+                    "status": "unavailable",
+                    "device_status": device.get("status", "no_data"),
+                    "value": float(raw) if numeric else None,
+                    "display": display,
+                    "decision": "sensor_check",
+                    "score": None,
+                    "level": None,
+                }
+            )
             continue
         value = float(raw)
         level_key = environment_level_for_value(criterion["key"], value, policy["mode"])
@@ -1095,20 +1236,29 @@ def assess_environment_values(
         if criterion["kind"] == "range":
             midpoint = (first_band[0] + first_band[1]) / 2.0
             recommendation = (
-                criterion.get("action_high") if value > midpoint
+                criterion.get("action_high")
+                if value > midpoint
                 else criterion.get("action_low")
             )
         else:
             recommendation = criterion.get("action_high")
         if level["decision"] == "maintain":
             recommendation = "รักษาการตั้งค่าปัจจุบัน"
-        evaluations.append({
-            **base, "status": "live", "device_status": "live", "value": value,
-            "score": level["rank"], "level": level, "decision": level["decision"],
-            "meets_expected": level["rank"] >= ENVIRONMENT_LEVELS[ENVIRONMENT_ACCEPTABLE_MIN_LEVEL]["rank"],
-            "display": f"{value:.{criterion['digits']}f}{(' ' + criterion['unit']) if criterion['unit'] else ''}",
-            "recommendation": recommendation,
-        })
+        evaluations.append(
+            {
+                **base,
+                "status": "live",
+                "device_status": "live",
+                "value": value,
+                "score": level["rank"],
+                "level": level,
+                "decision": level["decision"],
+                "meets_expected": level["rank"]
+                >= ENVIRONMENT_LEVELS[ENVIRONMENT_ACCEPTABLE_MIN_LEVEL]["rank"],
+                "display": f"{value:.{criterion['digits']}f}{(' ' + criterion['unit']) if criterion['unit'] else ''}",
+                "recommendation": recommendation,
+            }
+        )
     metrics = [item for item in evaluations if item["status"] == "live"]
     unavailable = [item for item in evaluations if item["status"] != "live"]
     blocking_unavailable = [
@@ -1122,38 +1272,69 @@ def assess_environment_values(
         key=lambda item: item["score"],
     )
     optimise = [item for item in metrics if item["decision"] == "optimise"]
-    blocking_missing_actions = [{
-        "type": "sensor", "priority": "required", "name": item["name"],
-        "current": "ไม่มีข้อมูล Live", "target": item["expected_floor"],
-        "control": item["source"],
-        "action": f"ตรวจการเชื่อมต่อ {item['source']} และ freshness ก่อนประเมิน",
-        "blocks_overall": True,
-    } for item in blocking_unavailable]
-    advisory_actions = [{
-        "type": "sensor", "priority": "advisory", "name": item["name"],
-        "current": "ไม่มีข้อมูล Live", "target": item["expected_floor"],
-        "control": item["source"],
-        "action": f"ตรวจการเชื่อมต่อ {item['source']} โดยภาพรวมยังทำงานต่อ",
-        "blocks_overall": False,
-    } for item in advisory_unavailable]
-    required_actions = [{
-        "type": "condition", "priority": "required", "name": item["name"],
-        "current": item["display"], "target": item["expected_floor"],
-        "control": item["control"], "action": item["recommendation"],
-        "score": item["score"],
-    } for item in required] + blocking_missing_actions
-    optimisation_actions = [{
-        "type": "condition", "priority": "optimise", "name": item["name"],
-        "current": item["display"], "target": item["target"],
-        "control": item["control"], "action": item["recommendation"],
-        "score": item["score"],
-    } for item in optimise]
+    blocking_missing_actions = [
+        {
+            "type": "sensor",
+            "priority": "required",
+            "name": item["name"],
+            "current": "ไม่มีข้อมูล Live",
+            "target": item["expected_floor"],
+            "control": item["source"],
+            "action": f"ตรวจการเชื่อมต่อ {item['source']} และ freshness ก่อนประเมิน",
+            "blocks_overall": True,
+        }
+        for item in blocking_unavailable
+    ]
+    advisory_actions = [
+        {
+            "type": "sensor",
+            "priority": "advisory",
+            "name": item["name"],
+            "current": "ไม่มีข้อมูล Live",
+            "target": item["expected_floor"],
+            "control": item["source"],
+            "action": f"ตรวจการเชื่อมต่อ {item['source']} โดยภาพรวมยังทำงานต่อ",
+            "blocks_overall": False,
+        }
+        for item in advisory_unavailable
+    ]
+    required_actions = [
+        {
+            "type": "condition",
+            "priority": "required",
+            "name": item["name"],
+            "current": item["display"],
+            "target": item["expected_floor"],
+            "control": item["control"],
+            "action": item["recommendation"],
+            "score": item["score"],
+        }
+        for item in required
+    ] + blocking_missing_actions
+    optimisation_actions = [
+        {
+            "type": "condition",
+            "priority": "optimise",
+            "name": item["name"],
+            "current": item["display"],
+            "target": item["target"],
+            "control": item["control"],
+            "action": item["recommendation"],
+            "score": item["score"],
+        }
+        for item in optimise
+    ]
     if not metrics:
         return {
-            **policy, "key": "unknown", "label": "รอข้อมูล", "english": "Waiting",
-            "symbol": "?", "description": "Sensor ยังไม่พร้อมสำหรับประเมิน",
+            **policy,
+            "key": "unknown",
+            "label": "รอข้อมูล",
+            "english": "Waiting",
+            "symbol": "?",
+            "description": "Sensor ยังไม่พร้อมสำหรับประเมิน",
             "reason": f"รอข้อมูล Sensor {len(evaluations)} เกณฑ์",
-            "metrics": metrics, "evaluations": evaluations,
+            "metrics": metrics,
+            "evaluations": evaluations,
             "required_actions": required_actions,
             "advisory_actions": advisory_actions,
             "optimisation_actions": optimisation_actions,
@@ -1177,7 +1358,10 @@ def assess_environment_values(
     unknown = bool(blocking_unavailable and minimum["score"] >= 2)
     if unknown:
         summary = {
-            "key": "unknown", "label": "รอข้อมูล", "english": "Waiting", "symbol": "?",
+            "key": "unknown",
+            "label": "รอข้อมูล",
+            "english": "Waiting",
+            "symbol": "?",
             "description": "ข้อมูลไม่ครบ จึงยังยืนยันภาพรวมไม่ได้",
             "reason": (
                 f"Sensor หลักพร้อม {len(metrics)}/{len(evaluations)} เกณฑ์ · "
@@ -1188,17 +1372,20 @@ def assess_environment_values(
         summary = dict(level)
         summary["reason"] = (
             f"แนะนำให้ปรับ {required[0]['name']} · {required[0]['recommendation']}"
-            if required else
-            f"ผ่านขั้นต่ำพอใช้ · ปรับเพิ่มได้ {optimise[0]['name']}"
-            if optimise else
-            f"ประเมินจาก {len(metrics)}/{len(evaluations)} เกณฑ์ · "
+            if required
+            else f"ผ่านขั้นต่ำพอใช้ · ปรับเพิ่มได้ {optimise[0]['name']}"
+            if optimise
+            else f"ประเมินจาก {len(metrics)}/{len(evaluations)} เกณฑ์ · "
             f"{advisory_unavailable[0]['name']}ไม่มีข้อมูล แต่ไม่บล็อกภาพรวม"
-            if advisory_unavailable else
-            f"ครบ {len(metrics)}/{len(evaluations)} เกณฑ์ · รักษาค่าปัจจุบัน"
+            if advisory_unavailable
+            else f"ครบ {len(metrics)}/{len(evaluations)} เกณฑ์ · รักษาค่าปัจจุบัน"
         )
     return {
-        **policy, **summary, "score": minimum["score"],
-        "metrics": metrics, "evaluations": evaluations,
+        **policy,
+        **summary,
+        "score": minimum["score"],
+        "metrics": metrics,
+        "evaluations": evaluations,
         "limiting": [item for item in metrics if item["score"] == minimum["score"]],
         "required_actions": required_actions,
         "advisory_actions": advisory_actions,
@@ -1206,11 +1393,15 @@ def assess_environment_values(
         "actions": required_actions + advisory_actions + optimisation_actions,
         "meets_expected": bool(not blocking_unavailable and not required),
         "assessment_quality": (
-            "incomplete_required" if blocking_unavailable
-            else "degraded_optional" if advisory_unavailable
+            "incomplete_required"
+            if blocking_unavailable
+            else "degraded_optional"
+            if advisory_unavailable
             else "complete"
         ),
-        "passed_expected_count": sum(bool(item.get("meets_expected")) for item in metrics),
+        "passed_expected_count": sum(
+            bool(item.get("meets_expected")) for item in metrics
+        ),
         "required_count": len(required_actions),
         "advisory_count": len(advisory_actions),
         "available_factor_count": len(metrics),
@@ -1219,6 +1410,7 @@ def assess_environment_values(
         "optimisation_count": len(optimisation_actions),
         "expected_factors": len(evaluations),
     }
+
 
 SLEEP_QUALITY_COMPONENT_MAX_POINTS = {
     "sleep_opportunity": 25.0,
@@ -1270,17 +1462,14 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "respiratory_wellness": RESPIRATORY_WELLNESS_VERSION,
             "restore_action_bands": RESTORE_ACTION_BANDS_VERSION,
             "restore_driver_policy": RESTORE_DRIVER_POLICY_VERSION,
-            "restore_baseline_comparison": (
-                RESTORE_BASELINE_COMPARISON_VERSION
-            ),
+            "restore_baseline_comparison": (RESTORE_BASELINE_COMPARISON_VERSION),
             "restore_recommendation": RESTORE_RECOMMENDATION_VERSION,
             "environment_context": ENVIRONMENT_CONTEXT_POLICY_VERSION,
             "terminal_wake": TERMINAL_WAKE_POLICY_VERSION,
         },
         "states": list(ZEEP_SLEEP_STATES),
         "stage_presentation": {
-            state: dict(SLEEP_STAGE_PRESENTATION[state])
-            for state in ZEEP_SLEEP_STATES
+            state: dict(SLEEP_STAGE_PRESENTATION[state]) for state in ZEEP_SLEEP_STATES
         },
         "normal_transitions": {
             source: sorted(targets)
@@ -1308,9 +1497,7 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "signal_gap_display": (
                 "carry_previous_or_initial_wake_scoreable_low_confidence"
             ),
-            "restart_same_session_display": (
-                "last_confirmed_scoreable_continuity"
-            ),
+            "restart_same_session_display": ("last_confirmed_scoreable_continuity"),
             "restart_display_hold_max_seconds": (
                 SLEEP_RESTART_STATE_HOLD_SECONDS_DEFAULT
             ),
@@ -1361,9 +1548,7 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "minimum_margin": SLEEP_EVIDENCE_MIN_MARGIN,
             "n3_gated_minimum_winner": SLEEP_N3_GATED_MIN_WINNER,
             "n3_gated_minimum_margin": SLEEP_N3_GATED_MIN_MARGIN,
-            "ambiguous_evidence_action": (
-                "carry_previous_scoreable_low_confidence"
-            ),
+            "ambiguous_evidence_action": ("carry_previous_scoreable_low_confidence"),
             "initial_state_action": "anchor_W_on_first_occupied_epoch",
             "gate_role": "new_state_entry_only",
             "challenger_receives_stage_time_before_confirmation": False,
@@ -1437,9 +1622,7 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "labels": ["off_bed", "no_session"],
             "counted_as_sleep_stage": False,
             "counted_in_score": False,
-            "temporary_evidence_loss_action": (
-                "carry_previous_or_initial_wake"
-            ),
+            "temporary_evidence_loss_action": ("carry_previous_or_initial_wake"),
             "temporary_evidence_loss_counted_in_score": True,
             "ambiguous_valid_epoch_is_gap": False,
         },
@@ -1453,12 +1636,15 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             ],
             "bounded_corroboration": ["sph0645_time_aligned_sound"],
             "explanatory_environment_only": [
-                "temperature", "humidity", "co2", "lux", "pm2_5", "voc_index",
+                "temperature",
+                "humidity",
+                "co2",
+                "lux",
+                "pm2_5",
+                "voc_index",
             ],
             "environment_can_create_stage": False,
-            "temporary_missing_hr_rr_result": (
-                "carry_previous_or_initial_wake"
-            ),
+            "temporary_missing_hr_rr_result": ("carry_previous_or_initial_wake"),
             "confirmed_no_occupancy_result": "off_bed_no_sleep_stage",
         },
         "movement_guard": {
@@ -1512,22 +1698,12 @@ def sleep_policy_snapshot() -> dict[str, Any]:
         "recovery_score": {
             "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
             "approved_formula_versions": sorted(
-                APPROVED_SCORE_FORMULA_VERSIONS_BY_GROUP[
-                    "nap_recovery"
-                ]
+                APPROVED_SCORE_FORMULA_VERSIONS_BY_GROUP["nap_recovery"]
             ),
-            "component_max_points": dict(
-                RECOVERY_SCORE_COMPONENT_MAX_POINTS
-            ),
-            "duration_curve_exponent": (
-                RECOVERY_DURATION_CURVE_EXPONENT
-            ),
-            "physiology_neutral_floor": (
-                WELLNESS_PHYSIOLOGY_NEUTRAL_FLOOR
-            ),
-            "physiology_full_lift_coverage": (
-                WELLNESS_PHYSIOLOGY_FULL_LIFT_COVERAGE
-            ),
+            "component_max_points": dict(RECOVERY_SCORE_COMPONENT_MAX_POINTS),
+            "duration_curve_exponent": (RECOVERY_DURATION_CURVE_EXPONENT),
+            "physiology_neutral_floor": (WELLNESS_PHYSIOLOGY_NEUTRAL_FLOOR),
+            "physiology_full_lift_coverage": (WELLNESS_PHYSIOLOGY_FULL_LIFT_COVERAGE),
             "missing_component_neutral_factor": (
                 WELLNESS_MISSING_COMPONENT_NEUTRAL_FACTOR
             ),
@@ -1543,16 +1719,10 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "physiology_rr_preferred_range_per_min": list(
                 WELLNESS_SCORE_RR_PREFERRED_RANGE_PER_MIN
             ),
-            "movement_penalty_weight": (
-                RECOVERY_MOVEMENT_PENALTY_WEIGHT
-            ),
+            "movement_penalty_weight": (RECOVERY_MOVEMENT_PENALTY_WEIGHT),
             "bed_exit_penalty_weight": RECOVERY_EXIT_PENALTY_WEIGHT,
-            "bed_exit_penalty_event_cap": (
-                RECOVERY_EXIT_PENALTY_EVENT_CAP
-            ),
-            "environment_score_factors": dict(
-                ENVIRONMENT_SCORE_FACTORS
-            ),
+            "bed_exit_penalty_event_cap": (RECOVERY_EXIT_PENALTY_EVENT_CAP),
+            "environment_score_factors": dict(ENVIRONMENT_SCORE_FACTORS),
             "environment_safety_score_factor_cap": (
                 ENVIRONMENT_SAFETY_SCORE_FACTOR_CAP
             ),
@@ -1568,16 +1738,10 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "approved_formula_versions": sorted(
                 APPROVED_SCORE_FORMULA_VERSIONS_BY_GROUP["sleep"]
             ),
-            "component_max_points": dict(
-                SLEEP_QUALITY_COMPONENT_MAX_POINTS
-            ),
+            "component_max_points": dict(SLEEP_QUALITY_COMPONENT_MAX_POINTS),
             "duration_curve_exponent": 0.5,
-            "physiology_neutral_floor": (
-                WELLNESS_PHYSIOLOGY_NEUTRAL_FLOOR
-            ),
-            "physiology_full_lift_coverage": (
-                WELLNESS_PHYSIOLOGY_FULL_LIFT_COVERAGE
-            ),
+            "physiology_neutral_floor": (WELLNESS_PHYSIOLOGY_NEUTRAL_FLOOR),
+            "physiology_full_lift_coverage": (WELLNESS_PHYSIOLOGY_FULL_LIFT_COVERAGE),
             "missing_component_neutral_factor": (
                 WELLNESS_MISSING_COMPONENT_NEUTRAL_FACTOR
             ),
@@ -1593,18 +1757,12 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "physiology_rr_preferred_range_per_min": list(
                 WELLNESS_SCORE_RR_PREFERRED_RANGE_PER_MIN
             ),
-            "arousal_penalty_max_points": (
-                SLEEP_AROUSAL_PENALTY_MAX_POINTS
-            ),
+            "arousal_penalty_max_points": (SLEEP_AROUSAL_PENALTY_MAX_POINTS),
             "arousal_penalty_points_per_index": (
                 SLEEP_AROUSAL_PENALTY_POINTS_PER_INDEX
             ),
-            "arousal_unavailable_points": (
-                SLEEP_AROUSAL_UNAVAILABLE_POINTS
-            ),
-            "environment_score_factors": dict(
-                ENVIRONMENT_SCORE_FACTORS
-            ),
+            "arousal_unavailable_points": (SLEEP_AROUSAL_UNAVAILABLE_POINTS),
+            "environment_score_factors": dict(ENVIRONMENT_SCORE_FACTORS),
             "environment_safety_score_factor_cap": (
                 ENVIRONMENT_SAFETY_SCORE_FACTOR_CAP
             ),
@@ -1619,9 +1777,7 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "version": RESTORE_SUMMARY_VERSION,
             "action_bands_version": RESTORE_ACTION_BANDS_VERSION,
             "driver_policy_version": RESTORE_DRIVER_POLICY_VERSION,
-            "baseline_comparison_version": (
-                RESTORE_BASELINE_COMPARISON_VERSION
-            ),
+            "baseline_comparison_version": (RESTORE_BASELINE_COMPARISON_VERSION),
             "recommendation_version": RESTORE_RECOMMENDATION_VERSION,
             "creates_independent_score": False,
             "source_scores": {

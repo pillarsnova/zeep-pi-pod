@@ -109,6 +109,7 @@ def public_protocol_status(value: Any) -> dict[str, Any]:
                 "minimum_seconds",
                 "maximum_seconds",
                 "minimum_score_seconds",
+                "timing_review_threshold_seconds",
                 "legacy_hard_max_seconds",
                 "extended_max_seconds",
             },

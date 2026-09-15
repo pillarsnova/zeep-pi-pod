@@ -51,7 +51,7 @@ def fake_zeep_account(_identifier: str, _password: str):
             "refresh_token": None,
             "profile_refreshed": True,
         },
-        {"gender": "male", "dateOfBirth": "1990-01-01"},
+        {"gender": "male", "dateOfBirth": "1990-01-01", "heightCm": 170.0, "weightKg": 62.0},
     )
 
 

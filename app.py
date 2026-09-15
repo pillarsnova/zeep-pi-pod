@@ -168,6 +168,7 @@ from maintenance_registry import maintenance_contract_snapshot
 from migration import migrate_jsonl
 from personal import BaselineStore
 from qr_login import QrLoginRegistry, create_qr_login_router
+from profile_completion import PendingProfileRegistry, create_profile_completion_router, require_complete_profile
 from progressive_profile import (
     admin_progress_summary,
     apply_answer as apply_progressive_answer,
@@ -1098,6 +1099,9 @@ auth_sessions = AuthSessionManager(DATA_DIR)
 # In-flight QR logins.  Process memory only: a pollSecret must never reach the
 # browser, the QR image, disk or the log.
 qr_logins = QrLoginRegistry()
+# Verified logins whose ZEEP account still lacks the facts a Session is scored
+# against: holds their tokens while the form is filled, never the pod itself.
+pending_profiles = PendingProfileRegistry()
 # Post-Session QR share. Off by default: it sends a rendered report off-pod.
 report_shares = ReportShareRegistry(enabled=os.getenv("SESSION_REPORT_SHARE_ENABLED", "0") == "1")
 occupancy_store = OccupancyStore(DATA_DIR, OCCUPANCY_LEASE_SECONDS)
@@ -6349,6 +6353,12 @@ app.include_router(
         log_event=log_event,
     )
 )
+app.include_router(create_profile_completion_router(
+    pending_profiles,  # late-bound hooks, exactly like the QR router above
+    zeep_request=lambda *a, **kw: _zeep_request(*a, **kw), zeep_offline=ZeepApiOffline,
+    complete_login=lambda *a, **kw: _complete_occupant_login(*a, **kw),
+    pod_occupied=_pod_is_occupied, log_event=log_event,
+))
 app.include_router(
     create_report_share_router(
         report_shares,
@@ -7463,9 +7473,10 @@ def _complete_occupant_login(
 ) -> Dict[str, Any]:
     """Bind a verified ZEEP identity to this pod: profile, cookie, pod session.
 
-    Password and QR login both land here so the age-group gate, the Pod-only
+    Password and QR login both land here so the profile gate, the Pod-only
     overrides and the revoke-on-failure guarantee cannot drift apart.
     """
+    require_complete_profile(auth, me, registry=pending_profiles, log_event=log_event)
     health_reference = _zeep_health_reference(me)
     age = health_reference.get("age_years")
     age_group = (age_group_choice or "").strip() or (_age_group(age) if age is not None else None)

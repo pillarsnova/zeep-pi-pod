@@ -197,6 +197,42 @@
     </div>
   </div>
 </div>
+<!-- ข้อมูลสุขภาพพื้นฐาน: บังคับกรอกเมื่อบัญชี ZEEP ยังว่าง (ปิดเองไม่ได้) -->
+<div id="profileModal" class="modal-layer hide" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
+  <div class="modal-card">
+    <div class="modal-head"><div class="modal-icon">i</div><div id="profileTitle">กรอกข้อมูลก่อนเริ่มการพัก</div></div>
+    <div class="modal-message" id="profileIntro">บัญชี ZEEP ของคุณยังไม่มีข้อมูลสุขภาพพื้นฐาน · ZEEP ใช้ค่าเหล่านี้ตั้ง Baseline ให้ตรงกับคุณ</div>
+    <div class="profile-form">
+      <div class="muted">วันเกิด</div>
+      <input id="profileDob" type="date" autocomplete="bday">
+
+      <div class="muted">เพศ</div>
+      <div class="genders three" id="profileGenderSeg">
+        <button type="button" data-g="male" onclick="selectProfileGender('male')">ชาย</button>
+        <button type="button" data-g="female" onclick="selectProfileGender('female')">หญิง</button>
+        <button type="button" data-g="other" onclick="selectProfileGender('other')">ไม่ระบุ</button>
+      </div>
+
+      <div class="profile-pair">
+        <div><div class="muted">ส่วนสูง (ซม.)</div><input id="profileHeight" type="number" inputmode="decimal" min="80" max="250" step="0.1" placeholder="170"></div>
+        <div><div class="muted">น้ำหนัก (กก.)</div><input id="profileWeight" type="number" inputmode="decimal" min="20" max="400" step="0.1" placeholder="60"></div>
+      </div>
+
+      <div class="muted">กรุ๊ปเลือด <small>(ไม่บังคับ)</small></div>
+      <div class="genders five" id="profileBloodSeg">
+        <button type="button" data-b="A" onclick="selectProfileBlood('A')">A</button>
+        <button type="button" data-b="B" onclick="selectProfileBlood('B')">B</button>
+        <button type="button" data-b="AB" onclick="selectProfileBlood('AB')">AB</button>
+        <button type="button" data-b="O" onclick="selectProfileBlood('O')">O</button>
+        <button type="button" data-b="" class="sel" onclick="selectProfileBlood('')">ไม่ทราบ</button>
+      </div>
+    </div>
+    <div id="profileError" class="login-safety login-off"></div>
+    <div class="modal-actions">
+      <button id="profileSubmit" class="btn primary" onclick="submitProfileForm(this)">บันทึกและเริ่มการพัก</button>
+    </div>
+  </div>
+</div>
 <div class="wrap">
   <div class="top">
     <div class="brand">

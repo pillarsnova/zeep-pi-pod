@@ -537,11 +537,14 @@ class RbacApiTests(unittest.TestCase):
 
             # The next successful profile fetch is authoritative.  Missing
             # fields are cleared and changed fields replace the old values.
+            # The four a Session needs stay present: dropping those now sends
+            # the occupant to the profile form instead (test_profile_completion).
             profile_refreshed[0] = True
             profile_response[0] = {
                 "gender": "female",
+                "dateOfBirth": "1991-03-04",
+                "heightCm": 170.0,
                 "weightKg": 58.0,
-                "bloodGroup": "A+",
             }
             refreshed = user.post(
                 "/api/auth/login",
@@ -550,10 +553,10 @@ class RbacApiTests(unittest.TestCase):
             self.assertEqual(refreshed.status_code, 200, refreshed.text)
             refreshed_ref = refreshed.json()["session"]["health_reference"]
             self.assertEqual(refreshed_ref["refresh_status"], "live_login")
-            self.assertIsNone(refreshed_ref["height_cm"])
+            self.assertEqual(refreshed_ref["height_cm"], 170.0)
             self.assertEqual(refreshed_ref["weight_kg"], 58.0)
-            self.assertEqual(refreshed_ref["blood_group"], "A+")
-            self.assertIsNone(refreshed_ref["date_of_birth"])
+            self.assertIsNone(refreshed_ref["blood_group"])
+            self.assertEqual(refreshed_ref["date_of_birth"], "1991-03-04")
         finally:
             if pod_app._active_session is not None:
                 pod_app._finalize_active_session("health_refresh_test_cleanup")
@@ -578,7 +581,7 @@ class RbacApiTests(unittest.TestCase):
                     "access_token": "ephemeral",
                     "refresh_token": None,
                 },
-                {"gender": "male", "dateOfBirth": "1988-02-03"},
+                {"gender": "male", "dateOfBirth": "1988-02-03", "heightCm": 170.0, "weightKg": 62.0},
             )
 
         pod_app._authenticate_zeep_account = fake_auth
@@ -884,7 +887,7 @@ class RbacApiTests(unittest.TestCase):
                     "access_token": "not-persisted",
                     "refresh_token": None,
                 },
-                {"gender": "female", "dateOfBirth": "1992-04-03"},
+                {"gender": "female", "dateOfBirth": "1992-04-03", "heightCm": 170.0, "weightKg": 62.0},
             )
 
         pod_app._authenticate_zeep_account = fake_auth
@@ -1948,7 +1951,7 @@ class RbacApiTests(unittest.TestCase):
                     "access_token": "not-persisted",
                     "refresh_token": None,
                 },
-                {"gender": "male", "dateOfBirth": "1990-01-01"},
+                {"gender": "male", "dateOfBirth": "1990-01-01", "heightCm": 170.0, "weightKg": 62.0},
             )
 
         pod_app._authenticate_zeep_account = fake_auth
@@ -2042,7 +2045,7 @@ class RbacApiTests(unittest.TestCase):
                     "access_token": "not-persisted",
                     "refresh_token": None,
                 },
-                {"gender": "female", "dateOfBirth": "1991-02-03"},
+                {"gender": "female", "dateOfBirth": "1991-02-03", "heightCm": 170.0, "weightKg": 62.0},
             )
 
         pod_app._authenticate_zeep_account = fake_auth
@@ -2108,7 +2111,7 @@ class RbacApiTests(unittest.TestCase):
                     "access_token": "not-persisted",
                     "refresh_token": None,
                 },
-                {"gender": "unspecified", "dateOfBirth": "1974-01-01"},
+                {"gender": "unspecified", "dateOfBirth": "1974-01-01", "heightCm": 170.0, "weightKg": 62.0},
             )
 
         pod_app._authenticate_zeep_account = fake_auth

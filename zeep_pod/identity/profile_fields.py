@@ -89,6 +89,12 @@ def normalise_blood_group(raw: Any) -> str | None:
     """Normalize supported ABO/Rh notation."""
     value = str(raw or "").strip().upper().replace(" ", "_").replace("-", "_")
     aliases = {
+        # ABO without a known Rh factor: the account API and the phone app both
+        # offer these four on their own, so a bare group is a real answer here.
+        "A": "A",
+        "B": "B",
+        "AB": "AB",
+        "O": "O",
         "A+": "A+",
         "A_POSITIVE": "A+",
         "APOSITIVE": "A+",

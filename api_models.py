@@ -81,6 +81,23 @@ class QrLoginPollCommand(BaseModel):
     target_duration_minutes: Optional[Literal[30, 90]] = None
 
 
+class ProfileCompletionCommand(BaseModel):
+    """Answer the profile form a ZEEP account was gated on.
+
+    ``profile_ticket`` stands in for the credentials: the pod already verified
+    them, and a QR login cannot present its own a second time.
+    """
+
+    profile_ticket: str
+    gender: str
+    date_of_birth: str
+    height_cm: float
+    weight_kg: float
+    blood_group: Optional[str] = None
+    rest_mode: PublicRestMode = "nap_recovery"
+    target_duration_minutes: Optional[Literal[30, 90]] = None
+
+
 class AdminLoginCommand(BaseModel):
     identifier: str
     password: str

@@ -240,10 +240,12 @@ function qrErrorFrom(response, body){
     pod_already_occupied:'ZEEP กำลังมีผู้ใช้งาน กรุณารอให้การพักครั้งนี้จบก่อน',
     offline:'ตอนนี้ยังเชื่อมต่อบัญชี ZEEP ไม่ได้ ระบบจะลองใหม่ให้',
     age_group_required:'กรุณาเลือกช่วงอายุเพื่อเตรียมผลให้เหมาะกับคุณ',
+    profile_incomplete:'กรอกข้อมูลสุขภาพพื้นฐานก่อนเริ่มการพัก',
     expired:'QR หมดอายุแล้ว กรุณาขอ QR ใหม่',
   };
   return {
     code,
+    detail: obj ? detail : null,
     message:userMessages[code]||'ยังเชื่อมต่อด้วย QR ไม่ได้ กรุณาลองอีกครั้ง',
   };
 }
@@ -298,6 +300,14 @@ async function pollQrLogin(){
       qrLogin.timer = setTimeout(pollQrLogin, QR_POLL_MS);
       return;
     }
+    if (err.code === 'profile_incomplete'){
+      // QR ใบนี้ถูกใช้ไปแล้ว แต่ ticket ถือ token ของรอบนี้ไว้ให้ → กรอกฟอร์ม
+      // แล้วเข้าได้เลย ไม่ต้องสแกนใหม่
+      qrLogin.loginId = null;
+      resetQrView();
+      openProfileGate(err.detail);
+      return;
+    }
     if (err.code === 'age_group_required'){
       // ZEEP ใช้ QR ใบนี้ไปแล้ว → เลือกช่วงอายุแล้วต้องสแกนใบใหม่
       qrLogin.loginId = null;
@@ -340,6 +350,86 @@ async function pollQrLogin(){
     setQrStatus(`เปิดแอป ZEEP บนมือถือแล้วสแกน QR นี้ · เหลือ ${qrSecondsLeft()} วิ`);
   }
   qrLogin.timer = setTimeout(pollQrLogin, QR_POLL_MS);
+}
+
+/* ---------- ข้อมูลสุขภาพพื้นฐาน: บัญชี ZEEP ที่ยังกรอกไม่ครบต้องกรอกก่อนเริ่มพัก
+   ตู้ยังไม่ถูกจอง และยังไม่มี cookie จนกว่าฟอร์มนี้จะผ่าน — ticket คือสิ่งเดียวที่
+   ผูกฟอร์มกับ Login ที่ยืนยันตัวตนไปแล้ว (QR สแกนซ้ำไม่ได้) ---------- */
+let profileGate = {ticket:null, gender:'', blood:''};
+
+function openProfileGate(detail){
+  profileGate.ticket = (detail && detail.profile_ticket) || null;
+  ['profileDob','profileHeight','profileWeight'].forEach(id=>{
+    document.getElementById(id).value = '';
+  });
+  selectProfileGender('');
+  selectProfileBlood('');
+  showProfileError('');
+  document.getElementById('profileModal').classList.remove('hide');
+  document.getElementById('profileDob').focus();
+}
+
+function closeProfileGate(){
+  profileGate.ticket = null;
+  document.getElementById('profileModal').classList.add('hide');
+}
+
+function selectProfileGender(value){
+  profileGate.gender = value;
+  document.querySelectorAll('#profileGenderSeg button').forEach(b=>{
+    b.classList.toggle('sel', b.dataset.g === value);
+  });
+}
+
+function selectProfileBlood(value){
+  profileGate.blood = value;
+  document.querySelectorAll('#profileBloodSeg button').forEach(b=>{
+    b.classList.toggle('sel', b.dataset.b === value);
+  });
+}
+
+function showProfileError(message, tone = 'danger'){
+  const el = document.getElementById('profileError');
+  if (!el) return;
+  el.textContent = message || '';
+  el.className = `login-safety ${tone}${message ? '' : ' login-off'}`;
+}
+
+async function submitProfileForm(btn){
+  if (!profileGate.ticket){ showProfileError('แบบฟอร์มหมดอายุแล้ว — เข้าสู่ระบบอีกครั้ง'); return; }
+  const dob = document.getElementById('profileDob').value;
+  const height = Number(document.getElementById('profileHeight').value);
+  const weight = Number(document.getElementById('profileWeight').value);
+  if (!profileGate.gender){ showProfileError('เลือกเพศก่อน'); return; }
+  if (!dob){ showProfileError('เลือกวันเกิดก่อน'); return; }
+  if (!(height > 0) || !(weight > 0)){ showProfileError('กรอกส่วนสูงและน้ำหนักให้ครบ'); return; }
+  const body = {
+    profile_ticket:profileGate.ticket, gender:profileGate.gender, date_of_birth:dob,
+    height_cm:height, weight_kg:weight, blood_group:profileGate.blood || null,
+    rest_mode:document.getElementById('loginRestMode').value,
+  };
+  await withBusy(btn, async ()=>{
+    let r, d = null;
+    try {
+      r = await fetch('/api/auth/profile/complete', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body),
+      });
+    } catch { showProfileError('ยังเชื่อมต่อระบบไม่ได้ กรุณาลองอีกครั้ง'); return; }
+    try { d = await r.json(); } catch {}
+    if (!r.ok){
+      const detail = d && d.detail, obj = detail && typeof detail === 'object';
+      // ข้อผิดพลาดที่ลองใหม่ได้จะแนบ ticket ใบใหม่มาด้วย → แก้เฉพาะช่องที่ผิด
+      // แล้วกดซ้ำได้ ไม่ต้องเข้าสู่ระบบหรือสแกน QR ใหม่
+      profileGate.ticket = (obj && detail.profile_ticket) || null;
+      showProfileError(
+        (obj ? detail.message : detail) || 'บันทึกข้อมูลไม่สำเร็จ กรุณาลองอีกครั้ง',
+        obj && detail.code === 'profile_update_offline' ? 'warning' : 'danger',
+      );
+      return;
+    }
+    closeProfileGate();
+    afterLoginStarted(d, `เข้าสู่ระบบ: ${identityLabel(d.user||d.session)}`);
+  });
 }
 
 function toggleQrLogin(){
@@ -400,6 +490,7 @@ function userLoginFailure(code,status){
   const messages={
     offline:'ตอนนี้ยังเชื่อมต่อบัญชี ZEEP ไม่ได้ คุณสามารถเลือกใช้งานแบบออฟไลน์ได้',
     age_group_required:'กรุณาเลือกช่วงอายุเพื่อเตรียมผลให้เหมาะกับคุณ',
+    profile_incomplete:'กรอกข้อมูลสุขภาพพื้นฐานก่อนเริ่มการพัก',
     pod_already_occupied:'ZEEP กำลังมีผู้ใช้งาน กรุณารอให้การพักครั้งนี้จบก่อน',
     invalid_credentials:'อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาลองอีกครั้ง',
   };
@@ -438,6 +529,8 @@ async function doZeepLogin(btn){
         document.getElementById('loginName').value=(offlineIdentifier.split('@')[0]||offlineIdentifier).slice(0,40);
         document.getElementById('loginModeLink').classList.remove('login-off');
         showLoginError(`${msg}`, 'warning');
+      } else if (code === 'profile_incomplete'){
+        openProfileGate(detail);
       } else if (code === 'age_group_required'){
         ageBlock.classList.remove('login-off');
         renderLoginBaseline();

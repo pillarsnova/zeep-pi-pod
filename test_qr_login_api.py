@@ -36,7 +36,7 @@ class FakeZeep:
 
     def __init__(self, poll_states, profile=None):
         self.poll_states = list(poll_states)
-        self.profile = {"gender": "male", "dateOfBirth": "1990-01-01"}
+        self.profile = {"gender": "male", "dateOfBirth": "1990-01-01", "heightCm": 170.0, "weightKg": 62.0}
         if profile is not None:
             self.profile = profile
         self.calls: list[tuple[str, str]] = []
@@ -201,23 +201,16 @@ class QrLoginApiTests(unittest.TestCase):
         replay = self.client.post("/api/auth/qr/poll", json={"login_id": LOGIN_ID})
         self.assertEqual(replay.json(), {"state": "expired"})
 
-    def test_account_without_birthdate_asks_for_an_age_group(self) -> None:
-        """The QR pane reveals the age selector on this code and offers a new QR."""
+    def test_an_incomplete_account_is_sent_to_the_profile_form(self) -> None:
+        """The approved QR is spent here, so its tokens ride on the ticket."""
         self.install(approved_payload(), profile={"gender": "male"})
         self.client.post("/api/auth/qr/session")
         r = self.client.post("/api/auth/qr/poll", json={"login_id": LOGIN_ID})
         self.assertEqual(r.status_code, 422)
-        self.assertEqual(r.json()["detail"]["code"], "age_group_required")
-
-    def test_age_group_from_the_qr_pane_completes_login(self) -> None:
-        self.install(approved_payload(), profile={"gender": "male"})
-        self.client.post("/api/auth/qr/session")
-        r = self.client.post(
-            "/api/auth/qr/poll",
-            json={"login_id": LOGIN_ID, "age_group": "30-44"},
-        )
-        self.assertEqual(r.status_code, 200, r.text)
-        self.assertEqual(r.json()["session"]["age_group"], "30-44")
+        detail = r.json()["detail"]
+        self.assertEqual(detail["code"], "profile_incomplete")
+        self.assertEqual(detail["missing"], ["date_of_birth", "height_cm", "weight_kg"])
+        self.assertTrue(detail["profile_ticket"])
 
 
 if __name__ == "__main__":

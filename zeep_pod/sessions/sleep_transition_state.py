@@ -139,23 +139,27 @@ def _blocked_transition(
     path["candidate_ticks"] = 0
     hold_ticks = int(path.get("continuity_hold_ticks") or 0) + 1
     path["continuity_hold_ticks"] = hold_ticks
-    guard.update({
-        "required_ticks": 0,
-        "candidate_ticks": 0,
-        "candidate_epochs": 0,
-        "required_epochs": 0,
-        "confirmation_seconds": stage_confirmation_seconds.get(
-            target,
-            default_confirmation_seconds,
-        ),
-        "confirmation_complete": False,
-    })
-    guard.update(continuity_hold_contract(
-        previous,
-        candidate=candidate,
-        decision="blocked_transition_hold",
-        hold_epochs=hold_ticks,
-    ))
+    guard.update(
+        {
+            "required_ticks": 0,
+            "candidate_ticks": 0,
+            "candidate_epochs": 0,
+            "required_epochs": 0,
+            "confirmation_seconds": stage_confirmation_seconds.get(
+                target,
+                default_confirmation_seconds,
+            ),
+            "confirmation_complete": False,
+        }
+    )
+    guard.update(
+        continuity_hold_contract(
+            previous,
+            candidate=candidate,
+            decision="blocked_transition_hold",
+            hold_epochs=hold_ticks,
+        )
+    )
     return previous or "wake", guard
 
 
@@ -183,19 +187,23 @@ def _initial_transition(
     path["candidate"] = None
     path["candidate_ticks"] = 0
     path["continuity_hold_ticks"] = 0
-    guard.update({
-        "required_ticks": 1,
-        "candidate_ticks": 1,
-        "candidate_epochs": 1,
-        "required_epochs": 1,
-        "confirmation_seconds": 0.0,
-        "confirmation_complete": True,
-    })
-    guard.update(continuity_hold_contract(
-        None,
-        candidate=target,
-        decision="initial_awake_anchor",
-    ))
+    guard.update(
+        {
+            "required_ticks": 1,
+            "candidate_ticks": 1,
+            "candidate_epochs": 1,
+            "required_epochs": 1,
+            "confirmation_seconds": 0.0,
+            "confirmation_complete": True,
+        }
+    )
+    guard.update(
+        continuity_hold_contract(
+            None,
+            candidate=target,
+            decision="initial_awake_anchor",
+        )
+    )
     return target, guard
 
 
@@ -211,26 +219,28 @@ def _same_state_transition(
     path["candidate"] = None
     path["candidate_ticks"] = 0
     path["continuity_hold_ticks"] = 0
-    guard.update({
-        "required_ticks": confirm_epochs,
-        "candidate_ticks": confirm_epochs,
-        "candidate_epochs": confirm_epochs,
-        "required_epochs": confirm_epochs,
-        "confirmation_seconds": stage_confirmation_seconds.get(
-            previous,
-            default_confirmation_seconds,
-        ),
-        "held": False,
-        "held_previous_state": False,
-        "confirmation_complete": True,
-        "confirmed_state": previous,
-        "provisional": False,
-        "decision": "hold_confirmed",
-        "decision_kind": "confirmed_state",
-        "score_eligible": True,
-        "excluded_from_score": False,
-        "excluded_from_personal_baseline": False,
-    })
+    guard.update(
+        {
+            "required_ticks": confirm_epochs,
+            "candidate_ticks": confirm_epochs,
+            "candidate_epochs": confirm_epochs,
+            "required_epochs": confirm_epochs,
+            "confirmation_seconds": stage_confirmation_seconds.get(
+                previous,
+                default_confirmation_seconds,
+            ),
+            "held": False,
+            "held_previous_state": False,
+            "confirmation_complete": True,
+            "confirmed_state": previous,
+            "provisional": False,
+            "decision": "hold_confirmed",
+            "decision_kind": "confirmed_state",
+            "score_eligible": True,
+            "excluded_from_score": False,
+            "excluded_from_personal_baseline": False,
+        }
+    )
     return previous, guard
 
 
@@ -248,9 +258,7 @@ def _challenger_transition(
 ) -> tuple[str, dict[str, Any]]:
     stage_since = path.get("stage_since")
     dwell_s = (
-        max(0.0, now - stage_since)
-        if isinstance(stage_since, (int, float))
-        else 0.0
+        max(0.0, now - stage_since) if isinstance(stage_since, (int, float)) else 0.0
     )
     minimum_dwell_s = minimum_dwell_seconds.get(previous, 0.0)
     if path.get("candidate") == target:
@@ -262,40 +270,46 @@ def _challenger_transition(
     required = int(confirm_ticks.get(target, 2))
     held = dwell_s < minimum_dwell_s or ticks < required
     hold_ticks = _update_hold_ticks(path, held)
-    guard.update({
-        "required_ticks": required,
-        "candidate_ticks": ticks,
-        "candidate_epochs": ticks,
-        "required_epochs": required,
-        "confirmation_seconds": stage_confirmation_seconds.get(
-            target,
-            default_confirmation_seconds,
-        ),
-        "dwell_s": round(dwell_s, 1),
-        "minimum_dwell_s": minimum_dwell_s,
-        "held": held,
-        "confirmation_complete": not held,
-        "confirmed_state": previous if held else target,
-    })
+    guard.update(
+        {
+            "required_ticks": required,
+            "candidate_ticks": ticks,
+            "candidate_epochs": ticks,
+            "required_epochs": required,
+            "confirmation_seconds": stage_confirmation_seconds.get(
+                target,
+                default_confirmation_seconds,
+            ),
+            "dwell_s": round(dwell_s, 1),
+            "minimum_dwell_s": minimum_dwell_s,
+            "held": held,
+            "confirmation_complete": not held,
+            "confirmed_state": previous if held else target,
+        }
+    )
     if held:
-        guard.update(continuity_hold_contract(
-            previous,
-            candidate=target,
-            decision="confirming",
-            hold_epochs=hold_ticks,
-        ))
+        guard.update(
+            continuity_hold_contract(
+                previous,
+                candidate=target,
+                decision="confirming",
+                hold_epochs=hold_ticks,
+            )
+        )
         return previous, guard
-    guard.update({
-        "held_previous_state": False,
-        "provisional": False,
-        "decision": "confirmed",
-        "decision_kind": "confirmed_state",
-        "score_attribution_state": target,
-        "challenger_counted_as_new_state": True,
-        "score_eligible": True,
-        "excluded_from_score": False,
-        "excluded_from_personal_baseline": False,
-    })
+    guard.update(
+        {
+            "held_previous_state": False,
+            "provisional": False,
+            "decision": "confirmed",
+            "decision_kind": "confirmed_state",
+            "score_attribution_state": target,
+            "challenger_counted_as_new_state": True,
+            "score_eligible": True,
+            "excluded_from_score": False,
+            "excluded_from_personal_baseline": False,
+        }
+    )
     return target, guard
 
 

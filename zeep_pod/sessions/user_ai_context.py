@@ -100,9 +100,7 @@ def _trend(value: Any) -> dict[str, Any]:
     return {
         "available": available,
         "direction": direction,
-        "change_points": (
-            _number(source.get("change_points")) if available else None
-        ),
+        "change_points": (_number(source.get("change_points")) if available else None),
         "formula_version": formula,
         "comparable_scores": _count(source.get("comparable_scores")),
     }
@@ -146,9 +144,7 @@ def _baseline(value: Any) -> dict[str, Any]:
             source.get("typical_duration_minutes"),
             minimum=0,
         ),
-        "typical_environment": _environment(
-            source.get("typical_environment")
-        ),
+        "typical_environment": _environment(source.get("typical_environment")),
         "target_specific": _flag(source.get("target_specific")),
         "target_key": target_key,
         "baseline_policy_version": (
@@ -156,9 +152,7 @@ def _baseline(value: Any) -> dict[str, Any]:
             if policy == PERSONAL_BEHAVIOUR_BASELINE_VERSION
             else None
         ),
-        "score_formula_version": _formula(
-            source.get("score_formula_version")
-        ),
+        "score_formula_version": _formula(source.get("score_formula_version")),
         "score_reference_status": _allowed(
             source.get("score_reference_status"),
             BASELINE_STATUSES,
@@ -183,16 +177,12 @@ def _target(value: Any) -> dict[str, Any] | None:
         "minutes": NAP_TARGET_MINUTES[target_key],
         "session_count": max(1, _count(source.get("session_count"), 1)),
         "scored_count": _count(source.get("scored_count")),
-        "comparable_scored_count": _count(
-            source.get("comparable_scored_count")
-        ),
+        "comparable_scored_count": _count(source.get("comparable_scored_count")),
         "without_score_count": _count(source.get("without_score_count")),
         "latest_score": _score(source.get("latest_score")),
         "average_score": _score(source.get("average_score")),
         "median_score": _score(source.get("median_score")),
-        "active_formula_version": _formula(
-            source.get("active_formula_version")
-        ),
+        "active_formula_version": _formula(source.get("active_formula_version")),
         "trend": _trend(source.get("trend")),
         "baseline": _baseline(source.get("baseline")),
     }
@@ -209,23 +199,15 @@ def _mode(value: Any, expected_key: str) -> dict[str, Any]:
         ]
     return {
         "key": expected_key,
-        "score_type": (
-            "sleep_score" if expected_key == "sleep" else "recovery_score"
-        ),
+        "score_type": ("sleep_score" if expected_key == "sleep" else "recovery_score"),
         "session_count": _count(source.get("session_count")),
-        "data_backed_session_count": _count(
-            source.get("data_backed_session_count")
-        ),
-        "without_sensor_data_count": _count(
-            source.get("without_sensor_data_count")
-        ),
+        "data_backed_session_count": _count(source.get("data_backed_session_count")),
+        "without_sensor_data_count": _count(source.get("without_sensor_data_count")),
         "scored_count": _count(source.get("scored_count")),
         "latest_score": _score(source.get("latest_score")),
         "average_score": _score(source.get("average_score")),
         "median_score": _score(source.get("median_score")),
-        "active_formula_version": _formula(
-            source.get("active_formula_version")
-        ),
+        "active_formula_version": _formula(source.get("active_formula_version")),
         "trend": _trend(source.get("trend")),
         "targets": targets,
         "unresolved_target_session_count": _count(
@@ -290,14 +272,10 @@ def _readiness(
         ),
         "personal_comparison_ready_modes": ready_modes,
         "personal_comparison_ready_targets": ready_targets,
-        "multi_mode_context_ready": _flag(
-            source.get("multi_mode_context_ready")
-        ),
+        "multi_mode_context_ready": _flag(source.get("multi_mode_context_ready")),
         "personalization_data_ready": bool(ready_modes),
         "personalization_inference_authorized": False,
-        "inference_authorization_status": (
-            "purpose_specific_consent_unavailable"
-        ),
+        "inference_authorization_status": ("purpose_specific_consent_unavailable"),
         "data_gap_codes": _gap_codes(
             profile,
             history,
@@ -321,23 +299,17 @@ def _project_user_ai_context(profile: Mapping[str, Any]) -> dict[str, Any]:
             history_source.get("without_sensor_data_count")
         ),
         "scored_count": _count(history_source.get("scored_count")),
-        "without_score_count": _count(
-            history_source.get("without_score_count")
-        ),
+        "without_score_count": _count(history_source.get("without_score_count")),
         "usage_minutes": _number(
             history_source.get("usage_minutes"),
             minimum=0,
-        ) or 0.0,
+        )
+        or 0.0,
         "modes_used": [
-            key
-            for key in _items(history_source.get("modes_used"))
-            if key in MODE_KEYS
+            key for key in _items(history_source.get("modes_used")) if key in MODE_KEYS
         ],
     }
-    modes = {
-        key: _mode(modes_source.get(key), key)
-        for key in MODE_KEYS
-    }
+    modes = {key: _mode(modes_source.get(key), key) for key in MODE_KEYS}
     return {
         "contract_version": USER_AI_CONTEXT_VERSION,
         "source_profile_version": SOURCE_PROFILE_VERSION,
@@ -376,7 +348,9 @@ def validated_user_ai_context(profile: Mapping[str, Any]) -> dict[str, Any]:
     """Return only validated, JSON-compatible AI egress data (no envelope)."""
     payload = _project_user_ai_context(profile)
     validate = getattr(UserAiContext, "model_validate", None)
-    model = validate(payload) if validate is not None else UserAiContext.parse_obj(payload)
+    model = (
+        validate(payload) if validate is not None else UserAiContext.parse_obj(payload)
+    )
     dump = getattr(model, "model_dump", None)
     if dump is not None:
         return dump(mode="json", by_alias=True)

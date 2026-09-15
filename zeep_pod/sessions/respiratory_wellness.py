@@ -41,6 +41,7 @@ MINIMUM_VALID_SAMPLES = 4
 MINIMUM_CONTEXT_COVERAGE_PCT = 50.0
 HIGH_CONTEXT_COVERAGE_PCT = 80.0
 
+
 def _age_band(reference: Mapping[str, Any]) -> str | None:
     age = finite_number(reference.get("age_years"))
     if age is not None:
@@ -69,20 +70,14 @@ def _age_context(reference: Mapping[str, Any]) -> dict[str, Any]:
         ),
         "role": "context_only",
         "threshold_adjustment_applied": False,
-        "note": (
-            "ใช้ช่วงอายุช่วยอธิบายและจัดกลุ่มแนวโน้มเท่านั้น "
-            "ไม่เปลี่ยนเกณฑ์ RR หรือคะแนนจากอายุ"
-        ),
+        "note": ("ใช้ช่วงอายุช่วยอธิบายและจัดกลุ่มแนวโน้มเท่านั้น ไม่เปลี่ยนเกณฑ์ RR หรือคะแนนจากอายุ"),
     }
 
 
 def _mode_context(mode: Any) -> str:
     source = dict(mode) if isinstance(mode, Mapping) else {}
     raw = (
-        source.get("group")
-        or source.get("resolved")
-        or source.get("requested")
-        or mode
+        source.get("group") or source.get("resolved") or source.get("requested") or mode
     )
     group = rest_mode_group(raw)
     if group == "sleep":
@@ -104,11 +99,7 @@ def _personal_baseline(
     typical_range = None
     if isinstance(raw_range, list | tuple) and len(raw_range) == 2:
         low, high = finite_number(raw_range[0]), finite_number(raw_range[1])
-        if (
-            low is not None
-            and high is not None
-            and 4.0 <= low <= high <= 60.0
-        ):
+        if low is not None and high is not None and 4.0 <= low <= high <= 60.0:
             typical_range = [round(low, 1), round(high, 1)]
     ready = bool(
         source.get("status") == "active"
@@ -185,11 +176,13 @@ def _status(
             "key": "needs_recheck",
             "label": RESPIRATORY_STATUS_LABELS["needs_recheck"],
         }
-    within_context = ADULT_CONTEXT_RANGE_BRPM[0] <= median <= (
-        ADULT_CONTEXT_RANGE_BRPM[1]
+    within_context = (
+        ADULT_CONTEXT_RANGE_BRPM[0] <= median <= (ADULT_CONTEXT_RANGE_BRPM[1])
     )
-    if within_context and coverage_pct >= 70.0 and (
-        regularity_factor is not None and regularity_factor >= 0.5
+    if (
+        within_context
+        and coverage_pct >= 70.0
+        and (regularity_factor is not None and regularity_factor >= 0.5)
     ):
         return {
             "key": "supportive",
@@ -295,7 +288,9 @@ def _vital_summary(
 ) -> dict[str, Any]:
     paired_ready = observations.get("paired_hr_rr_evidence_sufficient") is True
     heart_rate = observations.get("median_hr_bpm") if paired_ready else None
-    respiration_rate = observations.get("median_paired_rr_brpm") if paired_ready else None
+    respiration_rate = (
+        observations.get("median_paired_rr_brpm") if paired_ready else None
+    )
     combined_key, combined_label = user_paired_vital_status(
         status_key,
         heart_rate,
@@ -315,9 +310,7 @@ def _vital_summary(
             heart_rate,
             respiration_rate,
         ),
-        "recommendation": user_respiratory_recommendation(
-            recommendation_key
-        ),
+        "recommendation": user_respiratory_recommendation(recommendation_key),
         "basis": "direct_paired_hr_rr",
         "aggregation": "weighted_median",
         "wellness_only": True,
@@ -345,9 +338,7 @@ def build_respiratory_wellness(
     median = weighted_quantile(metrics["measured"], 0.5)
     occupied_seconds = metrics["occupied_seconds"]
     coverage_pct = (
-        100.0 * metrics["valid_seconds"] / occupied_seconds
-        if occupied_seconds
-        else 0.0
+        100.0 * metrics["valid_seconds"] / occupied_seconds if occupied_seconds else 0.0
     )
     age = _age_context(dict(health_reference or {}))
     baseline = _personal_baseline(dict(personal_context or {}), median)
@@ -367,9 +358,7 @@ def build_respiratory_wellness(
         valid_seconds=metrics["valid_seconds"],
         coverage_pct=coverage_pct,
         status_key=status["key"],
-        legacy_rr_without_provenance=metrics[
-            "legacy_rr_without_provenance"
-        ],
+        legacy_rr_without_provenance=metrics["legacy_rr_without_provenance"],
     )
     vital_summary = _vital_summary(status["key"], observations)
     result = {

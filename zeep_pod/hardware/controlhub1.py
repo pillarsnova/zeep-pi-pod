@@ -115,7 +115,9 @@ class ControlHub1MQTT:
         else:
             log_event("controlhub1", "mqtt_connect_failed", reason=str(reason_code))
 
-    def _on_disconnect(self, client, _userdata, _disconnect_flags, reason_code, _properties=None):
+    def _on_disconnect(
+        self, client, _userdata, _disconnect_flags, reason_code, _properties=None
+    ):
         with self._client_lock:
             if self._client is client:
                 self._client = None
@@ -206,7 +208,9 @@ class ControlHub1MQTT:
         """STATUS reads state only; every other current command emits IR."""
         return command != "status"
 
-    def _wait_for_ir_guard(self, command: str, minimum_gap_seconds: float | None) -> float:
+    def _wait_for_ir_guard(
+        self, command: str, minimum_gap_seconds: float | None
+    ) -> float:
         if not self._emits_ir(command) or self._last_ir_ack_monotonic is None:
             return 0.0
         required_gap = max(
@@ -237,7 +241,9 @@ class ControlHub1MQTT:
         with state_lock:
             aircon = dict(state.get("aircon") or {})
             last_update = aircon.get("last_update")
-            fresh = isinstance(last_update, (int, float)) and (now - last_update <= CONTROLHUB1_STALE_SECONDS)
+            fresh = isinstance(last_update, (int, float)) and (
+                now - last_update <= CONTROLHUB1_STALE_SECONDS
+            )
             online = bool(aircon.get("connected") and fresh)
         client = self._get_client()
         if client is None or not client.is_connected() or not online:
@@ -307,15 +313,23 @@ class ControlHub1MQTT:
         """Run an atomic IR sequence so another request cannot interleave."""
         if not commands:
             return []
-        if minimum_gaps_before is not None and (len(minimum_gaps_before) != len(commands)):
+        if minimum_gaps_before is not None and (
+            len(minimum_gaps_before) != len(commands)
+        ):
             raise ValueError("minimum_gaps_before must match commands")
         if not self._command_lock.acquire(blocking=False):
             raise HTTPException(429, "Air Con command already in progress")
         try:
             acknowledgements = []
             for index, command in enumerate(commands):
-                minimum_gap = minimum_gaps_before[index] if minimum_gaps_before is not None else None
-                acknowledgements.append(self._publish_and_wait_locked(command, minimum_gap))
+                minimum_gap = (
+                    minimum_gaps_before[index]
+                    if minimum_gaps_before is not None
+                    else None
+                )
+                acknowledgements.append(
+                    self._publish_and_wait_locked(command, minimum_gap)
+                )
             return acknowledgements
         finally:
             with state_lock:

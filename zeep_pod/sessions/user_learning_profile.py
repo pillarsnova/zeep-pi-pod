@@ -85,11 +85,7 @@ def _mode_summary(
     entries = [entry for session in sessions if (entry := score_entry(session))]
     active_formula = entries[0].get("formula_version") if entries else None
     comparable = (
-        [
-            entry
-            for entry in entries
-            if entry.get("formula_version") == active_formula
-        ]
+        [entry for entry in entries if entry.get("formula_version") == active_formula]
         if active_formula
         else []
     )
@@ -98,8 +94,7 @@ def _mode_summary(
     durations = [
         value
         for session in sessions
-        if (value := _number(session.get("duration_s"))) is not None
-        and value >= 0
+        if (value := _number(session.get("duration_s"))) is not None and value >= 0
     ]
     comparable_durations = [
         value
@@ -111,11 +106,7 @@ def _mode_summary(
     latest_entry = score_entry(sessions[0]) if sessions else None
     metadata = MODE_METADATA[mode]
     data_backed = sum(int(session.get("sample_count") or 0) > 0 for session in sessions)
-    targets = (
-        nap_target_histories(sessions, baseline)
-        if mode == "nap_recovery"
-        else []
-    )
+    targets = nap_target_histories(sessions, baseline) if mode == "nap_recovery" else []
     if mode == "nap_recovery":
         comparable = []
         comparable_durations = []
@@ -183,7 +174,9 @@ def _profile_context(
     return {
         "age_group": age_group,
         "gender": _gender(field_sources["gender"]),
-        "available_fields": sorted(key for key, value in field_sources.items() if value),
+        "available_fields": sorted(
+            key for key, value in field_sources.items() if value
+        ),
         "questionnaire": {
             "consent_status": questionnaire.get("consent_status") or "pending",
             "answered": max(0, int(questionnaire.get("answered") or 0)),
@@ -205,14 +198,10 @@ def _learning_gaps(
     sleep = modes["sleep"]
     sleep_needed = max(
         0,
-        sleep["baseline"]["minimum_sessions"]
-        - sleep["baseline"]["sessions_used"],
+        sleep["baseline"]["minimum_sessions"] - sleep["baseline"]["sessions_used"],
     )
     if sleep_needed:
-        gaps.append(
-            f"{sleep['label']} อีก {sleep_needed} ครั้ง "
-            "เพื่อเริ่มเทียบรูปแบบส่วนบุคคล"
-        )
+        gaps.append(f"{sleep['label']} อีก {sleep_needed} ครั้ง เพื่อเริ่มเทียบรูปแบบส่วนบุคคล")
     nap = modes["nap_recovery"]
     for target in nap["targets"]:
         needed = max(
@@ -232,10 +221,7 @@ def _learning_gaps(
         )
     questionnaire = _mapping(profile_context.get("questionnaire"))
     if questionnaire.get("consent_status") != "granted":
-        gaps.append(
-            "ข้อมูลไลฟ์สไตล์ยังไม่ถูกนำมาใช้ "
-            "เพราะยังไม่มีความยินยอมเฉพาะส่วน"
-        )
+        gaps.append("ข้อมูลไลฟ์สไตล์ยังไม่ถูกนำมาใช้ เพราะยังไม่มีความยินยอมเฉพาะส่วน")
     return gaps
 
 
@@ -279,9 +265,7 @@ def _learning_readiness(
         )
 
     ready_modes = []
-    if (
-        comparison_ready(modes["sleep"], "overnight_7h")
-    ):
+    if comparison_ready(modes["sleep"], "overnight_7h"):
         ready_modes.append("sleep")
     ready_nap_targets = [
         target["key"]
@@ -300,9 +284,7 @@ def _learning_readiness(
         ),
         "personalization_data_ready": bool(ready_modes),
         "personalization_inference_authorized": False,
-        "inference_authorization_status": (
-            "purpose_specific_consent_unavailable"
-        ),
+        "inference_authorization_status": ("purpose_specific_consent_unavailable"),
         "recommendation_mode": "not_authorized",
         "automatic_device_control": False,
         "sleep_state_direct_control": False,
@@ -327,8 +309,7 @@ def build_user_learning_profile(
     }
     baseline_data = dict(baseline or {})
     modes = {
-        mode: _mode_summary(mode, mode_rows[mode], baseline_data)
-        for mode in MODE_ORDER
+        mode: _mode_summary(mode, mode_rows[mode], baseline_data) for mode in MODE_ORDER
     }
     questionnaire_data = dict(questionnaire or {})
     context = _profile_context(profile, questionnaire_data)
@@ -336,8 +317,7 @@ def build_user_learning_profile(
     durations = [
         value
         for session in rows
-        if (value := _number(session.get("duration_s"))) is not None
-        and value >= 0
+        if (value := _number(session.get("duration_s"))) is not None and value >= 0
     ]
     first_session = rows[-1] if rows else {}
     latest_session = rows[0] if rows else {}

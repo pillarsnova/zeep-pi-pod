@@ -180,8 +180,7 @@ def persisted_restore_matches(
         and persisted_source.get("formula_version")
         == canonical_source.get("formula_version")
         and persisted_scope.get("mode") == group
-        and persisted_baseline.get("target_key")
-        == canonical_baseline.get("target_key")
+        and persisted_baseline.get("target_key") == canonical_baseline.get("target_key")
     )
 
 

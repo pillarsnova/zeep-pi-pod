@@ -22,9 +22,7 @@ def resolve_local_account_key(
     """Resolve an explicit legacy alias to its canonical local Profile key."""
     resolved = canonical_profile_key(requested_key, profiles)
     if resolved is None:
-        raise AccountErasureError(
-            "legacy account alias has multiple identity owners"
-        )
+        raise AccountErasureError("legacy account alias has multiple identity owners")
     return resolved
 
 
@@ -56,8 +54,7 @@ def _flush_or_raise(database: Any, *, phase: str) -> None:
         return
     error = database.health().get("last_error")
     raise AccountErasureError(
-        f"{phase} deletion could not be verified: "
-        f"{error or 'flush timeout'}"
+        f"{phase} deletion could not be verified: {error or 'flush timeout'}"
     )
 
 
@@ -183,8 +180,7 @@ def erase_local_user_account(
     for alias in account_keys:
         baseline_removed = baseline_store.delete_user(alias) or baseline_removed
     revoked_browser_sessions = sum(
-        max(0, int(auth_sessions.revoke_user_account(alias)))
-        for alias in account_keys
+        max(0, int(auth_sessions.revoke_user_account(alias))) for alias in account_keys
     )
     # A fallback ticket authenticates a prior connectivity attempt, while the
     # local account key arrives in a separate request field. Invalidate every
@@ -197,11 +193,7 @@ def erase_local_user_account(
         load_profiles=load_profiles,
         save_profiles=save_profiles,
     )
-    removed = (
-        dict(removed_value)
-        if isinstance(removed_value, Mapping)
-        else profile
-    )
+    removed = dict(removed_value) if isinstance(removed_value, Mapping) else profile
     return {
         "account_key": key,
         "account_aliases": list(account_keys),

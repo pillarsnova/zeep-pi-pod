@@ -144,9 +144,7 @@ class QuestionnaireContext(ContractModel):
 class UserProfileContext(ContractModel):
     age_group: str | None = Field(...)
     gender: Literal["male", "female", "other", "unspecified"]
-    available_fields: list[
-        Literal["age", "gender", "height", "weight", "blood_group"]
-    ]
+    available_fields: list[Literal["age", "gender", "height", "weight", "blood_group"]]
     questionnaire: QuestionnaireContext
     role: Literal["wellness_context_only"]
     medical_diagnosis_input: Literal[False]
@@ -160,9 +158,7 @@ class UserLearningReadiness(ContractModel):
     multi_mode_context_ready: bool
     personalization_data_ready: bool
     personalization_inference_authorized: Literal[False]
-    inference_authorization_status: Literal[
-        "purpose_specific_consent_unavailable"
-    ]
+    inference_authorization_status: Literal["purpose_specific_consent_unavailable"]
     recommendation_mode: Literal["not_authorized"]
     automatic_device_control: Literal[False]
     sleep_state_direct_control: Literal[False]

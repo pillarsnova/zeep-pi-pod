@@ -21,8 +21,7 @@ def baseline_interval_proximity(
     outside_distance = max(lo - value, 0.0, value - hi)
     midpoint_distance = abs(value - midpoint)
     normalized_distance = (
-        outside_distance / half_span
-        + 0.35 * midpoint_distance / half_span
+        outside_distance / half_span + 0.35 * midpoint_distance / half_span
     )
     proximity = math.exp(-1.2 * normalized_distance**2)
     return proximity, {
@@ -51,11 +50,7 @@ def sleep_environment_context(
     deviations: list[float] = []
     for metric in assessment["evaluations"]:
         factors[metric["key"]] = _environment_factor(metric, deviations)
-    disruption = (
-        round(sum(deviations) / len(deviations), 3)
-        if deviations
-        else None
-    )
+    disruption = round(sum(deviations) / len(deviations), 3) if deviations else None
     expected = len(assessment["evaluations"])
     available = len(deviations)
     return {
@@ -70,9 +65,7 @@ def sleep_environment_context(
         "coverage_percent": round(available / expected * 100, 1),
         "disruption_index": disruption,
         "sleep_support_score": (
-            round((1.0 - disruption) * 100)
-            if disruption is not None
-            else None
+            round((1.0 - disruption) * 100) if disruption is not None else None
         ),
         "overall_level": assessment["key"],
         "meets_expected": assessment["meets_expected"],
@@ -136,12 +129,9 @@ def sleep_auxiliary_evidence(
         and float(shift_ratio) >= 0.12
     )
     bed_motion = bool(
-        movement_ratio >= move_wake_ratio
-        or (statuses and statuses[-1] == 2)
+        movement_ratio >= move_wake_ratio or (statuses and statuses[-1] == 2)
     )
-    corroborated = bool(
-        acoustic["disturbance_detected"] and (bcg_shift or bed_motion)
-    )
+    corroborated = bool(acoustic["disturbance_detected"] and (bcg_shift or bed_motion))
     acoustic["bcg_or_motion_corroborated"] = corroborated
     status_counts = _bed_status_counts(frames)
     wake_support = acoustic_wake_support_max if corroborated else 0.0
@@ -193,8 +183,7 @@ def _acoustic_evidence(
         "high_sound_frames": high_frames,
         "dynamic_frames": dynamic_frames,
         "disturbance_detected": bool(
-            coverage >= minimum_coverage
-            and (high_frames > 0 or dynamic_frames > 0)
+            coverage >= minimum_coverage and (high_frames > 0 or dynamic_frames > 0)
         ),
         "standalone_stage_influence": False,
     }

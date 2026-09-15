@@ -39,20 +39,24 @@ def evaluate_safety_faults(
     """Return current faults without treating stale values as live."""
     faults: list[dict[str, str]] = []
     if not thresholds.basis_version or not thresholds.basis_approved:
-        faults.append({
-            "code": "safety_threshold_basis_unapproved",
-            "severity": "blocking",
-            "message": (
-                "เกณฑ์ CO₂/อุณหภูมิยังไม่มี versioned approved basis — "
-                "ใช้ดู telemetry ได้ แต่ห้าม Arm"
-            ),
-        })
+        faults.append(
+            {
+                "code": "safety_threshold_basis_unapproved",
+                "severity": "blocking",
+                "message": (
+                    "เกณฑ์ CO₂/อุณหภูมิยังไม่มี versioned approved basis — "
+                    "ใช้ดู telemetry ได้ แต่ห้าม Arm"
+                ),
+            }
+        )
     if not gpio_ok:
-        faults.append({
-            "code": "gpio_unavailable",
-            "severity": "critical",
-            "message": "GPIO ควบคุมอุปกรณ์ไม่ได้",
-        })
+        faults.append(
+            {
+                "code": "gpio_unavailable",
+                "severity": "critical",
+                "message": "GPIO ควบคุมอุปกรณ์ไม่ได้",
+            }
+        )
     _append_esp32_fault(
         faults,
         now=now,
@@ -66,17 +70,21 @@ def evaluate_safety_faults(
         not isinstance(bcg_last_update, (int, float))
         or now - bcg_last_update > thresholds.bcg_stale_seconds
     ):
-        faults.append({
-            "code": "bcg_stale",
-            "severity": "warning",
-            "message": "BCG ไม่มีข้อมูลใหม่ (telemetry ไม่ใช่ life-safety)",
-        })
+        faults.append(
+            {
+                "code": "bcg_stale",
+                "severity": "warning",
+                "message": "BCG ไม่มีข้อมูลใหม่ (telemetry ไม่ใช่ life-safety)",
+            }
+        )
     if not health.get("wifi_connected"):
-        faults.append({
-            "code": "network_degraded",
-            "severity": "warning",
-            "message": "Wi‑Fi/Network หลุด — Pi ยังควบคุม local ต่อ",
-        })
+        faults.append(
+            {
+                "code": "network_degraded",
+                "severity": "warning",
+                "message": "Wi‑Fi/Network หลุด — Pi ยังควบคุม local ต่อ",
+            }
+        )
     return faults
 
 
@@ -90,19 +98,23 @@ def _append_esp32_fault(
 ) -> None:
     severity = "critical" if occupied else "blocking"
     if not isinstance(last_update, (int, float)):
-        faults.append({
-            "code": "esp32_no_data",
-            "severity": severity,
-            "message": "ยังไม่มีข้อมูลจาก ESP32",
-        })
+        faults.append(
+            {
+                "code": "esp32_no_data",
+                "severity": severity,
+                "message": "ยังไม่มีข้อมูลจาก ESP32",
+            }
+        )
         return
     age = now - last_update
     if age > stale_seconds:
-        faults.append({
-            "code": "esp32_stale",
-            "severity": severity,
-            "message": f"ESP32 ไม่มีข้อมูลใหม่ {age:.1f} วินาที",
-        })
+        faults.append(
+            {
+                "code": "esp32_stale",
+                "severity": severity,
+                "message": f"ESP32 ไม่มีข้อมูลใหม่ {age:.1f} วินาที",
+            }
+        )
 
 
 def _append_co2_fault(
@@ -114,35 +126,40 @@ def _append_co2_fault(
     device = (environment.get("devices") or {}).get("mhz19c") or {}
     if device.get("status") != "live" or not isinstance(co2, (int, float)):
         if thresholds.require_co2:
-            faults.append({
-                "code": "co2_unavailable",
-                "severity": "blocking",
-                "message": (
-                    "CO₂ sensor ไม่มีข้อมูลสดที่ valid — ห้าม Arm "
-                    f"({device.get('status', 'offline')})"
-                ),
-            })
+            faults.append(
+                {
+                    "code": "co2_unavailable",
+                    "severity": "blocking",
+                    "message": (
+                        "CO₂ sensor ไม่มีข้อมูลสดที่ valid — ห้าม Arm "
+                        f"({device.get('status', 'offline')})"
+                    ),
+                }
+            )
         return
     value = float(co2)
     if value >= thresholds.co2_critical_ppm:
-        faults.append({
-            "code": "co2_critical",
-            "severity": "critical",
-            "message": (
-                f"CO₂ {value:.0f} ppm · ภาพรวมระดับวิกฤต "
-                f"(≥{thresholds.co2_critical_ppm:.0f})"
-            ),
-        })
+        faults.append(
+            {
+                "code": "co2_critical",
+                "severity": "critical",
+                "message": (
+                    f"CO₂ {value:.0f} ppm · ภาพรวมระดับวิกฤต "
+                    f"(≥{thresholds.co2_critical_ppm:.0f})"
+                ),
+            }
+        )
     elif value > thresholds.co2_warning_ppm:
         level = "พอใช้" if value <= thresholds.co2_fair_max_ppm else "แย่"
-        faults.append({
-            "code": "co2_warning",
-            "severity": "warning",
-            "message": (
-                f"CO₂ {value:.0f} ppm · ภาพรวมระดับ{level} "
-                "ควรเพิ่มการระบายอากาศ"
-            ),
-        })
+        faults.append(
+            {
+                "code": "co2_warning",
+                "severity": "warning",
+                "message": (
+                    f"CO₂ {value:.0f} ppm · ภาพรวมระดับ{level} ควรเพิ่มการระบายอากาศ"
+                ),
+            }
+        )
 
 
 def _append_temperature_fault(
@@ -160,42 +177,47 @@ def _append_temperature_fault(
         and math.isfinite(float(value))
     )
     if not numeric or status not in {"live", "degraded", "held"}:
-        faults.append({
-            "code": "temperature_unavailable",
-            "severity": "critical" if occupied else "blocking",
-            "message": f"เซนเซอร์อุณหภูมิไม่มีข้อมูลที่ใช้ได้ ({status})",
-        })
+        faults.append(
+            {
+                "code": "temperature_unavailable",
+                "severity": "critical" if occupied else "blocking",
+                "message": f"เซนเซอร์อุณหภูมิไม่มีข้อมูลที่ใช้ได้ ({status})",
+            }
+        )
         return
     temperature = float(value)
     if status != "live":
-        faults.append({
-            "code": "temperature_sensor_degraded",
-            "severity": "warning",
-            "message": f"เซนเซอร์อุณหภูมิใช้ค่าล่าสุดที่ยังสด ({status})",
-        })
+        faults.append(
+            {
+                "code": "temperature_sensor_degraded",
+                "severity": "warning",
+                "message": f"เซนเซอร์อุณหภูมิใช้ค่าล่าสุดที่ยังสด ({status})",
+            }
+        )
     if (
         temperature < thresholds.temperature_critical_min_c
         or temperature > thresholds.temperature_critical_max_c
     ):
-        faults.append({
-            "code": "temperature_critical",
-            "severity": "critical",
-            "message": (
-                f"อุณหภูมิ {temperature:.1f}°C · ภาพรวมระดับวิกฤต "
-                f"(ต้องอยู่ {thresholds.temperature_critical_min_c:g}–"
-                f"{thresholds.temperature_critical_max_c:g}°C)"
-            ),
-        })
+        faults.append(
+            {
+                "code": "temperature_critical",
+                "severity": "critical",
+                "message": (
+                    f"อุณหภูมิ {temperature:.1f}°C · ภาพรวมระดับวิกฤต "
+                    f"(ต้องอยู่ {thresholds.temperature_critical_min_c:g}–"
+                    f"{thresholds.temperature_critical_max_c:g}°C)"
+                ),
+            }
+        )
     elif (
         temperature < thresholds.temperature_warning_min_c
         or temperature > thresholds.temperature_warning_max_c
     ):
         level = "พอใช้" if 16 <= temperature <= 29 else "แย่"
-        faults.append({
-            "code": "temperature_warning",
-            "severity": "warning",
-            "message": (
-                f"อุณหภูมิ {temperature:.1f}°C · "
-                f"ภาพรวมระดับ{level} ควรปรับแอร์"
-            ),
-        })
+        faults.append(
+            {
+                "code": "temperature_warning",
+                "severity": "warning",
+                "message": (f"อุณหภูมิ {temperature:.1f}°C · ภาพรวมระดับ{level} ควรปรับแอร์"),
+            }
+        )

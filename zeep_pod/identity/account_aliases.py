@@ -19,11 +19,7 @@ def _legacy_aliases(profile: Mapping[str, Any]) -> set[str]:
     values = profile.get("legacy_account_keys")
     if not isinstance(values, (list, tuple, set, frozenset)):
         return set()
-    return {
-        alias
-        for value in values
-        if (alias := normalize_account_key(value))
-    }
+    return {alias for value in values if (alias := normalize_account_key(value))}
 
 
 def _claimants(
@@ -133,7 +129,12 @@ def account_boundary_keys(
 ) -> tuple[str, ...]:
     """Return one canonical key plus only ownership-verified aliases."""
     key = normalize_account_key(account_key)
-    return tuple(sorted({
-        key,
-        *verified_legacy_account_keys(key, profile, profiles),
-    } - {""}))
+    return tuple(
+        sorted(
+            {
+                key,
+                *verified_legacy_account_keys(key, profile, profiles),
+            }
+            - {""}
+        )
+    )

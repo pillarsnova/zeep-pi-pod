@@ -62,7 +62,9 @@ def _score_reference(
         (value for item in candidates if (value := _number(item)) is not None),
         None,
     )
-    raw_range = (reference.get("typical_range") if isinstance(reference, Mapping) else None) or context.get("score_typical_range")
+    raw_range = (
+        reference.get("typical_range") if isinstance(reference, Mapping) else None
+    ) or context.get("score_typical_range")
     typical = None
     if isinstance(raw_range, (list, tuple)) and len(raw_range) == 2:
         low, high = _number(raw_range[0]), _number(raw_range[1])
@@ -90,8 +92,7 @@ def _provenance_valid(
     return bool(
         formula == expected_formula
         and formula == str(source_formula_version or "")
-        and record.get("baseline_policy_version")
-        == PERSONAL_BEHAVIOUR_BASELINE_VERSION
+        and record.get("baseline_policy_version") == PERSONAL_BEHAVIOUR_BASELINE_VERSION
         and target_specific
         and target_key == source_target_key
     )
@@ -139,7 +140,11 @@ def build_baseline_summary(
             else "กำลังเตรียมคะแนนของการพักครั้งนี้"
         ),
     }
-    if sessions >= RESTORE_BASELINE_MIN_COMPARISON_SESSIONS and median is not None and score is not None:
+    if (
+        sessions >= RESTORE_BASELINE_MIN_COMPARISON_SESSIONS
+        and median is not None
+        and score is not None
+    ):
         delta = round(score - median, 1)
         if typical and score < typical[0]:
             key, label = "below_typical", "ต่ำกว่าช่วงที่พบเป็นประจำของคุณ"

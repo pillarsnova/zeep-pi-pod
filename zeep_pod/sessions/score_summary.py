@@ -113,9 +113,7 @@ def history_summary(
         raise ValueError("canonical result count must match Session count")
     sleep_scores, recovery_scores, awaiting = _score_buckets(results)
     people = {
-        session.get("account_key")
-        for session in sessions
-        if session.get("account_key")
+        session.get("account_key") for session in sessions if session.get("account_key")
     }
     return _summary_payload(
         people_count=len(people),

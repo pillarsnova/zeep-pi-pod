@@ -179,8 +179,7 @@ def _restore_off_bed_latch(
     latest = max(
         samples,
         key=lambda sample: (
-            float(sample.get("t"))
-            if _finite_number(sample.get("t")) else -math.inf
+            float(sample.get("t")) if _finite_number(sample.get("t")) else -math.inf
         ),
         default=None,
     )

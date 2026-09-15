@@ -143,9 +143,7 @@ def _period_boundaries(
         last.get("window_end") or last.get("timestamp") or report_end
     )
     start = (
-        first_end - timedelta(seconds=intervals[0])
-        if first_end is not None
-        else None
+        first_end - timedelta(seconds=intervals[0]) if first_end is not None else None
     )
     return start, last_end or _parse_datetime(report_end), intervals
 
@@ -158,13 +156,9 @@ def _period_from_group(
     fallback_estimator: str | None,
 ) -> dict[str, Any]:
     first, last = points[0], points[-1]
-    start, end, intervals = _period_boundaries(
-        points, report_end, fallback_interval_s
-    )
+    start, end, intervals = _period_boundaries(points, report_end, fallback_interval_s)
     confidences = [
-        point.get("confidence")
-        for point in points
-        if point.get("confidence")
+        point.get("confidence") for point in points if point.get("confidence")
     ]
     held_rounds = sum(
         bool(_decision_metadata(point, "held_previous_state")) for point in points
@@ -181,9 +175,7 @@ def _period_from_group(
     state = first.get("state")
     is_sleep_stage = state in ZEEP_SLEEP_STATES
     excluded_score = _decision_metadata(first, "excluded_from_score")
-    excluded_baseline = _decision_metadata(
-        first, "excluded_from_personal_baseline"
-    )
+    excluded_baseline = _decision_metadata(first, "excluded_from_personal_baseline")
     return {
         "start_time": start.isoformat() if start else first.get("timestamp"),
         "end_time": end.isoformat() if end else last.get("timestamp"),
@@ -208,9 +200,7 @@ def _period_from_group(
             else not is_sleep_stage
         ),
         "confidence": (
-            Counter(confidences).most_common(1)[0][0]
-            if confidences
-            else None
+            Counter(confidences).most_common(1)[0][0] if confidences else None
         ),
         "probabilities": _mean_probabilities(points),
         "reason": last.get("reason"),
@@ -279,9 +269,7 @@ def history_sleep_timeline(
     points_by_end = {_point_end(point): point for point in stage_points}
     for point in status_points:
         state = str(point.get("state") or "").strip().lower()
-        status = str(
-            _decision_metadata(point, "data_status") or ""
-        ).strip().lower()
+        status = str(_decision_metadata(point, "data_status") or "").strip().lower()
         if state == "off_bed" or status in ZEEP_OFF_BED_DATA_STATUSES:
             points_by_end[_point_end(point)] = point
     decision_points = sorted(points_by_end.values(), key=_point_end)
@@ -357,32 +345,34 @@ def fill_history_sleep_timeline_continuity(
         clipped_start = max(start, period_start)
         clipped_end = min(end, period_end)
         if clipped_start > cursor:
-            completed.append(_continuity_period(
-                held_state,
-                cursor,
-                clipped_start,
-                fallback_estimator=fallback_estimator,
-                initial=not completed,
-            ))
+            completed.append(
+                _continuity_period(
+                    held_state,
+                    cursor,
+                    clipped_start,
+                    fallback_estimator=fallback_estimator,
+                    initial=not completed,
+                )
+            )
         visible_start = max(cursor, clipped_start)
         if clipped_end > visible_start:
             item = dict(source)
             item["start_time"] = visible_start.isoformat()
             item["end_time"] = clipped_end.isoformat()
-            item["duration_s"] = round(
-                (clipped_end - visible_start).total_seconds(), 3
-            )
+            item["duration_s"] = round((clipped_end - visible_start).total_seconds(), 3)
             completed.append(item)
             cursor = clipped_end
             held_state = state
     if cursor < end:
-        completed.append(_continuity_period(
-            held_state,
-            cursor,
-            end,
-            fallback_estimator=fallback_estimator,
-            initial=not completed,
-        ))
+        completed.append(
+            _continuity_period(
+                held_state,
+                cursor,
+                end,
+                fallback_estimator=fallback_estimator,
+                initial=not completed,
+            )
+        )
     return completed
 
 
@@ -403,9 +393,7 @@ def _continuity_period(
             "round_count": 0,
             "sample_interval_s": None,
             "state": "off_bed",
-            "label": (
-                "OFF · ไม่มีผู้ใช้งานบนเตียง"
-            ),
+            "label": ("OFF · ไม่มีผู้ใช้งานบนเตียง"),
             "sleep_stage": False,
             "excluded_from_stage_statistics": True,
             "excluded_from_score": True,
@@ -414,9 +402,7 @@ def _continuity_period(
             "confidence": "operational",
             "probabilities": {},
             "metrics": {},
-            "reason": (
-                "คง OFF BED จนมีหลักฐานยืนยันว่ากลับขึ้นเตียง"
-            ),
+            "reason": ("คง OFF BED จนมีหลักฐานยืนยันว่ากลับขึ้นเตียง"),
             "data_status": "off_bed_latched",
             "decision_kind": "occupancy_hold",
             "continuity_synthesized": True,
@@ -447,16 +433,11 @@ def _continuity_period(
         "metrics": {},
         "reason": (
             "เริ่ม Recording ที่ W ก่อนมีหลักฐานรอบแรก"
-            if initial else
-            "หลักฐานใหม่ยังไม่ยืนยัน · "
-            "คง State ก่อนหน้าเพื่อให้เวลาต่อเนื่อง"
+            if initial
+            else "หลักฐานใหม่ยังไม่ยืนยัน · คง State ก่อนหน้าเพื่อให้เวลาต่อเนื่อง"
         ),
-        "data_status": (
-            "initial_awake_anchor" if initial else "continuity_hold"
-        ),
-        "decision_kind": (
-            "initial_awake_anchor" if initial else "continuity_hold"
-        ),
+        "data_status": ("initial_awake_anchor" if initial else "continuity_hold"),
+        "decision_kind": ("initial_awake_anchor" if initial else "continuity_hold"),
         "held_previous_state": not initial,
         "continuity_synthesized": True,
         "estimator_version": fallback_estimator,

@@ -30,6 +30,8 @@ SCORE_FORMULA_BY_GROUP = {
     "sleep": SLEEP_SCORE_FORMULA_VERSION,
     "nap_recovery": RECOVERY_SCORE_FORMULA_VERSION,
 }
+
+
 def mode_groups(value: Any) -> set[str]:
     """Return every canonical group asserted by one mode value."""
     if isinstance(value, Mapping):
@@ -152,9 +154,7 @@ def assess_score_identity(
     elif not formula:
         status = "score_formula_untyped"
         reason = "ผลคะแนนไม่มีรุ่นสูตรที่ตรวจสอบได้"
-    elif formula not in {
-        str(value).strip().casefold() for value in approved_formulas
-    }:
+    elif formula not in {str(value).strip().casefold() for value in approved_formulas}:
         status = "score_formula_mismatch"
         reason = "รุ่นสูตรคะแนนไม่อยู่ในรายการที่อนุมัติสำหรับ Session นี้"
     else:

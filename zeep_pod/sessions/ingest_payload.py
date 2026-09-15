@@ -51,10 +51,7 @@ def sample_off_bed(sample: dict[str, Any]) -> bool:
     """Recognise operational occupancy without creating Sleep Stage W."""
     data_status = str(sample.get("sleep_data_status") or "").lower()
     bed = str(sample.get("bed") or "").strip().lower()
-    return bool(
-        data_status in ZEEP_OFF_BED_DATA_STATUSES
-        or bed in ZEEP_OFF_BED_LABELS
-    )
+    return bool(data_status in ZEEP_OFF_BED_DATA_STATUSES or bed in ZEEP_OFF_BED_LABELS)
 
 
 def build_stage_runs(
@@ -92,9 +89,7 @@ def build_stage_runs(
         }
         for state, count in runs
     ]
-    hypnogram = [
-        {"s": STAGE_INDEX[state], "n": count} for state, count in runs
-    ]
+    hypnogram = [{"s": STAGE_INDEX[state], "n": count} for state, count in runs]
     return segments, hypnogram
 
 

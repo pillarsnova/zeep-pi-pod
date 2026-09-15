@@ -133,9 +133,7 @@ class AiLearningReadiness(ContractModel):
     multi_mode_context_ready: bool
     personalization_data_ready: bool
     personalization_inference_authorized: Literal[False]
-    inference_authorization_status: Literal[
-        "purpose_specific_consent_unavailable"
-    ]
+    inference_authorization_status: Literal["purpose_specific_consent_unavailable"]
     data_gap_codes: list[DataGapCode]
 
 

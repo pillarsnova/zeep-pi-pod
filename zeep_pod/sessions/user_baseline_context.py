@@ -68,9 +68,7 @@ def baseline_context(
         "target_key": target_key or source.get("target_key"),
         "baseline_policy_version": baseline.get("behaviour_policy_version"),
         "score_formula_version": score_reference.get("formula_version"),
-        "score_reference_status": str(
-            score_reference.get("status") or "no_data"
-        ),
+        "score_reference_status": str(score_reference.get("status") or "no_data"),
         "score_sessions_used": max(
             0,
             int(score_reference.get("sessions_used") or 0),

@@ -108,8 +108,7 @@ def _compatible_versioned_quality(
         return quality
     if (
         quality.get("version") == PRE_WELLNESS_BALANCE_SLEEP_QUALITY_VERSION
-        and report.get("version")
-        == PRE_WELLNESS_BALANCE_SESSION_REPORT_VERSION
+        and report.get("version") == PRE_WELLNESS_BALANCE_SESSION_REPORT_VERSION
     ):
         return {
             **quality,
@@ -117,8 +116,7 @@ def _compatible_versioned_quality(
         }
     if (
         quality.get("version") == PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION
-        and report.get("version")
-        == PRE_RECOVERY_TIMING_SESSION_REPORT_VERSION
+        and report.get("version") == PRE_RECOVERY_TIMING_SESSION_REPORT_VERSION
     ):
         return {
             **quality,

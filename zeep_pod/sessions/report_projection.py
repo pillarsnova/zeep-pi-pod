@@ -52,9 +52,10 @@ def weighted_sleep_state_counts(
         state = sample.get("sleep")
         if state not in SLEEP_STATES:
             continue
-        weight = sample_interval_seconds(
-            sample.get("sample_interval_s"), interval
-        ) / interval
+        weight = (
+            sample_interval_seconds(sample.get("sample_interval_s"), interval)
+            / interval
+        )
         display[str(state)] = display.get(str(state), 0.0) + weight
         if sample.get("sleep_score_eligible") is not False:
             scored[str(state)] = scored.get(str(state), 0.0) + weight
@@ -73,9 +74,10 @@ def weighted_bed_status_counts(
         status = sample.get("bed")
         if not status:
             continue
-        weight = sample_interval_seconds(
-            sample.get("sample_interval_s"), interval
-        ) / interval
+        weight = (
+            sample_interval_seconds(sample.get("sample_interval_s"), interval)
+            / interval
+        )
         counts[str(status)] = counts.get(str(status), 0.0) + weight
     return counts
 
@@ -121,9 +123,7 @@ def project_report_samples(
     stage_events: Sequence[Mapping[str, Any]],
     status_events: Sequence[Mapping[str, Any]],
     heart_rate_range: tuple[float, float] = DEFAULT_HEART_RATE_RANGE,
-    respiration_rate_range: tuple[float, float] = (
-        DEFAULT_RESPIRATION_RATE_RANGE
-    ),
+    respiration_rate_range: tuple[float, float] = (DEFAULT_RESPIRATION_RATE_RANGE),
 ) -> dict[str, Any]:
     """Materialise, label and normalise one complete report stream."""
     explicit_boundaries = (
@@ -151,12 +151,14 @@ def project_report_samples(
         heart_rate_range=heart_rate_range,
         respiration_rate_range=respiration_rate_range,
     )
-    grid_summary.update(sleep_attribution_accounting(
-        projected,
-        fallback_interval_s=sensor_interval_s,
-    ))
-    report_samples, report_interval_s, cadence_summary = (
-        normalise_samples_for_report(projected, sensor_interval_s)
+    grid_summary.update(
+        sleep_attribution_accounting(
+            projected,
+            fallback_interval_s=sensor_interval_s,
+        )
+    )
+    report_samples, report_interval_s, cadence_summary = normalise_samples_for_report(
+        projected, sensor_interval_s
     )
     display_counts, score_counts = weighted_sleep_state_counts(
         report_samples,

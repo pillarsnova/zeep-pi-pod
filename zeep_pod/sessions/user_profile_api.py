@@ -143,8 +143,6 @@ def add_user_profile_routes(
     ):
         response.headers["Cache-Control"] = PRIVATE_NO_STORE
         return response_envelope(
-            validated_user_ai_context(
-                profile_for(selected_account, principal)
-            ),
+            validated_user_ai_context(profile_for(selected_account, principal)),
             kind="user_ai_context",
         )

@@ -80,9 +80,7 @@ def apply_sleep_decisions_to_samples(
     status_events: Sequence[Mapping[str, Any]] = (),
     fallback_interval_s: float,
     heart_rate_range: tuple[float, float] = DEFAULT_HEART_RATE_RANGE,
-    respiration_rate_range: tuple[float, float] = (
-        DEFAULT_RESPIRATION_RATE_RANGE
-    ),
+    respiration_rate_range: tuple[float, float] = (DEFAULT_RESPIRATION_RATE_RANGE),
 ) -> None:
     """Project right-closed 30-second decisions onto 10-second samples.
 
@@ -151,21 +149,15 @@ def _stage_updates(
     confirmation = value.get("confirmation") or {}
     metrics = value.get("metrics") or {}
     auxiliary = (
-        metrics.get("auxiliary_evidence")
-        if isinstance(metrics, Mapping)
-        else {}
+        metrics.get("auxiliary_evidence") if isinstance(metrics, Mapping) else {}
     ) or {}
     acoustic = (
-        auxiliary.get("acoustic")
-        if isinstance(auxiliary, Mapping)
-        else {}
+        auxiliary.get("acoustic") if isinstance(auxiliary, Mapping) else {}
     ) or {}
     held = bool(value.get("held_previous_state"))
     provisional = bool(value.get("provisional"))
     baseline_excluded = bool(
-        held
-        or provisional
-        or value.get("excluded_from_personal_baseline", False)
+        held or provisional or value.get("excluded_from_personal_baseline", False)
     )
     return {
         "sleep": stage,
@@ -231,9 +223,11 @@ def _apply_status_events(
         if interval is None:
             continue
         start_epoch, end_epoch = interval
-        status = str(
-            value.get("data_status") or value.get("status") or "no_data"
-        ).strip().lower()
+        status = (
+            str(value.get("data_status") or value.get("status") or "no_data")
+            .strip()
+            .lower()
+        )
         if not _status_ends_occupancy(status, value):
             continue
         if status not in ZEEP_OFF_BED_DATA_STATUSES:
@@ -273,13 +267,15 @@ def _fill_unattributed_samples(
             if confirmed_off_bed and stage in SLEEP_STATES:
                 cursor.off_bed_latched = True
                 cursor.occupied_return_provenance = None
-                sample.update(_operational_updates(
-                    "empty_bed",
-                    provenance={
-                        **cursor.previous_versions,
-                        **_sample_provenance(sample),
-                    },
-                ))
+                sample.update(
+                    _operational_updates(
+                        "empty_bed",
+                        provenance={
+                            **cursor.previous_versions,
+                            **_sample_provenance(sample),
+                        },
+                    )
+                )
             elif cursor.off_bed_latched and stage in SLEEP_STATES:
                 # This stage exists only because _apply_stage_events projected
                 # a durable decision; cached/raw sample stages were reset. Live
@@ -338,18 +334,12 @@ def _fallback_updates(
     if sample_confirms_off_bed(sample):
         cursor.off_bed_latched = True
         cursor.occupied_return_provenance = None
-        return _operational_updates(
-            "empty_bed", provenance=cursor.previous_versions
-        )
+        return _operational_updates("empty_bed", provenance=cursor.previous_versions)
     if cursor.off_bed_latched and not return_confirmed:
-        return _operational_updates(
-            "empty_bed", provenance=cursor.previous_versions
-        )
+        return _operational_updates("empty_bed", provenance=cursor.previous_versions)
     if return_confirmed:
         cursor.off_bed_latched = False
-        cursor.occupied_return_provenance = (
-            "fresh_same_packet_hr_rr_bcg"
-        )
+        cursor.occupied_return_provenance = "fresh_same_packet_hr_rr_bcg"
     return _carry_updates(cursor)
 
 
@@ -366,9 +356,7 @@ def _carry_updates(cursor: _ProjectionCursor) -> dict[str, Any]:
         "sleep_evidence_candidate": None,
         "sleep_confirmation": confirmation,
         "sleep_provisional": False,
-        "sleep_held_previous_state": bool(
-            confirmation["held_previous_state"]
-        ),
+        "sleep_held_previous_state": bool(confirmation["held_previous_state"]),
         "sleep_data_status": str(confirmation["data_status"]),
         "sleep_score_attribution_state": stage,
         "sleep_challenger_counted_as_new_state": False,
@@ -378,9 +366,7 @@ def _carry_updates(cursor: _ProjectionCursor) -> dict[str, Any]:
         "sleep_confidence": "low",
         "sleep_probability": None,
         "sleep_decision_kind": confirmation["decision_kind"],
-        "sleep_occupancy_provenance": (
-            cursor.occupied_return_provenance
-        ),
+        "sleep_occupancy_provenance": (cursor.occupied_return_provenance),
         "acoustic_corroborated": False,
         **cursor.previous_versions,
     }

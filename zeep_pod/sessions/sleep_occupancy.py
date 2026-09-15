@@ -17,29 +17,25 @@ SLEEP_STATES = frozenset({"wake", "n1", "n2", "n3", "rem"})
 DEFAULT_HEART_RATE_RANGE = (25.0, 220.0)
 DEFAULT_RESPIRATION_RATE_RANGE = (2.0, 60.0)
 
-CONFIRMED_RETURN_PROVENANCE = frozenset({
-    "durable_stage_event",
-    "fresh_same_packet_hr_rr_bcg",
-})
+CONFIRMED_RETURN_PROVENANCE = frozenset(
+    {
+        "durable_stage_event",
+        "fresh_same_packet_hr_rr_bcg",
+    }
+)
 
 
 def confirmed_bed_exit_evidence(value: Mapping[str, Any]) -> bool:
     """Accept an explicit confirmed Bed Exit object, never a raw label."""
     evidence = value.get("bed_exit_evidence")
-    return bool(
-        isinstance(evidence, Mapping)
-        and evidence.get("confirmed") is True
-    )
+    return bool(isinstance(evidence, Mapping) and evidence.get("confirmed") is True)
 
 
 def sample_confirms_off_bed(sample: Mapping[str, Any]) -> bool:
     """Recognise only canonical status or confirmed Bed Exit evidence."""
-    data_status = str(
-        sample.get("sleep_data_status") or ""
-    ).strip().lower()
+    data_status = str(sample.get("sleep_data_status") or "").strip().lower()
     return bool(
-        data_status in ZEEP_OFF_BED_DATA_STATUSES
-        or confirmed_bed_exit_evidence(sample)
+        data_status in ZEEP_OFF_BED_DATA_STATUSES or confirmed_bed_exit_evidence(sample)
     )
 
 
@@ -51,8 +47,7 @@ def _is_on_bed(sample: Mapping[str, Any]) -> bool:
     if status_code is None:
         status_code = sample.get("status_code")
     return bool(
-        str(sample.get("bed") or "").strip().lower()
-        in ZEEP_ON_BED_LABELS
+        str(sample.get("bed") or "").strip().lower() in ZEEP_ON_BED_LABELS
         or status_code in ZEEP_ON_BED_STATUS_CODES
     )
 
@@ -88,6 +83,5 @@ def sample_has_confirmed_occupied_return(
     """Recognise return proof carried from an authoritative source."""
     return bool(
         sample.get("sleep") in SLEEP_STATES
-        and sample.get("sleep_occupancy_provenance")
-        in CONFIRMED_RETURN_PROVENANCE
+        and sample.get("sleep_occupancy_provenance") in CONFIRMED_RETURN_PROVENANCE
     )

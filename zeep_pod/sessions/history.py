@@ -89,9 +89,7 @@ def session_availability_by_account(
         lifetime = int(row.get("lifetime_sessions") or 0)
         available = int(row.get("available_sessions") or 0)
         without_data = int(row.get("sessions_without_data") or 0)
-        current_without_data = int(
-            row.get("current_sessions_without_data") or 0
-        )
+        current_without_data = int(row.get("current_sessions_without_data") or 0)
         result[key] = {
             "available_sessions": available,
             "lifetime_sessions": lifetime,
@@ -179,8 +177,7 @@ def _combined_session_availability(
         "current_sessions_without_data",
     )
     merged = {
-        field: sum(int(row.get(field) or 0) for row in rows)
-        for field in count_fields
+        field: sum(int(row.get(field) or 0) for row in rows) for field in count_fields
     }
     merged["archived_sessions"] = max(
         0,
@@ -190,8 +187,7 @@ def _combined_session_availability(
         merged["lifetime_sessions"] + merged["sessions_without_data"]
     )
     merged["available_usage_sessions"] = (
-        merged["available_sessions"]
-        + merged["current_sessions_without_data"]
+        merged["available_sessions"] + merged["current_sessions_without_data"]
     )
     for field in (
         "last_available_session_utc",

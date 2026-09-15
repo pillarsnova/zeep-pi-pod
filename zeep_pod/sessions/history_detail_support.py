@@ -37,11 +37,16 @@ def history_samples_from_rows(
         row_keys = set(row.keys())
         sample = {
             "t": datetime.fromisoformat(str(row["timestamp"])).timestamp(),
-            "temp": row["temperature"], "hum": row["humidity"],
-            "co2": row["co2"], "pm2_5": row["pm2_5"],
-            "voc": row["voc_index"], "lux": row["lux"],
-            "dba": row["sound"], "hr": row["heart_rate"],
-            "rr": row["respiration_rate"], "bed": bed_label,
+            "temp": row["temperature"],
+            "hum": row["humidity"],
+            "co2": row["co2"],
+            "pm2_5": row["pm2_5"],
+            "voc": row["voc_index"],
+            "lux": row["lux"],
+            "dba": row["sound"],
+            "hr": row["heart_rate"],
+            "rr": row["respiration_rate"],
+            "bed": bed_label,
             "respiratory_evidence_valid": (
                 row["respiratory_evidence_valid"] == 1
                 if "respiratory_evidence_valid" in row_keys
@@ -115,7 +120,10 @@ def parse_history_sleep_events(
         value = _json_event_value(event)
         if event_type == "sleep_stage":
             point = _stage_point(
-                event, value, annotations, sample_interval_s,
+                event,
+                value,
+                annotations,
+                sample_interval_s,
                 apply_annotations,
             )
             if point is not None:
@@ -131,9 +139,7 @@ def parse_history_sleep_events(
                 terminal = value
             continue
         kind = event_type.removeprefix("legacy_counter:")
-        amount = int(event["value"]) if event_type.startswith(
-            "legacy_counter:"
-        ) else 1
+        amount = int(event["value"]) if event_type.startswith("legacy_counter:") else 1
         counters[kind] = counters.get(kind, 0) + amount
     return {
         "stage_points": stages,
@@ -187,24 +193,25 @@ def _status_point(
     interval = sample_interval_seconds(
         value.get("sample_interval_s"), fallback_interval_s
     )
-    value.update({
-        "sample_interval_s": interval,
-        "data_status": value.get("data_status") or (
-            "off_bed" if state == "off_bed" else None
-        ),
-        "window_start": (
-            value.get("attribution_start") or value.get("window_start")
-        ),
-        "window_end": (
-            value.get("attribution_end")
-            or value.get("window_end")
-            or event["timestamp"]
-        ),
-        "score_eligible": False,
-        "excluded_from_score": True,
-        "excluded_from_personal_baseline": True,
-        "sleep_stage": False,
-    })
+    value.update(
+        {
+            "sample_interval_s": interval,
+            "data_status": value.get("data_status")
+            or ("off_bed" if state == "off_bed" else None),
+            "window_start": (
+                value.get("attribution_start") or value.get("window_start")
+            ),
+            "window_end": (
+                value.get("attribution_end")
+                or value.get("window_end")
+                or event["timestamp"]
+            ),
+            "score_eligible": False,
+            "excluded_from_score": True,
+            "excluded_from_personal_baseline": True,
+            "sleep_stage": False,
+        }
+    )
     return {"timestamp": event["timestamp"], **value}
 
 
@@ -231,10 +238,13 @@ def history_continuity_accounting(
 ) -> dict[str, Any]:
     """Compare visible State/OFF BED periods with the classification wall time."""
     try:
-        expected = max(0.0, (
-            datetime.fromisoformat(str(classification_end))
-            - datetime.fromisoformat(str(session_start))
-        ).total_seconds())
+        expected = max(
+            0.0,
+            (
+                datetime.fromisoformat(str(classification_end))
+                - datetime.fromisoformat(str(session_start))
+            ).total_seconds(),
+        )
     except (TypeError, ValueError):
         expected = 0.0
     accounted = sum(
@@ -281,8 +291,7 @@ def assemble_history_sleep_timeline(
         sample_interval_s=sample_interval_s,
     )
     classification_end = (
-        terminal_occupancy[0].get("start_time")
-        if terminal_occupancy else report_end
+        terminal_occupancy[0].get("start_time") if terminal_occupancy else report_end
     )
     if terminal_occupancy:
         periods = clip_history_sleep_timeline(
@@ -340,27 +349,27 @@ def project_history_report_samples(
 ) -> dict[str, Any]:
     """Build the same complete projected stream used by live finalization."""
     stages = [
-        {"timestamp": point.get("timestamp"), "value": point}
-        for point in stage_points
+        {"timestamp": point.get("timestamp"), "value": point} for point in stage_points
     ]
     statuses = [
-        {"timestamp": point.get("timestamp"), "value": point}
-        for point in status_points
+        {"timestamp": point.get("timestamp"), "value": point} for point in status_points
     ]
     if terminal_occupancy:
         occupancy = terminal_occupancy[0]
-        statuses.append({
-            "timestamp": occupancy.get("end_time") or end_at,
-            "value": {
-                "state": "off_bed",
-                "data_status": "confirmed_off_bed",
-                "attribution_start": occupancy.get("start_time"),
-                "attribution_end": occupancy.get("end_time") or end_at,
-                "score_eligible": False,
-                "excluded_from_score": True,
-                "excluded_from_personal_baseline": True,
-            },
-        })
+        statuses.append(
+            {
+                "timestamp": occupancy.get("end_time") or end_at,
+                "value": {
+                    "state": "off_bed",
+                    "data_status": "confirmed_off_bed",
+                    "attribution_start": occupancy.get("start_time"),
+                    "attribution_end": occupancy.get("end_time") or end_at,
+                    "score_eligible": False,
+                    "excluded_from_score": True,
+                    "excluded_from_personal_baseline": True,
+                },
+            }
+        )
     boundaries = [
         period.get(boundary)
         for period in [*timeline_periods, *terminal_occupancy]

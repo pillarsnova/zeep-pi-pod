@@ -36,11 +36,7 @@ def _assess_sleep_target(
     target = resolve_rest_target("sleep")
     canonical_seconds = _number(target.get("seconds"))
     session_seconds = _number(session_target_seconds)
-    quality = (
-        dict(quality_target)
-        if isinstance(quality_target, Mapping)
-        else {}
-    )
+    quality = dict(quality_target) if isinstance(quality_target, Mapping) else {}
     quality_seconds = _number(quality.get("seconds"))
     session_valid = bool(
         session_seconds is None

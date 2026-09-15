@@ -70,14 +70,27 @@ def _source_score(
     is_sleep = group == "sleep"
     is_recovery = group == "nap_recovery"
     source_score = {
-        "type": ("sleep_score" if is_sleep else "recovery_score" if is_recovery else "unresolved_score"),
-        "title": ("Sleep Score" if is_sleep else "Recovery Score" if is_recovery else "Session Score"),
+        "type": (
+            "sleep_score"
+            if is_sleep
+            else "recovery_score"
+            if is_recovery
+            else "unresolved_score"
+        ),
+        "title": (
+            "Sleep Score"
+            if is_sleep
+            else "Recovery Score"
+            if is_recovery
+            else "Session Score"
+        ),
         "value": int(round(score)) if score is not None else None,
         "available": bool(score is not None and group != "unknown"),
         "formula_version": (
-            quality.get("formula_version")
-            or identity.get("expected_formula_version")
-        ) if identity["valid"] else None,
+            quality.get("formula_version") or identity.get("expected_formula_version")
+        )
+        if identity["valid"]
+        else None,
         "copied_without_recalculation": True,
     }
     return source_score, identity
@@ -107,8 +120,7 @@ def _status(
             "min_score": None,
             "max_score": None,
             "meaning": (
-                "พบค่าเกินกรอบความปลอดภัยระหว่าง Session "
-                "คะแนนยังแสดงได้แต่ไม่ใช้แทนการตรวจสอบ"
+                "พบค่าเกินกรอบความปลอดภัยระหว่าง Session คะแนนยังแสดงได้แต่ไม่ใช้แทนการตรวจสอบ"
             ),
             "version": RESTORE_ACTION_BANDS_VERSION,
         }
@@ -118,7 +130,11 @@ def _status(
             "label": "กำลังเตรียมผลสรุป",
             "min_score": None,
             "max_score": None,
-            "meaning": ("เลือกรูปแบบการพักเพื่อให้ ZEEP แสดงผลได้เหมาะสม" if group == "unknown" else "ZEEP กำลังรวบรวมข้อมูลสำหรับสรุปผลการพักครั้งนี้"),
+            "meaning": (
+                "เลือกรูปแบบการพักเพื่อให้ ZEEP แสดงผลได้เหมาะสม"
+                if group == "unknown"
+                else "ZEEP กำลังรวบรวมข้อมูลสำหรับสรุปผลการพักครั้งนี้"
+            ),
             "version": RESTORE_ACTION_BANDS_VERSION,
         }
     bands = ACTION_BANDS[group]
@@ -237,7 +253,11 @@ def _environment_drivers(
             "decision": decision,
             "action": action,
             "affects_source_score": affects_source_score,
-            "relationship": ("recovery_score_component_and_session_context" if group == "nap_recovery" and affects_source_score else "session_context_only"),
+            "relationship": (
+                "recovery_score_component_and_session_context"
+                if group == "nap_recovery" and affects_source_score
+                else "session_context_only"
+            ),
             "causal_claim": False,
         }
         if safety_review:
@@ -261,7 +281,13 @@ def _environment_drivers(
         "unavailable": 3,
         "fair": 4,
     }
-    attention.sort(key=lambda item: (0 if item.get("priority") == "safety_review" else priority.get(str(item.get("severity")), 5)))
+    attention.sort(
+        key=lambda item: (
+            0
+            if item.get("priority") == "safety_review"
+            else priority.get(str(item.get("severity")), 5)
+        )
+    )
     return positive, attention
 
 
@@ -271,13 +297,17 @@ def _merge_drivers(
     group: str,
 ) -> dict[str, Any]:
     component_positive, component_attention = _component_drivers(quality, group)
-    environment_positive, environment_attention = _environment_drivers(list(findings), group)
+    environment_positive, environment_attention = _environment_drivers(
+        list(findings), group
+    )
 
     # A concrete environmental issue is more useful than repeating the generic
     # Environment component. Keep the point-bearing generic component only when
     # there is no metric-level issue to show.
     if any(item.get("affects_source_score") for item in environment_attention):
-        component_attention = [item for item in component_attention if item["key"] != "environment_support"]
+        component_attention = [
+            item for item in component_attention if item["key"] != "environment_support"
+        ]
     attention = (environment_attention + component_attention)[:2]
     positive = (component_positive + environment_positive)[:2]
     return {
@@ -336,11 +366,16 @@ def _recommendation(
     attention = list(drivers.get("attention") or [])
     selected = attention[0] if attention else None
     if selected and selected.get("priority") == "safety_review":
-        message = str(selected.get("action") or "ตรวจเหตุการณ์ Safety และการตอบสนองของระบบก่อนใช้งานครั้งถัดไป")
+        message = str(
+            selected.get("action")
+            or "ตรวจเหตุการณ์ Safety และการตอบสนองของระบบก่อนใช้งานครั้งถัดไป"
+        )
     elif score is None:
         message = "บอกความรู้สึกหลังพักได้ตามจริง และลองใช้งานตามปกติอีกครั้ง"
     elif selected and selected.get("category") == "environment":
-        message = str(selected.get("action") or "ปรับปัจจัยแวดล้อมที่ระบบระบุ แล้วเปรียบเทียบ Session ถัดไป")
+        message = str(
+            selected.get("action") or "ปรับปัจจัยแวดล้อมที่ระบบระบุ แล้วเปรียบเทียบ Session ถัดไป"
+        )
     elif selected:
         message = RECOMMENDATIONS.get(group, {}).get(
             str(selected.get("key")),
@@ -399,14 +434,24 @@ def build_restore_summary(
         "status": _status(
             group,
             score,
-            safety_review=bool(
-                score_quality.get("safety_review_required")
-            ),
+            safety_review=bool(score_quality.get("safety_review_required")),
         ),
         "session_scope": {
             "mode": group,
-            "label": ("Overnight Recovery" if is_sleep else "Nap & Refresh" if is_recovery else "ผลการพักครั้งนี้"),
-            "question": ("การนอนครั้งนี้สนับสนุนการฟื้นตัวได้ดีเพียงใด" if is_sleep else "ช่วงพักนี้ร่างกายสงบและพักได้ตามเป้าหมายเพียงใด" if is_recovery else "เลือกรูปแบบการพักเพื่อดูผลสรุปที่เหมาะสม"),
+            "label": (
+                "Overnight Recovery"
+                if is_sleep
+                else "Nap & Refresh"
+                if is_recovery
+                else "ผลการพักครั้งนี้"
+            ),
+            "question": (
+                "การนอนครั้งนี้สนับสนุนการฟื้นตัวได้ดีเพียงใด"
+                if is_sleep
+                else "ช่วงพักนี้ร่างกายสงบและพักได้ตามเป้าหมายเพียงใด"
+                if is_recovery
+                else "เลือกรูปแบบการพักเพื่อดูผลสรุปที่เหมาะสม"
+            ),
             "whole_day_readiness": False,
             "clinical_readiness": False,
             "updates_during_day": False,

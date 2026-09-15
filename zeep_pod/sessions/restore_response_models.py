@@ -124,9 +124,7 @@ class SafetyReviewRestoreStatus(ContractModel):
 
 
 RestoreStatus = (
-    AvailableRestoreStatus
-    | SafetyReviewRestoreStatus
-    | UnavailableRestoreStatus
+    AvailableRestoreStatus | SafetyReviewRestoreStatus | UnavailableRestoreStatus
 )
 
 
@@ -476,10 +474,7 @@ class RestoreSummaryPayload(ContractModel):
         }[mode]
         if values["source_score"].available and status_key not in valid_statuses:
             raise ValueError("Restore status must match the Session mode")
-        if (
-            values["source_score"].available
-            and status_key != "safety_review"
-        ):
+        if values["source_score"].available and status_key != "safety_review":
             expected_band = _STATUS_BANDS[status_key]
             actual_band = (values["status"].min_score, values["status"].max_score)
             if actual_band != expected_band:

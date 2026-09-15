@@ -92,16 +92,12 @@ def _rest_profile(detail: Mapping[str, Any]) -> dict[str, Any] | None:
         {
             "key": "estimated_sleep",
             "label": "ช่วงหลับที่ประเมินได้",
-            "duration_s": (
-                durations["n2"] + durations["n3"] + durations["rem"]
-            ),
+            "duration_s": (durations["n2"] + durations["n3"] + durations["rem"]),
         },
     ]
     total = sum(item["duration_s"] for item in items)
     for item in items:
-        item["percentage"] = (
-            100.0 * item["duration_s"] / total if total > 0 else None
-        )
+        item["percentage"] = 100.0 * item["duration_s"] / total if total > 0 else None
     return {
         "available": total > 0,
         "basis": "display_attributed_time",
@@ -120,9 +116,7 @@ def _drivers(summary: Mapping[str, Any], direction: str) -> list[dict[str, Any]]
         items.append(
             {
                 "key": str(driver["key"]),
-                "label": str(
-                    driver.get("label") or "ข้อมูลประกอบ"
-                ),
+                "label": str(driver.get("label") or "ข้อมูลประกอบ"),
                 "message": str(driver["message"]),
                 "direction": direction,
             }
@@ -142,17 +136,12 @@ def _baseline(summary: Mapping[str, Any]) -> dict[str, Any]:
             or comparison.get("reason")
             or "กำลังเรียนรู้รูปแบบการพักของคุณ"
         ),
-        "maturity_label": str(
-            maturity.get("label")
-            or "กำลังเรียนรู้รูปแบบของคุณ"
-        ),
+        "maturity_label": str(maturity.get("label") or "กำลังเรียนรู้รูปแบบของคุณ"),
         "sessions_used": int(maturity.get("sessions_used") or 0),
         "delta_points": (
             _number(comparison.get("delta_points")) if available else None
         ),
-        "typical_range": (
-            comparison.get("typical_range") if available else None
-        ),
+        "typical_range": (comparison.get("typical_range") if available else None),
     }
 
 
@@ -175,10 +164,7 @@ def _trend(summary: Mapping[str, Any]) -> dict[str, Any]:
         "label": (
             "ดูแนวโน้มจากการพักรูปแบบเดียวกัน"
             if windows
-            else str(
-                trend.get("reason")
-                or "ต้องมีข้อมูลเพิ่มเพื่อดูแนวโน้ม"
-            )
+            else str(trend.get("reason") or "ต้องมีข้อมูลเพิ่มเพื่อดูแนวโน้ม")
         ),
         "windows": windows,
     }
@@ -191,11 +177,7 @@ def _subjective(summary: Mapping[str, Any]) -> dict[str, Any]:
         "status": "measured" if measured else "not_measured",
         "label": str(
             outcome.get("label")
-            or (
-                "บันทึกความรู้สึกก่อน–หลังการพักแล้ว"
-                if measured
-                else "ยังไม่ได้บันทึกความรู้สึกหลังพัก"
-            )
+            or ("บันทึกความรู้สึกก่อน–หลังการพักแล้ว" if measured else "ยังไม่ได้บันทึกความรู้สึกหลังพัก")
         ),
         "freshness_delta": (
             _number_in_range(outcome.get("freshness_delta"), -10, 10)
@@ -238,17 +220,13 @@ def _environment(detail: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "available": available,
         "status": (
-            str(
-                assessment.get("overall_label")
-                or "ดูรายละเอียดบรรยากาศระหว่างพัก"
-            )
+            str(assessment.get("overall_label") or "ดูรายละเอียดบรรยากาศระหว่างพัก")
             if available
             else "ไม่มีข้อมูลสภาพแวดล้อมสำหรับครั้งนี้"
         ),
         "meets_expected": (
             assessment.get("meets_expected")
-            if available
-            and isinstance(assessment.get("meets_expected"), bool)
+            if available and isinstance(assessment.get("meets_expected"), bool)
             else None
         ),
         "metrics": metrics,
@@ -298,8 +276,7 @@ def _unavailable_result_copy(
     if mode.get("validation_status") == "mode_metadata_conflict":
         return (
             "mode_metadata_conflict",
-            "ครั้งนี้ยังไม่มีคะแนน เพราะข้อมูลรูปแบบการพัก"
-            "ต้องได้รับการตรวจสอบ",
+            "ครั้งนี้ยังไม่มีคะแนน เพราะข้อมูลรูปแบบการพักต้องได้รับการตรวจสอบ",
         )
     if mode.get("key") == "unknown":
         return (
@@ -311,20 +288,17 @@ def _unavailable_result_copy(
     if timing_status in {"insufficient", "too_short"}:
         return (
             "session_too_short",
-            "ครั้งนี้ยังไม่มีคะแนน เพราะเวลาที่บันทึก"
-            "สั้นกว่าเกณฑ์ของรูปแบบการพัก",
+            "ครั้งนี้ยังไม่มีคะแนน เพราะเวลาที่บันทึกสั้นกว่าเกณฑ์ของรูปแบบการพัก",
         )
     if timing_status == "target_unknown":
         return (
             "target_unknown",
-            "ครั้งนี้ยังไม่มีคะแนน เพราะ Session เดิม"
-            "ไม่ได้บันทึกเป้าหมายเวลาไว้",
+            "ครั้งนี้ยังไม่มีคะแนน เพราะ Session เดิมไม่ได้บันทึกเป้าหมายเวลาไว้",
         )
     if timing_status in {"out_of_protocol", "implausible_outlier", "over_limit"}:
         return (
             "duration_out_of_protocol",
-            "ครั้งนี้ยังไม่มีคะแนน เพราะระยะเวลาที่บันทึก"
-            "ไม่ตรงกับรูปแบบการพักที่เลือก",
+            "ครั้งนี้ยังไม่มีคะแนน เพราะระยะเวลาที่บันทึกไม่ตรงกับรูปแบบการพักที่เลือก",
         )
     report = _mapping(detail.get("report"))
     quality = _mapping(report.get("quality"))
@@ -332,13 +306,11 @@ def _unavailable_result_copy(
     if physiology.get("available") is False or not physiology:
         return (
             "insufficient_physiological_evidence",
-            "ครั้งนี้ยังไม่มีคะแนน เพราะข้อมูลชีพจร"
-            "และการหายใจยังไม่ครบพอ",
+            "ครั้งนี้ยังไม่มีคะแนน เพราะข้อมูลชีพจรและการหายใจยังไม่ครบพอ",
         )
     return (
         "result_unavailable",
-        "ครั้งนี้ยังไม่มีคะแนน ระบบเก็บข้อมูลที่บันทึกไว้"
-        "สำหรับการตรวจสอบแล้ว",
+        "ครั้งนี้ยังไม่มีคะแนน ระบบเก็บข้อมูลที่บันทึกไว้สำหรับการตรวจสอบแล้ว",
     )
 
 
@@ -348,8 +320,7 @@ def _primary_result(
     summary: Mapping[str, Any],
 ) -> tuple[bool, dict[str, Any]]:
     available = bool(
-        detail.get("session_closed") is True
-        and score.get("available") is True
+        detail.get("session_closed") is True and score.get("available") is True
     )
     reason_code, unavailable_reason = (
         ("available", "") if available else _unavailable_result_copy(detail)
@@ -386,35 +357,21 @@ def _result_context(
     confidence = _mapping(summary.get("confidence"))
     return {
         "positive_drivers": _drivers(summary, "positive") if available else [],
-        "attention_drivers": (
-            _drivers(summary, "attention") if available else []
-        ),
+        "attention_drivers": (_drivers(summary, "attention") if available else []),
         "personal_baseline": _baseline(summary if available else {}),
         "trend": _trend(summary if available else {}),
         "subjective_outcome": _subjective(summary if available else {}),
         "recommendation": (
-            str(
-                recommendation.get("primary")
-                or "ดูแนวโน้มร่วมกับความรู้สึกหลังพัก"
-            )
+            str(recommendation.get("primary") or "ดูแนวโน้มร่วมกับความรู้สึกหลังพัก")
             if available
             else (
-                "ดูรายละเอียดที่บันทึกไว้หลังจบการพักครั้งนี้"
-                if closed
-                else "ดูผลสรุปหลังจบการพักครั้งนี้"
+                "ดูรายละเอียดที่บันทึกไว้หลังจบการพักครั้งนี้" if closed else "ดูผลสรุปหลังจบการพักครั้งนี้"
             )
         ),
         "confidence_label": (
-            str(
-                confidence.get("label")
-                or "ข้อมูลสำหรับครั้งนี้ยังมีจำกัด"
-            )
+            str(confidence.get("label") or "ข้อมูลสำหรับครั้งนี้ยังมีจำกัด")
             if available
-            else (
-                "ข้อมูลยังไม่พอสรุปคะแนน"
-                if closed
-                else "กำลังบันทึกข้อมูล"
-            )
+            else ("ข้อมูลยังไม่พอสรุปคะแนน" if closed else "กำลังบันทึกข้อมูล")
         ),
     }
 
@@ -437,9 +394,7 @@ def build_usage_presentation(detail: Mapping[str, Any]) -> dict[str, Any]:
         "session_id": str(detail.get("session_id") or ""),
         "mode": {
             "key": mode.get("key") or "unknown",
-            "label": (
-                mode.get("label") or "รูปแบบการพักครั้งนี้"
-            ),
+            "label": (mode.get("label") or "รูปแบบการพักครั้งนี้"),
             "sleep_required": bool(mode.get("sleep_required")),
         },
         "timing": {

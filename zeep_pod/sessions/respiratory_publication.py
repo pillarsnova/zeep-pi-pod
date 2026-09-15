@@ -80,7 +80,9 @@ def _observations(source: dict[str, Any]) -> dict[str, Any]:
 def _personal_baseline(source: dict[str, Any]) -> dict[str, Any]:
     raw = mapping(source.get("personal_baseline"))
     status = str(raw.get("status") or "not_ready")
-    available = bool(raw.get("available") is True and status in {"below", "within", "above"})
+    available = bool(
+        raw.get("available") is True and status in {"below", "within", "above"}
+    )
     public = copy_scalars(
         raw,
         {
@@ -192,7 +194,9 @@ def _vital_summary(
 ) -> dict[str, Any]:
     paired_ready = observations.get("paired_hr_rr_evidence_sufficient") is True
     heart_rate = observations.get("median_hr_bpm") if paired_ready else None
-    respiration_rate = observations.get("median_paired_rr_brpm") if paired_ready else None
+    respiration_rate = (
+        observations.get("median_paired_rr_brpm") if paired_ready else None
+    )
     combined_key, combined_label = user_paired_vital_status(
         status_key,
         heart_rate,
@@ -212,9 +216,7 @@ def _vital_summary(
             heart_rate,
             respiration_rate,
         ),
-        "recommendation": user_respiratory_recommendation(
-            recommendation_key
-        ),
+        "recommendation": user_respiratory_recommendation(recommendation_key),
         "basis": "direct_paired_hr_rr",
         "aggregation": "weighted_median",
         "wellness_only": True,
@@ -225,7 +227,9 @@ def _vital_summary(
 def public_respiratory_wellness(value: Any) -> dict[str, Any]:
     """Publish respiratory aggregates without trusting persisted prose."""
     source = mapping(value)
-    status_key, status_label = user_respiratory_status(mapping(source.get("status")).get("key"))
+    status_key, status_label = user_respiratory_status(
+        mapping(source.get("status")).get("key")
+    )
     context = str(source.get("context") or "unknown")
     if context not in {"overnight_sleep", "nap_or_rest", "unknown"}:
         context = "unknown"
@@ -234,12 +238,18 @@ def public_respiratory_wellness(value: Any) -> dict[str, Any]:
     vital_summary = _vital_summary(status_key, observations)
     public = {
         "version": source.get("version"),
-        "available": bool(source.get("available") is True and status_key != "insufficient"),
+        "available": bool(
+            source.get("available") is True and status_key != "insufficient"
+        ),
         "label": "ชีพจรและการหายใจระหว่างพัก",
         "intended_use": "age_contextual_wellness_pattern_not_lung_function",
         "context": context,
         "status": {"key": status_key, "label": status_label},
-        "reason_codes": [item for item in scalar_list(source.get("reason_codes")) if item in REASON_CODES],
+        "reason_codes": [
+            item
+            for item in scalar_list(source.get("reason_codes"))
+            if item in REASON_CODES
+        ],
         "interpretation": vital_summary["summary"],
         "observations": observations,
         "vital_summary": vital_summary,

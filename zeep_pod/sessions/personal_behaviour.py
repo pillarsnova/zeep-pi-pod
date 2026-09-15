@@ -24,8 +24,7 @@ def _numbers(rows: list[Mapping[str, Any]], key: str) -> list[float]:
     return [
         float(row[key])
         for row in rows
-        if isinstance(row.get(key), (int, float))
-        and not isinstance(row.get(key), bool)
+        if isinstance(row.get(key), (int, float)) and not isinstance(row.get(key), bool)
     ]
 
 
@@ -45,7 +44,11 @@ def _typical_range(values: list[float]) -> list[float] | None:
         return None
     low = _percentile(values, 0.25)
     high = _percentile(values, 0.75)
-    return [round(low, 1), round(high, 1)] if low is not None and high is not None else None
+    return (
+        [round(low, 1), round(high, 1)]
+        if low is not None and high is not None
+        else None
+    )
 
 
 def _median(values: list[float], digits: int = 1) -> float | None:
@@ -116,9 +119,7 @@ def _cohort(
         "score_typical_range": score_range,
         "score_reference": {
             "status": (
-                "active"
-                if score_count >= score_minimum_sessions
-                else "learning"
+                "active" if score_count >= score_minimum_sessions else "learning"
             ),
             "sessions_used": score_count,
             "minimum_sessions": score_minimum_sessions,
@@ -130,18 +131,18 @@ def _cohort(
             "prior_completed_sessions_only": True,
             "formula_version": formula,
         },
-        "score_formula_versions": sorted({
-            str(row["score_formula_version"])
-            for row in rows
-            if row.get("score_formula_version")
-        }),
+        "score_formula_versions": sorted(
+            {
+                str(row["score_formula_version"])
+                for row in rows
+                if row.get("score_formula_version")
+            }
+        ),
         "expected_onset_minutes": (
             round(statistics.median(onset) / 60.0, 1) if onset else None
         ),
         "typical_duration_minutes": (
-            round(statistics.median(durations) / 60.0, 1)
-            if durations
-            else None
+            round(statistics.median(durations) / 60.0, 1) if durations else None
         ),
         "typical_start_local_hour": _median(start_hours, 2),
         "typical_environment": {
@@ -168,9 +169,7 @@ def aggregate_behaviour_by_mode(
     groups = sorted({str(row.get("mode_group") or "unknown") for row in sessions})
     for group in groups:
         group_rows = [
-            row
-            for row in sessions
-            if str(row.get("mode_group") or "unknown") == group
+            row for row in sessions if str(row.get("mode_group") or "unknown") == group
         ]
         rows = group_rows[:max_sessions]
         context = _cohort(
@@ -195,11 +194,9 @@ def aggregate_behaviour_by_mode(
             }
             context["by_target"] = {
                 target_key: _cohort(
-                    [
-                        row
-                        for row in group_rows
-                        if row.get("target_key") == target_key
-                    ][:max_sessions],
+                    [row for row in group_rows if row.get("target_key") == target_key][
+                        :max_sessions
+                    ],
                     group=group,
                     minimum_sessions=minimum_sessions,
                     score_minimum_sessions=score_minimum_sessions,
@@ -209,8 +206,7 @@ def aggregate_behaviour_by_mode(
                 for target_key in ("nap_30", "nap_90")
             }
             context["unresolved_target_sessions"] = sum(
-                row.get("target_key") not in {"nap_30", "nap_90"}
-                for row in group_rows
+                row.get("target_key") not in {"nap_30", "nap_90"} for row in group_rows
             )
         grouped[group] = context
     return grouped

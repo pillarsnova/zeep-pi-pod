@@ -125,8 +125,7 @@ class UsageMode(ContractModel):
         if values["sleep_required"] != (key == "sleep"):
             raise ValueError("sleep_required must match the canonical mode")
         expected_review = bool(
-            status != "mode_confirmed"
-            or values["protocol_review_required"]
+            status != "mode_confirmed" or values["protocol_review_required"]
         )
         if values["review_required"] != expected_review:
             raise ValueError(

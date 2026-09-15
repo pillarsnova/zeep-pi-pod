@@ -65,8 +65,7 @@ def occupied(row: Mapping[str, Any]) -> bool:
         return False
     bed = str(row.get("bed") or row.get("bed_status") or "").strip().lower()
     return bool(
-        bed in ZEEP_ON_BED_LABELS
-        or bed_status_code(row) in ZEEP_ON_BED_STATUS_CODES
+        bed in ZEEP_ON_BED_LABELS or bed_status_code(row) in ZEEP_ON_BED_STATUS_CODES
     )
 
 
@@ -81,9 +80,11 @@ def motion_or_weak_signal(row: Mapping[str, Any]) -> bool:
 
 
 def _invalid_data_status(row: Mapping[str, Any]) -> bool:
-    status = str(
-        row.get("sleep_data_status") or row.get("data_status") or ""
-    ).strip().lower()
+    status = (
+        str(row.get("sleep_data_status") or row.get("data_status") or "")
+        .strip()
+        .lower()
+    )
     return bool(
         status in _INVALID_DATA_STATUSES
         or status.startswith("invalid_or_missing_")
@@ -125,7 +126,10 @@ def measured_quiet_hr(row: Mapping[str, Any]) -> float | None:
     """Return current HR from the same direct, quiet evidence used for RR."""
     if measured_quiet_rr(row) is None:
         return None
-    if row.get("heart_rate_held") is True or row.get("heart_rate_current_valid") is False:
+    if (
+        row.get("heart_rate_held") is True
+        or row.get("heart_rate_current_valid") is False
+    ):
         return None
     value = finite_number(row.get("hr"))
     return value if value is not None and 30.0 <= value <= 220.0 else None
@@ -138,9 +142,7 @@ def weighted_quantile(
     if not values:
         return None
     ordered = sorted(values, key=lambda item: item[0])
-    threshold = max(0.0, min(1.0, quantile)) * sum(
-        weight for _, weight in ordered
-    )
+    threshold = max(0.0, min(1.0, quantile)) * sum(weight for _, weight in ordered)
     elapsed = 0.0
     for value, weight in ordered:
         elapsed += weight
@@ -158,9 +160,7 @@ def regularity(
     mean = sum(value * weight for value, weight in values) / total
     if mean <= 0:
         return None, "insufficient"
-    variance = sum(
-        weight * (value - mean) ** 2 for value, weight in values
-    ) / total
+    variance = sum(weight * (value - mean) ** 2 for value, weight in values) / total
     factor = max(0.0, min(1.0, 1.0 - math.sqrt(variance) / mean / 0.18))
     label = "stable" if factor >= 0.67 else "mixed" if factor >= 0.34 else "variable"
     return round(factor, 3), label

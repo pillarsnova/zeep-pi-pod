@@ -129,9 +129,7 @@ def _canonical_mode(
         if not conflicts
         else {}
     )
-    protocol_review_required = bool(
-        protocol_status.get("review_required") is True
-    )
+    protocol_review_required = bool(protocol_status.get("review_required") is True)
     resolved = quality_mode.get("resolved")
     if rest_mode_group(resolved) != group:
         resolved = None
@@ -285,9 +283,7 @@ def _target_contract(
         if session_target is not None or mode.get("group") == "sleep"
         else {}
     )
-    canonical_session_target = bool(
-        resolved_session_target.get("available") is True
-    )
+    canonical_session_target = bool(resolved_session_target.get("available") is True)
     session_target_overrides = (
         target_provenance.get("verified") is not True
         if mode.get("group") == "nap_recovery"
@@ -440,9 +436,7 @@ def build_result_contract(session: Mapping[str, Any]) -> dict[str, Any]:
                 target_provenance,
             ),
             "review_required": mode.get("review_required"),
-            "protocol_review_required": mode.get(
-                "protocol_review_required"
-            ),
+            "protocol_review_required": mode.get("protocol_review_required"),
             "validation_status": mode.get("validation_status"),
             "conflicts": mode.get("conflicts") or [],
         },

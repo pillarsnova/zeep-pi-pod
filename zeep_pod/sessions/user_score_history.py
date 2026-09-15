@@ -142,27 +142,29 @@ def nap_target_histories(
         )
         values = [float(entry["value"]) for entry in comparable]
         latest = score_entry(target_sessions[0])
-        histories.append({
-            "key": target_key,
-            "minutes": minutes,
-            "session_count": len(target_sessions),
-            "scored_count": len(entries),
-            "comparable_scored_count": len(comparable),
-            "without_score_count": len(target_sessions) - len(entries),
-            "latest_score": latest["value"] if latest else None,
-            "average_score": (
-                round(sum(values) / len(values), 1) if values else None
-            ),
-            "median_score": (
-                round(statistics.median(values), 1) if values else None
-            ),
-            "active_formula_version": active_formula,
-            "trend": score_trend(entries),
-            "baseline": baseline_context(
-                baseline,
-                "nap_recovery",
-                target_key=target_key,
-            ),
-            "recent_scores": comparable[:5],
-        })
+        histories.append(
+            {
+                "key": target_key,
+                "minutes": minutes,
+                "session_count": len(target_sessions),
+                "scored_count": len(entries),
+                "comparable_scored_count": len(comparable),
+                "without_score_count": len(target_sessions) - len(entries),
+                "latest_score": latest["value"] if latest else None,
+                "average_score": (
+                    round(sum(values) / len(values), 1) if values else None
+                ),
+                "median_score": (
+                    round(statistics.median(values), 1) if values else None
+                ),
+                "active_formula_version": active_formula,
+                "trend": score_trend(entries),
+                "baseline": baseline_context(
+                    baseline,
+                    "nap_recovery",
+                    target_key=target_key,
+                ),
+                "recent_scores": comparable[:5],
+            }
+        )
     return histories

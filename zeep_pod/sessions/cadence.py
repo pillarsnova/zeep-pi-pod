@@ -212,9 +212,7 @@ def materialise_report_sample_grid(
     source_rows = _report_grid_sources(samples)
     used: set[int] = set()
     grid: list[dict[str, Any]] = []
-    boundaries = _report_grid_boundaries(
-        split_boundaries, start_epoch, end_epoch
-    )
+    boundaries = _report_grid_boundaries(split_boundaries, start_epoch, end_epoch)
     cursor = start_epoch
     slot_number = 0
     while cursor < end_epoch - 0.0005:
@@ -289,15 +287,15 @@ def _report_grid_boundaries(
     start_epoch: float,
     end_epoch: float,
 ) -> list[float]:
-    candidates = (
-        values if isinstance(values, (list, tuple, set, frozenset)) else ()
+    candidates = values if isinstance(values, (list, tuple, set, frozenset)) else ()
+    return sorted(
+        {
+            value
+            for raw in candidates
+            if (value := _timestamp_epoch(raw)) is not None
+            and start_epoch < value < end_epoch
+        }
     )
-    return sorted({
-        value
-        for raw in candidates
-        if (value := _timestamp_epoch(raw)) is not None
-        and start_epoch < value < end_epoch
-    })
 
 
 def _report_grid_slot(
@@ -308,13 +306,9 @@ def _report_grid_slot(
     boundaries: list[float],
     fallback_interval_s: Any,
 ) -> tuple[float, float, float]:
-    nominal = cadence_interval_at(
-        cursor + 0.001, cadence_segments, fallback_interval_s
-    )
+    nominal = cadence_interval_at(cursor + 0.001, cadence_segments, fallback_interval_s)
     segment_start = _next_cadence_segment_start(cursor, cadence_segments)
-    split = next(
-        (value for value in boundaries if value > cursor + 0.0005), None
-    )
+    split = next((value for value in boundaries if value > cursor + 0.0005), None)
     natural_end = min(
         end_epoch,
         cursor + nominal,
@@ -376,23 +370,36 @@ def _report_grid_row(
 ) -> dict[str, Any]:
     if candidate is not None:
         source_epoch, row = sources[candidate]
-        row.update({
-            "source_t": source_epoch,
-            "t": slot_end,
-            "sample_interval_s": slot_duration,
-            "synthetic_sleep_gap": False,
-            "sleep_gap_slot": slot_number,
-        })
+        row.update(
+            {
+                "source_t": source_epoch,
+                "t": slot_end,
+                "sample_interval_s": slot_duration,
+                "synthetic_sleep_gap": False,
+                "sleep_gap_slot": slot_number,
+            }
+        )
         return row
     return {
         "t": slot_end,
         "sample_interval_s": slot_duration,
         "synthetic_sleep_gap": True,
         "sleep_gap_slot": slot_number,
-        **{key: None for key in (
-            "temp", "hum", "co2", "pm2_5", "voc", "lux", "dba", "hr",
-            "rr", "bed",
-        )},
+        **{
+            key: None
+            for key in (
+                "temp",
+                "hum",
+                "co2",
+                "pm2_5",
+                "voc",
+                "lux",
+                "dba",
+                "hr",
+                "rr",
+                "bed",
+            )
+        },
         "bcg_analysis_valid": False,
     }
 
@@ -412,13 +419,14 @@ def _complete_grid_summary(
         "matched_source_rows": len(used),
         "unmatched_source_rows": max(0, len(sources) - len(used)),
         "grid_rows": len(grid),
-        "synthetic_rows": sum(
-            bool(row.get("synthetic_sleep_gap")) for row in grid
+        "synthetic_rows": sum(bool(row.get("synthetic_sleep_gap")) for row in grid),
+        "covered_seconds": round(
+            sum(
+                sample_interval_seconds(row.get("sample_interval_s"), 0.1)
+                for row in grid
+            ),
+            3,
         ),
-        "covered_seconds": round(sum(
-            sample_interval_seconds(row.get("sample_interval_s"), 0.1)
-            for row in grid
-        ), 3),
         "requested_seconds": round(end_epoch - start_epoch, 3),
     }
 

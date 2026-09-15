@@ -125,9 +125,7 @@ class RespiratoryWellness(ContractModel):
     version: str
     available: bool
     label: str
-    intended_use: Literal[
-        "age_contextual_wellness_pattern_not_lung_function"
-    ]
+    intended_use: Literal["age_contextual_wellness_pattern_not_lung_function"]
     context: Literal["overnight_sleep", "nap_or_rest", "unknown"]
     status: RespiratoryStatus
     reason_codes: list[

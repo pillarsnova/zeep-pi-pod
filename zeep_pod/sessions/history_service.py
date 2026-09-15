@@ -188,9 +188,7 @@ class SessionHistoryService:
             if not keys:
                 return []
             placeholders = ",".join("?" for _ in keys)
-            clauses.append(
-                f"lower(trim(s.username_key)) IN ({placeholders})"
-            )
+            clauses.append(f"lower(trim(s.username_key)) IN ({placeholders})")
             params.extend(keys)
         if window is not None:
             clauses.extend(("s.end_time>=?", "s.end_time<?"))

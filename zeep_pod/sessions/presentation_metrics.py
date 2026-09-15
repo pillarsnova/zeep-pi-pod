@@ -78,11 +78,7 @@ def _sleep_metrics(
             "เข้าสู่ช่วงตื่น",
             int(wake_entries) if wake_entries is not None else None,
             "ครั้ง",
-            (
-                f"{int(wake_entries)} ครั้ง"
-                if wake_entries is not None
-                else "ยังไม่มีข้อมูล"
-            ),
+            (f"{int(wake_entries)} ครั้ง" if wake_entries is not None else "ยังไม่มีข้อมูล"),
         ),
     ]
 
@@ -93,14 +89,8 @@ def _nap_metrics(
 ) -> list[dict[str, Any]]:
     completion = _number(target.get("completion_pct"))
     movement = _number(_mapping(quality.get("body_response")).get("movement_pct"))
-    stillness = (
-        max(0.0, min(100.0, 100.0 - movement))
-        if movement is not None
-        else None
-    )
-    regularity = _number(
-        _mapping(quality.get("physiology")).get("regularity_factor")
-    )
+    stillness = max(0.0, min(100.0, 100.0 - movement)) if movement is not None else None
+    regularity = _number(_mapping(quality.get("physiology")).get("regularity_factor"))
     regularity_pct = regularity * 100.0 if regularity is not None else None
     return [
         _metric(

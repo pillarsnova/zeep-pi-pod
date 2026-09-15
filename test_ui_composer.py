@@ -13,6 +13,30 @@ class UiComposerTests(unittest.TestCase):
             ui_composer.render(),
         )
 
+    def test_aircon_temperature_is_direct_and_bounded_15_to_28(self):
+        runtime = ui_composer.render()
+        control_start = runtime.index('id="unifiedAirconTemp"')
+        control_end = runtime.index("</select>", control_start)
+        control = runtime[control_start:control_end]
+        debug_start = runtime.index('id="debugAirconTemp"')
+        debug_end = runtime.index("</select>", debug_start)
+        debug = runtime[debug_start:debug_end]
+
+        self.assertIn("const AIRCON_DESIRED_TEMPERATURE_MIN_C = 15", runtime)
+        self.assertIn("const AIRCON_DESIRED_TEMPERATURE_MAX_C = 28", runtime)
+        self.assertEqual(
+            [int(value) for value in re.findall(r'<option value="(\d+)"', control)],
+            list(range(15, 29)),
+        )
+        self.assertIn('<option value="18" selected>', control)
+        self.assertEqual(
+            [int(value) for value in re.findall(r">(\d+)</option>", debug)],
+            list(range(15, 29)),
+        )
+        self.assertIn('min="15" max="28"', runtime)
+        self.assertIn("ตรง 1:1", runtime)
+        self.assertNotIn('id="debugAirconBias"', runtime)
+
     def test_inline_partials_are_complete_ordered_and_deterministic(self):
         template = ui_composer.TEMPLATE.read_text(encoding="utf-8")
         marker_positions = []

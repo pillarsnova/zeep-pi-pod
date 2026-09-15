@@ -133,8 +133,7 @@ function quickAirconTemp(value, btn){
     toast(`เลือกอุณหภูมิได้ ${AIRCON_DESIRED_TEMPERATURE_MIN_C}–${AIRCON_DESIRED_TEMPERATURE_MAX_C} °C`,'error');
     return;
   }
-  // Send the user-facing value. The Pi API is the single source of truth that
-  // applies the -5 °C bias before publishing the command to ESP32 Aircon.
+  // The selected value is sent unchanged to ESP32 Aircon through the Pi API.
   airconCommand(`temp ${value}`, btn);
 }
 function quickDeviceNote(device, fallback){

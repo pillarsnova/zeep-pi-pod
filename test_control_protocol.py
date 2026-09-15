@@ -11,9 +11,11 @@ from unittest.mock import Mock, patch
 from fastapi import HTTPException
 
 from control_protocol import (
-    apply_aircon_temperature_bias,
+    AIRCON_TEMPERATURE_MAX_C,
+    AIRCON_TEMPERATURE_MIN_C,
     normalize_aircon_command,
     normalize_bed_command,
+    resolve_aircon_temperature_command,
 )
 from zeep_pod.hardware import controlhub2
 
@@ -22,35 +24,26 @@ class AirconProtocolTests(unittest.TestCase):
     def test_normalizes_fixed_and_temperature_commands(self) -> None:
         self.assertEqual(normalize_aircon_command("  SWING_ON  "), "swing_on")
         self.assertEqual(normalize_aircon_command("temp   18"), "temp 18")
-        with self.assertRaises(ValueError):
-            normalize_aircon_command("temp 33")
+        self.assertEqual(normalize_aircon_command("temp 15"), "temp 15")
+        self.assertEqual(normalize_aircon_command("temp 28"), "temp 28")
+        for temperature_c in (14, 29):
+            with self.assertRaises(ValueError):
+                normalize_aircon_command(f"temp {temperature_c}")
 
-    def test_user_temperature_bias_is_explicit_and_bounded(self) -> None:
+    def test_temperature_mapping_is_direct_and_bounded(self) -> None:
         self.assertEqual(
-            apply_aircon_temperature_bias(
-                "temp 20",
-                desired_min_c=15,
-                desired_max_c=25,
-                bias_c=-3,
-            ),
-            ("temp 17", 20, 17),
+            resolve_aircon_temperature_command("temp 20"),
+            ("temp 20", 20, 20),
         )
         self.assertEqual(
-            apply_aircon_temperature_bias(
-                "swing_on",
-                desired_min_c=15,
-                desired_max_c=25,
-                bias_c=-3,
-            ),
+            resolve_aircon_temperature_command("swing_on"),
             ("swing_on", None, None),
         )
-        with self.assertRaises(ValueError):
-            apply_aircon_temperature_bias(
-                "temp 14",
-                desired_min_c=15,
-                desired_max_c=25,
-                bias_c=-3,
-            )
+        self.assertEqual(AIRCON_TEMPERATURE_MIN_C, 15)
+        self.assertEqual(AIRCON_TEMPERATURE_MAX_C, 28)
+        for temperature_c in (14, 29):
+            with self.assertRaises(ValueError):
+                resolve_aircon_temperature_command(f"temp {temperature_c}")
 
 
 class BedProtocolTests(unittest.TestCase):

@@ -7,12 +7,11 @@ let airconRequestBusy = false;
 // firmware-reported boolean when available. A fresh unknown state safely
 // offers SWING ON as the first deterministic command.
 let unifiedAirconSwingState = null;
-// User controls expose the comfort target only. The Pi owns the -3°C hardware
-// conversion, while Admin Debug shows both sides of the mapping.
+// User and Admin controls send the selected physical setpoint unchanged.
 const AIRCON_DESIRED_TEMPERATURE_MIN_C = 15;
-const AIRCON_DESIRED_TEMPERATURE_MAX_C = 25;
-const AIRCON_DEBUG_TEMPERATURE_MIN_C = 5;
-const AIRCON_DEBUG_TEMPERATURE_MAX_C = 30;
+const AIRCON_DESIRED_TEMPERATURE_MAX_C = 28;
+const AIRCON_DEBUG_TEMPERATURE_MIN_C = 15;
+const AIRCON_DEBUG_TEMPERATURE_MAX_C = 28;
 // Preserve the user's unconfirmed selection while live WebSocket state keeps
 // rendering. Without this draft, the selector jumps back once per second.
 let unifiedAirconDraftTemp = null;

@@ -133,7 +133,7 @@ class LabelCommand(BaseModel):
 
 class AirconCommand(BaseModel):
     command: str
-    # Admin Control Debug may bypass the user-facing -5 °C comfort bias.
+    # Admin Debug is separately authorized but uses the same 15-28 °C mapping.
     direct: bool = False
 
 

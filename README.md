@@ -16,7 +16,7 @@ defined in [Pi 5 Software Architecture](docs/pi5-software-architecture.md).
 pi5/
 ├── app.py                  # Composition root: FastAPI, lifecycle, hardware orchestration
 ├── api_models.py           # Pydantic request contracts ของ HTTP API
-├── control_protocol.py     # ตรวจคำสั่ง Aircon/Bed และแปลง temperature bias
+├── control_protocol.py     # ตรวจคำสั่ง Aircon/Bed และขอบเขตอุณหภูมิ 15–28°C
 ├── access_control.py       # Browser session, User/Admin RBAC, CSRF, offline ticket
 ├── qr_login.py             # QR login: registry ของ pollSecret + route ที่ Pi proxy ให้แท็บเล็ต
 ├── pod_occupancy.py        # Lease ป้องกัน login ซ้ำ และ coordinator สำหรับหลายตู้

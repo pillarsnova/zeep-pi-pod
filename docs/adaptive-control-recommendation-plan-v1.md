@@ -203,7 +203,7 @@ confidence =
 | อุปกรณ์/คำสั่งจริง | AI แนะนำอะไรได้ | ผู้ยืนยัน | ตรวจผลอย่างไร | สถานะ Auto |
 |---|---|---|---|---|
 | แอร์ `on/off` | เปิดก่อนพักหรือคงสถานะ | User/Admin | IR ACK + trend อุณหภูมิ; ยังไม่ยืนยัน power จริง | ยังไม่อนุญาต |
-| อุณหภูมิ 15–25°C ฝั่ง User | เพิ่ม/ลดครั้งละ 1°C | User/Admin | SHT3x trend 10–15 นาที | Candidate หลังมี feedback เพิ่ม |
+| อุณหภูมิ 15–28°C | เพิ่ม/ลดครั้งละ 1°C | User/Admin | SHT3x trend 10–15 นาที | Candidate หลังมี feedback เพิ่ม |
 | Swing `on/off` | เปิด/ปิดตามความสบายที่เคยเลือก | User/Admin | IR ACK เท่านั้น | ยังไม่อนุญาต |
 | Fan `1→5→1` | ระยะแรกเสนอเพียง “ลองปรับหนึ่งขั้น” | Admin | เป็น intent counter ไม่ใช่ระดับจริง | ไม่อนุญาต |
 | ไฟหน้าจอแอร์ `light_on/off` | ปิดแสงรบกวนเมื่อทีมยืนยันความหมายคำสั่งแล้ว | Admin | IR ACK + Lux ทางอ้อม | ไม่อนุญาต |
@@ -247,13 +247,12 @@ Smart Response จึงแสดงได้เพียง `team_action_recomm
 
 ### 8.1 แอร์และอุณหภูมิ
 
-- เก็บ Baseline เป็น **desired temperature** ที่ผู้ใช้เห็น แยกจาก
-  `ir_command_temperature`; ห้ามนำสองหน่วยความหมายมาปนกัน
+- เก็บ Baseline เป็น **desired temperature** ที่ผู้ใช้เลือก โดยระบบส่งค่าเดียวกัน
+  ไปเป็น `ir_command_temperature` แบบ 1:1 และไม่ใช้ Bias
 - ค่าต่างจาก Personal Baseline ต่อเนื่องอย่างน้อย 5 นาทีจึงแนะนำ
 - ปรับครั้งละ 1°C, cooldown 15 นาที และไม่เกินรวม 2°C ต่อ Session ใน Pilot
-- `on` ปัจจุบันส่ง `on → IR command 18°C → swing_on`; ด้วย bias ปัจจุบัน −3
-  snapshot/UI แปลงเป็น desired 21°C จึงต้อง freeze และแสดงทั้งสอง field แยกกัน
-  ใน audit ส่วนหน้าผู้ใช้แสดงเฉพาะ desired temperature
+- `on` ปัจจุบันส่ง `on → IR command 18°C → swing_on`; ค่าอุณหภูมิที่เลือก
+  และค่า IR ต้องตรงกันเสมอในช่วง 15–28°C
 - ชุดเปิดแอร์นี้ต้องบันทึกเป็น `configuration_bundle` และไม่นำ outcome ไปอ้าง
   เชิงเหตุ–ผลของ power, temperature หรือ swing รายตัว
 - ACK ปัจจุบันหมายถึง ESP32 ส่ง IR แล้ว ไม่ได้หมายถึงแอร์เปลี่ยนจริง

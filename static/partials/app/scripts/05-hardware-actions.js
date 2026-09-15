@@ -147,12 +147,10 @@ function renderAircon(a={}){
     : `${a.desired_temperature_c??'--'} / ${a.temperature_c} °C`;
   document.getElementById('airconLastCommand').textContent=a.last_command||'--';
   document.getElementById('airconTxCount').textContent=a.tx_count??0;
-  // Hardware mapping is intentionally Admin-only. User controls show only the
-  // selected comfort target and never expose the installation bias.
-  const debugDesired=document.getElementById('debugAirconDesiredTemp'),debugBias=document.getElementById('debugAirconBias'),debugCommanded=document.getElementById('debugAirconCommandedTemp'),debugDefault=document.getElementById('debugAirconDefaultTemp');
-  const desired=Number(a.desired_temperature_c),bias=Number(a.temperature_bias_c),commanded=Number(a.temperature_c),powerOnDefault=Number(a.power_on_default_temperature_c);
+  // Admin can verify that the selected value and IR setpoint are identical.
+  const debugDesired=document.getElementById('debugAirconDesiredTemp'),debugCommanded=document.getElementById('debugAirconCommandedTemp'),debugDefault=document.getElementById('debugAirconDefaultTemp');
+  const desired=Number(a.desired_temperature_c),commanded=Number(a.temperature_c),powerOnDefault=Number(a.power_on_default_temperature_c);
   if(debugDesired)debugDesired.textContent=Number.isInteger(desired)?`${desired}°C`:'--';
-  if(debugBias)debugBias.textContent=Number.isInteger(bias)?`${bias<0?'−':bias>0?'+':''}${Math.abs(bias)}°C`:'--';
   if(debugCommanded)debugCommanded.textContent=Number.isInteger(commanded)?`${commanded}°C`:'--';
   if(debugDefault)debugDefault.textContent=Number.isInteger(powerOnDefault)?`${powerOnDefault}°C · สวิง`:'18°C · สวิง';
   const debugFanLevel=document.getElementById('debugAirconFanLevel');

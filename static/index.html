@@ -1356,7 +1356,7 @@
               </div>
               <button id="unifiedSwingBtn" class="smart-switch action-toggle visual-power-toggle stateful-content aircon-action state-unknown" data-control-label="สวิงพัดลม" data-aircon-command="swing_on" onclick="unifiedSwingToggle(this)" aria-label="เปิดสวิงพัดลม" title="เปิดสวิงพัดลม"><span class="toggle-status-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-swing"/></svg></span><span class="toggle-state-copy"><b data-action-label>เปิด</b><small data-state-label>ยังไม่ทราบ</small></span><small class="control-button-caption">สวิง</small></button>
               <button id="unifiedFanLevelBtn" class="smart-switch action-toggle visual-power-toggle stateful-content aircon-action fan-level-control state-unknown" data-control-label="แรงลม" data-aircon-command="fan" onclick="unifiedFanLevelCycle(this)" aria-label="ปรับแรงลมแอร์" title="กดเพื่อปรับแรงลมแอร์"><span class="toggle-status-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-fan"/></svg></span><span class="toggle-state-copy"><b data-action-label>ปรับแรงลม</b><small data-state-label>กดเพื่อปรับ</small></span><small class="control-button-caption">แรงลม</small></button>
-              <div class="temperature-quick-control"><div class="temperature-quick-copy"><b>อุณหภูมิ</b><small>15–25°C</small></div><div class="device-inline temperature-auto-control" id="unifiedAirconTempControl" data-state="ready"><select id="unifiedAirconTemp" aria-label="เลือกอุณหภูมิภายใน ZEEP ระหว่าง 15 ถึง 25 องศา และปรับทันที" onchange="applyUnifiedAirconTemperature(this)"><option value="15" selected>15°C</option><option value="16">16°C</option><option value="17">17°C</option><option value="18">18°C</option><option value="19">19°C</option><option value="20">20°C</option><option value="21">21°C</option><option value="22">22°C</option><option value="23">23°C</option><option value="24">24°C</option><option value="25">25°C</option></select><span class="temperature-auto-state" id="unifiedAirconTempState" aria-live="polite"></span></div></div>
+              <div class="temperature-quick-control"><div class="temperature-quick-copy"><b>อุณหภูมิ</b><small>15–28°C</small></div><div class="device-inline temperature-auto-control" id="unifiedAirconTempControl" data-state="ready"><select id="unifiedAirconTemp" aria-label="เลือกอุณหภูมิภายใน ZEEP ระหว่าง 15 ถึง 28 องศา และปรับทันที" onchange="applyUnifiedAirconTemperature(this)"><option value="15">15°C</option><option value="16">16°C</option><option value="17">17°C</option><option value="18" selected>18°C</option><option value="19">19°C</option><option value="20">20°C</option><option value="21">21°C</option><option value="22">22°C</option><option value="23">23°C</option><option value="24">24°C</option><option value="25">25°C</option><option value="26">26°C</option><option value="27">27°C</option><option value="28">28°C</option></select><span class="temperature-auto-state" id="unifiedAirconTempState" aria-live="polite"></span></div></div>
             </div>
           </div>
         </section>
@@ -1633,7 +1633,7 @@
             <div class="debug-aircon-telemetry" aria-label="การแปลงอุณหภูมิสำหรับผู้ดูแลระบบ">
               <div><span>เปิดแอร์เริ่มต้น</span><b id="debugAirconDefaultTemp">18°C · สวิง</b></div>
               <div><span>ค่าที่ผู้ใช้เลือก</span><b id="debugAirconDesiredTemp">--</b></div>
-              <div><span>System Bias</span><b id="debugAirconBias">−3°C</b></div>
+              <div><span>การส่งค่า</span><b>ตรง 1:1</b></div>
               <div><span>ค่าที่ส่ง ESP32</span><b id="debugAirconCommandedTemp">--</b></div>
             </div>
             <div class="debug-command-grid">
@@ -1646,7 +1646,7 @@
               <button class="debug-command-button danger" onclick="debugSend(this,'ESP32 Aircon','light_off','/api/aircon/command',{command:'light_off'})"><span><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-display"/></svg></span><b>DISPLAY OFF</b><code>light_off</code></button>
               <button class="debug-command-button status" onclick="debugSend(this,'ESP32 Aircon','status','/api/aircon/command',{command:'status'})"><span><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-refresh"/></svg></span><b>STATUS</b><code>status</code></button>
             </div>
-            <div class="debug-inline-command"><div><b>Direct temperature command</b><small>Admin Debug: ส่งตรง ESP32 5–30°C · ไม่ใช้ System Bias</small></div><select id="debugAirconTemp" aria-label="อุณหภูมิทดสอบแบบส่งตรง 5 ถึง 30 องศา"><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option selected>10</option><option>11</option><option>12</option><option>13</option><option>14</option><option>15</option><option>16</option><option>17</option><option>18</option><option>19</option><option>20</option><option>21</option><option>22</option><option>23</option><option>24</option><option>25</option><option>26</option><option>27</option><option>28</option><option>29</option><option>30</option></select><button class="ui-label-button" onclick="debugAirconTemperature(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-snow"/></svg><span>SEND TEMP</span></button></div>
+            <div class="debug-inline-command"><div><b>Direct temperature command</b><small>Admin Debug: ส่งค่าจริงไป ESP32 ช่วง 15–28°C</small></div><select id="debugAirconTemp" aria-label="อุณหภูมิทดสอบแบบส่งตรง 15 ถึง 28 องศา"><option>15</option><option>16</option><option>17</option><option selected>18</option><option>19</option><option>20</option><option>21</option><option>22</option><option>23</option><option>24</option><option>25</option><option>26</option><option>27</option><option>28</option></select><button class="ui-label-button" onclick="debugAirconTemperature(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-snow"/></svg><span>SEND TEMP</span></button></div>
             <div class="debug-inline-command"><div><b>Fan Level Reference</b><small id="debugAirconFanSource">ระดับอ้างอิงล่าสุด · บันทึกถาวร · ไม่ยิง IR</small></div><select id="debugAirconFanReference" aria-label="ระบุระดับพัดลมแอร์อ้างอิง 1 ถึง 5"><option selected>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select><button class="ui-label-button" onclick="debugSetAirconFanReference(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-fan"/></svg><span>SET LEVEL</span></button></div>
           </section>
 
@@ -2069,9 +2069,9 @@
           </div>
         </div>
         <div class="aircon-group">
-          <strong>Temperature · เลือก 15–25 °C</strong>
+          <strong>Temperature · เลือก 15–28 °C</strong>
           <div class="aircon-temp-row">
-            <input id="airconTempInput" type="number" min="15" max="25" step="1" value="15" inputmode="numeric" aria-label="อุณหภูมิที่ผู้ใช้เลือก">
+            <input id="airconTempInput" type="number" min="15" max="28" step="1" value="18" inputmode="numeric" aria-label="อุณหภูมิที่ผู้ใช้เลือก">
             <button id="airconTempBtn" class="btn primary aircon-action" data-aircon-command="temp" onclick="airconSendTemperature(this)">ส่งอุณหภูมิ</button>
           </div>
         </div>
@@ -2396,12 +2396,11 @@ let airconRequestBusy = false;
 // firmware-reported boolean when available. A fresh unknown state safely
 // offers SWING ON as the first deterministic command.
 let unifiedAirconSwingState = null;
-// User controls expose the comfort target only. The Pi owns the -3°C hardware
-// conversion, while Admin Debug shows both sides of the mapping.
+// User and Admin controls send the selected physical setpoint unchanged.
 const AIRCON_DESIRED_TEMPERATURE_MIN_C = 15;
-const AIRCON_DESIRED_TEMPERATURE_MAX_C = 25;
-const AIRCON_DEBUG_TEMPERATURE_MIN_C = 5;
-const AIRCON_DEBUG_TEMPERATURE_MAX_C = 30;
+const AIRCON_DESIRED_TEMPERATURE_MAX_C = 28;
+const AIRCON_DEBUG_TEMPERATURE_MIN_C = 15;
+const AIRCON_DEBUG_TEMPERATURE_MAX_C = 28;
 // Preserve the user's unconfirmed selection while live WebSocket state keeps
 // rendering. Without this draft, the selector jumps back once per second.
 let unifiedAirconDraftTemp = null;
@@ -2953,8 +2952,7 @@ function quickAirconTemp(value, btn){
     toast(`เลือกอุณหภูมิได้ ${AIRCON_DESIRED_TEMPERATURE_MIN_C}–${AIRCON_DESIRED_TEMPERATURE_MAX_C} °C`,'error');
     return;
   }
-  // Send the user-facing value. The Pi API is the single source of truth that
-  // applies the -5 °C bias before publishing the command to ESP32 Aircon.
+  // The selected value is sent unchanged to ESP32 Aircon through the Pi API.
   airconCommand(`temp ${value}`, btn);
 }
 function quickDeviceNote(device, fallback){
@@ -3939,8 +3937,8 @@ function syncUnifiedStarLight(on,enabled){
   updateUnifiedPodSceneLabel();
 }
 // Translate controller data into a calm, glanceable air-flow scene.  The
-// animation starts only from confirmed ESP32 power state. The user-facing
-// scene shows the selected comfort target, never the biased IR setpoint.
+// animation starts only from confirmed ESP32 power state. The scene shows the
+// same physical setpoint selected by the user and sent over IR.
 function syncUnifiedAirconComfort(on,online,targetTemperature,measuredTemperature){
   const map=document.getElementById('airconComfortMap');
   const caption=document.getElementById('airconComfortCaption');
@@ -4520,12 +4518,10 @@ function renderAircon(a={}){
     : `${a.desired_temperature_c??'--'} / ${a.temperature_c} °C`;
   document.getElementById('airconLastCommand').textContent=a.last_command||'--';
   document.getElementById('airconTxCount').textContent=a.tx_count??0;
-  // Hardware mapping is intentionally Admin-only. User controls show only the
-  // selected comfort target and never expose the installation bias.
-  const debugDesired=document.getElementById('debugAirconDesiredTemp'),debugBias=document.getElementById('debugAirconBias'),debugCommanded=document.getElementById('debugAirconCommandedTemp'),debugDefault=document.getElementById('debugAirconDefaultTemp');
-  const desired=Number(a.desired_temperature_c),bias=Number(a.temperature_bias_c),commanded=Number(a.temperature_c),powerOnDefault=Number(a.power_on_default_temperature_c);
+  // Admin can verify that the selected value and IR setpoint are identical.
+  const debugDesired=document.getElementById('debugAirconDesiredTemp'),debugCommanded=document.getElementById('debugAirconCommandedTemp'),debugDefault=document.getElementById('debugAirconDefaultTemp');
+  const desired=Number(a.desired_temperature_c),commanded=Number(a.temperature_c),powerOnDefault=Number(a.power_on_default_temperature_c);
   if(debugDesired)debugDesired.textContent=Number.isInteger(desired)?`${desired}°C`:'--';
-  if(debugBias)debugBias.textContent=Number.isInteger(bias)?`${bias<0?'−':bias>0?'+':''}${Math.abs(bias)}°C`:'--';
   if(debugCommanded)debugCommanded.textContent=Number.isInteger(commanded)?`${commanded}°C`:'--';
   if(debugDefault)debugDefault.textContent=Number.isInteger(powerOnDefault)?`${powerOnDefault}°C · สวิง`:'18°C · สวิง';
   const debugFanLevel=document.getElementById('debugAirconFanLevel');

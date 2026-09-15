@@ -70,9 +70,11 @@ from bcg_storage import BCGStorage
 from brainwave_audio import public_presets as brainwave_public_presets
 from brainwave_audio import render_preview as render_brainwave_preview
 from control_protocol import (
-    apply_aircon_temperature_bias,
+    AIRCON_TEMPERATURE_MAX_C,
+    AIRCON_TEMPERATURE_MIN_C,
     normalize_aircon_command,
     normalize_bed_command,
+    resolve_aircon_temperature_command,
 )
 from database import DatabaseManager
 from api_v1 import create_api_v1_router
@@ -499,16 +501,9 @@ MAX_VOLUME = 100  # mpv >100 is digital gain (distortion); keep sleep-safe ceili
 # After an explicit Stop, reject those legacy automatic play requests briefly;
 # a current page marks real touch actions and can start again immediately.
 MUSIC_STOP_GUARD_SECONDS = max(0.5, float(os.getenv("MUSIC_STOP_GUARD_SECONDS", "4.0")))
-# User-facing temperatures describe the preferred Pod setting. The aircon IR
-# command is intentionally biased colder because the current installation's
-# measured room response runs warmer than its setpoint. Keep this conversion
-# on the Pi API so every UI/client applies exactly the same rule.
-AIRCON_TEMPERATURE_BIAS_C = int(os.getenv("AIRCON_TEMPERATURE_BIAS_C", "-3"))
-AIRCON_DESIRED_TEMP_MIN_C = 15
-AIRCON_DESIRED_TEMP_MAX_C = 25
-AIRCON_POWER_ON_DEFAULT_TEMP_C = int(os.getenv("AIRCON_POWER_ON_DEFAULT_TEMP_C", "18"))
-if not 5 <= AIRCON_POWER_ON_DEFAULT_TEMP_C <= 32:
-    raise RuntimeError("AIRCON_POWER_ON_DEFAULT_TEMP_C must be between 5 and 32 °C")
+# The selected temperature is the physical IR setpoint: no hidden offset or
+# installation bias is applied. Product and Admin controls share 15-28 °C.
+AIRCON_POWER_ON_DEFAULT_TEMP_C = 18
 
 # ---------- user profiles & test sessions (stored only on this pod) ----------
 # PDPA boundary: profiles/sessions live in DATA_DIR on the Pi itself, never in
@@ -3662,16 +3657,17 @@ def snapshot() -> Dict[str, Any]:
     if aircon.get("connected") and (aircon_last is None or now - aircon_last > CONTROLHUB1_STALE_SECONDS):
         aircon["connected"] = False
         aircon["stale"] = True
-    # ESP32 reports the actual temperature sent over IR. Publish the matching
-    # user-facing value as a separate field; never relabel the hardware value.
-    aircon["temperature_bias_c"] = AIRCON_TEMPERATURE_BIAS_C
+    # ESP32 reports the setpoint sent over IR. The selected and sent values are
+    # intentionally identical; discard stale metadata from earlier releases.
+    aircon.pop("temperature_bias_c", None)
+    aircon["temperature_mapping"] = "direct_1_to_1"
     aircon["power_on_default_temperature_c"] = AIRCON_POWER_ON_DEFAULT_TEMP_C
-    aircon["desired_temperature_min_c"] = AIRCON_DESIRED_TEMP_MIN_C
-    aircon["desired_temperature_max_c"] = AIRCON_DESIRED_TEMP_MAX_C
+    aircon["desired_temperature_min_c"] = AIRCON_TEMPERATURE_MIN_C
+    aircon["desired_temperature_max_c"] = AIRCON_TEMPERATURE_MAX_C
     commanded_temperature = aircon.get("temperature_c")
     if isinstance(commanded_temperature, (int, float)) and not isinstance(commanded_temperature, bool):
-        desired_temperature = int(commanded_temperature) - AIRCON_TEMPERATURE_BIAS_C
-        aircon["desired_temperature_c"] = desired_temperature if AIRCON_DESIRED_TEMP_MIN_C <= desired_temperature <= AIRCON_DESIRED_TEMP_MAX_C else None
+        desired_temperature = int(commanded_temperature)
+        aircon["desired_temperature_c"] = desired_temperature if AIRCON_TEMPERATURE_MIN_C <= desired_temperature <= AIRCON_TEMPERATURE_MAX_C else None
     else:
         aircon["desired_temperature_c"] = None
     result["aircon"] = aircon
@@ -6302,20 +6298,13 @@ def _normalize_aircon_command(raw: str) -> str:
         raise HTTPException(422, str(exc)) from exc
 
 
-def _apply_aircon_temperature_bias(
+def _resolve_aircon_temperature_command(
     command: str,
 ) -> Tuple[str, Optional[int], Optional[int]]:
     try:
-        return apply_aircon_temperature_bias(
-            command,
-            desired_min_c=AIRCON_DESIRED_TEMP_MIN_C,
-            desired_max_c=AIRCON_DESIRED_TEMP_MAX_C,
-            bias_c=AIRCON_TEMPERATURE_BIAS_C,
-        )
+        return resolve_aircon_temperature_command(command)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(500, str(exc)) from exc
 
 
 def _normalize_bed_command(raw: str) -> str:
@@ -6481,14 +6470,7 @@ def aircon_command(
                 "message": "Direct Aircon command ใช้ได้เฉพาะผู้ดูแลระบบ",
             },
         )
-    if direct_temperature:
-        commanded_temperature = int(requested_command.split(" ", 1)[1])
-        if not 5 <= commanded_temperature <= 30:
-            raise HTTPException(422, "Control Debug ปรับอุณหภูมิได้ระหว่าง 5-30 °C")
-        command = requested_command
-        desired_temperature = None
-    else:
-        command, desired_temperature, commanded_temperature = _apply_aircon_temperature_bias(requested_command)
+    command, desired_temperature, commanded_temperature = _resolve_aircon_temperature_command(requested_command)
     # OFF and read-only status remain available during a safety latch. Other
     # commands follow the same safe-default policy as controllable outputs.
     if command not in ("off", "status"):
@@ -6560,7 +6542,7 @@ def aircon_command(
             "fan_level": fan_level,
             "desired_temperature_c": desired_temperature,
             "commanded_temperature_c": commanded_temperature,
-            "temperature_bias_c": AIRCON_TEMPERATURE_BIAS_C,
+            "temperature_mapping": "direct_1_to_1",
             "power_on_default_temperature_c": (AIRCON_POWER_ON_DEFAULT_TEMP_C if command == "on" else None),
             "preflight_command": preflight_command,
             "followup_command": followup_command,
@@ -6576,7 +6558,7 @@ def aircon_command(
         "fan_level": fan_level,
         "desired_temperature_c": desired_temperature,
         "commanded_temperature_c": commanded_temperature,
-        "temperature_bias_c": AIRCON_TEMPERATURE_BIAS_C,
+        "temperature_mapping": "direct_1_to_1",
         "power_on_default_temperature_c": (AIRCON_POWER_ON_DEFAULT_TEMP_C if command == "on" else None),
         "preflight_command": preflight_command,
         "preflight_ack": preflight_ack,

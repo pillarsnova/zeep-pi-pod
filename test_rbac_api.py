@@ -1417,7 +1417,7 @@ class RbacApiTests(unittest.TestCase):
             with pod_app.analysis_frame_lock:
                 pod_app._analysis_frame = original_frame
 
-    def test_aircon_on_sends_default_temperature_and_biases_user_temperature(
+    def test_aircon_on_and_temperature_commands_use_real_setpoints(
         self,
     ) -> None:
         """Exercise the Pi command sequence without publishing to real MQTT."""
@@ -1460,20 +1460,52 @@ class RbacApiTests(unittest.TestCase):
 
             commands.clear()
             coldest = pod_app.aircon_command(pod_app.AirconCommand(command="temp 15"))
-            self.assertEqual(commands, ["temp 12"])
+            self.assertEqual(commands, ["temp 15"])
             self.assertEqual(coldest["desired_temperature_c"], 15)
-            self.assertEqual(coldest["commanded_temperature_c"], 12)
+            self.assertEqual(coldest["commanded_temperature_c"], 15)
+            self.assertNotIn("temperature_bias_c", coldest)
+            self.assertEqual(coldest["temperature_mapping"], "direct_1_to_1")
 
             commands.clear()
-            changed = pod_app.aircon_command(pod_app.AirconCommand(command="temp 20"))
-            self.assertEqual(commands, ["temp 17"])
-            self.assertEqual(changed["desired_temperature_c"], 20)
-            self.assertEqual(changed["commanded_temperature_c"], 17)
+            warmest = pod_app.aircon_command(pod_app.AirconCommand(command="temp 28"))
+            self.assertEqual(commands, ["temp 28"])
+            self.assertEqual(warmest["desired_temperature_c"], 28)
+            self.assertEqual(warmest["commanded_temperature_c"], 28)
+
+            for temperature_c in (14, 29):
+                with self.assertRaises(pod_app.HTTPException) as rejected:
+                    pod_app.aircon_command(
+                        pod_app.AirconCommand(command=f"temp {temperature_c}")
+                    )
+                self.assertEqual(rejected.exception.status_code, 422)
+            self.assertEqual(commands, ["temp 28"])
         finally:
             pod_app.controlhub1_mqtt.publish_and_wait = original_publish
             pod_app.controlhub1_mqtt.publish_sequence_and_wait = (
                 original_publish_sequence
             )
+
+    def test_aircon_snapshot_projects_real_setpoint_and_product_bounds(self) -> None:
+        with pod_app.state_lock:
+            original = copy.deepcopy(pod_app.state["aircon"])
+            pod_app.state["aircon"].update(
+                {
+                    "connected": True,
+                    "last_update": time.time(),
+                    "temperature_c": 28,
+                }
+            )
+        try:
+            aircon = pod_app.snapshot()["aircon"]
+            self.assertEqual(aircon["desired_temperature_c"], 28)
+            self.assertEqual(aircon["temperature_c"], 28)
+            self.assertNotIn("temperature_bias_c", aircon)
+            self.assertEqual(aircon["temperature_mapping"], "direct_1_to_1")
+            self.assertEqual(aircon["desired_temperature_min_c"], 15)
+            self.assertEqual(aircon["desired_temperature_max_c"], 28)
+        finally:
+            with pod_app.state_lock:
+                pod_app.state["aircon"] = original
 
     def test_music_play_defaults_to_repeat_and_queue_overrides_loop(self) -> None:
         track = pod_app.MUSIC_DIR / "default-repeat-test.wav"
@@ -1699,16 +1731,16 @@ class RbacApiTests(unittest.TestCase):
         pod_app.controlhub1_mqtt.publish_sequence_and_wait = fake_publish_sequence
         try:
             direct = pod_app.aircon_command(
-                pod_app.AirconCommand(command="temp 5", direct=True), admin
+                pod_app.AirconCommand(command="temp 28", direct=True), admin
             )
-            self.assertEqual(commands, ["temp 5"])
+            self.assertEqual(commands, ["temp 28"])
             self.assertTrue(direct["direct"])
-            self.assertIsNone(direct["desired_temperature_c"])
-            self.assertEqual(direct["commanded_temperature_c"], 5)
+            self.assertEqual(direct["desired_temperature_c"], 28)
+            self.assertEqual(direct["commanded_temperature_c"], 28)
 
             with self.assertRaises(pod_app.HTTPException) as denied:
                 pod_app.aircon_command(
-                    pod_app.AirconCommand(command="temp 10", direct=True), user
+                    pod_app.AirconCommand(command="temp 18", direct=True), user
                 )
             self.assertEqual(denied.exception.status_code, 403)
 

@@ -2340,11 +2340,6 @@ body[data-view="control"] .device-copy span {
   font-size: 8.5px;
 }
 
-body[data-view="control"] .device-copy .aircon-bias-hint {
-  color: var(--amber);
-  font-weight: 750;
-}
-
 body[data-view="control"] .smart-switch {
   min-width: 66px;
   min-height: 44px;

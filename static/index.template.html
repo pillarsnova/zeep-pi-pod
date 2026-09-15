@@ -508,7 +508,7 @@
             <div class="debug-aircon-telemetry" aria-label="การแปลงอุณหภูมิสำหรับผู้ดูแลระบบ">
               <div><span>เปิดแอร์เริ่มต้น</span><b id="debugAirconDefaultTemp">18°C · สวิง</b></div>
               <div><span>ค่าที่ผู้ใช้เลือก</span><b id="debugAirconDesiredTemp">--</b></div>
-              <div><span>System Bias</span><b id="debugAirconBias">−3°C</b></div>
+              <div><span>การส่งค่า</span><b>ตรง 1:1</b></div>
               <div><span>ค่าที่ส่ง ESP32</span><b id="debugAirconCommandedTemp">--</b></div>
             </div>
             <div class="debug-command-grid">
@@ -521,7 +521,7 @@
               <button class="debug-command-button danger" onclick="debugSend(this,'ESP32 Aircon','light_off','/api/aircon/command',{command:'light_off'})"><span><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-display"/></svg></span><b>DISPLAY OFF</b><code>light_off</code></button>
               <button class="debug-command-button status" onclick="debugSend(this,'ESP32 Aircon','status','/api/aircon/command',{command:'status'})"><span><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-refresh"/></svg></span><b>STATUS</b><code>status</code></button>
             </div>
-            <div class="debug-inline-command"><div><b>Direct temperature command</b><small>Admin Debug: ส่งตรง ESP32 5–30°C · ไม่ใช้ System Bias</small></div><select id="debugAirconTemp" aria-label="อุณหภูมิทดสอบแบบส่งตรง 5 ถึง 30 องศา"><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option selected>10</option><option>11</option><option>12</option><option>13</option><option>14</option><option>15</option><option>16</option><option>17</option><option>18</option><option>19</option><option>20</option><option>21</option><option>22</option><option>23</option><option>24</option><option>25</option><option>26</option><option>27</option><option>28</option><option>29</option><option>30</option></select><button class="ui-label-button" onclick="debugAirconTemperature(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-snow"/></svg><span>SEND TEMP</span></button></div>
+            <div class="debug-inline-command"><div><b>Direct temperature command</b><small>Admin Debug: ส่งค่าจริงไป ESP32 ช่วง 15–28°C</small></div><select id="debugAirconTemp" aria-label="อุณหภูมิทดสอบแบบส่งตรง 15 ถึง 28 องศา"><option>15</option><option>16</option><option>17</option><option selected>18</option><option>19</option><option>20</option><option>21</option><option>22</option><option>23</option><option>24</option><option>25</option><option>26</option><option>27</option><option>28</option></select><button class="ui-label-button" onclick="debugAirconTemperature(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-snow"/></svg><span>SEND TEMP</span></button></div>
             <div class="debug-inline-command"><div><b>Fan Level Reference</b><small id="debugAirconFanSource">ระดับอ้างอิงล่าสุด · บันทึกถาวร · ไม่ยิง IR</small></div><select id="debugAirconFanReference" aria-label="ระบุระดับพัดลมแอร์อ้างอิง 1 ถึง 5"><option selected>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select><button class="ui-label-button" onclick="debugSetAirconFanReference(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-fan"/></svg><span>SET LEVEL</span></button></div>
           </section>
 
@@ -944,9 +944,9 @@
           </div>
         </div>
         <div class="aircon-group">
-          <strong>Temperature · เลือก 15–25 °C</strong>
+          <strong>Temperature · เลือก 15–28 °C</strong>
           <div class="aircon-temp-row">
-            <input id="airconTempInput" type="number" min="15" max="25" step="1" value="15" inputmode="numeric" aria-label="อุณหภูมิที่ผู้ใช้เลือก">
+            <input id="airconTempInput" type="number" min="15" max="28" step="1" value="18" inputmode="numeric" aria-label="อุณหภูมิที่ผู้ใช้เลือก">
             <button id="airconTempBtn" class="btn primary aircon-action" data-aircon-command="temp" onclick="airconSendTemperature(this)">ส่งอุณหภูมิ</button>
           </div>
         </div>

@@ -273,8 +273,8 @@ function syncUnifiedStarLight(on,enabled){
   updateUnifiedPodSceneLabel();
 }
 // Translate controller data into a calm, glanceable air-flow scene.  The
-// animation starts only from confirmed ESP32 power state. The user-facing
-// scene shows the selected comfort target, never the biased IR setpoint.
+// animation starts only from confirmed ESP32 power state. The scene shows the
+// same physical setpoint selected by the user and sent over IR.
 function syncUnifiedAirconComfort(on,online,targetTemperature,measuredTemperature){
   const map=document.getElementById('airconComfortMap');
   const caption=document.getElementById('airconComfortCaption');

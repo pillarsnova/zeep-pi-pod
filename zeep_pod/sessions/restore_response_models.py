@@ -114,7 +114,20 @@ class UnavailableRestoreStatus(ContractModel):
     version: str
 
 
-RestoreStatus = AvailableRestoreStatus | UnavailableRestoreStatus
+class SafetyReviewRestoreStatus(ContractModel):
+    key: Literal["safety_review"]
+    label: str
+    min_score: None = Field(...)
+    max_score: None = Field(...)
+    meaning: str
+    version: str
+
+
+RestoreStatus = (
+    AvailableRestoreStatus
+    | SafetyReviewRestoreStatus
+    | UnavailableRestoreStatus
+)
 
 
 class RestoreSessionScope(ContractModel):
@@ -408,14 +421,17 @@ class RestoreSummaryPayload(ContractModel):
         if values["source_score"].available:
             if values["status"].key == "unavailable":
                 raise ValueError("an available score requires an available status")
-            score_value = values["source_score"].value
-            band_value = int(round(score_value))
-            if not (
-                values["status"].min_score <= band_value <= values["status"].max_score
-            ):
-                raise ValueError(
-                    "source score must be inside the published status band"
-                )
+            if values["status"].key != "safety_review":
+                score_value = values["source_score"].value
+                band_value = int(round(score_value))
+                if not (
+                    values["status"].min_score
+                    <= band_value
+                    <= values["status"].max_score
+                ):
+                    raise ValueError(
+                        "source score must be inside the published status band"
+                    )
         elif values["status"].key != "unavailable":
             raise ValueError("an unavailable score requires status='unavailable'")
 
@@ -435,18 +451,23 @@ class RestoreSummaryPayload(ContractModel):
                 "sleep_restore_good",
                 "pace_morning",
                 "prioritise_rest",
+                "safety_review",
             },
             "nap_recovery": {
                 "rest_goal_full",
                 "rest_good",
                 "rest_partial",
                 "rest_more",
+                "safety_review",
             },
             "unknown": {"unavailable"},
         }[mode]
         if values["source_score"].available and status_key not in valid_statuses:
             raise ValueError("Restore status must match the Session mode")
-        if values["source_score"].available:
+        if (
+            values["source_score"].available
+            and status_key != "safety_review"
+        ):
             expected_band = _STATUS_BANDS[status_key]
             actual_band = (values["status"].min_score, values["status"].max_score)
             if actual_band != expected_band:

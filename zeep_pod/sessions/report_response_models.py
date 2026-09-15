@@ -154,6 +154,7 @@ class PublicEnvironmentMetric(ContractModel):
     available: bool | None = None
     required_for_overall: bool | None = None
     coverage_pct: float | None = Field(default=None, ge=0, le=100)
+    temporal_coverage_pct: float | None = Field(default=None, ge=0, le=100)
     average: float | None = None
     minimum: float | None = None
     maximum: float | None = None

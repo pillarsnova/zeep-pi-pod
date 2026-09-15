@@ -10,7 +10,8 @@ let monitorAudioContext = null;
 const USER_PRODUCT_COPY=Object.freeze({
   scoreLevels:Object.freeze({
     very_good:'ดีมาก',good:'ดี',fair:'พอใช้',low:'ให้เวลากับการพักเพิ่ม',
-    unavailable:'กำลังเตรียมผลสรุป',unknown:'ผลการพักครั้งนี้',
+    safety_review:'ควรให้ทีมตรวจสอบ',
+    unavailable:'ครั้งนี้ยังไม่มีคะแนน',unknown:'ผลการพักครั้งนี้',
   }),
   environmentLevels:Object.freeze({
     excellent:'ยอดเยี่ยม',good:'ดี',fair:'พอใช้',poor:'ควรปรับ',
@@ -18,7 +19,7 @@ const USER_PRODUCT_COPY=Object.freeze({
   }),
   confidenceLevels:Object.freeze({
     high:'ข้อมูลชัดเจน',medium:'ข้อมูลเพียงพอ',low:'กำลังรวบรวมข้อมูลเพิ่ม',
-    unknown:'กำลังเตรียมผลสรุป',
+    unknown:'ข้อมูลยังไม่พอสรุป',
   }),
   environmentMetrics:Object.freeze({
     temperature:'อุณหภูมิ',temp:'อุณหภูมิ',humidity:'ความชื้น',hum:'ความชื้น',
@@ -33,10 +34,14 @@ function userConfidenceLevelLabel(level){
   return USER_PRODUCT_COPY.confidenceLevels[String(level||'unknown').toLowerCase()]
     ||USER_PRODUCT_COPY.confidenceLevels.unknown;
 }
-function userScoreMeaning(quality={}){
-  if(!quality?.available)return 'ZEEP กำลังรวบรวมข้อมูลเพื่อสรุปผลการพักครั้งนี้';
+function userScoreMeaning(quality={},presentationOverride,safetyReviewOverride=false){
+  if(!quality?.available)return 'ครั้งนี้ยังไม่มีคะแนน แต่ยังดูรายละเอียดการพักที่บันทึกไว้ได้';
+  if(safetyReviewOverride||quality.safety_review_required===true||quality.level_key==='safety_review'){
+    return 'พบค่าสภาพแวดล้อมบางช่วงที่ควรให้ทีมตรวจสอบก่อนใช้งานครั้งถัดไป';
+  }
   const level=String(quality.level_key||'unknown').toLowerCase();
-  const recovery=quality.quality_type==='rest_goal'||String(quality.score_title||'').includes('Recovery');
+  const recovery=presentationOverride==='recovery'
+    ||(presentationOverride!=='sleep'&&quality.quality_type==='rest_goal');
   const meanings=recovery?{
     very_good:'ช่วงพักนี้เป็นไปได้ดีมากตามเป้าหมายที่เลือก',
     good:'ช่วงพักนี้เป็นไปได้ดีตามเป้าหมายที่เลือก',

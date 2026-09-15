@@ -47,7 +47,7 @@ function showSessionEndScreen(payload){
 
 function renderSessionEndScreen(payload){
   const overlay=document.getElementById('sessionEndScreen');
-  const presentation=reportPresentationMode(payload.session_report||payload);
+  const presentation=reportPresentationMode(payload);
   const resultSummaryHtml=renderRestoreSummary(
     payload,presentation,payload.ended_at_utc||true,
   );
@@ -58,7 +58,9 @@ function renderSessionEndScreen(payload){
   ].filter(Boolean).join(' · ');
   document.getElementById('sessionEndSummary').innerHTML=
     resultSummaryHtml
-    +renderSessionOverview(payload.session_report,Boolean(resultSummaryHtml));
+    +renderSessionOverview(
+      payload.session_report,Boolean(resultSummaryHtml),presentation,
+    );
   overlay.classList.remove('hide');overlay.setAttribute('aria-hidden','false');
   const label=document.getElementById('sessionEndCountdown');
   sessionEndDeadline=Date.now()+SESSION_END_NO_QR_HOLD_MS;
@@ -181,7 +183,7 @@ function drawReportHeader(ctx,payload,W,M,presentation){
   return y+62;
 }
 
-function drawReportScore(ctx,quality,y,W,M,presentation){
+function drawReportScore(ctx,quality,y,W,M,presentation,safetyReview=false){
   const h=250;
   reportRoundRect(ctx,M,y,W-2*M,h,24);
   ctx.fillStyle='#0b1e2e';ctx.fill();ctx.strokeStyle='#17394f';ctx.lineWidth=2;ctx.stroke();
@@ -206,10 +208,12 @@ function drawReportScore(ctx,quality,y,W,M,presentation){
   ctx.fillText(scoreTitle,tx,y+50);
   ctx.fillStyle='#eaf7fc';ctx.font=reportFont(800,42);
   const scoreAvailable=score!==null;
-  drawWrapped(ctx,scoreAvailable?userScoreLevelLabel(quality):'ครั้งนี้ยังไม่มีคะแนน',tx,y+88,tw,50,1);
+  const level=safetyReview
+    ?USER_PRODUCT_COPY.scoreLevels.safety_review:userScoreLevelLabel(quality);
+  drawWrapped(ctx,scoreAvailable?level:'ครั้งนี้ยังไม่มีคะแนน',tx,y+88,tw,50,1);
   ctx.fillStyle='#7fa6b8';ctx.font=reportFont(500,24);
   const meaning=scoreAvailable
-    ?userScoreMeaning(quality):userUnavailableScoreReason(quality,presentation);
+    ?userScoreMeaning(quality,presentation,safetyReview):userUnavailableScoreReason(quality,presentation);
   drawWrapped(ctx,meaning,tx,y+150,tw,34,3);
   return y+h+40;
 }
@@ -222,14 +226,14 @@ function drawReportMetrics(ctx,report,quality,y,W,M,presentation){
   let boxes;
   if(presentation==='recovery')boxes=[
     ['เวลาพักที่นับได้',fmtDur(target.eligible_rest_seconds==null?sleep.recording_s:target.eligible_rest_seconds)],
-    ['เทียบเป้าหมาย',target.completion_pct==null?'--':`${Math.round(Number(target.completion_pct))}%`],
+    ['ครบตามเวลาเป้าหมาย',target.completion_pct==null?'--':`${Math.round(Number(target.completion_pct))}%`],
     ['ความสม่ำเสมอระหว่างพัก',regularity==null?'--':`${Math.round(100*Number(regularity))}%`],
     ['ความนิ่งร่างกาย',movement==null?'--':`${Math.max(0,Math.round(100-Number(movement)))}%`],
   ];
   else if(presentation==='sleep')boxes=[
     ['เวลานอนโดยประมาณ',fmtDur(sleep.estimated_sleep_s)],
     ['ระยะเวลาการใช้งาน',fmtDur(sleep.recording_s)],
-    ['ประสิทธิภาพ',sleep.sleep_efficiency_pct==null?'--':`${sleep.sleep_efficiency_pct}%`],
+    ['สัดส่วนเวลาที่ประเมินว่าหลับ',sleep.sleep_efficiency_pct==null?'--':`${sleep.sleep_efficiency_pct}%`],
     ['W · ตื่น',fmtDur(sleep.wake_s)],
   ];
   else boxes=[['ระยะเวลาที่บันทึก',fmtDur(sleep.recording_s)]];
@@ -300,7 +304,8 @@ async function drawSessionReportPng(payload){
   const ctx=canvas.getContext('2d');
   const W=canvas.width,H=canvas.height,M=80;
   const report=payload.session_report||{},quality=payload.sleep_quality||{};
-  const presentation=reportPresentationMode(report||quality);
+  const presentation=reportPresentationMode(payload);
+  const safetyReview=reportSafetyReviewRequired(payload);
   // รอฟอนต์ไทยของแท็บเล็ตให้พร้อมก่อน ไม่งั้น measureText คำนวณจาก fallback
   try{await document.fonts.ready;}catch{}
   const bg=ctx.createLinearGradient(0,0,0,H);
@@ -308,7 +313,7 @@ async function drawSessionReportPng(payload){
   ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
   ctx.textBaseline='top';ctx.textAlign='left';
   let y=drawReportHeader(ctx,payload,W,M,presentation);
-  y=drawReportScore(ctx,quality,y,W,M,presentation);
+  y=drawReportScore(ctx,quality,y,W,M,presentation,safetyReview);
   y=drawReportMetrics(ctx,report,quality,y,W,M,presentation);
   if(presentation!=='unknown'){
     y=drawReportStages(ctx,report,quality,y,W,M,presentation);

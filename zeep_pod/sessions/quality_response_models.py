@@ -57,6 +57,8 @@ class PublicDurationTarget(ContractModel):
     eligible_rest_seconds: float | None = Field(default=None, ge=0)
     eligible_rest_minutes: float | None = Field(default=None, ge=0)
     completion_pct: float | None = Field(default=None, ge=0, le=100)
+    score_factor: float | None = Field(default=None, ge=0, le=1)
+    score_curve_exponent: float | None = Field(default=None, ge=0)
     basis: str | None = None
     extended_max_seconds: float | None = Field(default=None, ge=0)
     supported_seconds: list[float] | None = None
@@ -98,6 +100,24 @@ class PublicPhysiology(ContractModel):
     paired_hr_rr_samples: int | None = Field(default=None, ge=0)
     source_sensor_samples: int | None = Field(default=None, ge=0)
     paired_hr_rr_coverage_pct: float | None = Field(default=None, ge=0, le=100)
+    measured_paired_samples: int | None = Field(default=None, ge=0)
+    plausible_paired_samples: int | None = Field(default=None, ge=0)
+    plausible_paired_ratio: float | None = Field(default=None, ge=0, le=1)
+    plausibility_review_required: bool | None = None
+    physiology_context_factor: float | None = Field(default=None, ge=0, le=1)
+    edge_context_review_required: bool | None = None
+    evidence_coverage_ratio: float | None = Field(default=None, ge=0, le=1)
+    evidence_lift_factor: float | None = Field(default=None, ge=0, le=1)
+    usable_evidence_coverage_ratio: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+    )
+    usable_evidence_lift_factor: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+    )
     method: str | None = None
 
 
@@ -106,6 +126,9 @@ class PublicBodyResponse(ContractModel):
     movement_pct: float | None = Field(default=None, ge=0, le=100)
     bed_exit_events: int | None = Field(default=None, ge=0)
     transient_bed_exit_samples: int | None = Field(default=None, ge=0)
+    presence_factor: float | None = Field(default=None, ge=0, le=1)
+    continuity_factor: float | None = Field(default=None, ge=0, le=1)
+    confirmed_off_bed_seconds: float | None = Field(default=None, ge=0)
 
 
 class PublicSensorAverages(ContractModel):
@@ -131,7 +154,13 @@ class PublicSensorFit(ContractModel):
 class PublicEnvironmentSupport(ContractModel):
     available: bool | None = None
     quality_factor: float | None = Field(default=None, ge=0, le=1)
+    uncapped_quality_factor: float | None = Field(default=None, ge=0, le=1)
+    safety_score_factor_cap: float | None = Field(default=None, ge=0, le=1)
+    safety_score_cap_applied: bool | None = None
     coverage_pct: float | None = Field(default=None, ge=0, le=100)
+    channel_coverage_pct: float | None = Field(default=None, ge=0, le=100)
+    temporal_coverage_pct: float | None = Field(default=None, ge=0, le=100)
+    evidence_coverage_pct: float | None = Field(default=None, ge=0, le=100)
     available_factors: int | None = Field(default=None, ge=0)
     expected_factors: int | None = Field(default=None, ge=0)
     policy_version: str | None = None
@@ -178,6 +207,7 @@ class PublicArchitecturePoints(ContractModel):
     n2: float | None = Field(default=None, ge=0)
     n3: float | None = Field(default=None, ge=0)
     rem: float | None = Field(default=None, ge=0)
+    identified_sleep_pattern: float | None = Field(default=None, ge=0)
     mode_adjusted_balance: float | None = Field(default=None, ge=0)
 
 
@@ -214,6 +244,15 @@ class PublicContinuity(ContractModel):
     efficiency_points: float | None = Field(default=None, ge=0)
     efficiency_max_points: float | None = Field(default=None, ge=0)
     balanced_arousal_penalty_points: float | None = Field(default=None, ge=0)
+    arousal_evidence_available: bool | None = None
+    arousal_unavailable_neutral_points: float | None = Field(
+        default=None,
+        ge=0,
+    )
+    confirmed_post_onset_off_bed_s: float | None = Field(
+        default=None,
+        ge=0,
+    )
     arousal_proxy: PublicArousalProxy | None = None
 
 
@@ -294,6 +333,11 @@ class PublicScoreConfidence(ContractModel):
     paired_hr_rr_coverage_pct: float | None = Field(default=None, ge=0, le=100)
     coverage_is_admin_qa_context: bool | None = None
     coverage_can_hide_score: bool | None = None
+    component_evidence_coverage_pct: float | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+    )
 
 
 PublicQualityCycle = PublicCycle

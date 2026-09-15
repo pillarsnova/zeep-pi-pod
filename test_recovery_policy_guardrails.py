@@ -13,6 +13,8 @@ from api_models import AuthLoginCommand
 from rescore_session_reports import rescore
 from sleep_session_report import build_sleep_quality
 from sleep_system_policy import (
+    PRE_WELLNESS_BALANCE_SESSION_REPORT_VERSION,
+    PRE_WELLNESS_BALANCE_SLEEP_QUALITY_VERSION,
     PREVIOUS_SESSION_REPORT_VERSION,
     PREVIOUS_SLEEP_QUALITY_VERSION,
     RECOVERY_SCORE_COMPONENT_MAX_POINTS,
@@ -26,7 +28,7 @@ from zeep_pod.sessions.history_quality import released_historical_quality
 
 
 class RecoveryPolicyUnitTests(unittest.TestCase):
-    def test_two_mode_docs_match_recovery_v2_contract(self):
+    def test_two_mode_docs_match_recovery_v3_contract(self):
         root = Path(__file__).resolve().parent
         evidence = (root / "research/evidence-library/TWO_MODE_SCORE_EVIDENCE.md").read_text(
             encoding="utf-8"
@@ -113,6 +115,36 @@ class RecoveryPolicyUnitTests(unittest.TestCase):
         self.assertEqual(released["score"], 88)
         self.assertTrue(released["compatible_untouched_sleep_result"])
 
+    def test_pre_wellness_recovery_result_remains_readable(self):
+        quality = {
+            "available": True,
+            "score": 74,
+            "quality_type": "rest_goal",
+            "score_title": "Recovery Score",
+            "formula_version": (
+                "zeep-recovery-score-v2.1-complete-rest-25-35-30-10"
+            ),
+            "version": PRE_WELLNESS_BALANCE_SLEEP_QUALITY_VERSION,
+            "rest_mode": {"group": "nap_recovery"},
+        }
+        final_summary = {
+            "rest_mode": "nap_recovery",
+            "target_duration_s": 30 * 60,
+            "session_report": {
+                "version": PRE_WELLNESS_BALANCE_SESSION_REPORT_VERSION,
+                "rest_mode": {"group": "nap_recovery"},
+                "sleep": {"recording_s": 30 * 60},
+            },
+        }
+
+        released = released_historical_quality(final_summary, quality)
+
+        self.assertTrue(released["available"])
+        self.assertEqual(released["score"], 74)
+        self.assertTrue(
+            released["compatible_pre_wellness_balance_result"]
+        )
+
     def test_unresolved_auto_history_is_not_labelled_recovery(self):
         quality = {
             "available": True,
@@ -135,7 +167,7 @@ class RecoveryPolicyUnitTests(unittest.TestCase):
         self.assertTrue(released["rest_mode_unresolved"])
         self.assertNotEqual(released["score_title"], "Recovery Score")
 
-    def test_recovery_v2_weights_total_one_hundred_without_coverage(self):
+    def test_recovery_v3_weights_total_one_hundred_without_coverage(self):
         self.assertEqual(RECOVERY_SCORE_COMPONENT_MAX_POINTS, {
             "goal_duration": 25.0,
             "physiological_response": 35.0,
@@ -178,6 +210,37 @@ class RecoveryPolicyUnitTests(unittest.TestCase):
         self.assertEqual(environment["available_factors"], 6)
         self.assertEqual(environment["expected_factors"], 7)
         self.assertEqual(environment["coverage_pct"], 85.7)
+
+    def test_fair_environment_is_acceptable_not_a_half_score(self):
+        sample = {
+            "bed": "On bed",
+            "hr": 62.0,
+            "rr": 14.0,
+            "temp": 28.5,
+            "hum": 68.0,
+            "co2": 1100.0,
+            "lux": 25.0,
+            "dba": 48.0,
+            "pm2_5": 30.0,
+            "voc": 180.0,
+        }
+        quality = build_sleep_quality(
+            20 * 60,
+            {},
+            {"wake": 240},
+            rest_mode="nap_recovery",
+            sensor_samples=[sample] * 240,
+            target_duration_s=30 * 60,
+        )
+
+        environment = quality["environment_support"]
+        fair_factors = {
+            metric["score_factor"]
+            for metric in environment["metrics"]
+            if metric["status_key"] == "fair"
+        }
+        self.assertEqual(fair_factors, {0.85})
+        self.assertGreaterEqual(environment["quality_factor"], 0.85)
 
 
 class HistoricalRecoveryGuardrailTests(unittest.TestCase):
@@ -328,7 +391,7 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
         connection.close()
         return quality, before_stage_count, before_timeline_count
 
-    def test_missing_legacy_target_is_scored_with_admin_review(self):
+    def test_missing_legacy_target_is_withheld_for_admin_review(self):
         with tempfile.TemporaryDirectory() as temporary:
             data_dir = Path(temporary)
             original, _, _ = self._database(data_dir, duration_s=60 * 60)
@@ -341,21 +404,15 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
             )
 
             item = result["sessions"][0]
-            self.assertEqual(item["status"], "rescored")
-            self.assertEqual(item["score_title"], "Recovery Score")
-            self.assertIsInstance(item["new_score"], int)
-            self.assertTrue(item["quality"]["score_releasable"])
-            self.assertTrue(
-                item["quality"]["rest_mode"]["protocol_status"][
-                    "review_required"
-                ]
-            )
+            self.assertEqual(item["status"], "skipped_review_required")
+            self.assertEqual(item["reason_code"], "recovery_timing_review")
+            self.assertTrue(item["persisted_record_unchanged"])
             connection = sqlite3.connect(data_dir / "sessions.db")
             final = json.loads(connection.execute(
                 "SELECT value FROM events WHERE type='final_summary'"
             ).fetchone()[0])
             connection.close()
-            self.assertNotEqual(
+            self.assertEqual(
                 final["night_summary"]["sleep_quality"], original
             )
 
@@ -624,6 +681,86 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
                 final["night_summary"]["sleep_quality"]["score"], int
             )
             self.assertEqual(audit_count, 1)
+
+    def test_full_rescore_audit_keeps_complete_previous_summary(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            data_dir = Path(temporary)
+            self._database(
+                data_dir,
+                duration_s=20 * 60,
+                target_duration_s=30 * 60,
+            )
+            connection = sqlite3.connect(data_dir / "sessions.db")
+            previous = json.loads(connection.execute(
+                "SELECT value FROM events WHERE type='final_summary'"
+            ).fetchone()[0])
+            connection.close()
+
+            rescore(
+                data_dir,
+                ["nap-1"],
+                requested_mode=None,
+                apply=True,
+            )
+
+            connection = sqlite3.connect(data_dir / "sessions.db")
+            audit = json.loads(connection.execute(
+                "SELECT value FROM events "
+                "WHERE type='session_report_rescored'"
+            ).fetchone()[0])
+            current = json.loads(connection.execute(
+                "SELECT value FROM events WHERE type='final_summary'"
+            ).fetchone()[0])
+            connection.close()
+
+            self.assertEqual(audit["previous_final_summary"], previous)
+            self.assertEqual(
+                audit["previous_final_summary_sha256"],
+                rescore_session_reports._canonical_sha256(previous),
+            )
+            self.assertEqual(
+                audit["new_final_summary_sha256"],
+                rescore_session_reports._canonical_sha256(current),
+            )
+            self.assertEqual(
+                audit["rollback_scope"],
+                "complete_derived_final_summary",
+            )
+
+    def test_since_guard_limits_all_session_cohort(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            data_dir = Path(temporary)
+            self._database(
+                data_dir,
+                duration_s=20 * 60,
+                target_duration_s=30 * 60,
+            )
+
+            excluded = rescore(
+                data_dir,
+                None,
+                requested_mode=None,
+                apply=False,
+                since_utc="2026-09-11T00:00:00+00:00",
+            )
+            included = rescore(
+                data_dir,
+                None,
+                requested_mode=None,
+                apply=False,
+                since_utc="2026-09-09T00:00:00+00:00",
+            )
+
+            self.assertEqual(excluded["count"], 0)
+            self.assertEqual(included["count"], 1)
+            with self.assertRaisesRegex(ValueError, "only valid"):
+                rescore(
+                    data_dir,
+                    ["nap-1"],
+                    requested_mode=None,
+                    apply=False,
+                    since_utc="2026-09-09T00:00:00+00:00",
+                )
 
     def test_report_only_refreshes_environment_and_preserves_quality(self):
         with tempfile.TemporaryDirectory() as temporary:

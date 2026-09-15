@@ -17,7 +17,8 @@ USER_SCORE_LEVELS = {
     "good": "ดี",
     "fair": "พอใช้",
     "low": "ให้เวลากับการพักเพิ่ม",
-    "unavailable": "กำลังเตรียมผลสรุป",
+    "safety_review": "ควรให้ทีมตรวจสอบ",
+    "unavailable": "ครั้งนี้ยังไม่มีคะแนน",
     "unknown": "ผลการพักครั้งนี้",
 }
 
@@ -35,7 +36,7 @@ USER_CONFIDENCE_LEVELS = {
     "high": "ข้อมูลชัดเจน",
     "medium": "ข้อมูลเพียงพอ",
     "low": "กำลังรวบรวมข้อมูลเพิ่ม",
-    "unknown": "กำลังเตรียมผลสรุป",
+    "unknown": "ข้อมูลยังไม่พอสรุป",
 }
 
 USER_REST_MODE_LABELS = {

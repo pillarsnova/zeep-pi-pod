@@ -14,6 +14,7 @@ dashboard. They are not medical diagnostic limits.
 
 from __future__ import annotations
 
+import math
 from typing import Any, Dict, Iterable, Optional
 
 from sleep_signal_features import (
@@ -27,14 +28,21 @@ from sleep_system_policy import (
     ENVIRONMENT_CONTEXT_CRITERIA,
     ENVIRONMENT_CONTEXT_POLICY_VERSION,
     ENVIRONMENT_LEVELS,
+    ENVIRONMENT_SAFETY_SCORE_FACTOR_CAP,
+    ENVIRONMENT_SAMPLE_CREDIT_CAP_SECONDS,
+    ENVIRONMENT_SCORE_FACTORS,
     ENVIRONMENT_SESSION_AGGREGATION_VERSION,
     NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS,
     NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
     OVERNIGHT_ARCHITECTURE_MAX_POINTS,
     OVERNIGHT_N2_FULL_CREDIT_PCT,
+    OVERNIGHT_N2_SOFT_CREDIT_PCT,
     OVERNIGHT_N3_FULL_CREDIT_FROM_PCT,
-    OVERNIGHT_N3_ZERO_BELOW_PCT,
     OVERNIGHT_REM_FULL_CREDIT_PCT,
+    RECOVERY_DURATION_CURVE_EXPONENT,
+    RECOVERY_EXIT_PENALTY_EVENT_CAP,
+    RECOVERY_EXIT_PENALTY_WEIGHT,
+    RECOVERY_MOVEMENT_PENALTY_WEIGHT,
     RECOVERY_SCORE_COMPONENT_MAX_POINTS,
     RECOVERY_SCORE_FORMULA_VERSION,
     REST_MODE_DURATION_TARGETS_S,
@@ -42,9 +50,19 @@ from sleep_system_policy import (
     REST_MODE_PROTOCOLS,
     REST_SESSION_GROUPS,
     SESSION_REPORT_VERSION,
+    SLEEP_AROUSAL_PENALTY_MAX_POINTS,
+    SLEEP_AROUSAL_PENALTY_POINTS_PER_INDEX,
+    SLEEP_AROUSAL_UNAVAILABLE_POINTS,
     SLEEP_QUALITY_COMPONENT_MAX_POINTS,
     SLEEP_QUALITY_VERSION,
     SLEEP_SCORE_FORMULA_VERSION,
+    WELLNESS_MISSING_COMPONENT_NEUTRAL_FACTOR,
+    WELLNESS_PHYSIOLOGY_FULL_LIFT_COVERAGE,
+    WELLNESS_PHYSIOLOGY_NEUTRAL_FLOOR,
+    WELLNESS_SCORE_HR_PLAUSIBLE_RANGE_BPM,
+    WELLNESS_SCORE_HR_PREFERRED_RANGE_BPM,
+    WELLNESS_SCORE_RR_PLAUSIBLE_RANGE_PER_MIN,
+    WELLNESS_SCORE_RR_PREFERRED_RANGE_PER_MIN,
     ZEEP_OFF_BED_DATA_STATUSES,
     environment_criterion,
     environment_level_for_value,
@@ -141,7 +159,8 @@ _INITIAL_WAIT_STATUSES = {
 def _number(value: Any) -> Optional[float]:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    return float(value)
+    number = float(value)
+    return number if math.isfinite(number) else None
 
 
 def _row_duration_seconds(
@@ -606,8 +625,16 @@ def _protocol_status(
         "within_operational_window": not below_minimum and not above_maximum,
         "within_recommended_range": in_recommended,
         "status": status,
-        "review_required": False,
-        "score_releasable": True,
+        "review_required": bool(below_minimum or above_maximum),
+        "score_releasable": not below_minimum and not above_maximum,
+        "reason": (
+            "Overnight Recovery ต้องมีเวลาบันทึกอย่างน้อย 5 ชั่วโมง "
+            "ก่อนเผยแพร่ Sleep Score"
+            if below_minimum
+            else "ระยะเวลานอกขอบเขต Overnight Recovery"
+            if above_maximum
+            else None
+        ),
     }
 
 
@@ -661,10 +688,10 @@ def _nap_protocol_status(
             "within_operational_window": None,
             "within_recommended_range": None,
             "review_required": True,
-            "score_releasable": True,
+            "score_releasable": False,
             "reason": (
                 "Session เดิมไม่ได้เก็บเป้าหมาย 30/90 นาที "
-                "จึงประเมินจากเวลาพักจริงและเก็บธงไว้ให้ผู้ดูแลตรวจ"
+                "จึงไม่เดาเป้าหมายและไม่เผยแพร่ Recovery Score"
             ),
         }
 
@@ -710,6 +737,42 @@ def _range_fit(value: float, low: float, high: float, soft_low: float, soft_high
 
 def _average(values: list[float]) -> Optional[float]:
     return sum(values) / len(values) if values else None
+
+
+def _wellness_component_totals(
+    points: Dict[str, Optional[float]],
+    maxima: Dict[str, float],
+) -> Dict[str, Any]:
+    """Keep the denominator fixed and impute missing optional context.
+
+    Dividing by only the components that happened to be available can make a
+    score rise when a Sensor disappears.  A documented 75% neutral value is
+    therefore used for a missing optional component.  Core release gates such
+    as HR/RR plausibility, duration and stored Nap target remain independent
+    and can still withhold the public score.
+    """
+    effective = {}
+    imputed = {}
+    raw_available = 0.0
+    for key, maximum in maxima.items():
+        value = _number(points.get(key))
+        if value is None:
+            value = round(
+                maximum * WELLNESS_MISSING_COMPONENT_NEUTRAL_FACTOR,
+                1,
+            )
+            imputed[key] = value
+        else:
+            raw_available += value
+        effective[key] = value
+    return {
+        "raw_available_points": round(raw_available, 1),
+        "effective_points": effective,
+        "imputed_points": imputed,
+        "total": round(sum(effective.values()), 1),
+        "max_points": round(sum(maxima.values()), 1),
+        "neutral_factor": WELLNESS_MISSING_COMPONENT_NEUTRAL_FACTOR,
+    }
 
 
 def _regularity(values: list[float], *, soft_cv: float) -> Optional[float]:
@@ -775,6 +838,7 @@ def _score_confidence(
     *,
     paired_vital_ratio: Optional[float] = None,
     state_attribution_ratio: Optional[float] = None,
+    component_evidence_ratio: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Describe score evidence completeness without suppressing the score.
 
@@ -782,10 +846,13 @@ def _score_confidence(
     bounded score component.  It must not become a second, hidden veto after
     minimum paired HR/RR evidence has passed.
     """
-    evidence_floor = min(
+    evidence_inputs = [
         timeline_coverage_ratio,
         physiological_evidence_ratio,
-    )
+    ]
+    if component_evidence_ratio is not None:
+        evidence_inputs.append(component_evidence_ratio)
+    evidence_floor = min(evidence_inputs)
     attribution_ratio = timeline_coverage_ratio if state_attribution_ratio is None else state_attribution_ratio
     if evidence_floor >= 0.80:
         level, label = "high", "หลักฐานสูง"
@@ -808,6 +875,11 @@ def _score_confidence(
         ),
         "coverage_is_admin_qa_context": True,
         "coverage_can_hide_score": False,
+        "component_evidence_coverage_pct": (
+            round(component_evidence_ratio * 100.0, 1)
+            if component_evidence_ratio is not None
+            else None
+        ),
     }
 
 
@@ -821,6 +893,233 @@ def _settling(values: list[float], *, scale: float) -> Optional[float]:
     return max(0.0, min(1.0, 0.5 + (first - last) / max(0.1, scale)))
 
 
+def _physiology_response(
+    rows: list[Dict[str, Any]],
+    *,
+    evidence_coverage_ratio: float = 1.0,
+) -> Dict[str, Any]:
+    """Summarise coarse HR/RR regularity for a Wellness score.
+
+    This intentionally is not beat-to-beat HRV and does not classify health or
+    fitness.  Once the independent paired-HR/RR release gate is satisfied, an
+    ordinary valid response starts at a neutral floor instead of a technical
+    zero.  The observed regularity and gentle settling can improve the factor.
+    """
+    measured_rows = [
+        row for row in rows if _row_has_measured_paired_vitals(row)
+    ]
+    hr_low, hr_high = WELLNESS_SCORE_HR_PLAUSIBLE_RANGE_BPM
+    rr_low, rr_high = WELLNESS_SCORE_RR_PLAUSIBLE_RANGE_PER_MIN
+    physiology_rows = []
+    for row in measured_rows:
+        heart_rate = _number(row.get("hr"))
+        respiration = _number(row.get("rr"))
+        if (
+            heart_rate is not None
+            and respiration is not None
+            and hr_low <= heart_rate <= hr_high
+            and rr_low <= respiration <= rr_high
+        ):
+            physiology_rows.append(row)
+    plausible_ratio = (
+        len(physiology_rows) / len(measured_rows)
+        if measured_rows
+        else 0.0
+    )
+    plausibility_passed = bool(
+        len(physiology_rows) >= 6 and plausible_ratio >= 0.50
+    )
+    hr = [
+        value
+        for value in _values(physiology_rows, "hr")
+        if 30 <= value <= 220
+    ]
+    rr = [
+        value
+        for value in _values(physiology_rows, "rr")
+        if 4 <= value <= 60
+    ]
+    hr_regularity = _regularity(hr, soft_cv=0.12)
+    rr_regularity = _regularity(rr, soft_cv=0.18)
+    regularity_parts = [
+        value
+        for value in (hr_regularity, rr_regularity)
+        if value is not None
+    ]
+    settling_parts = [
+        value
+        for value in (
+            _settling(hr, scale=10.0),
+            _settling(rr, scale=5.0),
+        )
+        if value is not None
+    ]
+    regularity = _average(regularity_parts)
+    settling = _average(settling_parts)
+    heart_rate_average = _average(hr)
+    respiration_average = _average(rr)
+    hr_preferred_low, hr_preferred_high = (
+        WELLNESS_SCORE_HR_PREFERRED_RANGE_BPM
+    )
+    rr_preferred_low, rr_preferred_high = (
+        WELLNESS_SCORE_RR_PREFERRED_RANGE_PER_MIN
+    )
+    physiology_context_factor = (
+        min(
+            _range_fit(
+                heart_rate_average,
+                hr_preferred_low,
+                hr_preferred_high,
+                hr_low,
+                hr_high,
+            ),
+            _range_fit(
+                respiration_average,
+                rr_preferred_low,
+                rr_preferred_high,
+                rr_low,
+                rr_high,
+            ),
+        )
+        if heart_rate_average is not None
+        and respiration_average is not None
+        else 0.0
+    )
+    raw_factor = (
+        None
+        if regularity is None
+        else 0.85 * regularity
+        + 0.15 * (settling if settling is not None else 0.5)
+    )
+    unadjusted_wellness_factor = (
+        None
+        if raw_factor is None
+        else WELLNESS_PHYSIOLOGY_NEUTRAL_FLOOR
+        + (1.0 - WELLNESS_PHYSIOLOGY_NEUTRAL_FLOOR) * raw_factor
+    )
+    coverage_lift = max(
+        0.0,
+        min(
+            1.0,
+            evidence_coverage_ratio
+            / WELLNESS_PHYSIOLOGY_FULL_LIFT_COVERAGE,
+        ),
+    )
+    usable_evidence_coverage_ratio = max(
+        0.0,
+        min(1.0, evidence_coverage_ratio * plausible_ratio),
+    )
+    usable_coverage_lift = max(
+        0.0,
+        min(
+            1.0,
+            usable_evidence_coverage_ratio
+            / WELLNESS_PHYSIOLOGY_FULL_LIFT_COVERAGE,
+        ),
+    )
+    wellness_factor = (
+        None
+        if unadjusted_wellness_factor is None
+        else WELLNESS_PHYSIOLOGY_NEUTRAL_FLOOR
+        + (
+            unadjusted_wellness_factor
+            - WELLNESS_PHYSIOLOGY_NEUTRAL_FLOOR
+        )
+        * usable_coverage_lift
+        * physiology_context_factor
+    )
+    return {
+        "available": bool(
+            plausibility_passed
+            and hr_regularity is not None
+            and rr_regularity is not None
+        ),
+        "measured_paired_samples": len(measured_rows),
+        "plausible_paired_samples": len(physiology_rows),
+        "plausible_paired_ratio": round(plausible_ratio, 3),
+        "plausibility_review_required": bool(
+            measured_rows and not plausibility_passed
+        ),
+        "heart_rate_plausible_range_bpm": [hr_low, hr_high],
+        "respiration_plausible_range_per_min": [rr_low, rr_high],
+        "heart_rate_preferred_range_bpm": [
+            hr_preferred_low,
+            hr_preferred_high,
+        ],
+        "respiration_preferred_range_per_min": [
+            rr_preferred_low,
+            rr_preferred_high,
+        ],
+        "physiology_context_factor": round(
+            physiology_context_factor,
+            3,
+        ),
+        "edge_context_review_required": (
+            physiology_context_factor < 0.50
+        ),
+        "heart_rate_values": hr,
+        "respiration_values": rr,
+        "heart_rate_average": (
+            round(heart_rate_average, 1)
+            if heart_rate_average is not None
+            else None
+        ),
+        "respiration_average": (
+            round(respiration_average, 1)
+            if respiration_average is not None
+            else None
+        ),
+        "regularity_factor": (
+            round(regularity, 3) if regularity is not None else None
+        ),
+        "heart_rate_regularity_factor": (
+            round(hr_regularity, 3)
+            if hr_regularity is not None
+            else None
+        ),
+        "respiration_regularity_factor": (
+            round(rr_regularity, 3)
+            if rr_regularity is not None
+            else None
+        ),
+        "settling_factor": (
+            round(settling, 3) if settling is not None else None
+        ),
+        "raw_response_factor": (
+            round(raw_factor, 3) if raw_factor is not None else None
+        ),
+        "unadjusted_wellness_factor": (
+            round(unadjusted_wellness_factor, 3)
+            if unadjusted_wellness_factor is not None
+            else None
+        ),
+        "evidence_coverage_ratio": round(
+            max(0.0, min(1.0, evidence_coverage_ratio)),
+            3,
+        ),
+        "evidence_lift_factor": round(coverage_lift, 3),
+        "usable_evidence_coverage_ratio": round(
+            usable_evidence_coverage_ratio,
+            3,
+        ),
+        "usable_evidence_lift_factor": round(
+            usable_coverage_lift,
+            3,
+        ),
+        "wellness_factor": (
+            round(wellness_factor, 3)
+            if wellness_factor is not None
+            else None
+        ),
+        "neutral_floor": WELLNESS_PHYSIOLOGY_NEUTRAL_FLOOR,
+        "method": (
+            "ความนิ่งและแนวโน้ม HR/RR ระดับ Sample; "
+            "เพิ่มน้ำหนักตาม coverage และใช้ช่วงตรวจคุณภาพ Sensor; "
+            "ไม่ใช่ True HRV/RMSSD/SDNN หรือการวินิจฉัย"
+        ),
+    }
+
+
 def _rest_goal_seconds(target: Dict[str, Any]) -> Optional[float]:
     """Return a validated, persisted Recovery target or ``None``."""
     value = _number(target.get("seconds"))
@@ -830,6 +1129,10 @@ def _rest_goal_seconds(target: Dict[str, Any]) -> Optional[float]:
 def _recovery_environment_summary(
     rows: list[Dict[str, Any]],
     rest_mode: str,
+    *,
+    primary_score: str = "Recovery Score",
+    duration_s: Optional[float] = None,
+    sample_interval_s: float = 5.0,
 ) -> Dict[str, Any]:
     """Score available environment values with the canonical policy bands.
 
@@ -843,10 +1146,26 @@ def _recovery_environment_summary(
         values = _values(rows, sample_key)
         if not values:
             continue
+        observed_seconds = sum(
+            min(
+                _row_duration_seconds(row, sample_interval_s),
+                ENVIRONMENT_SAMPLE_CREDIT_CAP_SECONDS,
+            )
+            for row in rows
+            if _number(row.get(sample_key)) is not None
+        )
+        temporal_coverage_ratio = (
+            min(1.0, observed_seconds / max(1.0, duration_s))
+            if duration_s is not None
+            else None
+        )
         average = _average(values) or 0.0
         averages[sample_key] = round(average, 1)
         levels = [environment_level_for_value(criterion_key, value, rest_mode) for value in values]
         aggregate = summarize_environment_session_levels(levels)
+        score_factor = ENVIRONMENT_SCORE_FACTORS.get(
+            aggregate.get("status_key")
+        )
         safety = summarize_safety_excursions(values, criterion)
         metrics.append(
             {
@@ -860,11 +1179,23 @@ def _recovery_environment_summary(
                 "safety_excursion_observed": safety["excursion_observed"],
                 "safety_excursion_sample_count": safety["excursion_sample_count"],
                 "safety_excursion_sample_pct": safety["excursion_sample_pct"],
+                "score_factor": score_factor,
+                "temporal_coverage_pct": (
+                    round(temporal_coverage_ratio * 100.0, 1)
+                    if temporal_coverage_ratio is not None
+                    else None
+                ),
                 **aggregate,
             }
         )
     expected = len(ENVIRONMENT_CONTEXT_CRITERIA)
-    quality_factor = _average([float(metric["rank"]) / 4.0 for metric in metrics]) if metrics else None
+    quality_factor = _average(
+        [
+            float(metric["score_factor"])
+            for metric in metrics
+            if metric.get("score_factor") is not None
+        ]
+    )
     minimum = min(metrics, key=lambda metric: metric["rank"], default=None)
     required_keys = {key for key, criterion in ENVIRONMENT_CONTEXT_CRITERIA.items() if criterion.get("required_for_overall", True)}
     available_keys = {metric["key"] for metric in metrics}
@@ -882,12 +1213,61 @@ def _recovery_environment_summary(
         for metric in metrics
         if metric["safety_excursion_observed"]
     ]
+    uncapped_quality_factor = quality_factor
+    if safety_excursions and quality_factor is not None:
+        quality_factor = min(
+            quality_factor,
+            ENVIRONMENT_SAFETY_SCORE_FACTOR_CAP,
+        )
+    channel_coverage_ratio = len(metrics) / expected if expected else 0.0
+    temporal_coverage_values = [
+        float(metric["temporal_coverage_pct"]) / 100.0
+        for metric in metrics
+        if metric.get("temporal_coverage_pct") is not None
+    ]
+    temporal_coverage_ratio = (
+        _average(temporal_coverage_values)
+        if temporal_coverage_values
+        else None
+    )
+    evidence_coverage_ratio = (
+        min(channel_coverage_ratio, temporal_coverage_ratio)
+        if temporal_coverage_ratio is not None
+        else channel_coverage_ratio
+    )
     return {
         "available": bool(metrics),
         "averages": averages,
         "metrics": metrics,
         "quality_factor": (round(quality_factor, 3) if quality_factor is not None else None),
-        "coverage_pct": round(100.0 * len(metrics) / expected, 1),
+        "uncapped_quality_factor": (
+            round(uncapped_quality_factor, 3)
+            if uncapped_quality_factor is not None
+            else None
+        ),
+        "safety_score_factor_cap": (
+            ENVIRONMENT_SAFETY_SCORE_FACTOR_CAP
+        ),
+        "safety_score_cap_applied": bool(
+            safety_excursions
+            and uncapped_quality_factor is not None
+            and quality_factor is not None
+            and quality_factor < uncapped_quality_factor
+        ),
+        "coverage_pct": round(100.0 * channel_coverage_ratio, 1),
+        "channel_coverage_pct": round(
+            100.0 * channel_coverage_ratio,
+            1,
+        ),
+        "temporal_coverage_pct": (
+            round(100.0 * temporal_coverage_ratio, 1)
+            if temporal_coverage_ratio is not None
+            else None
+        ),
+        "evidence_coverage_pct": round(
+            100.0 * evidence_coverage_ratio,
+            1,
+        ),
         "available_factors": len(metrics),
         "expected_factors": expected,
         "policy_version": ENVIRONMENT_CONTEXT_POLICY_VERSION,
@@ -898,7 +1278,7 @@ def _recovery_environment_summary(
         "context_only": False,
         "sleep_stage_context_only": True,
         "contributes_to_primary_score": True,
-        "primary_score": "Recovery Score",
+        "primary_score": primary_score,
         "max_points": 10.0,
         "assessment_quality": ("incomplete_required" if missing_required else "degraded_optional" if missing_optional else "complete"),
         "blocking_unavailable_count": len(missing_required),
@@ -906,7 +1286,12 @@ def _recovery_environment_summary(
         "safety_excursion_observed": bool(safety_excursions),
         "safety_review_required": bool(safety_excursions),
         "safety_excursions": safety_excursions,
-        "safety_excursions_change_score": False,
+        "safety_excursions_change_score": bool(
+            safety_excursions
+            and uncapped_quality_factor is not None
+            and quality_factor is not None
+            and quality_factor < uncapped_quality_factor
+        ),
     }
 
 
@@ -962,6 +1347,37 @@ def _confirmed_exit_summary(
     }
 
 
+def _confirmed_off_bed_seconds(
+    rows: list[Dict[str, Any]],
+    fallback_interval_s: float,
+) -> float:
+    """Return confirmed unoccupied time without using raw vendor labels."""
+    return sum(
+        _row_duration_seconds(row, fallback_interval_s)
+        for row in rows
+        if sample_confirms_off_bed(row)
+    )
+
+
+def _confirmed_post_sleep_off_bed_seconds(
+    rows: list[Dict[str, Any]],
+    fallback_interval_s: float,
+) -> float:
+    """Return confirmed OFF BED time after the first observed sleep State."""
+    sleep_seen = False
+    off_bed_seconds = 0.0
+    for row in rows:
+        stage = _row_sleep_stage(row)
+        if stage in SLEEP_STAGES:
+            sleep_seen = True
+        if sleep_seen and sample_confirms_off_bed(row):
+            off_bed_seconds += _row_duration_seconds(
+                row,
+                fallback_interval_s,
+            )
+    return off_bed_seconds
+
+
 def _eligible_rest_seconds(
     rows: list[Dict[str, Any]],
     interval: float,
@@ -1013,75 +1429,6 @@ def _build_awake_rest_quality(
     duration_goal_s = _rest_goal_seconds(target)
     presence_rows = _recovery_presence_rows(rows)
     eligible_rest_s = _eligible_rest_seconds(rows, interval, duration)
-    duration_factor = (
-        min(1.0, eligible_rest_s / duration_goal_s)
-        if duration_goal_s is not None
-        else None
-    )
-    duration_points = (
-        None
-        if duration_factor is None
-        else 0.0
-        if no_sensor_evidence
-        else round(25.0 * duration_factor, 1)
-    )
-
-    physiology_rows = [row for row in presence_rows if _row_has_measured_paired_vitals(row)]
-    hr = [value for value in _values(physiology_rows, "hr") if 30 <= value <= 220]
-    rr = [value for value in _values(physiology_rows, "rr") if 4 <= value <= 60]
-    hr_regularity = _regularity(hr, soft_cv=0.12)
-    rr_regularity = _regularity(rr, soft_cv=0.18)
-    regularity_parts = [value for value in (hr_regularity, rr_regularity) if value is not None]
-    settling_parts = [
-        value
-        for value in (
-            _settling(hr, scale=10.0),
-            _settling(rr, scale=5.0),
-        )
-        if value is not None
-    ]
-    regularity = _average(regularity_parts)
-    settling = _average(settling_parts)
-    if regularity is None:
-        physiology_factor = 0.0
-    else:
-        # Nap & Refresh accepts quiet wakefulness. Stable HR/RR matters more
-        # than forcing heart rate to fall, which meditation does not guarantee.
-        physiology_factor = 0.85 * regularity + 0.15 * (settling if settling is not None else 0.5)
-    physiology_points = round(35.0 * physiology_factor, 1)
-
-    # A materialised restart/Sensor gap may carry the preceding Sleep State so
-    # elapsed rest remains complete, but it must not fabricate extra stillness
-    # or repeat a stale ``Moving`` label.  Body-response evidence therefore
-    # uses only rows that came from an actual Sensor observation.
-    body_rows = [row for row in presence_rows if not row.get("synthetic_sleep_gap")]
-    bed_labels = [str(row.get("bed") or row.get("bed_status") or "") for row in body_rows if row.get("bed") or row.get("bed_status")]
-    moving = sum(label.strip().casefold() == "moving" for label in bed_labels)
-    exit_summary = _confirmed_exit_summary(rows)
-    exits = exit_summary["event_count"]
-    if bed_labels:
-        movement_ratio = moving / len(bed_labels)
-        stillness_factor = max(0.0, 1.0 - 1.5 * movement_ratio - 0.15 * exits)
-    else:
-        movement_ratio = None
-        stillness_factor = 0.0
-    continuity_points = round(30.0 * stillness_factor, 1)
-
-    # Use the same versioned bands as Dashboard/Session findings. Quality is
-    # calculated only from available channels; missing channels are coverage,
-    # not a fabricated poor measurement.
-    # Environment can explain and support Recovery only while the user has an
-    # attributed presence interval. Confirmed OFF BED and materialised Sensor
-    # gaps remain visible to Admin QA in the full Session report, but cannot
-    # add or remove points from the user's Recovery exposure.
-    environment_rows = [row for row in presence_rows if not row.get("synthetic_sleep_gap")]
-    environment = _recovery_environment_summary(
-        environment_rows,
-        "nap_recovery",
-    )
-    environment_factor = _number(environment.get("quality_factor"))
-    environment_points = round(10.0 * environment_factor, 1) if environment_factor is not None else None
-
     recorded_s = sum(_row_duration_seconds(row, interval) for row in rows)
     state_s = sum(counts.values()) * interval
     state_attribution_ratio = max(
@@ -1100,7 +1447,86 @@ def _build_awake_rest_quality(
     source_vital_samples = int(evidence_coverage["source_samples"])
     paired_vital_samples = int(evidence_coverage["paired_samples"])
     paired_vital_ratio = float(evidence_coverage["paired_ratio"])
-    physiological_evidence_ratio = float(evidence_coverage["evidence_ratio"])
+    physiological_evidence_ratio = float(
+        evidence_coverage["evidence_ratio"]
+    )
+    duration_completion_ratio = (
+        min(1.0, eligible_rest_s / duration_goal_s)
+        if duration_goal_s is not None
+        else None
+    )
+    duration_factor = (
+        duration_completion_ratio**RECOVERY_DURATION_CURVE_EXPONENT
+        if duration_completion_ratio is not None
+        else None
+    )
+    duration_points = (
+        None
+        if duration_factor is None
+        else 0.0
+        if no_sensor_evidence
+        else round(25.0 * duration_factor, 1)
+    )
+
+    physiology = _physiology_response(
+        presence_rows,
+        evidence_coverage_ratio=physiological_evidence_ratio,
+    )
+    physiology_factor = _number(physiology.get("wellness_factor"))
+    physiology_points = (
+        round(35.0 * physiology_factor, 1)
+        if physiology_factor is not None
+        else None
+    )
+
+    # A materialised restart/Sensor gap may carry the preceding Sleep State so
+    # elapsed rest remains complete, but it must not fabricate extra stillness
+    # or repeat a stale ``Moving`` label.  Body-response evidence therefore
+    # uses only rows that came from an actual Sensor observation.
+    body_rows = [row for row in presence_rows if not row.get("synthetic_sleep_gap")]
+    bed_labels = [str(row.get("bed") or row.get("bed_status") or "") for row in body_rows if row.get("bed") or row.get("bed_status")]
+    moving = sum(label.strip().casefold() == "moving" for label in bed_labels)
+    exit_summary = _confirmed_exit_summary(rows)
+    exits = exit_summary["event_count"]
+    confirmed_off_bed_s = _confirmed_off_bed_seconds(rows, interval)
+    presence_factor = max(
+        0.0,
+        min(1.0, eligible_rest_s / max(1.0, duration)),
+    )
+    if bed_labels:
+        movement_ratio = moving / len(bed_labels)
+        observed_continuity_factor = max(
+            0.0,
+            1.0
+            - RECOVERY_MOVEMENT_PENALTY_WEIGHT * movement_ratio
+            - RECOVERY_EXIT_PENALTY_WEIGHT
+            * min(exits, RECOVERY_EXIT_PENALTY_EVENT_CAP),
+        )
+        stillness_factor = observed_continuity_factor * presence_factor
+        continuity_points = round(30.0 * stillness_factor, 1)
+    else:
+        movement_ratio = None
+        observed_continuity_factor = None
+        stillness_factor = None
+        continuity_points = None
+
+    # Use the same versioned bands as Dashboard/Session findings. Quality is
+    # calculated only from available channels; missing channels are coverage,
+    # not a fabricated poor measurement.
+    # Environment can explain and support Recovery only while the user has an
+    # attributed presence interval. Confirmed OFF BED and materialised Sensor
+    # gaps remain visible to Admin QA in the full Session report, but cannot
+    # add or remove points from the user's Recovery exposure.
+    environment_rows = [row for row in presence_rows if not row.get("synthetic_sleep_gap")]
+    environment = _recovery_environment_summary(
+        environment_rows,
+        "nap_recovery",
+        duration_s=duration,
+        sample_interval_s=interval,
+    )
+    environment_factor = _number(environment.get("quality_factor"))
+    environment_points = round(10.0 * environment_factor, 1) if environment_factor is not None else None
+
     component_points = {
         "goal_duration": duration_points,
         "physiological_response": physiology_points,
@@ -1108,11 +1534,16 @@ def _build_awake_rest_quality(
         "environment_support": environment_points,
     }
     component_max = dict(RECOVERY_SCORE_COMPONENT_MAX_POINTS)
-    scored_components = [key for key, points in component_points.items() if points is not None]
-    scored_max = sum(component_max[key] for key in scored_components)
-    earned = round(sum(component_points[key] for key in scored_components), 1)
-    normalized_unrounded = 100.0 * earned / max(1.0, scored_max)
-    score = max(0, min(100, int(round(normalized_unrounded))))
+    component_totals = _wellness_component_totals(
+        component_points,
+        component_max,
+    )
+    scored_components = [
+        key for key, points in component_points.items() if points is not None
+    ]
+    effective_component_points = component_totals["effective_points"]
+    score_unrounded = float(component_totals["total"])
+    score = max(0, min(100, int(round(score_unrounded))))
     if score >= 85:
         level, level_key = "ดีมาก", "very_good"
     elif score >= 70:
@@ -1122,9 +1553,14 @@ def _build_awake_rest_quality(
     else:
         level, level_key = "ยังมีจุดที่ปรับได้", "low"
 
-    lowest = min(
-        scored_components,
-        key=lambda key: component_points[key] / max(1.0, component_max[key]),
+    lowest = (
+        min(
+            scored_components,
+            key=lambda key: component_points[key]
+            / max(1.0, component_max[key]),
+        )
+        if scored_components
+        else None
     )
     insights = {
         "goal_duration": "เวลาพักครั้งนี้ยังสั้นกว่าเป้าหมายที่เลือก",
@@ -1134,12 +1570,22 @@ def _build_awake_rest_quality(
     }
     sleep_s = sum(counts[stage] for stage in SLEEP_STAGES) * interval
     protocol_status = dict(mode.get("protocol_status") or {})
-    evidence_available = bool(not no_sensor_evidence and paired_vital_samples >= 6 and hr_regularity is not None and rr_regularity is not None)
+    target_available = bool(target.get("available"))
+    evidence_available = bool(
+        not no_sensor_evidence
+        and paired_vital_samples >= 6
+        and physiology["available"]
+    )
     timing_releasable = bool(protocol_status.get("score_releasable"))
     eligible_duration_releasable = eligible_rest_s >= NAP_RECOVERY_MINIMUM_SCORE_SECONDS
     score_available = bool(evidence_available and timing_releasable and eligible_duration_releasable)
     if score_available:
         unavailable_reason = None
+    elif not target_available:
+        unavailable_reason = (
+            "ไม่มีเป้าหมาย Nap & Refresh 30/90 นาทีที่บันทึกไว้ "
+            "จึงไม่เผยแพร่ Recovery Score"
+        )
     elif not eligible_duration_releasable:
         unavailable_reason = (
             "เวลาพักที่ยืนยันได้ยังไม่ถึง 10 นาที "
@@ -1147,19 +1593,70 @@ def _build_awake_rest_quality(
         )
     elif not evidence_available:
         unavailable_reason = (
-            "ข้อมูล HR/RR ที่จับคู่กันยังไม่พอสำหรับคำนวณ Recovery Score"
+            "ข้อมูล HR/RR ที่จับคู่กันและผ่านการตรวจคุณภาพยังไม่พอ "
+            "สำหรับคำนวณ Recovery Score"
         )
     else:
         unavailable_reason = (
             protocol_status.get("reason")
             or "ข้อมูลสำคัญยังไม่พอสำหรับคำนวณ Recovery Score"
         )
+    physiology_usable_ratio = float(
+        physiology.get("usable_evidence_coverage_ratio") or 0.0
+    )
+    body_evidence_ratio = min(
+        1.0,
+        sum(
+            _row_duration_seconds(row, interval)
+            for row in body_rows
+            if row.get("bed") or row.get("bed_status")
+        )
+        / max(1.0, duration),
+    )
+    environment_evidence_ratio = float(
+        environment.get("evidence_coverage_pct") or 0.0
+    ) / 100.0
+    component_evidence_ratio = min(
+        body_evidence_ratio,
+        environment_evidence_ratio,
+    )
     score_confidence = _score_confidence(
         recording_coverage_ratio,
-        physiological_evidence_ratio,
+        physiology_usable_ratio,
         paired_vital_ratio=paired_vital_ratio,
         state_attribution_ratio=state_attribution_ratio,
+        component_evidence_ratio=component_evidence_ratio,
     )
+    safety_review_required = bool(
+        environment.get("safety_review_required")
+    )
+    if not score_available:
+        level, level_key = "ข้อมูลยังไม่พอ", "unavailable"
+        quality_insight = unavailable_reason
+    elif safety_review_required:
+        level, level_key = "ควรให้ทีมตรวจสอบ", "safety_review"
+        quality_insight = (
+            "พบค่าสภาพแวดล้อมที่ควรให้ทีมตรวจสอบก่อนตีความคะแนน"
+        )
+    elif protocol_status.get("status") == "partial":
+        quality_insight = (
+            "ร่างกายได้พักในเวลาที่มี แม้ระยะเวลายังสั้นกว่าเป้าหมายที่เลือก"
+        )
+    elif protocol_status.get("status") == "extended":
+        quality_insight = (
+            "ช่วงพักยาวกว่าเป้าหมายที่เลือก และคะแนนสรุปจากการพักจริง"
+        )
+    elif protocol_status.get("status") == "out_of_protocol":
+        quality_insight = (
+            "ผลนี้สรุปจากการพักจริง แต่ระยะเวลาต่างจากรูปแบบที่เลือกไว้"
+        )
+    elif score < 85:
+        quality_insight = insights.get(
+            lowest,
+            "ข้อมูลสำคัญยังไม่พอสำหรับสรุปผลการพัก",
+        )
+    else:
+        quality_insight = f"{policy['label']}โดยรวมเป็นไปได้ดี"
     return {
         "available": score_available,
         "score": score if score_available else None,
@@ -1173,14 +1670,37 @@ def _build_awake_rest_quality(
             "paired_hr_rr_coverage_blocks_score": False,
             "minimum_paired_samples": 6,
             "paired_hr_rr_required": True,
+            "physiology_plausibility_passed": bool(
+                physiology.get("available")
+            ),
+            "stored_target_required": True,
+            "stored_target_available": target_available,
             "state_attribution_coverage_pct": round(state_attribution_ratio * 100.0, 1),
             "physiological_evidence_coverage_pct": round(physiological_evidence_ratio * 100.0, 1),
+            "physiology_usable_evidence_coverage_pct": round(
+                physiology_usable_ratio * 100.0,
+                1,
+            ),
+            "component_evidence_coverage_pct": round(
+                component_evidence_ratio * 100.0,
+                1,
+            ),
             "minimum_session_seconds": NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
             "eligible_rest_seconds": round(eligible_rest_s, 1),
             "eligible_duration_releasable": eligible_duration_releasable,
             "timing_status": protocol_status.get("status"),
             "timing_releasable": timing_releasable,
-            "review_required": bool(protocol_status.get("review_required")),
+            "physiology_review_required": bool(
+                physiology.get("plausibility_review_required")
+                or physiology.get("edge_context_review_required")
+            ),
+            "safety_review_required": safety_review_required,
+            "review_required": bool(
+                protocol_status.get("review_required")
+                or physiology.get("plausibility_review_required")
+                or physiology.get("edge_context_review_required")
+                or safety_review_required
+            ),
             "passed": score_available,
         },
         "reason": unavailable_reason,
@@ -1193,7 +1713,14 @@ def _build_awake_rest_quality(
         "sleep_detected": sleep_s > 0,
         "level": level,
         "level_key": level_key,
-        "insight": insights[lowest] if score < 85 else f"{policy['label']}โดยรวมสอดคล้องกับเป้าหมายที่เลือก",
+        "insight": quality_insight,
+        "safety_review_required": safety_review_required,
+        "review_required": bool(
+            protocol_status.get("review_required")
+            or physiology.get("plausibility_review_required")
+            or physiology.get("edge_context_review_required")
+            or safety_review_required
+        ),
         "estimated_sleep_s": round(sleep_s, 1),
         "actual_scored_s": round(sum(counts.values()) * interval, 1),
         "rest_mode": {
@@ -1208,37 +1735,60 @@ def _build_awake_rest_quality(
             "eligible_rest_seconds": round(eligible_rest_s, 1),
             "eligible_rest_minutes": round(eligible_rest_s / 60.0, 1),
             "completion_pct": (
-                round(100.0 * duration_factor, 1)
+                round(100.0 * duration_completion_ratio, 1)
+                if duration_completion_ratio is not None
+                else None
+            ),
+            "score_factor": (
+                round(duration_factor, 3)
                 if duration_factor is not None
                 else None
             ),
+            "score_curve_exponent": RECOVERY_DURATION_CURVE_EXPONENT,
             "basis": (
                 f"เป้าหมาย {target.get('label')}; นับทุก State attribution "
                 "ที่ไม่ใช่ confirmed OFF BED; เวลาที่ต่างจากเป้าหมายเป็น "
                 "Admin QA และไม่ปิด Recovery Score"
                 if target.get("available")
-                else "ไม่มีเป้าหมายเดิม 30/90 นาที; ไม่คิดคะแนนส่วนเวลา "
-                "และใช้เฉพาะองค์ประกอบที่มีหลักฐาน"
+                else "ไม่มีเป้าหมายเดิม 30/90 นาที; ไม่เดาเป้าหมาย "
+                "และไม่เผยแพร่ Recovery Score"
             ),
         },
         "physiology": {
-            "available": hr_regularity is not None and rr_regularity is not None,
-            "heart_rate_average": round(_average(hr), 1) if hr else None,
-            "respiration_average": round(_average(rr), 1) if rr else None,
-            "regularity_factor": round(regularity, 3) if regularity is not None else None,
-            "heart_rate_regularity_factor": (round(hr_regularity, 3) if hr_regularity is not None else None),
-            "respiration_regularity_factor": (round(rr_regularity, 3) if rr_regularity is not None else None),
-            "settling_factor": round(settling, 3) if settling is not None else None,
+            **{
+                key: value
+                for key, value in physiology.items()
+                if key not in {"heart_rate_values", "respiration_values"}
+            },
             "paired_hr_rr_samples": paired_vital_samples,
             "source_sensor_samples": source_vital_samples,
             "paired_hr_rr_coverage_pct": round(paired_vital_ratio * 100.0, 1),
-            "method": "ความนิ่งและแนวโน้ม HR/RR ระดับ Sample; ไม่ใช่ True HRV/RMSSD/SDNN",
         },
         "body_response": {
             "available": bool(bed_labels),
             "movement_pct": round((movement_ratio or 0.0) * 100.0, 1) if bed_labels else None,
             "bed_exit_events": exits if bed_labels else None,
             "transient_bed_exit_samples": (exit_summary["transient_samples"] if bed_labels else None),
+            "continuity_factor": (
+                round(stillness_factor, 3)
+                if stillness_factor is not None
+                else None
+            ),
+            "observed_continuity_factor": (
+                round(observed_continuity_factor, 3)
+                if observed_continuity_factor is not None
+                else None
+            ),
+            "presence_factor": round(presence_factor, 3),
+            "confirmed_off_bed_seconds": round(
+                confirmed_off_bed_s,
+                1,
+            ),
+            "ordinary_movement_penalty_weight": (
+                RECOVERY_MOVEMENT_PENALTY_WEIGHT
+            ),
+            "bed_exit_penalty_weight": RECOVERY_EXIT_PENALTY_WEIGHT,
+            "bed_exit_penalty_event_cap": RECOVERY_EXIT_PENALTY_EVENT_CAP,
         },
         "environment_support": {
             **environment,
@@ -1269,11 +1819,23 @@ def _build_awake_rest_quality(
             "environment_support": "สภาพแวดล้อมสนับสนุน",
         },
         "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
-        "raw_component_points": earned,
-        "score_unrounded": round(normalized_unrounded, 1),
-        "scored_max_points": scored_max,
-        "score_normalized_for_available_components": scored_max < 100.0,
-        "score_basis": ("เวลาพักตามเป้าหมาย 25 + การตอบสนอง HR/RR 35 + ความต่อเนื่อง 30 + สภาพแวดล้อม 10; Coverage แสดงแยกและไม่ให้คะแนน"),
+        "raw_component_points": component_totals[
+            "raw_available_points"
+        ],
+        "effective_component_points": effective_component_points,
+        "imputed_component_points": component_totals["imputed_points"],
+        "missing_component_neutral_factor": component_totals[
+            "neutral_factor"
+        ],
+        "score_unrounded": round(score_unrounded, 1),
+        "scored_max_points": component_totals["max_points"],
+        "score_normalized_for_available_components": False,
+        "score_basis": (
+            "เวลาพักตามเป้าหมาย 25 (เส้นโค้งรากที่สอง) + "
+            "การตอบสนอง HR/RR 35 (Wellness neutral floor) + "
+            "ความต่อเนื่อง 30 (ขยับได้ตามธรรมชาติ) + "
+            "สภาพแวดล้อม 10; Coverage แสดงแยกและไม่ให้คะแนน"
+        ),
         "version": SLEEP_QUALITY_VERSION,
         "outcome_interpretation": "Nap & Refresh ไม่บังคับให้หลับหรือมี N3/REM; ความสดชื่นจริงใช้คำตอบหลัง Session ประกอบ",
         "disclaimer": "Recovery Score เป็นการประเมิน ZEEP Wellness จาก Sensor ไม่ใช่การวินิจฉัย การรักษา หรือผล AASM/PSG",
@@ -1340,44 +1902,55 @@ def _latency_points(mode: str, onset_s: Any) -> Dict[str, Any]:
     false maximum and a technical zero for legacy Sessions.
     """
     onset = _number(onset_s)
-    ideal_s, ceiling_s = (10 * 60, 30 * 60) if mode == "short_nap" else (20 * 60, 60 * 60)
+    ideal_s = 20 * 60
+    soft_s = 45 * 60
+    ceiling_s = 90 * 60
     if onset is None:
         return {
             "available": False,
             "seconds": None,
-            "points": 2.5,
+            "points": 3.0,
             "max_points": 5.0,
-            "basis": "ไม่มีเวลาหลับครั้งแรก; ใช้คะแนนกลางและแสดงว่าไม่มีข้อมูล",
+            "basis": (
+                "ไม่มีเวลาหลับครั้งแรก; ใช้คะแนนกลางแบบ Wellness "
+                "และแสดงว่าไม่มีข้อมูล"
+            ),
         }
     onset = max(0.0, onset)
     if onset <= ideal_s:
         points = 5.0
+    elif onset <= soft_s:
+        points = 5.0 - 2.0 * (onset - ideal_s) / (soft_s - ideal_s)
     elif onset >= ceiling_s:
-        points = 0.0
+        points = 2.0
     else:
-        points = 5.0 * (ceiling_s - onset) / (ceiling_s - ideal_s)
+        points = 3.0 - (onset - soft_s) / (ceiling_s - soft_s)
     return {
         "available": True,
         "seconds": round(onset, 1),
         "points": round(points, 1),
         "max_points": 5.0,
-        "basis": f"เต็มเมื่อหลับภายใน {int(ideal_s / 60)} นาที; ลดจนเป็นศูนย์ที่ {int(ceiling_s / 60)} นาที",
+        "basis": (
+            "เต็มเมื่อหลับภายใน 20 นาที; 3 คะแนนที่ 45 นาที; "
+            "คงขั้นต่ำ 2 คะแนนตั้งแต่ 90 นาที โดยใช้เป็น Onset proxy"
+        ),
     }
 
 
 def _balanced_architecture_points(mode: str, sleep_pct: Dict[str, float]) -> Dict[str, Any]:
-    """Return the 30-point restorative component for ZEEP-balanced v4.
+    """Return the bounded 20-point Overnight sleep-pattern component.
 
-    Overnight sleep keeps conservative N2/N3/REM guards.  Brief-rest modes use
-    broad stage balance instead, because a valid nap may end before N3 or REM.
-    These are project wellness rules, not AASM stage norms.
+    BCG stage composition is not PSG, so a coherent estimated sleep pattern
+    receives half of this component before N2/N3/REM proportions are applied.
+    Missing N3/REM can explain the estimate but cannot dominate the total score.
+    These are project Wellness rules, not AASM stage norms.
     """
     if mode != "overnight":
         factor = _stage_balance_factor(mode, sleep_pct)
-        total = round(30.0 * factor, 1)
+        total = round(20.0 * factor, 1)
         return {
             "points": {"mode_adjusted_balance": total},
-            "max_points": {"mode_adjusted_balance": 30.0},
+            "max_points": {"mode_adjusted_balance": 20.0},
             "total": total,
             "method": "สัดส่วน Stage ตาม Rest Mode; ไม่บังคับ N3/REM ในการพักสั้น",
             "mode_adjusted": True,
@@ -1385,20 +1958,34 @@ def _balanced_architecture_points(mode: str, sleep_pct: Dict[str, float]) -> Dic
 
     pct = {stage: sleep_pct[stage] * 100.0 for stage in SLEEP_STAGES}
     n2_low, n2_high = OVERNIGHT_N2_FULL_CREDIT_PCT
-    n2_distance = n2_low - pct["n2"] if pct["n2"] < n2_low else max(0.0, pct["n2"] - n2_high)
-    n2_points = max(0.0, OVERNIGHT_ARCHITECTURE_MAX_POINTS["n2"] - 0.35 * n2_distance)
+    n2_soft_low, n2_soft_high = OVERNIGHT_N2_SOFT_CREDIT_PCT
+    n2_factor = _range_fit(
+        pct["n2"],
+        n2_low,
+        n2_high,
+        n2_soft_low,
+        n2_soft_high,
+    )
+    n2_points = OVERNIGHT_ARCHITECTURE_MAX_POINTS["n2"] * n2_factor
 
-    if pct["n3"] < OVERNIGHT_N3_ZERO_BELOW_PCT:
-        n3_points = 0.0
-    elif pct["n3"] < OVERNIGHT_N3_FULL_CREDIT_FROM_PCT:
-        n3_points = OVERNIGHT_ARCHITECTURE_MAX_POINTS["n3"] * pct["n3"] / OVERNIGHT_N3_FULL_CREDIT_FROM_PCT
+    if pct["n3"] < OVERNIGHT_N3_FULL_CREDIT_FROM_PCT:
+        n3_points = (
+            OVERNIGHT_ARCHITECTURE_MAX_POINTS["n3"]
+            * pct["n3"]
+            / OVERNIGHT_N3_FULL_CREDIT_FROM_PCT
+        )
     else:
         n3_points = OVERNIGHT_ARCHITECTURE_MAX_POINTS["n3"]
 
-    rem_low, rem_high = OVERNIGHT_REM_FULL_CREDIT_PCT
-    rem_distance = rem_low - pct["rem"] if pct["rem"] < rem_low else max(0.0, pct["rem"] - rem_high)
-    rem_points = max(0.0, OVERNIGHT_ARCHITECTURE_MAX_POINTS["rem"] - 0.40 * rem_distance)
+    rem_full_from, _ = OVERNIGHT_REM_FULL_CREDIT_PCT
+    rem_points = OVERNIGHT_ARCHITECTURE_MAX_POINTS["rem"] * min(
+        1.0,
+        pct["rem"] / rem_full_from,
+    )
     points = {
+        "identified_sleep_pattern": OVERNIGHT_ARCHITECTURE_MAX_POINTS[
+            "identified_sleep_pattern"
+        ],
         "n2": round(n2_points, 1),
         "n3": round(n3_points, 1),
         "rem": round(rem_points, 1),
@@ -1407,7 +1994,11 @@ def _balanced_architecture_points(mode: str, sleep_pct: Dict[str, float]) -> Dic
         "points": points,
         "max_points": dict(OVERNIGHT_ARCHITECTURE_MAX_POINTS),
         "total": round(sum(points.values()), 1),
-        "method": "N2 45–75% · N3 ≥10% · REM 15–25% ของ TST (ZEEP conservative proxy)",
+        "method": (
+            "ฐานรูปแบบการนอน 10 · N2 ≥30% สูงสุด 4 · "
+            "N3 ≥10% สูงสุด 3 · REM ≥15% สูงสุด 3; "
+            "ไม่หัก N3/REM ที่สูง และเป็น ZEEP BCG proxy"
+        ),
         "mode_adjusted": False,
     }
 
@@ -1562,10 +2153,10 @@ def build_sleep_quality(
 ) -> Dict[str, Any]:
     """Build the mode-aware ZEEP-balanced post-session wellness score.
 
-    The five visible components mirror the product promise without claiming a
-    clinical diagnosis: sleep opportunity/onset 20, stability 30, restorative
-    architecture 30, cycle expression 15, and data coverage 5. Rest Mode keeps
-    a short nap from being judged as an incomplete overnight sleep. Raw
+    The five score components mirror the product promise without claiming a
+    clinical diagnosis: sleep opportunity/onset 25, stability 35, bounded BCG
+    sleep pattern 20, HR/RR response 10, and environment support 10. Cycle and
+    coverage remain visible evidence context but contribute no points. Raw
     W/N1/N2/N3/REM decisions are inputs only and are never rewritten here.
     """
     requested_mode = normalise_rest_mode(rest_mode)
@@ -1634,105 +2225,164 @@ def build_sleep_quality(
 
     # Every term deliberately comes from the same recorded state rounds. It is
     # not mixed with user-reported sleep before/after Sensor recording.
-    efficiency = max(0.0, min(1.0, total_sleep_samples / total_scored_samples))
+    # Confirmed OFF BED after sleep onset belongs in continuity even though it
+    # is not a W/N1/N2/N3/REM State and is excluded from Stage percentages.
+    post_sleep_off_bed_s = _confirmed_post_sleep_off_bed_seconds(
+        rows,
+        interval,
+    )
+    continuity_denominator_s = actual_scored_s + post_sleep_off_bed_s
+    efficiency = max(
+        0.0,
+        min(
+            1.0,
+            estimated_sleep_s / max(1.0, continuity_denominator_s),
+        ),
+    )
     awakenings = max(0, int(_number(night.get("awakenings")) or 0))
     sleep_pct = {stage: (counts[stage] / total_sleep_samples if total_sleep_samples else 0.0) for stage in SLEEP_STAGES}
 
-    # 1) Sleep opportunity + onset — 20 points. Duration contributes 15 instead
-    # of the old 40, so a partly recorded but physiologically stable sleep is not
-    # overwhelmed by one duration term. The AASM/SRS 7-hour threshold applies
-    # only to overnight/main-sleep mode.
+    # 1) Sleep opportunity + onset — 25 points. The square-root duration curve
+    # keeps the seven-hour adult target while avoiding a harsh linear penalty
+    # for a useful but shorter recorded night.
     duration_target = _duration_target(mode["resolved"], actual_scored_s)
-    duration_points = round(15.0 * min(1.0, estimated_sleep_s / max(1.0, duration_target["seconds"])), 1)
+    duration_ratio = min(
+        1.0,
+        estimated_sleep_s / max(1.0, duration_target["seconds"]),
+    )
+    duration_points = round(20.0 * duration_ratio**0.5, 1)
     latency = _latency_points(mode["resolved"], night.get("sleep_onset_proxy_s"))
     opportunity_points = round(duration_points + latency["points"], 1)
 
-    # 2) Stability — 30 points: efficiency 20 + continuity 10. BCG disturbance
-    # episodes can remove at most five points and are explicitly not EEG arousal.
-    efficiency_points = round(20.0 * efficiency, 1)
+    # 2) Stability — 35 points: efficiency 25 + continuity 10. Wake time is
+    # already represented by efficiency, so it is not deducted a second time.
+    # BCG disturbance remains a small, bounded context penalty and is not EEG.
+    efficiency_points = round(25.0 * efficiency**0.5, 1)
     wake_pct = counts["wake"] * 100.0 / total_scored_samples
-    wake_points = 10.0 if wake_pct <= 10.0 else max(0.0, 10.0 - (wake_pct - 10.0))
     arousal = analyse_arousal_proxy(
         score_stage_sequence,
         sample_interval_s=interval,
     )
-    balanced_arousal_penalty = round(min(5.0, 0.25 * arousal["index_per_hour"]), 1) if arousal.get("index_per_hour") is not None else 0.0
-    continuity_points = round(max(0.0, wake_points - balanced_arousal_penalty), 1)
+    balanced_arousal_penalty = (
+        round(
+            min(
+                SLEEP_AROUSAL_PENALTY_MAX_POINTS,
+                SLEEP_AROUSAL_PENALTY_POINTS_PER_INDEX
+                * arousal["index_per_hour"],
+            ),
+            1,
+        )
+        if arousal.get("index_per_hour") is not None
+        else 0.0
+    )
+    continuity_points = (
+        round(10.0 - balanced_arousal_penalty, 1)
+        if arousal.get("index_per_hour") is not None
+        else SLEEP_AROUSAL_UNAVAILABLE_POINTS
+    )
     stability_points = round(efficiency_points + continuity_points, 1)
 
-    # 3) Restorative architecture — 30 points. Conservative N2/N3/REM bands
-    # apply only to overnight; short-rest modes never require N3 or REM.
+    # 3) Bounded sleep pattern — 20 points. Estimated Stage composition is
+    # useful context, but BCG absence of N3/REM cannot dominate a Wellness score.
     architecture = (
         _balanced_architecture_points(mode["resolved"], sleep_pct)
         if total_sleep_samples
         else {
             "points": {"mode_adjusted_balance": 0.0},
-            "max_points": {"mode_adjusted_balance": 30.0},
+            "max_points": {"mode_adjusted_balance": 20.0},
             "total": 0.0,
             "method": "ไม่มี Sleep State",
             "mode_adjusted": mode["resolved"] != "overnight",
         }
     )
 
-    # 4) Cycle expression / readiness proxy — 15 points. It describes whether a
-    # recorded opportunity expressed plausible NREM→REM progression. It is not a
-    # direct measurement that the user woke refreshed; subjective alertness must
-    # be collected separately if that claim is required.
+    # Cycle expression remains explanatory evidence. It cannot reduce the score
+    # because this contactless estimate is not a PSG cycle measurement.
     cycles = analyse_sleep_cycles(
         score_stage_sequence,
         sample_interval_s=interval,
     )
-    expected_cycles = max(1, int((estimated_sleep_s + 45 * 60) // (90 * 60))) if mode["resolved"] == "overnight" and estimated_sleep_s > 0 else 1
-    completed_cycles = cycles.get("completed_nrem_rem_cycles")
-    cycles["expected_for_score"] = expected_cycles if mode["resolved"] != "short_nap" else 0
-    if mode["resolved"] == "short_nap":
-        # A power nap is rewarded for staying efficient and expressing a broad
-        # N1/N2 balance; it is never required to reach REM/N3 or a full cycle.
-        nap_factor = 0.5 * efficiency + 0.5 * _stage_balance_factor("short_nap", sleep_pct)
-        cycle_points = round(15.0 * nap_factor, 1)
-        cycles["score_note"] = "งีบสั้นใช้ความต่อเนื่องและ N1/N2; ไม่บังคับ NREM→REM"
-    elif completed_cycles is None:
-        cycle_points = 7.5
-        cycles["score_note"] = "ไม่มีลำดับ Stage; ใช้คะแนนกลางและระบุว่าไม่มีหลักฐานรอบ"
-    else:
-        cycle_points = round(15.0 * min(1.0, completed_cycles / max(1, expected_cycles)), 1)
-        cycles["score_note"] = "คะแนน ZEEP proxy จาก NREM→REM ที่ตรวจพบเทียบรอบที่คาดตามเวลาหลับ"
-    cycles["points"] = cycle_points
-    cycles["max_points"] = 15.0
+    expected_cycles = max(
+        1,
+        int((estimated_sleep_s + 45 * 60) // (90 * 60)),
+    )
+    cycles["expected_for_context"] = expected_cycles
+    cycles["score_component"] = False
+    cycles["points"] = 0.0
+    cycles["max_points"] = 0.0
+    cycles["score_note"] = (
+        "แสดงลำดับ NREM→REM เป็นบริบทเท่านั้น ไม่ใช้ตัดคะแนน"
+    )
 
-    # 5) Data coverage — 5 points. Continuity carry can fill the State timeline,
-    # but only paired, non-synthetic HR/RR time earns evidence coverage points.
-    coverage_points = round(5.0 * physiological_evidence_ratio, 1)
+    # 4) Coarse HR/RR response — 10 points. The minimum paired-evidence gate is
+    # independent; once valid, the bounded factor is Wellness context, not HRV.
+    sleep_physiology_rows = [
+        row
+        for row in rows
+        if not row.get("synthetic_sleep_gap")
+        and not sample_confirms_off_bed(row)
+    ]
+    physiology = _physiology_response(
+        sleep_physiology_rows,
+        evidence_coverage_ratio=physiological_evidence_ratio,
+    )
+    physiology_factor = _number(physiology.get("wellness_factor"))
+    physiology_points = (
+        round(10.0 * physiology_factor, 1)
+        if physiology_factor is not None
+        else None
+    )
+
+    # 5) Environment support — 10 points, using the same versioned bands as the
+    # Dashboard. A missing optional channel uses a documented neutral value;
+    # independent safety review remains authoritative.
+    environment_rows = [
+        row
+        for row in rows
+        if not row.get("synthetic_sleep_gap")
+        and not sample_confirms_off_bed(row)
+    ]
+    environment = _recovery_environment_summary(
+        environment_rows,
+        "sleep",
+        primary_score="Sleep Score",
+        duration_s=duration,
+        sample_interval_s=interval,
+    )
+    environment_factor = _number(environment.get("quality_factor"))
+    environment_points = (
+        round(10.0 * environment_factor, 1)
+        if environment_factor is not None
+        else None
+    )
 
     component_points = {
         "sleep_opportunity": opportunity_points,
         "sleep_stability": stability_points,
         "restorative_architecture": architecture["total"],
-        "cycle_expression": cycle_points,
-        "data_coverage": coverage_points,
+        "physiological_response": physiology_points,
+        "environment_support": environment_points,
     }
     component_max = dict(SLEEP_QUALITY_COMPONENT_MAX_POINTS)
-    component_order = list(component_points)
-    nap_mode = mode.get("group") == "nap_recovery"
-    component_labels = (
-        {
-            "sleep_opportunity": "เวลาและการเข้าสู่การพัก",
-            "sleep_stability": "ความต่อเนื่องของการพัก",
-            "restorative_architecture": "รูปแบบการพักที่ตรวจพบ",
-            "cycle_expression": "การตอบสนองระหว่างพัก",
-            "data_coverage": "ความครบของข้อมูล",
-        }
-        if nap_mode
-        else {
-            "sleep_opportunity": "หลับไวและเวลาพัก",
-            "sleep_stability": "หลับดีและต่อเนื่อง",
-            "restorative_architecture": "โครงสร้าง N2/N3/REM",
-            "cycle_expression": "รอบการนอนที่ตรวจพบ",
-            "data_coverage": "ความครบของข้อมูล",
-        }
+    component_totals = _wellness_component_totals(
+        component_points,
+        component_max,
     )
-    earned_points = round(sum(component_points.values()), 1)
-    score = 0 if estimated_sleep_s <= 0 else max(0, min(100, int(round(earned_points))))
+    effective_component_points = component_totals["effective_points"]
+    score_unrounded = float(component_totals["total"])
+    component_order = list(component_points)
+    component_labels = {
+        "sleep_opportunity": "เวลาและการเข้าสู่การนอน",
+        "sleep_stability": "ความต่อเนื่องของการนอน",
+        "restorative_architecture": "รูปแบบการนอนที่ประเมินได้",
+        "physiological_response": "การตอบสนอง HR/RR",
+        "environment_support": "สภาพแวดล้อมสนับสนุน",
+    }
+    score = (
+        0
+        if estimated_sleep_s <= 0
+        else max(0, min(100, int(round(score_unrounded))))
+    )
 
     if score >= 85:
         level, level_key = "ดีมาก", "very_good"
@@ -1743,40 +2393,73 @@ def build_sleep_quality(
     else:
         level, level_key = "ยังมีจุดที่ปรับได้", "low"
 
-    if nap_mode:
-        if latency["available"] and latency["points"] < 3.0:
-            insight = "ร่างกายใช้เวลาสักพักจึงเริ่มผ่อนลง ครั้งถัดไปลองเพิ่มช่วงเตรียมตัวอีกนิด"
-        elif duration_points < 10.5:
-            insight = "เวลาพักครั้งนี้ยังสั้นกว่าเป้าหมาย Nap & Refresh"
-        elif stability_points < 21.0:
-            insight = "การพักต่อเนื่องได้เป็นบางช่วง"
-        elif architecture["total"] < 18.0:
-            insight = "รูปแบบการพักเปลี่ยนแปลงในบางช่วง ลองดูร่วมกับความรู้สึกหลังพัก"
-        elif cycle_points < 9.0:
-            insight = "การตอบสนองของร่างกายเปลี่ยนแปลงในบางช่วง"
-        else:
-            insight = "เวลา ความต่อเนื่อง และการตอบสนองระหว่างพักโดยรวมอยู่ในเกณฑ์ดี"
-    elif latency["available"] and latency["points"] < 3.0:
+    if latency["available"] and latency["points"] < 3.0:
         insight = "ร่างกายใช้เวลาสักพักจึงเข้าสู่การนอน ครั้งถัดไปลองเพิ่มช่วงผ่อนคลายก่อนนอน"
-    elif duration_points < 10.5:
+    elif duration_points < 14.0:
         insight = f"เวลาหลับยังต่ำกว่าเป้าหมายของ {mode['label']}"
-    elif stability_points < 21.0:
+    elif stability_points < 24.5:
         insight = "การนอนขาดช่วงมากกว่าคืนที่พักต่อเนื่อง"
-    elif continuity_points < 7.0:
-        insight = "พบช่วงตื่นหรือการเคลื่อนไหวหลายครั้งระหว่างการนอน"
-    elif architecture["total"] < 18.0:
-        insight = f"รูปแบบการนอนที่ประเมินได้ของ {mode['label']} ต่างจากช่วงเป้าหมายบางส่วน"
-    elif cycle_points < 9.0:
-        insight = "รอบการนอนที่ตรวจพบยังไม่เต็มตามโอกาสการพักครั้งนี้"
+    elif architecture["total"] < 14.0:
+        insight = (
+            "รูปแบบ Sleep Stage ที่ประเมินได้มีหลักฐานบางส่วน "
+            "ควรดูร่วมกับเวลาและความต่อเนื่อง"
+        )
+    elif physiology_points is not None and physiology_points < 7.0:
+        insight = "ชีพจรหรือการหายใจเปลี่ยนแปลงในบางช่วงระหว่างนอน"
+    elif environment_points is not None and environment_points < 7.0:
+        insight = "สภาพแวดล้อมบางส่วนยังปรับให้สบายขึ้นได้"
     else:
         insight = f"ภาพรวมเวลา ความต่อเนื่อง และรูปแบบการนอนของ {mode['label']} อยู่ในระดับดี"
 
-    score_available = bool(estimated_sleep_s > 0 and paired_vital_rows >= 6)
+    protocol_status = dict(mode.get("protocol_status") or {})
+    protocol_releasable = bool(protocol_status.get("score_releasable"))
+    physiology_available = bool(physiology.get("available"))
+    score_available = bool(
+        estimated_sleep_s > 0
+        and paired_vital_rows >= 6
+        and physiology_available
+        and protocol_releasable
+    )
+    safety_review_required = bool(
+        environment.get("safety_review_required")
+    )
+    if score_available:
+        unavailable_reason = None
+    elif not protocol_releasable:
+        unavailable_reason = (
+            protocol_status.get("reason")
+            or "ระยะเวลา Overnight Recovery ยังไม่ถึงเกณฑ์เผยแพร่ Sleep Score"
+        )
+    elif not physiology_available:
+        unavailable_reason = (
+            "ข้อมูล HR/RR ที่จับคู่กันและผ่านการตรวจคุณภาพยังไม่พอ "
+            "สำหรับคำนวณ Sleep Score"
+        )
+    else:
+        unavailable_reason = (
+            "ยังไม่พบ Sleep State หรือข้อมูล HR/RR ที่จับคู่กันไม่พอ "
+            "สำหรับคำนวณ Sleep Score"
+        )
+    if not score_available:
+        level, level_key = "ข้อมูลยังไม่พอ", "unavailable"
+        insight = unavailable_reason
+    elif safety_review_required:
+        level, level_key = "ควรให้ทีมตรวจสอบ", "safety_review"
+        insight = (
+            "พบค่าสภาพแวดล้อมที่ควรให้ทีมตรวจสอบก่อนตีความคะแนน"
+        )
+    physiology_usable_ratio = float(
+        physiology.get("usable_evidence_coverage_ratio") or 0.0
+    )
+    environment_evidence_ratio = float(
+        environment.get("evidence_coverage_pct") or 0.0
+    ) / 100.0
     score_confidence = _score_confidence(
         state_attribution_ratio,
-        physiological_evidence_ratio,
+        physiology_usable_ratio,
         paired_vital_ratio=paired_vital_ratio,
         state_attribution_ratio=state_attribution_ratio,
+        component_evidence_ratio=environment_evidence_ratio,
     )
     return {
         "available": score_available,
@@ -1792,14 +2475,33 @@ def build_sleep_quality(
             "paired_hr_rr_coverage_blocks_score": False,
             "minimum_paired_samples": 6,
             "paired_hr_rr_required": True,
+            "physiology_plausibility_passed": physiology_available,
+            "minimum_session_seconds": REST_MODE_PROTOCOLS["sleep"][
+                "minimum_seconds"
+            ],
+            "timing_status": protocol_status.get("status"),
+            "timing_releasable": protocol_releasable,
+            "physiology_review_required": bool(
+                physiology.get("plausibility_review_required")
+                or physiology.get("edge_context_review_required")
+            ),
+            "safety_review_required": safety_review_required,
             "paired_hr_rr_rows": paired_vital_rows,
             "source_vital_rows": source_vital_rows,
             "paired_hr_rr_coverage_pct": round(paired_vital_ratio * 100.0, 1),
             "state_attribution_coverage_pct": round(state_attribution_ratio * 100.0, 1),
             "physiological_evidence_coverage_pct": round(physiological_evidence_ratio * 100.0, 1),
+            "physiology_usable_evidence_coverage_pct": round(
+                physiology_usable_ratio * 100.0,
+                1,
+            ),
+            "component_evidence_coverage_pct": round(
+                environment_evidence_ratio * 100.0,
+                1,
+            ),
             "passed": score_available,
         },
-        "reason": (None if score_available else "ยังไม่พบ Sleep State หรือข้อมูล HR/RR ที่จับคู่กันไม่พอสำหรับคำนวณ Sleep Score"),
+        "reason": unavailable_reason,
         "score_title": mode.get("score_title") or "คุณภาพการนอน",
         "score_scope": mode.get("score_scope") or "ค่าประเมินการนอนจาก Sensor",
         "validation_status": "preliminary_wellness_estimate",
@@ -1810,9 +2512,28 @@ def build_sleep_quality(
         "level": level,
         "level_key": level_key,
         "insight": insight,
+        "safety_review_required": safety_review_required,
+        "review_required": bool(
+            protocol_status.get("review_required")
+            or physiology.get("plausibility_review_required")
+            or physiology.get("edge_context_review_required")
+            or safety_review_required
+        ),
         "estimated_sleep_s": round(estimated_sleep_s, 1),
         "actual_scored_s": round(actual_scored_s, 1),
         "wake_s": round(counts["wake"] * interval, 1),
+        "confirmed_post_onset_off_bed_s": round(
+            post_sleep_off_bed_s,
+            1,
+        ),
+        "continuity_denominator_s": round(
+            continuity_denominator_s,
+            1,
+        ),
+        "wake_plus_off_bed_s": round(
+            counts["wake"] * interval + post_sleep_off_bed_s,
+            1,
+        ),
         "wake_pct_recorded": round(wake_pct, 1),
         "sleep_efficiency_pct": round(efficiency * 100.0),
         "awakenings": awakenings,
@@ -1827,17 +2548,58 @@ def build_sleep_quality(
         "duration_target": duration_target,
         "sleep_opportunity": {
             "duration_points": duration_points,
-            "duration_max_points": 15.0,
+            "duration_max_points": 20.0,
+            "duration_ratio": round(duration_ratio, 3),
+            "duration_curve_exponent": 0.5,
             "latency": latency,
         },
         "architecture": architecture,
         "continuity": {
-            "wake_points": round(wake_points, 1),
+            # Compatibility field: Wake is represented once by efficiency.
+            # The ten-point base is only reduced by the BCG disturbance proxy.
+            "wake_points": continuity_points,
             "wake_max_points": 10.0,
+            "wake_pct_score_component": False,
+            "confirmed_post_onset_off_bed_s": round(
+                post_sleep_off_bed_s,
+                1,
+            ),
             "efficiency_points": efficiency_points,
-            "efficiency_max_points": 20.0,
+            "efficiency_max_points": 25.0,
             "balanced_arousal_penalty_points": balanced_arousal_penalty,
+            "arousal_evidence_available": bool(
+                arousal.get("index_per_hour") is not None
+            ),
+            "arousal_unavailable_neutral_points": (
+                SLEEP_AROUSAL_UNAVAILABLE_POINTS
+            ),
+            "arousal_penalty_max_points": (
+                SLEEP_AROUSAL_PENALTY_MAX_POINTS
+            ),
+            "arousal_penalty_points_per_index": (
+                SLEEP_AROUSAL_PENALTY_POINTS_PER_INDEX
+            ),
             "arousal_proxy": arousal,
+        },
+        "physiology": {
+            **{
+                key: value
+                for key, value in physiology.items()
+                if key not in {"heart_rate_values", "respiration_values"}
+            },
+            "paired_hr_rr_samples": paired_vital_rows,
+            "source_sensor_samples": source_vital_rows,
+            "paired_hr_rr_coverage_pct": round(
+                paired_vital_ratio * 100.0,
+                1,
+            ),
+            "points": physiology_points,
+            "max_points": 10.0,
+        },
+        "environment_support": {
+            **environment,
+            "points": environment_points,
+            "max_points": 10.0,
         },
         "data_coverage": {
             "ratio": round(physiological_evidence_ratio, 3),
@@ -1847,20 +2609,41 @@ def build_sleep_quality(
             "state_attribution_ratio": round(state_attribution_ratio, 3),
             "state_attribution_pct": round(state_attribution_ratio * 100.0, 1),
             "paired_hr_rr_pct": round(paired_vital_ratio * 100.0, 1),
-            "points": coverage_points,
-            "max_points": 5.0,
-            "basis": ("คะแนนความครบของข้อมูลใช้เวลาที่มี HR/RR คู่จริง; State attribution แสดงแยกและอาจรวม continuity carry"),
+            "points": 0.0,
+            "max_points": 0.0,
+            "score_component": False,
+            "basis": (
+                "Coverage ใช้บอกความมั่นใจและ QA เท่านั้น; "
+                "ไม่เพิ่มหรือลด Sleep Score"
+            ),
         },
         "cycles": cycles,
         "component_points": component_points,
         "component_max_points": component_max,
         "component_order": component_order,
         "component_labels": component_labels,
-        "score_unrounded": earned_points,
-        "score_basis": ("เวลา/การเข้าสู่การพัก 20 + ความต่อเนื่อง 30 + รูปแบบการพัก 30 + การตอบสนอง 15 + ข้อมูล 5" if nap_mode else "หลับไว/เวลาพัก 20 + หลับต่อเนื่อง 30 + ฟื้นฟู 30 + รอบการนอน 15 + ข้อมูล 5"),
+        "raw_component_points": component_totals[
+            "raw_available_points"
+        ],
+        "effective_component_points": effective_component_points,
+        "imputed_component_points": component_totals["imputed_points"],
+        "missing_component_neutral_factor": component_totals[
+            "neutral_factor"
+        ],
+        "score_unrounded": round(score_unrounded, 1),
+        "scored_max_points": component_totals["max_points"],
+        "score_normalized_for_available_components": False,
+        "score_basis": (
+            "เวลาและการเข้าสู่การนอน 25 + ความต่อเนื่อง 35 + "
+            "รูปแบบการนอนจาก BCG แบบจำกัดผล 20 + "
+            "การตอบสนอง HR/RR 10 + สภาพแวดล้อม 10; "
+            "Cycle และ Coverage เป็นบริบท ไม่ให้คะแนน"
+        ),
         "formula_version": SLEEP_SCORE_FORMULA_VERSION,
         "version": SLEEP_QUALITY_VERSION,
-        "outcome_interpretation": ("Nap & Refresh ไม่บังคับ N3/REM; Recovery Score สะท้อนสัญญาณสนับสนุนการฟื้นตัว และต้องอ่านร่วมกับคำตอบก่อน–หลัง Session" if nap_mode else "ความสดชื่นหลังตื่นต้องใช้คำตอบหลัง Session ประกอบ"),
+        "outcome_interpretation": (
+            "ความสดชื่นหลังตื่นต้องใช้คำตอบหลัง Session ประกอบ"
+        ),
         "disclaimer": (f"{mode.get('score_title') or 'Sleep Score'} เป็นการประเมิน ZEEP Wellness จาก BCG/Sensor ไม่ใช่ PSG หรือผลวินิจฉัย"),
     }
 
@@ -2350,7 +3133,11 @@ def build_session_report(
         "safety_excursion_count": sum(item["sample_count"] for item in safety_excursions),
         "safety_excursions": safety_excursions,
         "safety_excursions_change_sustained_assessment": False,
-        "safety_excursions_change_score": False,
+        "safety_excursions_change_score": bool(
+            (quality.get("environment_support") or {}).get(
+                "safety_score_cap_applied"
+            )
+        ),
         "context_only": True,
         "sleep_stage_context_only": True,
         "contributes_to_primary_score": report_environment_contributes,
@@ -2360,7 +3147,6 @@ def build_session_report(
         "safety_thresholds_unchanged": True,
     }
 
-    total_rows = len(rows)
     total_row_seconds = sum(_row_duration_seconds(sample, sample_interval_s) for sample in rows)
     stage_seconds = float(classification_accounting["display_attributed_s"])
     evidence_coverage = _physiological_evidence_coverage(

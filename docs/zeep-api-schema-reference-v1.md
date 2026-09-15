@@ -275,7 +275,8 @@ Admin จะมีหลายรายการ
 | `resolved` | `string` | nullable | mode ที่ quality policy ยืนยัน; อาจไม่มี |
 | `sleep_required` | `boolean` | ไม่ได้ | Overnight=true; Nap=false |
 | `target` | `Target` | nullable | เป้าหมาย duration; Overnight อาจไม่มี |
-| `review_required` | `boolean` | ไม่ได้ | true เมื่อ mode unresolved หรือ metadata conflict |
+| `review_required` | `boolean` | ไม่ได้ | true เมื่อ mode unresolved, metadata conflict หรือเวลา Session ต้องตรวจเทียบ Protocol |
+| `protocol_review_required` | `boolean` | ไม่ได้ | true เฉพาะเมื่อเวลาของ Session ต้องให้ Admin ตรวจ โดยไม่ปิดคะแนนที่มีหลักฐานครบ |
 | `validation_status` | `enum<string>` | ไม่ได้ | `mode_confirmed`, `mode_unresolved`, `mode_metadata_conflict` |
 | `conflicts` | `array<ModeConflict>` | ไม่ได้ | ปกติว่าง; รายละเอียดแหล่งที่ขัดกัน |
 
@@ -479,13 +480,15 @@ Client ต้องรองรับ subkey ที่อนุมัติแ�
 | `priority` | `string` | nullable | เช่น `safety_review` |
 
 องค์ประกอบ score ที่รองรับ: Overnight (`sleep_opportunity`,
-`sleep_stability`, `restorative_architecture`, `cycle_expression`) และ Nap
+`sleep_stability`, `restorative_architecture`, `physiological_response`,
+`environment_support`) และ Nap
 (`goal_duration`, `physiological_response`, `rest_continuity`,
 `environment_support`) แต่ UI ต้อง render จาก array ไม่ hard-code รายการ
 
-Environment ใน Overnight มีความสัมพันธ์ `session_context_only`; ใน Nap อาจมี
-`recovery_score_component_and_session_context` ตามสูตรที่ release แล้ว
-Environment ไม่ได้กำหนด Sleep State และ event เป็น association ไม่ใช่ causation
+Environment เป็นองค์ประกอบแบบจำกัด 10 คะแนนของทั้ง Sleep Score และ Recovery
+Score พร้อมทำหน้าที่อธิบายบริบทของ Session; ค่า Environment ไม่ได้กำหนด Sleep
+State และ event เป็น association ไม่ใช่ causation Client จึงต้องใช้ driver จาก
+องค์ประกอบคะแนนเป็นคำอธิบายผล และไม่เขียนเป็นเหตุทางการแพทย์
 
 ### 8.4 Personal Baseline และ Trend
 
@@ -689,14 +692,30 @@ restart carry ต้องยังแสดง State ก่อนหน้า�
 `wake_pct_recorded`, `sleep_efficiency_pct`, `awakenings`, `wake_entries`,
 `deep_pct`, `rem_pct`, `stage_pct_of_sleep`, `rest_mode`, `duration_target`,
 `physiology`, `body_response`, `environment_support`, `data_coverage`,
-`cycles`, `component_points`, `component_max_points`, `component_order`,
-`score_confidence`, `formula_version`, `version`, `outcome_interpretation`,
+`cycles`, `component_points`, `component_max_points`,
+`effective_component_points`, `imputed_component_points`, `component_order`,
+`score_confidence`, `scored_max_points`,
+`score_normalized_for_available_components`,
+`missing_component_neutral_factor`, `safety_review_required`,
+`review_required`, `formula_version`, `version`, `outcome_interpretation`,
 `disclaimer` และ field ที่อนุมัติใน response model รุ่นนั้น
 
 ห้ามพึ่งพา field ที่ไม่อยู่ใน allowlist เช่น `engineering_shadow_score`,
 `score_unrounded`, `release_requirements`, `samples`, `raw_samples`,
 `bcg_base64`, `answers`, `profile`, `access_token`, `refresh_token` หรือ
 `wellness_context`
+
+เมื่อ `available=true`, `effective_component_points` คือแต้มที่เข้าสูตรจริง,
+`imputed_component_points` ระบุเฉพาะ optional component ที่ใช้ค่า neutral 75%,
+`scored_max_points` ต้องเป็น 100 และ
+`score_normalized_for_available_components=false` Client ห้ามรวมคะแนนใหม่เอง
+เมื่อ `available=false` Server ไม่เผยแพร่ component points ที่อาจใช้ย้อนสร้าง
+engineering shadow score
+
+`duration_target` อาจมี `score_factor` และ `score_curve_exponent` เพื่ออธิบาย
+เส้นโค้งเวลา Nap ส่วน `environment_support` แยก `channel_coverage_pct`,
+`temporal_coverage_pct` และ `evidence_coverage_pct`; การมีครบทุกชื่อ Sensor
+ไม่ได้แปลว่ามีหลักฐานเต็ม Session
 
 ## 10. ตัวอย่าง canonical payloads
 
@@ -740,7 +759,7 @@ restart carry ต้องยังแสดง State ก่อนหน้า�
       "value": 76,
       "available": true,
       "level": "ดี",
-      "formula_version": "zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage",
+      "formula_version": "zeep-sleep-score-v2.0-wellness-25-35-20-10-10",
       "quality_model_version": "zeep-sleep-quality-v1",
       "validation_status": "preliminary_wellness_estimate",
       "clinical_validated": false,
@@ -757,7 +776,7 @@ restart carry ต้องยังแสดง State ก่อนหน้า�
         "title": "Sleep Score",
         "value": 76,
         "available": true,
-        "formula_version": "zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage",
+        "formula_version": "zeep-sleep-score-v2.0-wellness-25-35-20-10-10",
         "copied_without_recalculation": true
       },
       "status": {
@@ -879,7 +898,7 @@ restart carry ต้องยังแสดง State ก่อนหน้า�
     "versions": {
       "result_contract": "zeep.session-result.v1",
       "session_report": "report-v-test",
-      "score_formula": "zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage",
+      "score_formula": "zeep-sleep-score-v2.0-wellness-25-35-20-10-10",
       "score_quality_model": "zeep-sleep-quality-v1",
       "restore_summary": "zeep-restore-summary-v1.0",
       "product_language": "zeep-product-language-v1.0"
@@ -933,11 +952,12 @@ Nap ไม่บังคับให้หลับและไม่ควร�
         "label": "30 นาที",
         "seconds": 1800,
         "minutes": 30,
-        "recommended_range_minutes": [20, 40],
+        "recommended_range_minutes": [25, 35],
         "completion_pct": 100,
         "protocol_status": {}
       },
       "review_required": false,
+      "protocol_review_required": false,
       "validation_status": "mode_confirmed",
       "conflicts": []
     },
@@ -947,7 +967,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       "value": 74,
       "available": true,
       "level": "ช่วงพักนี้เป็นไปได้ดี",
-      "formula_version": "zeep-recovery-score-v2.1-complete-rest-25-35-30-10",
+      "formula_version": "zeep-recovery-score-v3.0-wellness-soft-25-35-30-10",
       "quality_model_version": "zeep-recovery-quality-v2",
       "validation_status": "preliminary_wellness_estimate",
       "clinical_validated": false,
@@ -964,7 +984,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
         "title": "Recovery Score",
         "value": 74,
         "available": true,
-        "formula_version": "zeep-recovery-score-v2.1-complete-rest-25-35-30-10",
+        "formula_version": "zeep-recovery-score-v3.0-wellness-soft-25-35-30-10",
         "copied_without_recalculation": true
       },
       "status": {
@@ -972,7 +992,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
         "label": "ช่วงพักนี้เป็นไปได้ดี",
         "min_score": 70,
         "max_score": 84,
-        "meaning": "ช่วงพักนี้สอดคล้องกับเป้าหมายในระดับดี",
+        "meaning": "ร่างกายได้หยุดพักอย่างต่อเนื่องในระดับดี",
         "version": "zeep-restore-action-bands-v1.0"
       },
       "session_scope": {
@@ -1086,7 +1106,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
     "versions": {
       "result_contract": "zeep.session-result.v1",
       "session_report": "report-v-test",
-      "score_formula": "zeep-recovery-score-v2.1-complete-rest-25-35-30-10",
+      "score_formula": "zeep-recovery-score-v3.0-wellness-soft-25-35-30-10",
       "score_quality_model": "zeep-recovery-quality-v2",
       "restore_summary": "zeep-restore-summary-v1.0",
       "product_language": "zeep-product-language-v1.0"
@@ -1324,7 +1344,7 @@ Admin ได้แก่ `score_release`, `data_quality`, `score_components`,
 |---|---|
 | Transport | `schema=zeep.api.response`, `api_version=1.0` |
 | Resource contract | `zeep.usage-session.v1` |
-| Score/summary | `zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage`, `zeep-recovery-score-v2.1-complete-rest-25-35-30-10`, `zeep-restore-summary-v1.0` |
+| Score/summary | `zeep-sleep-score-v2.0-wellness-25-35-20-10-10`, `zeep-recovery-score-v3.0-wellness-soft-25-35-30-10`, `zeep-restore-summary-v1.0` |
 
 การเพิ่ม optional field ที่ไม่เปลี่ยนความหมายเดิมเป็น backward-compatible ได้
 แต่ client ต้อง ignore unknown fields และรองรับ optional/nullable field เสมอ
@@ -1333,6 +1353,9 @@ availability invariant ต้องออก contract/API version ใหม่�
 
 การคำนวณคะแนนย้อนหลังทำได้เฉพาะสูตรที่มี version และ Audit trail; raw sensor
 record ต้อง immutable และ adapter นี้ต้องไม่ recalculate score (`score_recalculated_by_adapter=false`)
+เมื่อเวลาของ Nap ต่างจาก Protocol คะแนนยังสะท้อนคุณภาพการพักจริงได้ แต่
+`mode.protocol_review_required=true`, `mode.review_required=true` และ
+`score.review_required=true`; แอปต้องแสดงบริบทเวลาแยกจากความหมายของคะแนน
 
 ## 13. Error contract
 

@@ -82,7 +82,24 @@ def _source_score(
     return source_score, identity
 
 
-def _status(group: str, score: float | None) -> dict[str, Any]:
+def _status(
+    group: str,
+    score: float | None,
+    *,
+    safety_review: bool = False,
+) -> dict[str, Any]:
+    if safety_review:
+        return {
+            "key": "safety_review",
+            "label": "ควรให้ทีมตรวจสอบสภาพแวดล้อม",
+            "min_score": None,
+            "max_score": None,
+            "meaning": (
+                "พบค่าเกินกรอบความปลอดภัยระหว่าง Session "
+                "คะแนนยังแสดงได้แต่ไม่ใช้แทนการตรวจสอบ"
+            ),
+            "version": RESTORE_ACTION_BANDS_VERSION,
+        }
     if score is None or group == "unknown":
         return {
             "key": "unavailable",
@@ -366,7 +383,13 @@ def build_restore_summary(
         "name": "ZEEP Restore Summary",
         "creates_independent_score": False,
         "source_score": source_score,
-        "status": _status(group, score),
+        "status": _status(
+            group,
+            score,
+            safety_review=bool(
+                score_quality.get("safety_review_required")
+            ),
+        ),
         "session_scope": {
             "mode": group,
             "label": ("Overnight Recovery" if is_sleep else "Nap & Refresh" if is_recovery else "ผลการพักครั้งนี้"),

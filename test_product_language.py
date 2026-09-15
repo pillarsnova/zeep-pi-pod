@@ -24,6 +24,10 @@ class ProductLanguageTests(unittest.TestCase):
             "ให้เวลากับการพักเพิ่ม",
         )
         self.assertEqual(user_score_level("good"), "ดี")
+        self.assertEqual(
+            user_score_level("safety_review", "ดีมาก"),
+            "ควรให้ทีมตรวจสอบ",
+        )
 
     def test_wellness_levels_do_not_reuse_emergency_judgement(self):
         self.assertEqual(user_environment_level("poor"), "ควรปรับ")
@@ -44,12 +48,16 @@ class ProductLanguageTests(unittest.TestCase):
             "ผลการพักครั้งนี้",
         )
         self.assertEqual(
+            user_score_level("unavailable"),
+            "ครั้งนี้ยังไม่มีคะแนน",
+        )
+        self.assertEqual(
             user_environment_level("future", "แย่"),
             "กำลังรวบรวมข้อมูล",
         )
         self.assertEqual(
             user_confidence_level("future", "ข้อมูลไม่พอ"),
-            "กำลังเตรียมผลสรุป",
+            "ข้อมูลยังไม่พอสรุป",
         )
         self.assertEqual(user_confidence_level("low"), "กำลังรวบรวมข้อมูลเพิ่ม")
 

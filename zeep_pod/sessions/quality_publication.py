@@ -58,6 +58,8 @@ def _public_duration_target(value: Any) -> dict[str, Any]:
             "eligible_rest_seconds",
             "eligible_rest_minutes",
             "completion_pct",
+            "score_factor",
+            "score_curve_exponent",
             "basis",
             "extended_max_seconds",
         },
@@ -89,6 +91,7 @@ def public_environment_metric(value: Any) -> dict[str, Any]:
             "available",
             "required_for_overall",
             "coverage_pct",
+            "temporal_coverage_pct",
             "average",
             "minimum",
             "maximum",
@@ -154,7 +157,13 @@ def _public_environment_support(value: Any) -> dict[str, Any]:
         {
             "available",
             "quality_factor",
+            "uncapped_quality_factor",
+            "safety_score_factor_cap",
+            "safety_score_cap_applied",
             "coverage_pct",
+            "channel_coverage_pct",
+            "temporal_coverage_pct",
+            "evidence_coverage_pct",
             "available_factors",
             "expected_factors",
             "policy_version",
@@ -226,6 +235,9 @@ def _public_continuity(value: Any) -> dict[str, Any]:
             "efficiency_points",
             "efficiency_max_points",
             "balanced_arousal_penalty_points",
+            "arousal_evidence_available",
+            "arousal_unavailable_neutral_points",
+            "confirmed_post_onset_off_bed_s",
         },
     )
     proxy = mapping(source.get("arousal_proxy"))
@@ -264,6 +276,8 @@ def _public_scalar_maps(source: dict[str, Any]) -> dict[str, Any]:
         "stage_pct_of_sleep": STAGE_KEYS,
         "component_points": COMPONENT_KEYS,
         "component_max_points": COMPONENT_KEYS,
+        "effective_component_points": COMPONENT_KEYS,
+        "imputed_component_points": COMPONENT_KEYS,
         "data_coverage": {
             "ratio",
             "pct",
@@ -302,6 +316,16 @@ def _public_scalar_maps(source: dict[str, Any]) -> dict[str, Any]:
             "paired_hr_rr_samples",
             "source_sensor_samples",
             "paired_hr_rr_coverage_pct",
+            "measured_paired_samples",
+            "plausible_paired_samples",
+            "plausible_paired_ratio",
+            "plausibility_review_required",
+            "physiology_context_factor",
+            "edge_context_review_required",
+            "evidence_coverage_ratio",
+            "evidence_lift_factor",
+            "usable_evidence_coverage_ratio",
+            "usable_evidence_lift_factor",
             "method",
         },
         "body_response": {
@@ -309,6 +333,9 @@ def _public_scalar_maps(source: dict[str, Any]) -> dict[str, Any]:
             "movement_pct",
             "bed_exit_events",
             "transient_bed_exit_samples",
+            "presence_factor",
+            "continuity_factor",
+            "confirmed_off_bed_seconds",
         },
     }
     for key, fields in specifications.items():
@@ -354,8 +381,17 @@ def public_quality_payload(value: Any) -> dict[str, Any]:
             "sleep_efficiency_pct",
             "awakenings",
             "wake_entries",
+            "confirmed_post_onset_off_bed_s",
+            "continuity_denominator_s",
+            "wake_plus_off_bed_s",
             "deep_pct",
             "rem_pct",
+            "safety_review_required",
+            "review_required",
+            "raw_component_points",
+            "scored_max_points",
+            "score_normalized_for_available_components",
+            "missing_component_neutral_factor",
             "score_basis",
             "formula_version",
             "version",
@@ -364,6 +400,14 @@ def public_quality_payload(value: Any) -> dict[str, Any]:
         },
     )
     public.update(_public_scalar_maps(source))
+    if source.get("available") is not True:
+        for key in (
+            "component_points",
+            "effective_component_points",
+            "imputed_component_points",
+            "raw_component_points",
+        ):
+            public.pop(key, None)
     if "disclaimer" in source:
         public["disclaimer"] = USER_WELLNESS_DISCLAIMER
     if "component_order" in source:
@@ -398,6 +442,7 @@ def public_result_data_quality(value: Any) -> dict[str, Any]:
             "coverage_points",
             "coverage_max_points",
             "coverage_can_hide_score",
+            "component_evidence_coverage_pct",
         },
     )
     if "coverage" in source:

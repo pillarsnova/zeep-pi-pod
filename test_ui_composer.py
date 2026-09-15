@@ -188,7 +188,13 @@ class UiComposerTests(unittest.TestCase):
         css = (ui_composer.STATIC / "theme-modern.css").read_text(encoding="utf-8")
 
         self.assertIn("function reportPresentationMode(source)", template)
-        self.assertIn("if(unresolved)return 'unknown';", template)
+        self.assertIn("const canonicalMode=reportModeGroup(root.mode);", template)
+        self.assertIn("const canonicalRestMode=reportModeGroup(root.rest_mode);", template)
+        self.assertIn("explicit.length?explicit:[value.requested]", template)
+        self.assertNotIn("title.includes('recovery')", template)
+        self.assertNotIn("title.includes('sleep')", template)
+        self.assertIn("reportPresentationMode(rec)", template)
+        self.assertIn("reportPresentationMode(payload)", template)
         self.assertIn("'รูปแบบยังไม่ยืนยัน'", template)
         self.assertIn("'ผล Session · รอยืนยันรูปแบบ'", template)
         self.assertIn("'NAP & REFRESH SUMMARY'", template)
@@ -283,7 +289,15 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn(".restore-summary-card", css)
         self.assertIn(".restore-summary-grid", css)
         self.assertNotIn("whole_day_readiness", template)
-        self.assertNotIn("freshness_delta", template)
+        self.assertIn("subjective.status==='measured'", template)
+        self.assertIn("subjective.freshness_delta", template)
+        self.assertIn("subjective.activity_readiness", template)
+        self.assertIn("ไม่ได้อนุมานจาก Sensor", template)
+        self.assertIn(
+            "restorePlainText(summary.recommendation,['primary'])",
+            template,
+        )
+        self.assertIn(".restore-subjective-outcome", css)
 
     def test_result_summary_has_one_user_hierarchy_and_admin_evidence(self):
         template = ui_composer.render()
@@ -294,6 +308,11 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn('class="result-summary-actions"', template)
         self.assertIn("คำแนะนำครั้งถัดไป", template)
         self.assertIn("ครั้งนี้ยังไม่มีคะแนน", template)
+        self.assertIn("function reportSafetyReviewRequired", template)
+        self.assertIn("USER_PRODUCT_COPY.scoreLevels.safety_review", template)
+        self.assertIn('class="result-safety-review"', template)
+        self.assertIn(".quality-safety_review", css)
+        self.assertIn(".result-safety-review", css)
         self.assertIn("ยังดูรายละเอียดการพักครั้งนี้ได้ตามปกติ", template)
         self.assertIn("ข้อมูลยังไม่พอสรุปคะแนน", template)
         self.assertNotIn(
@@ -502,7 +521,10 @@ class UiComposerTests(unittest.TestCase):
         png_start = finding_end
         png_end = template.index("async function doLogout", png_start)
 
-        self.assertIn("userScoreMeaning(quality)", template[score_start:score_end])
+        self.assertIn(
+            "userScoreMeaning(quality,presentation,safetyReview)",
+            template[score_start:score_end],
+        )
         self.assertNotIn("quality.insight", template[score_start:score_end])
         self.assertIn("userReportFinding(item)", template[finding_start:finding_end])
         self.assertNotIn("item.detail", template[finding_start:finding_end])
@@ -526,10 +548,13 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("ZEEP · SESSION REPORT", image_renderer)
         self.assertIn("presentation!=='unknown'", image_renderer)
         self.assertIn("drawReportHeader(ctx,payload,W,M,presentation)", image_renderer)
-        self.assertIn("drawReportScore(ctx,quality,y,W,M,presentation)", image_renderer)
+        self.assertIn(
+            "drawReportScore(ctx,quality,y,W,M,presentation,safetyReview)",
+            image_renderer,
+        )
         self.assertIn("presentation==='unknown'", summary_renderer)
         self.assertIn("mode_metadata_conflict", template)
-        self.assertIn("quality.validation_status||restMode.validation_status", template)
+        self.assertIn("validationStatuses.some", template)
         self.assertIn('alt="QR ผลการพัก"', template)
         self.assertIn(".session-end-share{position:static;order:2}", template)
         self.assertIn("ยังยืนยันรูปแบบการพักครั้งนี้ไม่ได้", template)

@@ -23,7 +23,15 @@ COMPONENT_KEYS = {
     "rest_continuity",
     "environment_support",
 }
-STAGE_KEYS = {"wake", "n1", "n2", "n3", "rem", "mode_adjusted_balance"}
+STAGE_KEYS = {
+    "wake",
+    "n1",
+    "n2",
+    "n3",
+    "rem",
+    "identified_sleep_pattern",
+    "mode_adjusted_balance",
+}
 ENVIRONMENT_LEVEL_KEYS = {"critical", "poor", "fair", "good", "excellent"}
 SENSOR_VALUE_KEYS = {"temp", "hum", "lux", "dba", "co2", "pm2_5", "voc"}
 

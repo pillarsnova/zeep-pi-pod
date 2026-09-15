@@ -68,7 +68,7 @@ def _sleep_metrics(
         ),
         _metric(
             "sleep_efficiency",
-            "เวลาที่ระบบประเมินว่าหลับ",
+            "สัดส่วนเวลาที่ประเมินว่าหลับ",
             efficiency,
             "%",
             _percent_display(efficiency),
@@ -93,6 +93,11 @@ def _nap_metrics(
 ) -> list[dict[str, Any]]:
     completion = _number(target.get("completion_pct"))
     movement = _number(_mapping(quality.get("body_response")).get("movement_pct"))
+    stillness = (
+        max(0.0, min(100.0, 100.0 - movement))
+        if movement is not None
+        else None
+    )
     regularity = _number(
         _mapping(quality.get("physiology")).get("regularity_factor")
     )
@@ -100,17 +105,17 @@ def _nap_metrics(
     return [
         _metric(
             "target_completion",
-            "เวลาพักที่ทำได้",
+            "ครบตามเวลาเป้าหมาย",
             completion,
             "%",
             _percent_display(completion),
         ),
         _metric(
-            "movement",
-            "การเคลื่อนไหวระหว่างพัก",
-            movement,
+            "body_stillness",
+            "ความนิ่งร่างกาย",
+            stillness,
             "%",
-            _percent_display(movement),
+            _percent_display(stillness),
         ),
         _metric(
             "physiological_regularity",

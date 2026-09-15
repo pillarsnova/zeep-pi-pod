@@ -121,7 +121,7 @@ def history_participants(
                 "score": score.get("value") if available else None,
                 "score_type": score.get("type"),
                 "score_title": score.get("title"),
-                "level": score.get("level") if available else "กำลังเตรียมผลสรุป",
+                "level": score.get("level") if available else "ครั้งนี้ยังไม่มีคะแนน",
                 "available": available,
             }
         )

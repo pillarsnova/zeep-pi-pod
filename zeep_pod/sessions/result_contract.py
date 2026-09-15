@@ -21,31 +21,12 @@ from zeep_pod.product_language import (
     user_score_level,
 )
 from zeep_pod.sessions.protocol_publication import public_protocol_status
-from zeep_pod.sessions.restore_summary import build_restore_summary
-from zeep_pod.sessions.result_context import (
-    canonical_restore_contexts,
-    persisted_restore_matches,
+from zeep_pod.sessions.result_restore_contract import (
+    build_result_restore_summary,
 )
-from zeep_pod.sessions.result_privacy import public_result_value
 from zeep_pod.sessions.score_identity import assess_score_identity
 
 RESULT_CONTRACT_VERSION = "zeep.session-result.v1"
-PUBLIC_RESTORE_SUMMARY_FIELDS = (
-    "version",
-    "available",
-    "name",
-    "creates_independent_score",
-    "source_score",
-    "status",
-    "session_scope",
-    "drivers",
-    "personal_baseline",
-    "trend",
-    "recommendation",
-    "confidence",
-    "subjective_outcome",
-    "claim_boundary",
-)
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -56,6 +37,27 @@ def _number(value: Any) -> float | None:
     if isinstance(value, bool) or not isinstance(value, int | float):
         return None
     return float(value)
+
+
+def _safety_review_required(
+    quality: Mapping[str, Any],
+    report: Mapping[str, Any],
+) -> bool:
+    """Propagate a Safety review without changing or withholding the score."""
+    environment_support = _mapping(quality.get("environment_support"))
+    environment_assessment = _mapping(report.get("environment_assessment"))
+    findings = report.get("findings") or []
+    return bool(
+        quality.get("safety_review_required") is True
+        or str(quality.get("level_key") or "").strip().casefold() == "safety_review"
+        or environment_support.get("safety_review_required") is True
+        or environment_assessment.get("safety_review_required") is True
+        or any(
+            isinstance(item, Mapping)
+            and str(item.get("decision") or "").strip().casefold() == "safety_review"
+            for item in findings
+        )
+    )
 
 
 def _mode_groups(value: Any) -> set[str]:
@@ -121,6 +123,14 @@ def _canonical_mode(
 
     policy = REST_SESSION_GROUPS.get(group, {})
     quality_mode = _mapping(quality_value)
+    protocol_status = (
+        public_protocol_status(quality_mode.get("protocol_status"))
+        if not conflicts
+        else {}
+    )
+    protocol_review_required = bool(
+        protocol_status.get("review_required") is True
+    )
     resolved = quality_mode.get("resolved")
     if rest_mode_group(resolved) != group:
         resolved = None
@@ -130,9 +140,18 @@ def _canonical_mode(
         "requested": group if group != "unknown" else "unknown",
         "resolved": resolved,
         "sleep_required": bool(policy.get("sleep_required", False)),
-        "protocol_status": (public_protocol_status(quality_mode.get("protocol_status")) if not conflicts else {}),
-        "review_required": bool(conflicts or group == "unknown"),
-        "validation_status": ("mode_metadata_conflict" if conflicts else "mode_unresolved" if group == "unknown" else "mode_confirmed"),
+        "protocol_status": protocol_status,
+        "protocol_review_required": protocol_review_required,
+        "review_required": bool(
+            conflicts or group == "unknown" or protocol_review_required
+        ),
+        "validation_status": (
+            "mode_metadata_conflict"
+            if conflicts
+            else "mode_unresolved"
+            if group == "unknown"
+            else "mode_confirmed"
+        ),
         "conflicts": conflicts,
     }
 
@@ -173,6 +192,9 @@ def _released_score(
     quality: Mapping[str, Any],
     *,
     mode_conflict: bool,
+    session_closed: bool,
+    safety_review_required: bool,
+    quality_review_required: bool,
 ) -> dict[str, Any]:
     """Expose only a valid score released by the persisted quality result."""
     score_type = _score_type(group)
@@ -202,6 +224,8 @@ def _released_score(
         validation_status = score_identity.get("validation_status")
     elif group == "unknown":
         reason = "เลือกรูปแบบการพักเพื่อให้ ZEEP แสดงผลได้เหมาะสม"
+    elif session_closed:
+        reason = "ครั้งนี้ยังไม่มีคะแนน เพราะข้อมูลสำคัญสำหรับสรุปผลยังไม่ครบ"
     else:
         reason = "ZEEP กำลังรวบรวมข้อมูลสำหรับสรุปผลการพักครั้งนี้"
     return {
@@ -209,14 +233,27 @@ def _released_score(
         "title": _score_title(score_type),
         "value": score_value if available else None,
         "available": available,
-        "level": (user_score_level(quality.get("level_key"), quality.get("level")) if available else None),
+        "level": (
+            user_score_level(
+                "safety_review" if safety_review_required else quality.get("level_key"),
+                quality.get("level"),
+            )
+            if available
+            else None
+        ),
         "formula_version": quality.get("formula_version"),
         "quality_model_version": quality.get("version"),
         "validation_status": validation_status,
-        "clinical_validated": bool(available and quality.get("clinical_validated") is True),
+        "clinical_validated": bool(
+            available and quality.get("clinical_validated") is True
+        ),
         "reason": reason,
         "review_required": bool(
-            mode_conflict or group == "unknown" or provenance_issue
+            mode_conflict
+            or group == "unknown"
+            or provenance_issue
+            or safety_review_required
+            or quality_review_required
         ),
     }
 
@@ -226,15 +263,16 @@ def _target_contract(
     mode: Mapping[str, Any],
     quality: Mapping[str, Any],
 ) -> dict[str, Any] | None:
-    target = _mapping(quality.get("duration_target")) if mode.get("validation_status") != "mode_metadata_conflict" else {}
+    target = (
+        _mapping(quality.get("duration_target"))
+        if mode.get("validation_status") != "mode_metadata_conflict"
+        else {}
+    )
     session_target = _number(session.get("target_duration_s"))
     persisted_target = _number(target.get("seconds"))
     session_target_overrides = bool(
         session_target is not None
-        and (
-            persisted_target is None
-            or abs(session_target - persisted_target) > 1.0
-        )
+        and (persisted_target is None or abs(session_target - persisted_target) > 1.0)
     )
     if session_target_overrides:
         resolved_target = resolve_rest_target(
@@ -258,9 +296,7 @@ def _target_contract(
             ),
         }
     target_seconds = (
-        session_target
-        if session_target is not None
-        else _number(target.get("seconds"))
+        session_target if session_target is not None else _number(target.get("seconds"))
     )
     if not target and target_seconds is None:
         return None
@@ -268,7 +304,11 @@ def _target_contract(
         "key": target.get("key"),
         "label": target.get("label"),
         "seconds": target_seconds,
-        "minutes": (round(target_seconds / 60.0, 1) if target_seconds is not None else target.get("target_minutes")),
+        "minutes": (
+            round(target_seconds / 60.0, 1)
+            if target_seconds is not None
+            else target.get("target_minutes")
+        ),
         "recommended_range_minutes": target.get("recommended_range_minutes"),
         "completion_pct": (
             None if session_target_overrides else target.get("completion_pct")
@@ -281,116 +321,12 @@ def _target_contract(
     }
 
 
-def _canonical_quality(
-    quality: Mapping[str, Any],
-    mode: Mapping[str, Any],
-    score: Mapping[str, Any],
-) -> dict[str, Any]:
-    quality_type = {
-        "sleep": "sleep",
-        "nap_recovery": "rest_goal",
-    }.get(str(mode.get("group") or "unknown"))
-    return {
-        **quality,
-        "available": score.get("available") is True,
-        "score": score.get("value"),
-        "quality_type": quality_type,
-        "rest_mode": mode,
-    }
-
-
-def _restore_summary(
-    session: Mapping[str, Any],
+def _data_quality_contract(
     report: Mapping[str, Any],
     quality: Mapping[str, Any],
-    mode: Mapping[str, Any],
-    score: Mapping[str, Any],
+    group: str,
 ) -> dict[str, Any]:
-    existing = _mapping(report.get("restore_summary"))
-    if not existing:
-        existing = _mapping(session.get("restore_summary"))
-    canonical_quality = _canonical_quality(quality, mode, score)
-    canonical = build_restore_summary(
-        canonical_quality,
-        mode=mode,
-        findings=report.get("findings") or [],
-    )
-    persisted_matches = persisted_restore_matches(
-        existing,
-        canonical,
-        str(mode.get("group") or "unknown"),
-    )
-    # Preserve Baseline/trend/questionnaire snapshots only when they belong to
-    # this exact released score. Status, drivers and recommendation are always
-    # rebuilt from the canonical score so the explanation cannot contradict it.
-    context_matches = bool(persisted_matches and score.get("available"))
-    summary = existing if context_matches else canonical
-    public_summary = {key: public_result_value(summary[key] if key in summary else canonical[key]) for key in PUBLIC_RESTORE_SUMMARY_FIELDS if key in summary or key in canonical}
-    canonical_source_score = {
-        "type": score.get("type"),
-        "title": score.get("title"),
-        "value": score.get("value"),
-        "available": bool(score.get("available")),
-        "formula_version": score.get("formula_version"),
-        "copied_without_recalculation": True,
-    }
-    contexts = canonical_restore_contexts(
-        summary,
-        existing,
-        canonical,
-        group=str(mode.get("group") or "unknown"),
-        score_value=_number(score.get("value")),
-        score_available=score.get("available") is True,
-    )
-    canonical_drivers = public_result_value(canonical.get("drivers") or {})
-    if not score.get("available"):
-        safety_attention = [item for item in canonical_drivers.get("attention", []) if item.get("priority") == "safety_review"]
-        canonical_drivers = {
-            "positive": [],
-            "attention": safety_attention,
-            "explainability_available": bool(safety_attention),
-            "reason": ("คะแนนกำลังอยู่ระหว่างสรุป; ข้อมูลที่ควรดูแลเพื่อความปลอดภัยยังแสดงตามปกติ" if safety_attention else "กำลังรวบรวมข้อมูลสำหรับอธิบายคะแนนของการพักครั้งนี้"),
-            "selection": canonical_drivers.get("selection"),
-            "policy_version": canonical_drivers.get("policy_version"),
-            "environment_never_determines_sleep_state": True,
-            "events_are_associations_not_proven_causes": True,
-        }
-    return {
-        **public_summary,
-        "version": canonical.get("version"),
-        "available": bool(score.get("available")),
-        "name": canonical.get("name"),
-        "creates_independent_score": False,
-        "source_score": canonical_source_score,
-        "status": public_result_value(canonical.get("status") or {}),
-        "session_scope": public_result_value(canonical.get("session_scope") or {}),
-        "drivers": canonical_drivers,
-        "personal_baseline": contexts["personal_baseline"],
-        "trend": contexts["trend"],
-        "recommendation": public_result_value(canonical.get("recommendation") or {}),
-        "confidence": public_result_value(canonical.get("confidence") or {}),
-        "subjective_outcome": contexts["subjective_outcome"],
-        "claim_boundary": public_result_value(canonical.get("claim_boundary") or {}),
-        "whole_day_readiness_available": False,
-        "provenance": {
-            "source": ("persisted_context_with_canonical_explanation" if persisted_matches else "derived_from_persisted_report_without_rescoring"),
-            "score_changed": False,
-            "persisted_source_score_matched": persisted_matches,
-            "causal_claims": False,
-        },
-    }
-
-
-def build_result_contract(session: Mapping[str, Any]) -> dict[str, Any]:
-    """Adapt one finalized report without changing its score or raw record."""
-    report, quality, mode = _mode_and_quality(session)
-    group = str(mode.get("group") or "unknown")
-    mode_conflict = mode.get("validation_status") == "mode_metadata_conflict"
-    score = _released_score(
-        group,
-        quality,
-        mode_conflict=mode_conflict,
-    )
+    """Publish QA context without allowing coverage to hide a score."""
     score_confidence = _mapping(quality.get("score_confidence"))
     if score_confidence:
         confidence_level = score_confidence.get("level") or "unknown"
@@ -401,8 +337,46 @@ def build_result_contract(session: Mapping[str, Any]) -> dict[str, Any]:
     if not coverage:
         coverage = _mapping(quality.get("data_coverage"))
     score_coverage = _mapping(quality.get("data_coverage"))
-    coverage_contributes = bool(score_coverage.get("score_component") if "score_component" in score_coverage else group == "sleep")
-    restore_summary = _restore_summary(
+    coverage_contributes = bool(
+        score_coverage.get("score_component")
+        if "score_component" in score_coverage
+        else group == "sleep"
+    )
+    return {
+        "level": data_quality_level,
+        "label": user_confidence_level(data_quality_level),
+        "coverage": coverage,
+        "confidence": score_confidence,
+        "confidence_distribution": report_quality.get("confidence_pct"),
+        "coverage_contributes_points": coverage_contributes,
+        "coverage_points": score_coverage.get("points"),
+        "coverage_max_points": score_coverage.get("max_points"),
+        "coverage_can_hide_score": False,
+    }
+
+
+def build_result_contract(session: Mapping[str, Any]) -> dict[str, Any]:
+    """Adapt one finalized report without changing its score or raw record."""
+    report, quality, mode = _mode_and_quality(session)
+    group = str(mode.get("group") or "unknown")
+    mode_conflict = mode.get("validation_status") == "mode_metadata_conflict"
+    session_closed = bool(session.get("ended_at_utc"))
+    safety_review_required = _safety_review_required(quality, report)
+    quality_review_required = bool(
+        quality.get("review_required") is True
+        or mode.get("protocol_review_required") is True
+    )
+    if safety_review_required and quality.get("safety_review_required") is not True:
+        quality = {**quality, "safety_review_required": True}
+    score = _released_score(
+        group,
+        quality,
+        mode_conflict=mode_conflict,
+        session_closed=session_closed,
+        safety_review_required=safety_review_required,
+        quality_review_required=quality_review_required,
+    )
+    restore_summary = build_result_restore_summary(
         session,
         report,
         quality,
@@ -411,7 +385,7 @@ def build_result_contract(session: Mapping[str, Any]) -> dict[str, Any]:
     )
     return {
         "version": RESULT_CONTRACT_VERSION,
-        "session_closed": bool(session.get("ended_at_utc")),
+        "session_closed": session_closed,
         "score_revision_policy": "versioned_recalculation_with_audit",
         "raw_sensor_record_immutable": True,
         "mode": {
@@ -422,22 +396,15 @@ def build_result_contract(session: Mapping[str, Any]) -> dict[str, Any]:
             "sleep_required": mode.get("sleep_required"),
             "target": _target_contract(session, mode, quality),
             "review_required": mode.get("review_required"),
+            "protocol_review_required": mode.get(
+                "protocol_review_required"
+            ),
             "validation_status": mode.get("validation_status"),
             "conflicts": mode.get("conflicts") or [],
         },
         "score": score,
         "restore_summary": restore_summary,
-        "data_quality": {
-            "level": data_quality_level,
-            "label": user_confidence_level(data_quality_level),
-            "coverage": coverage,
-            "confidence": score_confidence,
-            "confidence_distribution": report_quality.get("confidence_pct"),
-            "coverage_contributes_points": coverage_contributes,
-            "coverage_points": score_coverage.get("points"),
-            "coverage_max_points": score_coverage.get("max_points"),
-            "coverage_can_hide_score": False,
-        },
+        "data_quality": _data_quality_contract(report, quality, group),
         "versions": {
             "result_contract": RESULT_CONTRACT_VERSION,
             "session_report": report.get("version"),
@@ -447,10 +414,18 @@ def build_result_contract(session: Mapping[str, Any]) -> dict[str, Any]:
             "product_language": PRODUCT_LANGUAGE_VERSION,
         },
         "provenance": {
-            "source": ("display_recomputed_report" if report.get("display_recomputed") else "persisted_final_summary"),
+            "source": (
+                "display_recomputed_report"
+                if report.get("display_recomputed")
+                else "persisted_final_summary"
+            ),
             "display_recomputed": bool(report.get("display_recomputed")),
-            "display_recomputed_from_version": report.get("display_recomputed_from_version"),
-            "persisted_record_unchanged": bool(report.get("persisted_record_unchanged", True)),
+            "display_recomputed_from_version": report.get(
+                "display_recomputed_from_version"
+            ),
+            "persisted_record_unchanged": bool(
+                report.get("persisted_record_unchanged", True)
+            ),
             "score_recalculated_by_adapter": False,
         },
     }

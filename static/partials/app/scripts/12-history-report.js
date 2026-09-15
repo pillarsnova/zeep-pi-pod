@@ -15,23 +15,74 @@ const TERMINAL_OCCUPANCY_META={
   exited_zeep:{label:'ออกจาก ZEEP',code:'EXIT',color:'#f6b94a'},
 };
 
+const REPORT_SLEEP_MODE_KEYS=new Set(['sleep','overnight']);
+const REPORT_RECOVERY_MODE_KEYS=new Set([
+  'nap_recovery','general_rest','short_nap','cycle_nap','shift_rest','jet_lag',
+  'relax_meditation','recovery_readiness','performance_prep','physical_comfort',
+  'performance','prepare','comfort','recovery','meditation','relax',
+]);
+const REPORT_UNRESOLVED_MODE_KEYS=new Set(['auto','unknown','unknown_legacy']);
+
+function reportModeGroup(value){
+  if(value==null)return '';
+  const explicit=typeof value==='object'
+    ?[value.group,value.key,value.resolved].filter(raw=>String(raw||'').trim())
+    :[];
+  // `requested:auto` is valid provenance when the canonical API already
+  // publishes a concrete key/group. It must not turn that released mode back
+  // into unknown.
+  const values=typeof value==='object'
+    ?explicit.length?explicit:[value.requested]
+    :[value];
+  const groups=new Set();
+  values.forEach(raw=>{
+    const key=String(raw||'').trim().toLowerCase();
+    if(!key)return;
+    if(REPORT_UNRESOLVED_MODE_KEYS.has(key))groups.add('unknown');
+    else if(REPORT_SLEEP_MODE_KEYS.has(key))groups.add('sleep');
+    else if(REPORT_RECOVERY_MODE_KEYS.has(key))groups.add('recovery');
+  });
+  return groups.size===1?[...groups][0]:groups.size>1?'unknown':'';
+}
+
 function reportPresentationMode(source){
-  const report=source?.session_report||source||{};
-  const quality=report.quality||report.sleep_quality||report;
-  const restMode=report.rest_mode||quality.rest_mode||{};
-  const group=restMode.group||restMode.key||restMode.requested||restMode.resolved||'';
-  const title=String(quality.score_title||restMode.score_title||'').toLowerCase();
-  const validationStatus=quality.validation_status||restMode.validation_status;
-  const unresolved=quality.rest_mode_unresolved
-    ||['legacy_mode_unresolved','mode_unresolved','mode_metadata_conflict'].includes(
-      validationStatus,
-    )
-    ||['auto','unknown_legacy'].includes(group)
-    ||(!group&&!quality.quality_type&&!title);
-  if(unresolved)return 'unknown';
-  if(quality.quality_type==='rest_goal'||group==='nap_recovery'||title.includes('recovery'))return 'recovery';
-  if(quality.quality_type==='sleep'||['sleep','overnight'].includes(group)||title.includes('sleep'))return 'sleep';
-  return 'unknown';
+  const root=source?.data||source||{};
+  // API v1 publishes a canonical `mode`; legacy history publishes canonical
+  // `rest_mode`.  Once present, either must win over stale report titles/copy.
+  const canonicalMode=reportModeGroup(root.mode);
+  if(canonicalMode)return canonicalMode;
+  const canonicalRestMode=reportModeGroup(root.rest_mode);
+  if(canonicalRestMode)return canonicalRestMode;
+
+  const report=root.session_report||root.report||root;
+  const rootQuality=root.sleep_quality||{};
+  const reportQuality=report.quality||report.sleep_quality||{};
+  const validationStatuses=[
+    rootQuality.validation_status,rootQuality.rest_mode?.validation_status,
+    report.validation_status,report.rest_mode?.validation_status,
+    reportQuality.validation_status,reportQuality.rest_mode?.validation_status,
+  ];
+  if(
+    rootQuality.rest_mode_unresolved||reportQuality.rest_mode_unresolved
+    ||validationStatuses.some(status=>[
+      'legacy_mode_unresolved','mode_unresolved','mode_metadata_conflict',
+    ].includes(String(status||'').toLowerCase()))
+  )return 'unknown';
+
+  const inferredModes=[
+    reportModeGroup(rootQuality.rest_mode),reportModeGroup(report.rest_mode),
+    reportModeGroup(reportQuality.rest_mode),
+  ].filter(Boolean);
+  const distinctModes=new Set(inferredModes);
+  if(distinctModes.has('unknown')||distinctModes.size>1)return 'unknown';
+  if(distinctModes.size===1)return [...distinctModes][0];
+
+  const qualityTypes=new Set(
+    [rootQuality.quality_type,reportQuality.quality_type,root.quality_type]
+      .map(value=>value==='sleep'?'sleep':value==='rest_goal'?'recovery':'')
+      .filter(Boolean),
+  );
+  return qualityTypes.size===1?[...qualityTypes][0]:'unknown';
 }
 
 function reportStageDurations(report){
@@ -189,7 +240,7 @@ function reportOverviewMetrics(report,presentation){
     const movement=quality.body_response?.movement_pct;
     values=[
       ['◷','เวลาพักที่นับได้',fmtDur(eligible)],
-      ['◎',adminView?'เทียบเป้าหมาย':'เวลาพักที่ทำได้',completion],
+      ['◎',adminView?'เทียบเป้าหมาย':'ครบตามเวลาเป้าหมาย',completion],
       ['♥',adminView?'ความนิ่ง HR/RR':'ความนิ่งของสัญญาณชีพ',regularity==null?'--':`${Math.round(100*Number(regularity))}%`],
       ['◇','ความนิ่งร่างกาย',movement==null?'--':`${Math.max(0,Math.round(100-Number(movement)))}%`],
     ];
@@ -197,7 +248,7 @@ function reportOverviewMetrics(report,presentation){
     values=[
       ['◷','เวลานอนโดยประมาณ',fmtDur(sleep.estimated_sleep_s)],
       ...(adminView?[['▣','ระยะเวลาใช้งาน',fmtDur(sleep.recording_s)]]:[]),
-      ['◎',adminView?'ประสิทธิภาพ':'เวลาที่ประเมินว่าหลับ',sleep.sleep_efficiency_pct==null?'--':`${sleep.sleep_efficiency_pct}%`],
+      ['◎',adminView?'ประสิทธิภาพ':'สัดส่วนเวลาที่ประเมินว่าหลับ',sleep.sleep_efficiency_pct==null?'--':`${sleep.sleep_efficiency_pct}%`],
       ['☀','W · ตื่น',fmtDur(sleep.wake_s)],
     ];
   }else{
@@ -325,12 +376,12 @@ function renderRespiratoryWellness(report,adminView=false){
   </section>`;
 }
 
-function renderSessionOverview(report,hasRestoreSummary=false){
+function renderSessionOverview(report,hasRestoreSummary=false,presentationOverride){
   if(!report?.available)return '';
   const adminView=currentPrincipal?.role==='admin';
   const sleep=report.sleep||{},quality=report.quality||{};
   const data=report.data_quality||{};
-  const presentation=reportPresentationMode(report);
+  const presentation=presentationOverride||reportPresentationMode(report);
   const findingIcon={critical:'!',poor:'↓',fair:'–',good:'✓',excellent:'★',unavailable:'?'};
   const allFindings=Array.isArray(report.findings)?report.findings:[];
   const findingRow=item=>{
@@ -426,7 +477,7 @@ function renderSessionOverview(report,hasRestoreSummary=false){
 function renderReport(rec){
   const root = document.getElementById('sessionDetail');
   const adminView=currentPrincipal?.role==='admin';
-  const presentation=reportPresentationMode(rec.session_report||rec);
+  const presentation=reportPresentationMode(rec);
   const reportTitle=presentation==='recovery'
     ?'ผล Nap & Refresh'
     :presentation==='sleep'?'ผล Overnight Recovery':adminView?'ผล Session · รอยืนยันรูปแบบ':'ผลการพักครั้งนี้';
@@ -568,7 +619,7 @@ function renderReport(rec){
       <div class="report-result-meta">${adminView?`${historyEscape(identityLabel(rec,''))} · `:''}${fmtDateTh(rec.started_at_utc)} → ${fmtDateTh(rec.ended_at_utc)} · ${fmtDur(rec.duration_s)}</div>
     </div>
     ${resultSummaryHtml}
-    ${renderSessionOverview(rec.session_report,Boolean(resultSummaryHtml))}
+    ${renderSessionOverview(rec.session_report,Boolean(resultSummaryHtml),presentation)}
     ${!adminView?timeAccounting:''}
     ${!adminView?timelineDetails:''}
     ${adminDiagnostics}

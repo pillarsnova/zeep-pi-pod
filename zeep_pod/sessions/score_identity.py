@@ -12,6 +12,7 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from sleep_system_policy import (
+    APPROVED_SCORE_FORMULA_VERSIONS_BY_GROUP,
     RECOVERY_SCORE_FORMULA_VERSION,
     SLEEP_SCORE_FORMULA_VERSION,
     rest_mode_group,
@@ -29,12 +30,6 @@ SCORE_FORMULA_BY_GROUP = {
     "sleep": SLEEP_SCORE_FORMULA_VERSION,
     "nap_recovery": RECOVERY_SCORE_FORMULA_VERSION,
 }
-SCORE_FORMULA_PREFIX_BY_GROUP = {
-    "sleep": "zeep-sleep-score-",
-    "nap_recovery": "zeep-recovery-score-",
-}
-
-
 def mode_groups(value: Any) -> set[str]:
     """Return every canonical group asserted by one mode value."""
     if isinstance(value, Mapping):
@@ -127,7 +122,10 @@ def assess_score_identity(
     actual_quality_type_group = quality_type_group(score_quality)
     quality_type_present = bool(str(score_quality.get("quality_type") or "").strip())
     expected_formula = SCORE_FORMULA_BY_GROUP.get(group)
-    expected_formula_prefix = SCORE_FORMULA_PREFIX_BY_GROUP.get(group)
+    approved_formulas = APPROVED_SCORE_FORMULA_VERSIONS_BY_GROUP.get(
+        group,
+        frozenset(),
+    )
     actual_formula = score_quality.get("formula_version")
     formula = str(actual_formula or "").strip().casefold()
     stored_title = str(score_quality.get("score_title") or "").strip()
@@ -154,9 +152,11 @@ def assess_score_identity(
     elif not formula:
         status = "score_formula_untyped"
         reason = "ผลคะแนนไม่มีรุ่นสูตรที่ตรวจสอบได้"
-    elif not formula.startswith(str(expected_formula_prefix)):
+    elif formula not in {
+        str(value).strip().casefold() for value in approved_formulas
+    }:
         status = "score_formula_mismatch"
-        reason = "รุ่นสูตรคะแนนไม่ตรงกับรูปแบบการพักของ Session"
+        reason = "รุ่นสูตรคะแนนไม่อยู่ในรายการที่อนุมัติสำหรับ Session นี้"
     else:
         status = "score_identity_confirmed"
         reason = None
@@ -171,4 +171,5 @@ def assess_score_identity(
         "expected_quality_type": expected_quality_type,
         "expected_score_title": SCORE_TITLE_BY_GROUP.get(group),
         "expected_formula_version": expected_formula,
+        "approved_formula_versions": sorted(approved_formulas),
     }

@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 # Every persisted decision/report carries these versions for provenance.
 SLEEP_PIPELINE_CONTRACT_VERSION = (
     "zeep-sleep-health-pipeline-v1.12-complete-occupied-epochs"
@@ -30,8 +29,14 @@ SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
 SLEEP_HISTORY_BACKFILL_VERSION = (
     "zeep-sleep-history-reclass-v28-complete-occupied-epochs"
 )
-SESSION_REPORT_VERSION = "zeep-session-report-v10.9-recovery-timing-advisory"
-SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.7-recovery-timing-advisory"
+SESSION_REPORT_VERSION = "zeep-session-report-v10.10-wellness-score-balance"
+SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.8-wellness-score-balance"
+PRE_WELLNESS_BALANCE_SESSION_REPORT_VERSION = (
+    "zeep-session-report-v10.9-recovery-timing-advisory"
+)
+PRE_WELLNESS_BALANCE_SLEEP_QUALITY_VERSION = (
+    "zeep-rest-quality-v8.7-recovery-timing-advisory"
+)
 PRE_RECOVERY_TIMING_SESSION_REPORT_VERSION = (
     "zeep-session-report-v10.8-respiratory-wellness"
 )
@@ -39,7 +44,7 @@ PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION = (
     "zeep-rest-quality-v8.6-state-evidence-coverage-split"
 )
 SLEEP_SCORE_FORMULA_VERSION = (
-    "zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage"
+    "zeep-sleep-score-v2.0-wellness-25-35-20-10-10"
 )
 # v10.9 keeps Nap timing deviations as Admin QA instead of withholding an
 # otherwise supported Recovery Score. The point formula itself is unchanged.
@@ -72,6 +77,10 @@ PREVIOUS_SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.3-nap-goal-duration"
 APPROVED_SLEEP_RESULT_VERSION_PAIRS = frozenset({
     (SESSION_REPORT_VERSION, SLEEP_QUALITY_VERSION),
     (
+        PRE_WELLNESS_BALANCE_SESSION_REPORT_VERSION,
+        PRE_WELLNESS_BALANCE_SLEEP_QUALITY_VERSION,
+    ),
+    (
         PRE_RECOVERY_TIMING_SESSION_REPORT_VERSION,
         PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION,
     ),
@@ -94,8 +103,19 @@ APPROVED_SLEEP_RESULT_VERSION_PAIRS = frozenset({
     (PREVIOUS_SESSION_REPORT_VERSION, PREVIOUS_SLEEP_QUALITY_VERSION),
 })
 RECOVERY_SCORE_FORMULA_VERSION = (
-    "zeep-recovery-score-v2.1-complete-rest-25-35-30-10"
+    "zeep-recovery-score-v3.0-wellness-soft-25-35-30-10"
 )
+APPROVED_SCORE_FORMULA_VERSIONS_BY_GROUP = {
+    "sleep": frozenset({
+        "zeep-sleep-score-v1.0-reviewed",
+        SLEEP_SCORE_FORMULA_VERSION,
+    }),
+    "nap_recovery": frozenset({
+        "zeep-recovery-score-v2.0-reviewed",
+        "zeep-recovery-score-v2.1-complete-rest-25-35-30-10",
+        RECOVERY_SCORE_FORMULA_VERSION,
+    }),
+}
 RESTORE_SUMMARY_VERSION = "zeep-restore-summary-v1.0"
 RESPIRATORY_WELLNESS_VERSION = "zeep-respiratory-wellness-v1.1"
 RESTORE_ACTION_BANDS_VERSION = "zeep-restore-action-bands-v1.0"
@@ -516,6 +536,21 @@ RECOVERY_SCORE_COMPONENT_MAX_POINTS = {
     "rest_continuity": 30.0,
     "environment_support": 10.0,
 }
+# Wellness balance keeps valid, ordinary rest away from a technical zero while
+# preserving the release gates above.  These factors are product-scoring
+# transforms, not clinical normal ranges or claims of recovery.
+WELLNESS_PHYSIOLOGY_NEUTRAL_FLOOR = 0.60
+WELLNESS_MISSING_COMPONENT_NEUTRAL_FACTOR = 0.75
+WELLNESS_PHYSIOLOGY_FULL_LIFT_COVERAGE = 0.80
+WELLNESS_SCORE_HR_PLAUSIBLE_RANGE_BPM = (35.0, 160.0)
+WELLNESS_SCORE_RR_PLAUSIBLE_RANGE_PER_MIN = (6.0, 40.0)
+WELLNESS_SCORE_HR_PREFERRED_RANGE_BPM = (45.0, 120.0)
+WELLNESS_SCORE_RR_PREFERRED_RANGE_PER_MIN = (8.0, 30.0)
+ENVIRONMENT_SAMPLE_CREDIT_CAP_SECONDS = 30.0
+RECOVERY_DURATION_CURVE_EXPONENT = 0.50
+RECOVERY_MOVEMENT_PENALTY_WEIGHT = 0.50
+RECOVERY_EXIT_PENALTY_WEIGHT = 0.08
+RECOVERY_EXIT_PENALTY_EVENT_CAP = 3
 
 # The Pilot exposes exactly two Session goals. Detailed sub-modes remain
 # internal for historical replay and duration scoring; they must not reappear
@@ -746,6 +781,17 @@ ENVIRONMENT_LEVELS = {
         "decision": "maintain", "description": "อยู่ในเป้าหมายสูงสุดของ ZEEP",
     },
 }
+# ``fair`` is already the minimum acceptable ZEEP operating level, so its
+# score factor must not equal a failing half score.  Life-safety excursions are
+# still flagged independently and are never relaxed by these bounded factors.
+ENVIRONMENT_SCORE_FACTORS = {
+    "critical": 0.30,
+    "poor": 0.60,
+    "fair": 0.85,
+    "good": 0.95,
+    "excellent": 1.00,
+}
+ENVIRONMENT_SAFETY_SCORE_FACTOR_CAP = 0.30
 ENVIRONMENT_SESSION_SUSTAINED_FLOOR_QUANTILE = 0.10
 
 
@@ -1172,21 +1218,35 @@ def assess_environment_values(
     }
 
 SLEEP_QUALITY_COMPONENT_MAX_POINTS = {
-    "sleep_opportunity": 20.0,
-    "sleep_stability": 30.0,
-    "restorative_architecture": 30.0,
-    "cycle_expression": 15.0,
-    "data_coverage": 5.0,
+    "sleep_opportunity": 25.0,
+    "sleep_stability": 35.0,
+    "restorative_architecture": 20.0,
+    "physiological_response": 10.0,
+    "environment_support": 10.0,
 }
 
-# Overnight restorative architecture is a transparent ZEEP wellness formula.
-# It is not an AASM normative distribution. N3 is deliberately not penalised
-# above 20%; full N3 credit starts at 10% and remains open-ended.
-OVERNIGHT_ARCHITECTURE_MAX_POINTS = {"n2": 10.0, "n3": 12.0, "rem": 8.0}
-OVERNIGHT_N2_FULL_CREDIT_PCT = (45.0, 75.0)
-OVERNIGHT_N3_ZERO_BELOW_PCT = 3.0
+# Overnight pattern is deliberately bounded at 20 points because BCG is not
+# PSG.  Ten points recognise a coherent estimated sleep pattern; the estimated
+# N2/N3/REM composition can move the total by only ten further points.  Missing
+# N3 or REM is therefore informative but cannot dominate an otherwise sound
+# Wellness result.  High N3 is never penalised.
+OVERNIGHT_ARCHITECTURE_MAX_POINTS = {
+    "identified_sleep_pattern": 10.0,
+    "n2": 4.0,
+    "n3": 3.0,
+    "rem": 3.0,
+}
+# Above 30% receives full credit.  An unusually high N2 estimate often means
+# that contactless BCG could not separate N3/REM confidently; it must not be
+# punished a second time after those two small subcomponents are already zero.
+OVERNIGHT_N2_FULL_CREDIT_PCT = (30.0, 100.0)
+OVERNIGHT_N2_SOFT_CREDIT_PCT = (10.0, 100.0)
+OVERNIGHT_N3_ZERO_BELOW_PCT = 0.0
 OVERNIGHT_N3_FULL_CREDIT_FROM_PCT = 10.0
 OVERNIGHT_REM_FULL_CREDIT_PCT = (15.0, 25.0)
+SLEEP_AROUSAL_PENALTY_MAX_POINTS = 3.0
+SLEEP_AROUSAL_PENALTY_POINTS_PER_INDEX = 0.15
+SLEEP_AROUSAL_UNAVAILABLE_POINTS = 8.5
 
 
 def sleep_policy_snapshot() -> dict[str, Any]:
@@ -1448,17 +1508,108 @@ def sleep_policy_snapshot() -> dict[str, Any]:
         },
         "recovery_score": {
             "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
+            "approved_formula_versions": sorted(
+                APPROVED_SCORE_FORMULA_VERSIONS_BY_GROUP[
+                    "nap_recovery"
+                ]
+            ),
             "component_max_points": dict(
                 RECOVERY_SCORE_COMPONENT_MAX_POINTS
             ),
+            "duration_curve_exponent": (
+                RECOVERY_DURATION_CURVE_EXPONENT
+            ),
+            "physiology_neutral_floor": (
+                WELLNESS_PHYSIOLOGY_NEUTRAL_FLOOR
+            ),
+            "physiology_full_lift_coverage": (
+                WELLNESS_PHYSIOLOGY_FULL_LIFT_COVERAGE
+            ),
+            "missing_component_neutral_factor": (
+                WELLNESS_MISSING_COMPONENT_NEUTRAL_FACTOR
+            ),
+            "physiology_hr_plausible_range_bpm": list(
+                WELLNESS_SCORE_HR_PLAUSIBLE_RANGE_BPM
+            ),
+            "physiology_hr_preferred_range_bpm": list(
+                WELLNESS_SCORE_HR_PREFERRED_RANGE_BPM
+            ),
+            "physiology_rr_plausible_range_per_min": list(
+                WELLNESS_SCORE_RR_PLAUSIBLE_RANGE_PER_MIN
+            ),
+            "physiology_rr_preferred_range_per_min": list(
+                WELLNESS_SCORE_RR_PREFERRED_RANGE_PER_MIN
+            ),
+            "movement_penalty_weight": (
+                RECOVERY_MOVEMENT_PENALTY_WEIGHT
+            ),
+            "bed_exit_penalty_weight": RECOVERY_EXIT_PENALTY_WEIGHT,
+            "bed_exit_penalty_event_cap": (
+                RECOVERY_EXIT_PENALTY_EVENT_CAP
+            ),
+            "environment_score_factors": dict(
+                ENVIRONMENT_SCORE_FACTORS
+            ),
+            "environment_safety_score_factor_cap": (
+                ENVIRONMENT_SAFETY_SCORE_FACTOR_CAP
+            ),
+            "environment_sample_credit_cap_seconds": (
+                ENVIRONMENT_SAMPLE_CREDIT_CAP_SECONDS
+            ),
             "coverage_is_score_component": False,
             "sleep_required": False,
+            "stored_target_required": True,
         },
         "sleep_score": {
             "formula_version": SLEEP_SCORE_FORMULA_VERSION,
+            "approved_formula_versions": sorted(
+                APPROVED_SCORE_FORMULA_VERSIONS_BY_GROUP["sleep"]
+            ),
             "component_max_points": dict(
                 SLEEP_QUALITY_COMPONENT_MAX_POINTS
             ),
+            "duration_curve_exponent": 0.5,
+            "physiology_neutral_floor": (
+                WELLNESS_PHYSIOLOGY_NEUTRAL_FLOOR
+            ),
+            "physiology_full_lift_coverage": (
+                WELLNESS_PHYSIOLOGY_FULL_LIFT_COVERAGE
+            ),
+            "missing_component_neutral_factor": (
+                WELLNESS_MISSING_COMPONENT_NEUTRAL_FACTOR
+            ),
+            "physiology_hr_plausible_range_bpm": list(
+                WELLNESS_SCORE_HR_PLAUSIBLE_RANGE_BPM
+            ),
+            "physiology_hr_preferred_range_bpm": list(
+                WELLNESS_SCORE_HR_PREFERRED_RANGE_BPM
+            ),
+            "physiology_rr_plausible_range_per_min": list(
+                WELLNESS_SCORE_RR_PLAUSIBLE_RANGE_PER_MIN
+            ),
+            "physiology_rr_preferred_range_per_min": list(
+                WELLNESS_SCORE_RR_PREFERRED_RANGE_PER_MIN
+            ),
+            "arousal_penalty_max_points": (
+                SLEEP_AROUSAL_PENALTY_MAX_POINTS
+            ),
+            "arousal_penalty_points_per_index": (
+                SLEEP_AROUSAL_PENALTY_POINTS_PER_INDEX
+            ),
+            "arousal_unavailable_points": (
+                SLEEP_AROUSAL_UNAVAILABLE_POINTS
+            ),
+            "environment_score_factors": dict(
+                ENVIRONMENT_SCORE_FACTORS
+            ),
+            "environment_safety_score_factor_cap": (
+                ENVIRONMENT_SAFETY_SCORE_FACTOR_CAP
+            ),
+            "environment_sample_credit_cap_seconds": (
+                ENVIRONMENT_SAMPLE_CREDIT_CAP_SECONDS
+            ),
+            "cycle_is_score_component": False,
+            "coverage_is_score_component": False,
             "sleep_required": True,
         },
         "restore_summary": {
@@ -1490,10 +1641,12 @@ def sleep_policy_snapshot() -> dict[str, Any]:
         "overnight_architecture": {
             "max_points": dict(OVERNIGHT_ARCHITECTURE_MAX_POINTS),
             "n2_full_credit_pct": list(OVERNIGHT_N2_FULL_CREDIT_PCT),
+            "n2_soft_credit_pct": list(OVERNIGHT_N2_SOFT_CREDIT_PCT),
             "n3_zero_below_pct": OVERNIGHT_N3_ZERO_BELOW_PCT,
             "n3_full_credit_from_pct": OVERNIGHT_N3_FULL_CREDIT_FROM_PCT,
             "n3_upper_penalty": False,
             "rem_full_credit_pct": list(OVERNIGHT_REM_FULL_CREDIT_PCT),
+            "rem_upper_penalty": False,
         },
         "claim_boundary": {
             "intended_use": "exploratory_wellness_telemetry",

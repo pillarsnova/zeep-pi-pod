@@ -52,6 +52,9 @@ def _session(session_id: str, email: str, mode: str) -> dict:
             "hr_series": [58.0, 59.0],
             "participant_phone": "must-not-leak",
         },
+        "body_response": {
+            "movement_pct": 12.5,
+        },
         "data_coverage": {
             "pct": 95,
             "score_component": not is_nap,
@@ -514,6 +517,10 @@ class UsageSessionApiTests(unittest.TestCase):
         metrics = {item["key"]: item for item in data["overview_metrics"]}
         self.assertEqual(data["timing"]["target_duration_s"], 1800)
         self.assertEqual(metrics["target_completion"]["value"], 100)
+        self.assertEqual(metrics["target_completion"]["label"], "ครบตามเวลาเป้าหมาย")
+        self.assertEqual(metrics["body_stillness"]["value"], 87.5)
+        self.assertEqual(metrics["body_stillness"]["label"], "ความนิ่งร่างกาย")
+        self.assertNotIn("movement", metrics)
         self.assertIn("physiological_regularity", metrics)
 
     def test_unresolved_mode_never_falls_back_to_nap_metrics(self) -> None:
@@ -953,10 +960,10 @@ class UsageSessionApiTests(unittest.TestCase):
         self.assertNotIn("engineering_shadow_score", rendered)
         self.assertNotIn("score_unrounded", rendered)
         self.assertNotIn("must-not-leak", rendered)
-        self.assertEqual(payload["report"]["headline"], "กำลังเตรียมผลสรุป")
+        self.assertEqual(payload["report"]["headline"], "ครั้งนี้ยังไม่มีคะแนน")
         self.assertEqual(
             payload["report"]["insight"],
-            "ZEEP กำลังรวบรวมข้อมูลสำหรับสรุปผลการพักครั้งนี้",
+            "ครั้งนี้ยังไม่มีคะแนน เพราะข้อมูลสำคัญสำหรับสรุปผลยังไม่ครบ",
         )
         safety_finding = payload["report"]["findings"][0]
         self.assertEqual(safety_finding["decision"], "safety_review")
@@ -985,6 +992,44 @@ class UsageSessionApiTests(unittest.TestCase):
         self.assertNotIn("พร้อมแข่งขัน", rendered)
         self.assertNotIn("SHT3x", rendered)
         self.assertNotIn("Timeline", rendered)
+
+    def test_available_high_score_keeps_safety_review_prominent(self) -> None:
+        session = self.history.sessions["a-session"]
+        quality = session["sleep_quality"]
+        quality.update(
+            {
+                "score": 94,
+                "level": "ดีมาก",
+                "level_key": "very_good",
+                "safety_review_required": True,
+            }
+        )
+
+        detail_response = self.client.get(
+            "/api/v1/usage-sessions/a-session",
+            headers=self._headers("a@example.test"),
+        )
+        self.assertEqual(detail_response.status_code, 200)
+        detail = detail_response.json()["data"]
+        self.assertTrue(detail["score"]["available"])
+        self.assertEqual(detail["score"]["value"], 94)
+        self.assertEqual(detail["score"]["level"], "ควรให้ทีมตรวจสอบ")
+        self.assertTrue(detail["score"]["review_required"])
+        self.assertTrue(detail["report"]["quality"]["safety_review_required"])
+        self.assertEqual(
+            detail["restore_summary"]["status"]["key"],
+            "safety_review",
+        )
+        self.assertIn("ควรให้ทีมตรวจสอบ", detail["report"]["headline"])
+
+        presentation_response = self.client.get(
+            "/api/v1/usage-sessions/a-session/presentation",
+            headers=self._headers("a@example.test"),
+        )
+        self.assertEqual(presentation_response.status_code, 200)
+        primary = presentation_response.json()["data"]["primary_result"]
+        self.assertEqual(primary["value"], 94)
+        self.assertIn("ควรให้ทีมตรวจสอบ", primary["status"])
 
     def test_available_score_rebuilds_all_user_copy_from_stable_keys(self) -> None:
         session = self.history.sessions["a-session"]
@@ -1072,7 +1117,7 @@ class UsageSessionApiTests(unittest.TestCase):
         )
         self.assertEqual(
             payload["report"]["data_quality"]["label"],
-            "กำลังเตรียมผลสรุป",
+            "ข้อมูลยังไม่พอสรุป",
         )
         self.assertIn(
             "ความครบถ้วนของข้อมูล",
@@ -1155,7 +1200,7 @@ class UsageSessionApiTests(unittest.TestCase):
                 self.assertFalse(payload["score"]["available"])
                 self.assertEqual(
                     payload["report"]["headline"],
-                    "กำลังเตรียมผลสรุป",
+                    "ครั้งนี้ยังไม่มีคะแนน",
                 )
                 self.assertNotIn("ยอดเยี่ยม", str(payload))
 

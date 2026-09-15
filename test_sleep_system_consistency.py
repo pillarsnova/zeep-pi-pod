@@ -136,7 +136,7 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
             rest_mode="overnight",
         )
         self.assertEqual(quality["duration_target"]["seconds"], 25_200)
-        self.assertEqual(quality["architecture"]["points"]["n3"], 12.0)
+        self.assertEqual(quality["architecture"]["points"]["n3"], 3.0)
         self.assertEqual(quality["component_max_points"], {
             key: value for key, value in policy.SLEEP_QUALITY_COMPONENT_MAX_POINTS.items()
         })
@@ -420,7 +420,7 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         for version in policy.sleep_policy_snapshot()["versions"].values():
             self.assertIn(version, doc)
         self.assertIn("N3 → REM", doc)
-        self.assertIn("20 + 30 + 30 + 15 + 5", doc)
+        self.assertIn("25 + 35 + 20 + 10 + 10", doc)
         self.assertIn("25200", doc)
 
 

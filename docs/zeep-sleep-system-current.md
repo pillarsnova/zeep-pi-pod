@@ -3,7 +3,7 @@
 > **Purpose:** เอกสารหลักฉบับเดียวของ Sleep State, Historical Replay, Sleep Score และ Session Report ที่ใช้งานจริงใน ZEEP Pod  
 > **Positioning:** Sleep Wellness · EEG-free exploratory telemetry · ไม่ใช่ PSG/การวินิจฉัย/คำสั่งรักษา  
 > **Status:** Wellness release candidate · guarded derived-result replay/promotion · G2 paired-PSG validation open
-> **Updated:** 2026-09-13
+> **Updated:** 2026-09-15
 > **Code manifest:** [`pi5/sleep_system_policy.py`](../pi5/sleep_system_policy.py)  
 > **Related:** [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.0.md) · [ZEEP Restore Summary v1](zeep-restore-summary-v1.md) · [Respiratory Wellness v1](zeep-respiratory-wellness-v1.md) · [Historical Promotion Policy v2](sleep-history-promotion-policy-v2.md) · [v1.23 Wellness Replay Review](sleep-estimator-v123-wellness-longitudinal-report-2026-09-05.md) · [AI Sleep-State](ai-sleep-state-and-assistant.md)
 
@@ -20,7 +20,7 @@
 - `Overnight Recovery` ใช้ `Sleep Score`; `Nap & Refresh` ใช้ `Recovery Score` ไม่ว่าจะหลับ พักสายตา หรือทำสมาธิ โดย Recovery Score ใช้ HR/RR ที่จับคู่กันอย่างน้อย 6 จุด ส่วน coverage เป็น QA/confidence แยกและไม่ให้หรือหักคะแนน
 - `ZEEP Restore Summary` อธิบายคะแนนหลักด้วยสถานะ ตัวขับคะแนน Personal Baseline และคำแนะนำหนึ่งข้อ โดยไม่สร้างคะแนนที่สามและไม่อ้าง Whole-day Readiness
 - `Respiratory Wellness` แสดงค่ากลาง HR/RR จากหน้าต่างหลักฐาน BCG คู่เดียวกัน พร้อมสรุปและคำแนะนำสั้นสำหรับผู้ใช้; รายละเอียดความสม่ำเสมอ, Personal Baseline, ช่วงอายุ และ Coverage อยู่ในมุมมองผู้ดูแล โดยไม่เปลี่ยน State/Score และไม่อ้างว่าเป็นการวัดสมรรถภาพปอด, SpO₂ หรือภาวะหยุดหายใจ
-- N3 ต่ำกว่า 3% ไม่ได้คะแนน N3, 3–10% ได้ตามสัดส่วน, ตั้งแต่ 10% ได้เต็มและ **ไม่หักเมื่อเกิน 20%**
+- Sleep Score จำกัดผลของ BCG Stage ไว้ 20 คะแนน: มีรูปแบบการนอนที่ประเมินได้ 10, N2 สูงสุด 4, N3 สูงสุด 3 และ REM สูงสุด 3; ไม่มี N3/REM จึงไม่กดคะแนนทั้งคืน และ **ไม่หักเมื่อ N3/REM สูง**
 - Raw/Timeline เดิมไม่ถูกแก้โดยการคำนวณรายงานใหม่; Historical Replay และ Rescore มี version/audit แยก
 - ช่วงจบ Session แยก `Wake` ของมนุษย์ออกจาก `ไม่มีผู้ใช้งานบนเตียง → ออกจาก ZEEP → จบ Session`; สองสถานะหลังเป็น Occupancy และไม่ปนเปอร์เซ็นต์ Sleep Stage
 - รายงานต้องปิดบัญชีเวลาทุก epoch: Recording ที่ยังไม่ยืนยัน `OFF BED` ต้องอยู่ใน W/N1/N2/N3/REM และเข้าคะแนนทั้งหมด หลักฐานที่ก้ำกึ่ง ขาด ไม่สด หรือขาดช่วงจาก restart จะคง State ก่อนหน้าแบบ low-confidence โดยไม่แต่ง Evidence probability และไม่ใช้ epoch นั้นเรียนรู้ Personal Baseline; `WAIT` ใช้เฉพาะ `waiting_bed` ก่อน Recording, `NO DATA` เป็น evidence-quality/legacy label ไม่ใช่ State bucket และ confirmed `OFF BED` เป็น operational exception เพียงชนิดเดียวที่ไม่เข้า Stage%, Score หรือ Baseline
@@ -38,10 +38,10 @@
 | Semi-Markov transition | `zeep-semimarkov-30s-v1.18-scoreable-continuity` |
 | G2 ontology | `g2-aasm-5class-v1.0` |
 | Historical replay | `zeep-sleep-history-reclass-v28-complete-occupied-epochs` |
-| Sleep / Recovery quality | `zeep-rest-quality-v8.7-recovery-timing-advisory` |
-| Sleep Score formula | `zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage` |
-| Recovery Score formula | `zeep-recovery-score-v2.1-complete-rest-25-35-30-10` |
-| Session report | `zeep-session-report-v10.9-recovery-timing-advisory` |
+| Sleep / Recovery quality | `zeep-rest-quality-v8.8-wellness-score-balance` |
+| Sleep Score formula | `zeep-sleep-score-v2.0-wellness-25-35-20-10-10` |
+| Recovery Score formula | `zeep-recovery-score-v3.0-wellness-soft-25-35-30-10` |
+| Session report | `zeep-session-report-v10.10-wellness-score-balance` |
 | Restore Summary | `zeep-restore-summary-v1.0` |
 | Respiratory Wellness | `zeep-respiratory-wellness-v1.1` |
 | Restore action bands | `zeep-restore-action-bands-v1.0` |
@@ -423,21 +423,22 @@ stateDiagram-v2
 physiology evidence ก่อนเสมอ การอนุญาต graph นี้ไม่ได้หมายความว่า BCG เทียบเท่า PSG
 ซึ่งยังต้องใช้ EEG/EOG/chin EMG จริง
 
-## 4. Sleep / Recovery Quality v8.7
+## 4. Sleep / Recovery Quality v8.8
 
 ### 4.1 สมการภาพรวม
 
-`Sleep Score = Opportunity 20 + Stability 30 + Restorative 30 + Cycle 15 + Coverage 5`
+`Sleep Score = Opportunity 25 + Stability 35 + BCG Sleep Pattern 20 + HR/RR Response 10 + Environment 10`
 
-สัญญาน้ำหนักเชิงตัวเลขของสูตรคือ `20 + 30 + 30 + 15 + 5 = 100` คะแนน
+สัญญาน้ำหนักเชิงตัวเลขของสูตรคือ `25 + 35 + 20 + 10 + 10 = 100` คะแนน
 
 ระบบแยกคะแนนตามเป้าหมายที่ผู้ใช้เลือกโดยไม่แก้ Raw หรือบิด Sleep Stage:
 `Overnight Recovery` ใช้ Sleep Score เท่านั้น ส่วน `Nap & Refresh` ใช้ Recovery Score
 เท่านั้น ไม่ว่าจะพบการหลับหรือยังตื่นพักอยู่ การไม่มีข้อมูล Sensor เพียงพอจะไม่เผยแพร่
 คะแนนจาก duration เพียงอย่างเดียว
 
-สำหรับ Recovery Score เมื่อมีหลักฐาน HR/RR ที่จับคู่กันอย่างน้อย 6 จุดและมีเวลา
-พักที่นับได้อย่างน้อย 10 นาที ระบบจะแสดงคะแนนพร้อมระดับความมั่นใจ
+สำหรับ Recovery Score ต้องมีเป้าหมาย 30/90 นาทีที่บันทึกไว้ หลักฐาน HR/RR
+ที่จับคู่กันอย่างน้อย 6 จุด และเวลาพักที่นับได้อย่างน้อย 10 นาที ระบบจึงแสดง
+คะแนนพร้อมระดับความมั่นใจ
 `high / medium / low` โดย
 Coverage/Tier เป็น Admin QA เท่านั้น มีน้ำหนัก 0 คะแนนและไม่หักคะแนนสุขภาพ
 การขาด paired HR/RR ยังปิดคะแนนได้เพราะไม่มีหลักฐานสรีรวิทยาขั้นต่ำ ไม่ใช่เพราะ
@@ -445,21 +446,37 @@ Coverage ทั้ง Session ต่ำกว่า Tier ใด Tier หนึ�
 
 | Component | เต็ม | วิธีปัจจุบัน |
 |---|---:|---|
-| หลับไวและเวลาพัก | 20 | Duration 15 + latency 5 |
-| หลับดีและต่อเนื่อง | 30 | Efficiency 20 + Wake continuity 10 − BCG disturbance proxy สูงสุด 5 |
-| โครงสร้าง N2/N3/REM | 30 | แสดงเฉพาะ Overnight: N2 10 + N3 12 + REM 8; เป็น Signal estimate ไม่ใช่การวัดการฟื้นฟูโดยตรง |
-| รอบการนอนที่ตรวจพบ | 15 | Overnight ใช้ NREM→REM proxy เทียบจำนวนรอบที่คาด |
-| ความครบของข้อมูล | 5 | เวลาที่มี HR/RR คู่จริงและ BCG valid / wall-clock duration; continuity carry ไม่เพิ่มหลักฐาน |
+| เวลาและการเข้าสู่การนอน | 25 | Duration 20 ใช้รากที่สองของ TST/7 h + onset proxy 5; onset ช้าคงขั้นต่ำ 2 เพราะไม่ใช่ PSG latency |
+| ความต่อเนื่องของการนอน | 35 | `25 × √efficiency` + continuity 10 − BCG disturbance proxy สูงสุด 3; efficiency รวม confirmed OFF BED หลัง onset ในตัวหาร และ Wake ไม่ถูกหักซ้ำ |
+| รูปแบบการนอนที่ประเมินได้ | 20 | ฐานรูปแบบการนอน 10 + N2 4 + N3 3 + REM 3; ไม่มี/มากเกินกรอบไม่ครอบงำคะแนน |
+| การตอบสนอง HR/RR | 10 | ความสม่ำเสมอและแนวโน้มแบบหยาบ โดยมี Wellness neutral floor 60%; ไม่ใช่ HRV |
+| สภาพแวดล้อมสนับสนุน | 10 | ใช้เกณฑ์เดียวกับ Dashboard; พอใช้=0.85, ดี=0.95, ยอดเยี่ยม=1.0 |
 
-Nap & Refresh ใช้ Recovery Score v2.1: **เวลาพักตามเป้าหมาย 25 + การตอบสนอง
+Cycle proxy และ Coverage ยังคงอยู่ในรายงานเพื่ออธิบายหลักฐาน/QA แต่มีน้ำหนัก
+0 คะแนน การไม่มี NREM→REM cycle จาก BCG จึงไม่ใช่เหตุให้คะแนนลดลงโดยลำพัง
+
+Nap & Refresh ใช้ Recovery Score v3.0: **เวลาพักตามเป้าหมาย 25 + การตอบสนอง
 HR/RR 35 + ความต่อเนื่อง/ความนิ่ง 30 + สภาพแวดล้อมสนับสนุน 10** รวม 100
 คะแนน ไม่บังคับให้หลับและไม่บังคับ N1/N2/N3/REM; Coverage/Tier แสดงแยกเป็น
 QA/confidence และมีน้ำหนัก 0 คะแนน ส่วนความสดชื่นจริงต้องใช้แบบประเมินหลัง
 Session ประกอบ ห้ามอนุมานจาก Sensor เพียงอย่างเดียว
 
+- HR/RR ที่ผ่าน release gate เริ่มจาก Wellness neutral floor 60% แล้วเพิ่มเฉพาะ
+  ส่วนที่มีหลักฐานจริงตาม coverage, สัดส่วนค่าที่ผ่านการตรวจ และระยะห่างจากขอบ
+  plausibility; ช่วงเหล่านี้เป็น Engineering Sensor QA ไม่ใช่เกณฑ์สุขภาพ
+- Continuity ใช้ `1 − 0.50 × movement ratio − 0.08 × min(exit events, 3)`;
+  แล้วคูณสัดส่วนเวลาที่อยู่บนเตียงจริง การขยับตามธรรมชาติจึงไม่ถูกตีเป็นความ
+  ล้มเหลว แต่ confirmed OFF BED ยังลดความต่อเนื่องตามเวลาจริง
+- ตัวหารคงที่ 100 คะแนนเสมอ หาก Bed หรือ Environment ซึ่งเป็นองค์ประกอบเสริม
+  ไม่มีข้อมูล ให้แทนด้วยค่า neutral 75% ของคะแนนเต็มส่วนนั้น ห้ามหารใหม่ด้วย
+  เฉพาะองค์ประกอบที่เหลือ เพราะข้อมูลหายต้องไม่ทำให้คะแนนสูงขึ้น
+- Environment ใช้ factor `0.30 / 0.60 / 0.85 / 0.95 / 1.00` สำหรับ
+  critical/poor/fair/good/excellent; หากพบ Safety excursion ให้ cap ส่วนนี้ที่
+  30% และเปลี่ยนหัวข้อเป็น “ควรให้ทีมตรวจสอบ” โดยคะแนนยังไม่แทน Safety review
+
 คะแนนเวลา Nap ใช้ **เวลาที่มี State attribution และยังไม่ยืนยัน OFF BED เทียบ
 เป้าหมาย 30 หรือ 90 นาทีที่บันทึกตั้งแต่เริ่ม Session**:
-`Duration points = 25 × min(1, eligible rest seconds / selected target seconds)`
+`Duration points = 25 × √min(1, eligible rest seconds / selected target seconds)`
 ช่วง Continuity carry นับเป็นเวลาพักแบบ low-confidence แต่ไม่ถูกนับเป็นหลักฐาน
 HR/RR, Movement หรือ Environment ใหม่; Raw `Get out of bed` ชั่วคราวไม่หักเวลา
 มีเพียง confirmed OFF BED เท่านั้นที่ไม่นับ หากข้อมูลเก่าไม่มี State attribution
@@ -467,8 +484,13 @@ HR/RR, Movement หรือ Environment ใหม่; Raw `Get out of bed` ช�
 breathing/Snoring หรือ HR/RR คู่ที่ผ่าน sanity range เป็น fallback เมื่อครบเป้าหมาย
 ได้เต็ม 25 และไม่หักคะแนนเพียงเพราะพักนานกว่าเป้าหมาย หากยังไม่เกิน lifecycle
 guard 120 นาที ความต่างจากเป้าหมาย 30/90 นาทีจะเป็น Admin QA flag แต่ไม่ปิด
-Recovery Score; หากข้อมูลเดิมไม่มีเป้าหมาย ระบบจะไม่เดาเป้าหมายและไม่นับ
-องค์ประกอบเวลา โดยคำนวณจากองค์ประกอบที่มีหลักฐานแทน
+Recovery Score; หากข้อมูลเดิมไม่มีเป้าหมาย ระบบจะไม่เดาเป้าหมายและไม่เผยแพร่
+Recovery Score จนกว่าผู้ดูแลจะระบุเป้าหมายที่มีหลักฐานรองรับ
+
+คะแนนที่สูงหมายถึงคุณภาพการพักในเวลาที่เกิดขึ้นจริง ไม่ได้แปลว่า Session ทำเวลา
+ตรง Protocol เสมอ ข้อความสรุปจึงไม่ใช้คำว่า “ถึงเป้าหมาย” จากคะแนนเพียงอย่างเดียว:
+`partial`, `extended` และ `out_of_protocol` ต้องแสดงบริบทเวลาแยกจากระดับ
+Recovery Score และส่ง `protocol_review_required` ไปยัง Admin/API โดยไม่ซ่อนคะแนน
 
 คำอธิบายสองรูปแบบ แผนที่หลักฐาน และข้อห้ามในการเปรียบเทียบคะแนนอยู่ที่
 [`TWO_MODE_SCORE_EVIDENCE.md`](../research/evidence-library/TWO_MODE_SCORE_EVIDENCE.md)
@@ -497,9 +519,8 @@ Score จากเวลาพักจริงและหลักฐาน S
 `implausible_outlier` และไม่เผยแพร่คะแนน
 
 ข้อมูลเดิมที่ไม่มี target ไม่ถูกเดา: 10–45 นาทีแสดง `TARGET_UNKNOWN`, 45–120
-นาทีแสดง `TARGET_UNKNOWN/extended`; ระบบไม่นับองค์ประกอบเวลา แต่ยังคำนวณจาก
-องค์ประกอบที่มีหลักฐานและเก็บธงให้ Admin ตรวจ มากกว่า 120 นาทีถือเป็น outlier
-ที่ปิดคะแนนได้
+นาทีแสดง `TARGET_UNKNOWN/extended`; ทั้งสองกรณีไม่เผยแพร่ Recovery Score และ
+เก็บธงให้ Admin ตรวจ มากกว่า 120 นาทีถือเป็น outlier ที่ปิดคะแนนเช่นกัน
 
 คำว่า 7 ชั่วโมงในระบบหมายถึง AASM/SRS adult overnight recommendation threshold
 ไม่ใช่ “ZEEP target 7.5 ชั่วโมง” และไม่ใช้ลงโทษการงีบหรือการพักจากเข้าเวร
@@ -512,7 +533,7 @@ compatibility สำหรับอ่านประวัติและ repla
 | เป้าหมายผู้ใช้ | ช่วงเวลา | ลักษณะการประเมิน |
 |---|---|---|
 | Nap & Refresh | เลือกเป้าหมาย 30 หรือ 90 นาที; ช่วงแนะนำ 25–35 หรือ 75–105 นาทีตามเป้าหมาย | อนุญาตทั้งหลับ พักสายตา และสมาธิ; ใช้ Recovery Score จากเวลา HR/RR ความนิ่ง และสภาพแวดล้อม; coverage แสดงเป็น QA/confidence แยก |
-| Overnight Recovery | ขั้นต่ำโหมด 5 ชม.; duration score เต็มที่ 7 ชม. | Sleep Score จาก W/N1/N2/N3/REM, continuity, architecture, cycle proxy และ coverage |
+| Overnight Recovery | ขั้นต่ำโหมด 5 ชม.; duration score เต็มที่ 7 ชม. | Sleep Score จากเวลา ความต่อเนื่อง รูปแบบ Stage แบบจำกัดผล HR/RR และสภาพแวดล้อม; cycle/coverage เป็นบริบท |
 
 ค่าเก่า `relax_meditation`, `recovery_readiness`, `performance_prep` และ
 `physical_comfort` map เป็น `nap_recovery` ตอนอ่าน/สร้างรายงานโดยไม่แก้ Raw
@@ -526,23 +547,28 @@ Recovery Score รวม `เวลา 25 + HR/RR 35 + ความต่อเ�
 W/N1/N2/N3/REM ทั้งสองสายแสดง `score_title`, `quality_type`, เป้าหมาย และ version
 เพื่อให้ UI และประวัติไม่เรียกทุก Session ว่า “คุณภาพการนอน” อย่างไม่ถูกต้อง
 
-### 4.4 Overnight architecture
+### 4.4 Overnight BCG sleep pattern
 
-- N2 45–75% ของ TST ได้เต็ม 10; นอกกรอบลดแบบเส้นตรง
-- N3 `<3%` ได้ 0; `3–<10%` ได้ตามสัดส่วน; `≥10%` ได้เต็ม 12
-- N3 เกิน 20% **ไม่ถูกหักคะแนน**; ความเสี่ยง over-score จัดการที่ physiology/confidence gate ไม่ใช่หัก reward
-- REM 15–25% ของ TST ได้เต็ม 8; นอกกรอบลดแบบเส้นตรง
-- กรอบนี้เป็น ZEEP conservative wellness formula ไม่ใช่ AASM normative score
+- เมื่อมี Sleep State ที่ประเมินได้ ให้ฐานรูปแบบการนอน 10 คะแนน
+- N2 ≥30% ของ TST ได้เต็ม 4; ช่วง 10–30% ลดแบบนุ่ม และไม่หักซ้ำเมื่อ
+  N2 สูงเพราะ BCG แยก N3/REM ไม่ชัด
+- N3 เพิ่มตามสัดส่วนถึง 10% ของ TST ได้สูงสุด 3 และไม่หักเมื่อสูงกว่า
+- REM เพิ่มตามสัดส่วนถึง 15% ของ TST ได้สูงสุด 3 และไม่หักเมื่อสูงกว่า
+- กรอบนี้เป็น ZEEP Wellness weighting ของ BCG proxy ไม่ใช่ AASM normative score
 
-### 4.4 Continuity และ Cycle proxy
+### 4.5 Continuity, Cycle และ Coverage
 
-- Sleep efficiency = sleep rounds / (sleep + Wake rounds)
-- Wake ≤10% ได้ continuity base เต็ม 10; เกินจากนั้นลด 1 คะแนนต่อ 1 percentage point
-- BCG disturbance proxy รวม amplitude shift/movement/bed exit เป็น episode แบบ debounce; หัก `min(5, 0.25 × index/hour)`
+- Sleep efficiency = sleep rounds / (sleep + Wake + confirmed OFF BED หลัง onset)
+- Efficiency ได้ `25 × √efficiency`; Wake จึงมีผลครั้งเดียวและไม่ถูกหักซ้ำ
+- BCG disturbance proxy รวม amplitude shift/movement/bed exit เป็น episode แบบ debounce; หัก `min(3, 0.15 × index/hour)` จาก continuity 10
+- หาก Arousal evidence ใช้ไม่ได้ ให้ 8.5/10 แบบ neutral แทนการให้เต็ม 10
 - Cycle นับเมื่อมี accumulated NREM ≥45 นาทีก่อนเข้า REM และไม่เพิ่มหลายรอบจาก REM flicker
+- Cycle และ Coverage แสดงเป็นบริบท/ความมั่นใจ มีน้ำหนัก 0 คะแนน
+- High confidence ต้องสะท้อน coverage ของ HR/RR ที่ผ่าน plausibility, Bed และ
+  Environment ตามเวลา; ข้อมูลเสริมที่หายไม่ปิดคะแนนแต่ลดระดับความมั่นใจ
 - Arousal proxy ไม่ใช่ EEG cortical arousal และ Cycle proxy ไม่ใช่ AASM cycle count
 
-## 5. Session Report v10.7
+## 5. Session Report v10.10
 
 เมื่อจบ Session ระบบสร้างและ persist รายงานจากข้อมูลชุดเดียวกับ Timeline:
 
@@ -580,11 +606,16 @@ health record เดิม การแก้ derived record จริงยั�
 | `reclassify_sleep_history.py` | Legacy event comparison; ใช้ scorer/policy เดียวกันและมี dry-run/guard | Raw BCG และ Timeline |
 | `promote_sleep_history.py` | Promote valid derived Epoch ของ reviewed Session หลังตรวจ per-Session blocker และ replay/code/input hash บน staging copy; ใช้ช่วงวันที่และ minimum duration ที่ตรึงมากับ reviewed artifact โดยไม่บังคับ cutoff 25 นาทีซ้ำ | Raw BCG, Timeline และ confirmed OFF BED; WAIT/NO DATA รุ่นเก่าคง provenance เดิมและถูกแปลเป็น initial W/low-confidence carry เฉพาะใน Derived result รุ่นใหม่ |
 | `compare_sleep_history_replay.py` | เปรียบเทียบ replay manifest สองรุ่นเป็น owner-only JSON/Markdown | DB, Raw, Event และ Report ทุกชนิด |
-| `rescore_session_reports.py` | Derived `final_summary`, quality และ report | Raw BCG, Timeline, event ต้นฉบับ |
+| `rescore_session_reports.py` | Derived `final_summary`, quality และ report; `--since` จำกัด cohort ตาม cutover และ Audit เก็บสำเนา/Hash ของ `previous_final_summary` ครบสำหรับ rollback | Raw BCG, Timeline, event ต้นฉบับ |
 | `trim_session.py` | ตัดข้อมูลตามคำสั่งผู้ดูแลพร้อม audit | ข้อมูลนอกช่วงที่สั่ง |
 
 ทุกเครื่องมือ default เป็น dry-run หรือมี gate ก่อน apply และสร้าง audit/version เพื่อ
 ให้แยกได้ว่าค่าใดเป็นค่าดั้งเดิมกับค่าคำนวณย้อนหลัง
+
+ตัวอย่างการคำนวณใหม่หลัง Product cutover โดยไม่แตะรายการก่อนหน้า:
+`python rescore_session_reports.py --all --since 2026-09-01T00:00:00+07:00`
+ให้ตรวจ dry-run ก่อนเติม `--apply` เสมอ; ห้ามใช้ `--all --apply` โดยไม่ระบุ
+`--since` ในงานที่มีขอบเขตวันเริ่มต้น
 
 ## 7. Sensor calibration ที่เกี่ยวกับรายงาน
 

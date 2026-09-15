@@ -10,12 +10,13 @@ be inspected or reversed without inventing historical Sensor evidence.
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
+import copy
 import hashlib
 import json
-from pathlib import Path
 import sqlite3
 import statistics
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict
 
 from sleep_session_report import (
@@ -24,6 +25,12 @@ from sleep_session_report import (
     build_sleep_quality,
     normalise_rest_mode,
 )
+from sleep_signal_features import (
+    HR_SANITY_RANGE_BPM,
+    RR_SANITY_RANGE_PER_MIN,
+    terminal_occupancy_timeline,
+)
+from sleep_stage_annotations import apply_annotations, load_annotations
 from sleep_system_policy import (
     NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS,
     SLEEP_EVIDENCE_VERSION,
@@ -33,20 +40,15 @@ from sleep_system_policy import (
     is_approved_sleep_result_version,
     resolve_rest_target,
 )
-from sleep_stage_annotations import apply_annotations, load_annotations
-from sleep_signal_features import (
-    HR_SANITY_RANGE_BPM,
-    RR_SANITY_RANGE_PER_MIN,
-    terminal_occupancy_timeline,
-)
 from zeep_pod.sessions.cadence import timeline_sample_interval
 from zeep_pod.sessions.report_projection import project_report_samples
 from zeep_pod.sessions.report_timeline import (
     sensor_samples as shared_sensor_samples,
+)
+from zeep_pod.sessions.report_timeline import (
     timeline_projection as shared_timeline_projection,
 )
 from zeep_pod.sessions.sleep_event_data import decision_interval
-
 
 MAINTENANCE_TOOL_NAME = "rescore_session_reports.py"
 STAGES = ("wake", "n1", "n2", "n3", "rem")
@@ -294,6 +296,8 @@ def _rebuild(
     if final_row is None:
         raise ValueError(f"completed Session has no final_summary: {session_id}")
     old_final = _json(final_row["value"])
+    previous_final_summary = copy.deepcopy(old_final)
+    previous_final_summary_sha256 = _canonical_sha256(previous_final_summary)
     start = _timestamp(session["start_time"])
     sensor_sample_seconds = _positive_seconds(
         old_final.get("sensor_sample_interval_s")
@@ -450,7 +454,8 @@ def _rebuild(
             (quality.get("rest_mode") or {}).get("protocol_status") or {}
         )
         if (
-            timing.get("review_required")
+            quality.get("quality_type") == "rest_goal"
+            and timing.get("review_required")
             and not timing.get("score_releasable")
             and duration_s <= NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS
             and not allow_reviewed_protocol_withhold
@@ -575,6 +580,7 @@ def _rebuild(
     # One development-only Session previously carried a manually entered
     # seven-hour duration. Reports now use Sensor evidence exclusively.
     old_final.pop("user_report", None)
+    new_final_summary_sha256 = _canonical_sha256(old_final)
     audit = {
         "version": SLEEP_QUALITY_VERSION,
         "rescored_at_utc": now,
@@ -586,6 +592,10 @@ def _rebuild(
         "annotated_rounds": annotated_rounds,
         "previous_quality": previous_quality,
         "new_quality": quality,
+        "previous_final_summary_sha256": previous_final_summary_sha256,
+        "new_final_summary_sha256": new_final_summary_sha256,
+        "previous_final_summary": previous_final_summary,
+        "rollback_scope": "complete_derived_final_summary",
         "raw_bed_status_counts": raw_bed_status_counts,
         "canonical_bed_status_counts": canonical_bed_status_counts,
         "terminal_occupancy_periods": len(terminal_occupancy),
@@ -623,9 +633,12 @@ def rescore(
     requested_target_minutes: int | None = None,
     report_only: bool = False,
     allow_reviewed_protocol_withhold: bool = False,
+    since_utc: str | None = None,
 ) -> Dict[str, Any]:
     if report_only and not session_ids:
         raise ValueError("--report-only requires one or more --session-id values")
+    if session_ids and since_utc:
+        raise ValueError("since_utc is only valid for an all-Session cohort")
     if report_only and (
         requested_mode is not None or requested_target_minutes is not None
     ):
@@ -646,6 +659,13 @@ def rescore(
             sessions = connection.execute(
                 f"SELECT * FROM sessions WHERE end_time IS NOT NULL AND session_id IN ({placeholders}) "
                 "ORDER BY start_time", session_ids,
+            ).fetchall()
+        elif since_utc:
+            cutoff = _timestamp(since_utc).isoformat()
+            sessions = connection.execute(
+                "SELECT * FROM sessions WHERE end_time IS NOT NULL "
+                "AND julianday(start_time) >= julianday(?) ORDER BY start_time",
+                (cutoff,),
             ).fetchall()
         else:
             sessions = connection.execute(
@@ -721,6 +741,14 @@ def main() -> None:
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
     parser.add_argument("--session-id", action="append", dest="session_ids")
     parser.add_argument("--all", action="store_true", help="Rescore every completed Session")
+    parser.add_argument(
+        "--since",
+        dest="since_utc",
+        help=(
+            "Limit --all to Sessions starting at or after this ISO-8601 "
+            "timestamp (for example 2026-09-01T00:00:00+07:00)"
+        ),
+    )
     parser.add_argument("--rest-mode", choices=(
         "auto", "sleep", "nap_recovery", "short_nap", "cycle_nap",
         "shift_rest", "jet_lag", "overnight"))
@@ -737,12 +765,15 @@ def main() -> None:
     args = parser.parse_args()
     if not args.all and not args.session_ids:
         parser.error("provide --session-id (repeatable) or --all")
+    if args.since_utc and not args.all:
+        parser.error("--since requires --all")
     result = rescore(
         args.data_dir, None if args.all else args.session_ids,
         requested_mode=args.rest_mode,
         requested_target_minutes=args.target_minutes,
         apply=args.apply,
         report_only=args.report_only,
+        since_utc=args.since_utc,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

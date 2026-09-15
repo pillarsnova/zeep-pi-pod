@@ -64,11 +64,14 @@ ZEEP ไม่คัดลอกสูตร น้ำหนัก หรือ 
 
 | องค์ประกอบ | คะแนนเต็ม |
 |---|---:|
-| เวลาและการเข้าสู่การนอน | 20 |
-| ความต่อเนื่องของการนอน | 30 |
-| โครงสร้าง N2/N3/REM | 30 |
-| รอบการนอนที่ตรวจพบ | 15 |
-| ความครบของข้อมูล | 5 |
+| เวลาและการเข้าสู่การนอน | 25 |
+| ความต่อเนื่องของการนอน | 35 |
+| รูปแบบ Sleep Stage จาก BCG แบบจำกัดผล | 20 |
+| การตอบสนอง HR/RR | 10 |
+| สภาพแวดล้อมสนับสนุน | 10 |
+
+Cycle และ Coverage เป็นบริบท/ความมั่นใจ ไม่ใช่ component คะแนน เพื่อไม่ให้
+ข้อจำกัดของ BCG หรือข้อมูลที่ขาดบางช่องครอบงำผล Wellness
 
 ### 3.2 Recovery Score — Nap & Refresh
 
@@ -86,8 +89,11 @@ Environment ไม่ได้สร้าง W/N1/N2/N3/REM แม้ใน Nap
 ค่าทั้ง Session ยังคงแสดงแยกใน Admin QA
 
 Recovery Score เผยแพร่เมื่อมี eligible rest อย่างน้อย 10 นาทีและมี HR/RR คู่จริง
-อย่างน้อย 6 จุด ช่วง State continuity carry นับเป็นเวลาพัก แต่ไม่สร้างหลักฐาน
-HR/RR, Movement หรือ Environment เพิ่มขึ้นเอง
+อย่างน้อย 6 จุด รวมทั้งต้องมีเป้าหมาย 30/90 นาทีที่ persist ไว้ ช่วง State
+continuity carry นับเป็นเวลาพัก แต่ไม่สร้างหลักฐาน HR/RR, Movement หรือ
+Environment เพิ่มขึ้นเอง confirmed OFF BED ลดทั้งเวลาเป้าหมายและ Continuity
+ตามเวลาจริง ข้อมูล Bed/Environment ที่หายใช้ neutral 75% บนตัวหาร 100 คงที่
+และลด confidence; Safety excursion cap คะแนน Environment และขึ้นสถานะให้ทีมตรวจ
 
 ## 4. Five-driver taxonomy
 
@@ -154,7 +160,12 @@ Environment driver ทุกตัวต้องมี `causal_claim=false` แ
 
 Coverage/Tier เป็นบริบท QA สำหรับ Admin ไม่ใช่คะแนนใหม่และไม่ใช่ veto
 ที่ซ่อนอยู่ หากคะแนนหลักถูกปล่อยแล้ว Summary ต้องคงคะแนนเดิมพร้อมบอก
-ความครบของหลักฐาน
+ความครบของหลักฐาน โดย confidence ต้องรวมความครบตามเวลาของ HR/RR, Bed และ
+Environment ไม่ใช่ดูเพียงว่ามีชื่อช่อง Sensor หรือไม่
+
+หากพบ Safety excursion คะแนนหลักอาจยังมีค่าและส่วน Environment ถูก cap ตาม
+policy แต่ `status.key=safety_review` ต้องมาก่อน band ปกติ พร้อมข้อความ
+“ควรให้ทีมตรวจสอบสภาพแวดล้อม” ห้ามแสดงหัวข้อเชิงบวกกลบธงนี้
 
 หากยังไม่มีแบบสอบถาม ให้แสดง:
 
@@ -174,7 +185,7 @@ Coverage/Tier เป็นบริบท QA สำหรับ Admin ไม่�
     "type": "sleep_score",
     "title": "Sleep Score",
     "value": 76,
-    "formula_version": "zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage"
+    "formula_version": "zeep-sleep-score-v2.0-wellness-25-35-20-10-10"
   },
   "status": {
     "key": "sleep_restore_good",
@@ -205,15 +216,15 @@ Historical `auto/unknown_legacy` ต้องส่ง `unresolved_score` แล
 
 | ชั้น | Version |
 |---|---|
-| Session report | `zeep-session-report-v10.9-recovery-timing-advisory` |
+| Session report | `zeep-session-report-v10.10-wellness-score-balance` |
 | Restore Summary | `zeep-restore-summary-v1.0` |
 | Action bands | `zeep-restore-action-bands-v1.0` |
 | Driver policy | `zeep-restore-drivers-v1.0` |
 | Baseline comparison | `zeep-restore-personal-baseline-v1.0` |
 | Recommendation | `zeep-restore-recommendation-v1.0` |
 | Product language | `zeep-product-language-v1.0` |
-| Sleep Score formula | `zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage` |
-| Recovery Score formula | `zeep-recovery-score-v2.1-complete-rest-25-35-30-10` |
+| Sleep Score formula | `zeep-sleep-score-v2.0-wellness-25-35-20-10-10` |
+| Recovery Score formula | `zeep-recovery-score-v3.0-wellness-soft-25-35-30-10` |
 
 การเพิ่ม Summary ทำให้ Session Report เปลี่ยน version แต่ไม่เปลี่ยนสูตร
 หรือคะแนนเดิม จึงคงคู่ Report/Quality รุ่นก่อนหน้าไว้ใน approved history

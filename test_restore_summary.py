@@ -15,6 +15,8 @@ from sleep_system_policy import (
     PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION,
     PRE_RESPIRATORY_SESSION_REPORT_VERSION,
     PRE_RESTORE_SESSION_REPORT_VERSION,
+    PRE_WELLNESS_BALANCE_SESSION_REPORT_VERSION,
+    PRE_WELLNESS_BALANCE_SLEEP_QUALITY_VERSION,
     RECOVERY_SCORE_FORMULA_VERSION,
     RESTORE_SUMMARY_VERSION,
     SESSION_REPORT_VERSION,
@@ -484,10 +486,17 @@ class RestoreSummaryTests(unittest.TestCase):
     def test_report_version_bump_preserves_previous_approved_pair(self):
         self.assertEqual(
             SESSION_REPORT_VERSION,
-            "zeep-session-report-v10.9-recovery-timing-advisory",
+            "zeep-session-report-v10.10-wellness-score-balance",
         )
         self.assertIn(
             (SESSION_REPORT_VERSION, SLEEP_QUALITY_VERSION),
+            APPROVED_SLEEP_RESULT_VERSION_PAIRS,
+        )
+        self.assertIn(
+            (
+                PRE_WELLNESS_BALANCE_SESSION_REPORT_VERSION,
+                PRE_WELLNESS_BALANCE_SLEEP_QUALITY_VERSION,
+            ),
             APPROVED_SLEEP_RESULT_VERSION_PAIRS,
         )
         self.assertIn(

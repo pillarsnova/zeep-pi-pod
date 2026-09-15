@@ -112,20 +112,26 @@ Client ห้ามคำนวณคะแนนจาก State timeline เอ
 - Recovery Score ต้องมี eligible rest อย่างน้อย 10 นาที; State continuity carry
   นับเป็นเวลาพัก แต่ confirmed OFF BED ไม่นับ และไม่สามารถใช้เติมขั้นต่ำได้
 - HR/RR, Movement และ Environment ที่นำมาคิด Recovery Score ใช้เฉพาะช่วง
-  eligible rest ที่วัดได้จริง; Sensor gap/OFF BED ยังคงอยู่ใน Admin QA
-  แต่ไม่เปลี่ยนคะแนน
+  eligible rest ที่วัดได้จริง; Sensor gap ลด confidence ส่วน confirmed OFF BED
+  ลดเวลาเป้าหมายและ Continuity ตามเวลาจริง
+- Session Nap เดิมที่ไม่มี target 30/90 นาทีแสดง `TARGET_UNKNOWN` และไม่เผยแพร่
+  Recovery Score; ห้าม normalize จากองค์ประกอบที่เหลือหรือเดา target จากเวลา
+- ตัวหารทั้งสองสูตรคงที่ 100; optional Bed/Environment ที่หายใช้ neutral 75%
+  ของส่วนนั้นและลด confidence ข้อมูลหายจึงไม่ทำให้คะแนนสูงขึ้น
 - Overnight ที่สั้นกว่า 5 ชั่วโมงยังเป็น Overnight แต่ระบุ
-  `protocol_status=too_short`; ห้ามเปลี่ยนเป็น Nap
+  `protocol_status=too_short` และไม่เผยแพร่ Sleep Score; ห้ามเปลี่ยนเป็น Nap
+- Safety excursion cap ส่วน Environment ที่ 30% และส่ง
+  `safety_review_required=true`; UI ต้องให้สถานะนี้มาก่อน band คะแนนปกติ
 
 น้ำหนักคะแนนที่ใช้จริง:
 
 | Sleep Score | คะแนนเต็ม | Recovery Score | คะแนนเต็ม |
 |---|---:|---|---:|
-| เวลาและการเข้าสู่การนอน | 20 | เวลาพักตามเป้าหมาย | 25 |
-| ความต่อเนื่องของการนอน | 30 | การตอบสนอง HR/RR | 35 |
-| โครงสร้าง N2/N3/REM | 30 | ความต่อเนื่อง/ความนิ่ง | 30 |
-| รอบการนอน | 15 | สภาพแวดล้อมสนับสนุน | 10 |
-| ความครบของข้อมูล | 5 | — | — |
+| เวลาและการเข้าสู่การนอน | 25 | เวลาพักตามเป้าหมาย | 25 |
+| ความต่อเนื่องของการนอน | 35 | การตอบสนอง HR/RR | 35 |
+| รูปแบบ Stage จาก BCG แบบจำกัดผล | 20 | ความต่อเนื่อง/ความนิ่ง | 30 |
+| การตอบสนอง HR/RR | 10 | สภาพแวดล้อมสนับสนุน | 10 |
+| สภาพแวดล้อมสนับสนุน | 10 | Coverage (QA) | 0 |
 
 ### 2.3 ZEEP Restore Summary
 
@@ -201,10 +207,10 @@ Success response ใช้ envelope:
 | Transition policy | `zeep-semimarkov-30s-v1.18-scoreable-continuity` |
 | Personal/population baseline | `zeep-sleep-state-baseline-v1.8-sep1-cutover` |
 | Historical replay | `zeep-sleep-history-reclass-v28-complete-occupied-epochs` |
-| Session report | `zeep-session-report-v10.9-recovery-timing-advisory` |
-| Quality | `zeep-rest-quality-v8.7-recovery-timing-advisory` |
-| Sleep Score formula | `zeep-sleep-score-v1.1-20-30-30-15-5-evidence-coverage` |
-| Recovery Score formula | `zeep-recovery-score-v2.1-complete-rest-25-35-30-10` |
+| Session report | `zeep-session-report-v10.10-wellness-score-balance` |
+| Quality | `zeep-rest-quality-v8.8-wellness-score-balance` |
+| Sleep Score formula | `zeep-sleep-score-v2.0-wellness-25-35-20-10-10` |
+| Recovery Score formula | `zeep-recovery-score-v3.0-wellness-soft-25-35-30-10` |
 | Restore Summary | `zeep-restore-summary-v1.0` |
 
 Client ต้องเก็บ version strings เพื่อใช้ Bug report แต่ไม่ควร hard-code ว่า

@@ -108,6 +108,7 @@ class UsageMode(ContractModel):
     sleep_required: bool
     target: UsageTarget | None = Field(...)
     review_required: bool
+    protocol_review_required: bool
     validation_status: Literal[
         "mode_confirmed",
         "mode_unresolved",
@@ -123,8 +124,14 @@ class UsageMode(ContractModel):
             raise ValueError("requested mode must match the canonical mode key")
         if values["sleep_required"] != (key == "sleep"):
             raise ValueError("sleep_required must match the canonical mode")
-        if values["review_required"] != (status != "mode_confirmed"):
-            raise ValueError("review_required must match mode validation status")
+        expected_review = bool(
+            status != "mode_confirmed"
+            or values["protocol_review_required"]
+        )
+        if values["review_required"] != expected_review:
+            raise ValueError(
+                "review_required must match mode or protocol review status"
+            )
         if status == "mode_confirmed" and (key == "unknown" or values["conflicts"]):
             raise ValueError("a confirmed mode cannot be unknown or have conflicts")
         if status == "mode_unresolved" and key != "unknown":
@@ -238,6 +245,12 @@ class PublicQuality(ContractModel):
     sleep_efficiency_pct: float | None = Field(default=None, ge=0, le=100)
     awakenings: int | None = Field(default=None, ge=0)
     wake_entries: int | None = Field(default=None, ge=0)
+    confirmed_post_onset_off_bed_s: float | None = Field(
+        default=None,
+        ge=0,
+    )
+    continuity_denominator_s: float | None = Field(default=None, ge=0)
+    wake_plus_off_bed_s: float | None = Field(default=None, ge=0)
     deep_pct: float | None = Field(default=None, ge=0, le=100)
     rem_pct: float | None = Field(default=None, ge=0, le=100)
     stage_pct_of_sleep: PublicStagePercentages | None = None
@@ -253,9 +266,22 @@ class PublicQuality(ContractModel):
     cycles: PublicQualityCycle | None = None
     component_points: PublicComponentPoints | None = None
     component_max_points: PublicComponentPoints | None = None
+    effective_component_points: PublicComponentPoints | None = None
+    imputed_component_points: PublicComponentPoints | None = None
     component_order: list[QualityComponentKey] | None = None
     component_labels: PublicComponentLabels | None = None
     score_confidence: PublicScoreConfidence | None = None
+    safety_review_required: bool | None = None
+    review_required: bool | None = None
+    raw_component_points: float | None = Field(default=None, ge=0)
+    score_unrounded: float | None = Field(default=None, ge=0, le=100)
+    scored_max_points: float | None = Field(default=None, ge=0, le=100)
+    score_normalized_for_available_components: bool | None = None
+    missing_component_neutral_factor: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+    )
     score_basis: str | None = None
     formula_version: str | None = None
     version: str | None = None

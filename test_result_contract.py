@@ -79,6 +79,46 @@ class SessionResultContractTests(unittest.TestCase):
         self.assertEqual(result["score"]["type"], "recovery_score")
         self.assertFalse(result["data_quality"]["coverage_contributes_points"])
 
+    def test_nap_protocol_review_is_preserved_in_canonical_result(self) -> None:
+        quality = {
+            "available": True,
+            "score": 91,
+            "quality_type": "rest_goal",
+            "score_title": "Recovery Score",
+            "formula_version": RECOVERY_SCORE_FORMULA_VERSION,
+            "version": "sleep-quality-test",
+            "review_required": True,
+            "rest_mode": {
+                "group": "nap_recovery",
+                "label": "Nap & Refresh",
+                "protocol_status": {
+                    "available": True,
+                    "canonical_mode": "nap_recovery",
+                    "observed_seconds": 7200,
+                    "status": "out_of_protocol",
+                    "review_required": True,
+                    "score_releasable": True,
+                },
+            },
+        }
+
+        result = build_result_contract(
+            {
+                "ended_at_utc": "2026-09-11T00:00:00+00:00",
+                "rest_mode": "nap_recovery",
+                "sleep_quality": quality,
+            }
+        )
+
+        self.assertTrue(result["score"]["available"])
+        self.assertTrue(result["score"]["review_required"])
+        self.assertTrue(result["mode"]["review_required"])
+        self.assertTrue(result["mode"]["protocol_review_required"])
+        self.assertEqual(
+            result["mode"]["validation_status"],
+            "mode_confirmed",
+        )
+
     def test_unknown_legacy_mode_is_not_inferred_as_nap(self) -> None:
         result = build_result_contract(
             {
@@ -95,6 +135,77 @@ class SessionResultContractTests(unittest.TestCase):
             result["restore_summary"]["session_scope"]["mode"],
             "unknown",
         )
+
+    def test_unavailable_copy_distinguishes_completed_from_open_session(self) -> None:
+        base = {
+            "rest_mode": "sleep",
+            "sleep_quality": {
+                "available": False,
+                "score": None,
+                "quality_type": "sleep",
+            },
+        }
+        completed = build_result_contract(
+            {
+                **base,
+                "ended_at_utc": "2026-09-11T00:00:00+00:00",
+            }
+        )
+        active = build_result_contract(base)
+
+        self.assertEqual(
+            completed["score"]["reason"],
+            "ครั้งนี้ยังไม่มีคะแนน เพราะข้อมูลสำคัญสำหรับสรุปผลยังไม่ครบ",
+        )
+        self.assertEqual(
+            completed["restore_summary"]["status"]["label"],
+            "ครั้งนี้ยังไม่มีคะแนน",
+        )
+        self.assertIn("กำลังรวบรวมข้อมูล", active["score"]["reason"])
+        self.assertEqual(
+            active["restore_summary"]["status"]["label"],
+            "กำลังเตรียมผลสรุป",
+        )
+
+    def test_safety_review_stays_visible_without_hiding_released_score(self) -> None:
+        for source in ("quality", "environment"):
+            with self.subTest(source=source):
+                quality = {
+                    "available": True,
+                    "score": 94,
+                    "quality_type": "sleep",
+                    "score_title": "Sleep Score",
+                    "formula_version": SLEEP_SCORE_FORMULA_VERSION,
+                    "level_key": "very_good",
+                    "level": "ดีมาก",
+                }
+                report = {"rest_mode": {"group": "sleep"}}
+                if source == "quality":
+                    quality["safety_review_required"] = True
+                else:
+                    report["environment_assessment"] = {
+                        "safety_review_required": True,
+                    }
+                result = build_result_contract(
+                    {
+                        "ended_at_utc": "2026-09-11T00:00:00+00:00",
+                        "rest_mode": "sleep",
+                        "sleep_quality": quality,
+                        "session_report": report,
+                    }
+                )
+
+                self.assertTrue(result["score"]["available"])
+                self.assertEqual(result["score"]["value"], 94)
+                self.assertEqual(
+                    result["score"]["level"],
+                    "ควรให้ทีมตรวจสอบ",
+                )
+                self.assertTrue(result["score"]["review_required"])
+                self.assertEqual(
+                    result["restore_summary"]["status"]["key"],
+                    "safety_review",
+                )
 
     def test_persisted_restore_summary_is_preferred_without_rescoring(self) -> None:
         persisted = {

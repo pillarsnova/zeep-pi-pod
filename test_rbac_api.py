@@ -1675,8 +1675,8 @@ class RbacApiTests(unittest.TestCase):
                 "sleep_opportunity",
                 "sleep_stability",
                 "restorative_architecture",
-                "cycle_expression",
-                "data_coverage",
+                "physiological_response",
+                "environment_support",
             },
         )
         self.assertNotIn("7 ชั่วโมง", quality["insight"])

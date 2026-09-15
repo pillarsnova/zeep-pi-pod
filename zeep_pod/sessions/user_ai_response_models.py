@@ -12,9 +12,11 @@ from zeep_pod.sessions.usage_response_models import ApiResponseBase
 ScoreFormulaVersion = Literal[
     "zeep-sleep-score-v1.0-reviewed",
     "zeep-sleep-score-v2.0-wellness-25-35-20-10-10",
+    "zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10",
     "zeep-recovery-score-v2.0-reviewed",
     "zeep-recovery-score-v2.1-complete-rest-25-35-30-10",
     "zeep-recovery-score-v3.0-wellness-soft-25-35-30-10",
+    "zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10",
 ]
 BaselinePolicyVersion = Literal[
     "zeep-personal-behaviour-baseline-v1.1-formula-target-specific"

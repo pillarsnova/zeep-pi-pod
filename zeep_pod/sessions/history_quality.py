@@ -5,12 +5,13 @@ from __future__ import annotations
 from typing import Any
 
 from sleep_system_policy import (
-    NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS,
     NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
     PRE_CONTINUITY_SESSION_REPORT_VERSION,
     PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
     PRE_NAP_TIMING_SESSION_REPORT_VERSION,
     PRE_NAP_TIMING_SLEEP_QUALITY_VERSION,
+    PRE_MINIMUM_ONLY_SESSION_REPORT_VERSION,
+    PRE_MINIMUM_ONLY_SLEEP_QUALITY_VERSION,
     PRE_RECOVERY_TIMING_SESSION_REPORT_VERSION,
     PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION,
     PRE_RESPIRATORY_SESSION_REPORT_VERSION,
@@ -76,7 +77,7 @@ def _identity_unavailable_quality(
             else "เลือกว่าเป็น Overnight หรือ Nap & Refresh เพื่อแสดงผล"
         ),
         "formula_version": None,
-        "level": "กำลังเตรียมผลสรุป",
+        "level": "ครั้งนี้ยังไม่มีคะแนน",
         "level_key": "unavailable",
         "reason": identity["reason"],
         "validation_status": identity["validation_status"],
@@ -108,6 +109,14 @@ def _compatible_versioned_quality(
         and report.get("version") == SESSION_REPORT_VERSION
     ):
         return quality
+    if (
+        quality.get("version") == PRE_MINIMUM_ONLY_SLEEP_QUALITY_VERSION
+        and report.get("version") == PRE_MINIMUM_ONLY_SESSION_REPORT_VERSION
+    ):
+        return {
+            **quality,
+            "compatible_pre_minimum_only_result": True,
+        }
     if (
         quality.get("version") == PRE_NAP_TIMING_SLEEP_QUALITY_VERSION
         and report.get("version") == PRE_NAP_TIMING_SESSION_REPORT_VERSION
@@ -171,9 +180,7 @@ def _preserved_legacy_recovery(
         mode_group == "nap_recovery"
         and final_summary.get("target_duration_s") is None
         and duration is not None
-        and NAP_RECOVERY_MINIMUM_SCORE_SECONDS
-        <= duration
-        <= NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS
+        and duration >= NAP_RECOVERY_MINIMUM_SCORE_SECONDS
         and isinstance(quality, dict)
         and quality.get("score") is not None
     ):
@@ -263,7 +270,7 @@ def released_historical_quality(
             if not unresolved_mode
             else "เลือกว่าเป็น Overnight หรือ Nap & Refresh เพื่อแสดงผล"
         ),
-        "level": "กำลังเตรียมผลสรุป",
+        "level": "ครั้งนี้ยังไม่มีคะแนน",
         "level_key": "unavailable",
         "reason": (
             "ข้อมูลเดิมยังไม่ได้ระบุรูปแบบการพัก จึงพักการแสดงคะแนนไว้"

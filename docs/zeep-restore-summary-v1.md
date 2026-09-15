@@ -73,6 +73,12 @@ ZEEP ไม่คัดลอกสูตร น้ำหนัก หรือ 
 Cycle และ Coverage เป็นบริบท/ความมั่นใจ ไม่ใช่ component คะแนน เพื่อไม่ให้
 ข้อจำกัดของ BCG หรือข้อมูลที่ขาดบางช่องครอบงำผล Wellness
 
+Sleep Score เผยแพร่เมื่อ Session ของ Overnight Recovery บันทึกครบอย่างน้อย
+5 ชั่วโมง หาก Timeline ที่มีหลักฐานยืนยันว่าไม่พบช่วงหลับ ระบบเผยแพร่คะแนน 0;
+หากไม่มี State evidence เลยใช้คะแนนกลางแบบจำกัดไม่เกิน 50 ส่วน HR/RR หรือ
+Environment component ที่ขาดใช้ neutral 75% เฉพาะส่วนนั้นและลด confidence
+โดยต้องแสดงสถานะข้อมูลตามจริง
+
 ### 3.2 Recovery Score — Nap & Refresh
 
 | องค์ประกอบ | คะแนนเต็ม |
@@ -88,12 +94,18 @@ Environment ไม่ได้สร้าง W/N1/N2/N3/REM แม้ใน Nap
 วัดระหว่าง State-attributed rest และตัด confirmed OFF BED/Sensor gap ออก;
 ค่าทั้ง Session ยังคงแสดงแยกใน Admin QA
 
-Recovery Score เผยแพร่เมื่อมี eligible rest อย่างน้อย 10 นาทีและมี HR/RR คู่จริง
-อย่างน้อย 6 จุด รวมทั้งต้องมีเป้าหมาย 30/90 นาทีที่ persist ไว้ ช่วง State
-continuity carry นับเป็นเวลาพัก แต่ไม่สร้างหลักฐาน HR/RR, Movement หรือ
-Environment เพิ่มขึ้นเอง confirmed OFF BED ลดทั้งเวลาเป้าหมายและ Continuity
-ตามเวลาจริง ข้อมูล Bed/Environment ที่หายใช้ neutral 75% บนตัวหาร 100 คงที่
-และลด confidence; Safety excursion cap คะแนน Environment และขึ้นสถานะให้ทีมตรวจ
+Recovery Score เผยแพร่เมื่อ Session ของ Nap & Refresh บันทึกครบอย่างน้อย 10 นาที
+ซึ่งเป็น release gate เพียงข้อเดียวหลังยืนยันโหมดแล้ว เป้าหมาย 30/90 นาทีและ HR/RR
+คู่จริงยังใช้คำนวณองค์ประกอบเมื่อมีหลักฐาน แต่ไม่ปิดคะแนน: ข้อมูล Target, HR/RR,
+State/Bed หรือ Environment ที่ขาดใช้ neutral 75% บนตัวหาร 100 คงที่และลด
+confidence เป็นระดับต่ำ ช่วง State continuity carry ไม่สร้างหลักฐาน HR/RR,
+Movement หรือ Environment เพิ่มขึ้นเอง และ confirmed OFF BED ยังลดองค์ประกอบเวลา
+กับ Continuity ตามเวลาจริง Safety excursion cap คะแนน Environment และขึ้นสถานะ
+ให้ทีมตรวจ
+
+กรณีหลักฐาน Sensor หลักไม่มีเลย ใช้ bounded neutral 50 และแจกแจง
+`effective_component_points` ให้รวมได้ 50 พอดี ค่าเหล่านี้เป็น imputation ไม่ใช่
+สิ่งที่วัดได้ จึงไม่สร้าง positive/attention driver หรือคำแนะนำเฉพาะ Sensor
 
 ## 4. Five-driver taxonomy
 
@@ -185,7 +197,7 @@ policy แต่ `status.key=safety_review` ต้องมาก่อน band 
     "type": "sleep_score",
     "title": "Sleep Score",
     "value": 76,
-    "formula_version": "zeep-sleep-score-v2.0-wellness-25-35-20-10-10"
+    "formula_version": "zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10"
   },
   "status": {
     "key": "sleep_restore_good",
@@ -216,20 +228,22 @@ Historical `auto/unknown_legacy` ต้องส่ง `unresolved_score` แล
 
 | ชั้น | Version |
 |---|---|
-| Session report | `zeep-session-report-v10.11-nap-timing-advisory` |
+| Session report | `zeep-session-report-v10.12-minimum-only-score-release` |
+| Sleep / Recovery quality | `zeep-rest-quality-v8.10-minimum-only-score-release` |
 | Restore Summary | `zeep-restore-summary-v1.0` |
 | Action bands | `zeep-restore-action-bands-v1.0` |
 | Driver policy | `zeep-restore-drivers-v1.0` |
 | Baseline comparison | `zeep-restore-personal-baseline-v1.0` |
 | Recommendation | `zeep-restore-recommendation-v1.0` |
 | Product language | `zeep-product-language-v1.0` |
-| Sleep Score formula | `zeep-sleep-score-v2.0-wellness-25-35-20-10-10` |
-| Recovery Score formula | `zeep-recovery-score-v3.0-wellness-soft-25-35-30-10` |
+| Sleep Score formula | `zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10` |
+| Recovery Score formula | `zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10` |
 
-นโยบาย v10.11/v8.9 เปลี่ยนการเกิน 120 นาทีจากตัวปิด Recovery Score เป็นธง
-Admin QA โดยไม่เปลี่ยนสูตร v3.0 และไม่ให้ Session ที่รอตรวจสอน Personal Baseline
-อัตโนมัติ ระบบจึงคงคู่ Report/Quality รุ่นก่อนหน้าไว้ใน approved history สำหรับ
-การเปิดรายงานเก่า
+นโยบาย v10.12/v8.10 ใช้เวลาขั้นต่ำเป็น release gate เพียงข้อเดียว: Overnight
+อย่างน้อย 5 ชั่วโมง และ Nap อย่างน้อย 10 นาที การขาด Target, HR/RR หรือหลักฐาน
+เสริมใช้ neutral พร้อมลด confidence ส่วนการเกิน 120 นาทีเป็นธง Admin QA เท่านั้น
+และไม่ปิด Recovery Score ระบบยังคงคู่ Report/Quality รุ่นก่อนหน้าไว้ใน approved
+history สำหรับเปิดรายงานเก่าโดยไม่เปลี่ยน Raw record
 
 ## 11. ขอบเขตการพัฒนาถัดไป
 

@@ -10,6 +10,8 @@ from sleep_session_report import build_session_report, build_sleep_quality
 from sleep_system_policy import (
     APPROVED_SLEEP_RESULT_VERSION_PAIRS,
     PERSONAL_BEHAVIOUR_BASELINE_VERSION,
+    PRE_MINIMUM_ONLY_SESSION_REPORT_VERSION,
+    PRE_MINIMUM_ONLY_SLEEP_QUALITY_VERSION,
     PRE_CONTINUITY_SESSION_REPORT_VERSION,
     PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
     PRE_NAP_TIMING_SESSION_REPORT_VERSION,
@@ -297,7 +299,7 @@ class RestoreSummaryTests(unittest.TestCase):
         )
         self.assertFalse(report["restore_summary"]["available"])
 
-    def test_missing_sensor_is_attention_never_a_positive_driver(self):
+    def test_missing_sensor_stays_in_admin_qa_not_user_drivers(self):
         summary = build_restore_summary(
             _sleep_quality(),
             findings=[
@@ -315,20 +317,13 @@ class RestoreSummaryTests(unittest.TestCase):
         positive_keys = {item["key"] for item in summary["drivers"]["positive"]}
         attention_keys = {item["key"] for item in summary["drivers"]["attention"]}
         self.assertNotIn("environment_sound", positive_keys)
-        self.assertIn("environment_sound", attention_keys)
-        driver = next(
-            item
-            for item in summary["drivers"]["attention"]
-            if item["key"] == "environment_sound"
-        )
-        self.assertFalse(driver["affects_source_score"])
-        self.assertEqual(driver["label"], "เสียง · กำลังรวบรวมข้อมูล")
-        self.assertEqual(driver["message"], "ZEEP กำลังรวบรวมข้อมูลส่วนนี้")
-        self.assertNotIn("SPH0645", driver["message"])
+        self.assertNotIn("environment_sound", attention_keys)
+        self.assertNotIn("SPH0645", summary["recommendation"]["primary"])
 
     def test_safety_review_is_first_attention_driver(self):
         quality = _sleep_quality()
         quality["component_points"]["sleep_stability"] = 5.0
+        quality["limited_evidence_neutral_score"] = True
         summary = build_restore_summary(
             quality,
             findings=[
@@ -361,6 +356,12 @@ class RestoreSummaryTests(unittest.TestCase):
         self.assertEqual(attention[0]["threshold"], 1300.0)
         self.assertEqual(attention[0]["maximum"], 1400.0)
         self.assertEqual(attention[0]["sample_count"], 2)
+        self.assertEqual(summary["status"]["key"], "safety_review")
+        self.assertEqual(summary["recommendation"]["primary"], "กรุณาแจ้งทีมงาน")
+        self.assertEqual(
+            summary["recommendation"]["source_driver_key"],
+            "environment_co2_safety_excursion",
+        )
 
     def test_explicit_not_measured_subjective_payload_stays_unmeasured(self):
         summary = build_restore_summary(
@@ -513,20 +514,25 @@ class RestoreSummaryTests(unittest.TestCase):
         )
         self.assertEqual(sound["severity"], "unavailable")
         self.assertFalse(sound["contributes_to_primary_score"])
-        driver = next(
-            item
-            for item in report["restore_summary"]["drivers"]["attention"]
-            if item["key"] == "environment_sound"
+        self.assertNotIn(
+            "environment_sound",
+            {item["key"] for item in report["restore_summary"]["drivers"]["attention"]},
         )
-        self.assertFalse(driver["affects_source_score"])
 
     def test_report_version_bump_preserves_previous_approved_pair(self):
         self.assertEqual(
             SESSION_REPORT_VERSION,
-            "zeep-session-report-v10.11-nap-timing-advisory",
+            "zeep-session-report-v10.12-minimum-only-score-release",
         )
         self.assertIn(
             (SESSION_REPORT_VERSION, SLEEP_QUALITY_VERSION),
+            APPROVED_SLEEP_RESULT_VERSION_PAIRS,
+        )
+        self.assertIn(
+            (
+                PRE_MINIMUM_ONLY_SESSION_REPORT_VERSION,
+                PRE_MINIMUM_ONLY_SLEEP_QUALITY_VERSION,
+            ),
             APPROVED_SLEEP_RESULT_VERSION_PAIRS,
         )
         self.assertIn(

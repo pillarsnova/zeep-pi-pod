@@ -3626,13 +3626,11 @@ body[data-view="sessions"] .hist-row > span {
   white-space: nowrap;
 }
 
-/* Post-session sleep quality ------------------------------------------
- * The score is intentionally presented with its measured components and
- * Wellness disclaimer.  An incomplete/no-data session never receives a
- * fabricated score; it stays in the neutral unavailable state.
+/* Post-session primary result -----------------------------------------
+ * Sleep Score and Recovery Score share one concise Wellness presentation;
+ * missing evidence stays explicit and is never presented as measured data.
  */
 .hist-quality,
-.sleep-quality-card,
 .result-summary-card {
   --quality-color: #748996;
   --quality-soft: rgba(116, 137, 150, .14);
@@ -3707,20 +3705,6 @@ body[data-view="sessions"] .hist-row > .hist-quality {
   white-space: nowrap;
 }
 
-.sleep-quality-card {
-  display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
-  gap: 17px;
-  align-items: center;
-  margin-top: 12px;
-  padding: 14px;
-  border: 1px solid color-mix(in srgb, var(--quality-color) 34%, transparent);
-  border-radius: 15px;
-  background:
-    radial-gradient(circle at 0 0, var(--quality-soft), transparent 42%),
-    rgba(7, 21, 31, .84);
-}
-
 .sleep-quality-ring {
   position: relative;
   display: grid;
@@ -3755,75 +3739,12 @@ body[data-view="sessions"] .hist-row > .hist-quality {
   font-size: 9px;
 }
 
-.sleep-quality-copy {
-  min-width: 0;
-}
-
 .sleep-quality-eyebrow {
   color: var(--quality-color);
   font-size: 8px;
   font-weight: 900;
   letter-spacing: .14em;
   text-transform: uppercase;
-}
-
-.sleep-quality-copy h3 {
-  margin: 4px 0 1px;
-  color: #f2fbfd;
-  font-size: 22px;
-}
-
-.sleep-quality-copy p {
-  margin: 0;
-  color: #adc1ca;
-  font-size: 11px;
-}
-
-.sleep-quality-copy > small {
-  display: block;
-  margin-top: 8px;
-  color: #67818e;
-  font-size: 8px;
-}
-
-.sleep-quality-metrics {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(88px, 1fr));
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.sleep-quality-metrics > div {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-  padding: 7px 9px;
-  border: 1px solid rgba(103, 145, 162, .18);
-  border-radius: 9px;
-  background: rgba(13, 34, 47, .72);
-}
-
-.sleep-quality-metrics span {
-  overflow: hidden;
-  color: #738f9c;
-  font-size: 8px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sleep-quality-metrics b {
-  color: #e8f6f9;
-  font-size: 11px;
-}
-
-.sleep-quality-card.quality-unavailable .sleep-quality-ring {
-  background: rgba(75, 98, 110, .18);
-}
-
-.sleep-quality-card.mode-recovery {
-  background:
-    radial-gradient(circle at 0 0, rgba(65, 205, 151, .1), transparent 42%),
-    rgba(7, 25, 29, .88);
 }
 
 /* Restore Summary ---------------------------------------------------------
@@ -4436,22 +4357,12 @@ body[data-view="sessions"] .hist-row > .hist-quality {
 }
 
 @media (max-width: 760px) {
-  .sleep-quality-card {
-    grid-template-columns: 86px minmax(0, 1fr);
-    gap: 11px;
-    padding: 11px;
-  }
-
   .sleep-quality-ring {
     width: 78px;
     height: 78px;
   }
 
   .sleep-quality-ring strong { font-size: 24px; }
-
-  .sleep-quality-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 
   .restore-summary-grid,
   .restore-drivers {
@@ -8710,10 +8621,6 @@ body[data-view="monitor"] .raw-monitor { order: 4; }
   body[data-view="sessions"] .hist-row { min-height: 56px; height: auto; padding: 10px 13px; font-size: 13px; }
   .hist-quality b { font-size: 12px; }
   .hist-quality small { font-size: 10px; }
-  .sleep-quality-copy p { font-size: 12px; }
-  .sleep-quality-metrics span { font-size: 10px; }
-  .sleep-quality-metrics b { font-size: 13px; }
-
   body[data-view="monitor"] .card,
   body[data-view="monitor"] .admin-atmosphere-card { padding: 16px; }
   .monitor-alert-bar .btn,
@@ -14843,46 +14750,11 @@ body[data-view="sessions"][data-role="user"] .history-admin-filter {
   font-size: 8px;
 }
 
-.history-person-scores {
-  display: flex;
-  gap: 4px;
-  min-width: 0;
-  overflow-x: auto;
-}
-
 .history-person-mode-mix {
   overflow: hidden;
   color: #91b2bf;
   font-size: 8px;
   text-align: right;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.history-score {
-  display: grid;
-  justify-items: center;
-  min-width: 47px;
-  padding: 3px 5px;
-  border-radius: 8px;
-  color: #5ce2b2;
-  background: rgba(49, 188, 137, .11);
-}
-
-.history-score.unavailable {
-  color: #93a8b2;
-  background: rgba(109, 131, 143, .1);
-}
-
-.history-score b {
-  font-size: 14px;
-  line-height: 1;
-}
-
-.history-score small {
-  max-width: 68px;
-  overflow: hidden;
-  font-size: 7px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

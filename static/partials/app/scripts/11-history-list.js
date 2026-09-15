@@ -88,18 +88,10 @@ function userUnavailableScoreReason(q,presentation){
   if(validation.includes('short')||reason.includes('short')||reason.includes('10 นาที')){
     return 'ระยะเวลาครั้งนี้สั้นเกินกว่าจะสรุปเป็นคะแนนได้อย่างเหมาะสม';
   }
-  if(
-    validation.includes('out_of_protocol')||validation.includes('implausible')
-    ||reason.includes('protocol')||reason.includes('target')
-  ){
-    return 'ระยะเวลาครั้งนี้ต่างจากรูปแบบที่เลือก จึงแสดงรายละเอียดโดยไม่สรุปเป็นคะแนน';
-  }
   if(validation.includes('unresolved')||reason.includes('mode')){
     return 'ยังยืนยันรูปแบบการพักครั้งนี้ไม่ได้ จึงไม่สรุปเป็นคะแนน';
   }
-  return presentation==='recovery'
-    ?'ข้อมูลสำคัญสำหรับ Recovery Score ครั้งนี้ยังไม่ครบ'
-    :'ข้อมูลสำคัญสำหรับ Sleep Score ครั้งนี้ยังไม่ครบ';
+  return 'ผลเดิมของครั้งนี้ต้องตรวจความสอดคล้องก่อนแสดงคะแนน';
 }
 
 function sleepQualityCompact(q, ended, presentationOverride,safetyReviewOverride=false){
@@ -112,90 +104,6 @@ function sleepQualityCompact(q, ended, presentationOverride,safetyReviewOverride
   const level=safetyReview
     ?USER_PRODUCT_COPY.scoreLevels.safety_review:userScoreLevelLabel(q);
   return `<span class="hist-quality quality-${sleepQualityTone(q,safetyReview)}"><strong>${q.score}</strong><span><b>${historyEscape(level)}</b><small>${title}</small></span></span>`;
-}
-
-function renderSleepQuality(q, ended, presentationOverride){
-  const adminView=currentPrincipal?.role==='admin';
-  const presentation=presentationOverride||reportPresentationMode(q);
-  const scoreTitle=resultScoreTitle(q,presentation,adminView);
-  if (!ended || !q?.available||presentation==='unknown'){
-    const title=!ended?'กำลังบันทึกการพัก':'ครั้งนี้ยังไม่มีคะแนน';
-    const reason=!ended
-      ?'คะแนนจะแสดงเมื่อจบการพัก'
-      :userUnavailableScoreReason(q,presentation);
-    const adminReason=currentPrincipal?.role==='admin'&&q?.reason
-      ?`<small>สำหรับผู้ดูแล · ${historyEscape(q.reason)}</small>`:'';
-    return `<section class="sleep-quality-card quality-unavailable mode-${presentation}"><div class="sleep-quality-ring"><strong>—</strong><small>/100</small></div><div class="sleep-quality-copy"><span class="sleep-quality-eyebrow">${scoreTitle}</span><h3>${title}</h3><p>${reason}</p><small>${!ended?'ผลจะอัปเดตหลังจบการพัก':'ยังดูรายละเอียดการพักครั้งนี้ได้ตามปกติ'}</small>${adminReason}</div></section>`;
-  }
-  const components=q.component_points||{},componentMax=q.component_max_points||{};
-  const arousal=q.continuity?.arousal_proxy||{};
-  const pointText=key=>components[key]==null?'--':`${Number(components[key]).toFixed(1)} / ${Number(componentMax[key]||0).toFixed(0)}`;
-  const legacyLabels={duration:'เวลาพัก',architecture:'รูปแบบการนอน',continuity:'ความต่อเนื่อง'};
-  const userComponentLabels={
-    ...legacyLabels,
-    sleep_opportunity:'เวลาและการเข้าสู่การนอน',
-    sleep_stability:'ความต่อเนื่องของการนอน',
-    restorative_architecture:'รูปแบบการนอน',
-    cycle_expression:'รอบการนอน',
-    goal_duration:'เวลาพักตามเป้าหมาย',
-    physiological_response:'การตอบสนองระหว่างพัก',
-    rest_continuity:'ความต่อเนื่องในการพัก',
-    environment_support:'บรรยากาศระหว่างพัก',
-  };
-  const componentRows=(q.component_order||Object.keys(components)).map(key=>[
-    adminView
-      ?q.component_labels?.[key]||legacyLabels[key]||key
-      :userComponentLabels[key]||'รายละเอียดคะแนน',
-    pointText(key),
-  ]);
-  const targetText=q.duration_target?.target_minutes!=null
-    ? `${q.duration_target.target_minutes} นาที`
-    : q.duration_target?.range_minutes
-    ? `${q.duration_target.range_minutes[0]}–${q.duration_target.range_minutes[1]} นาที`
-    : q.duration_target?.hours==null?null:`${q.duration_target.hours} ชม.`;
-  const restMetrics = [
-    ['รูปแบบการพัก', adminView
-      ?q.rest_mode?.label||'ประเมินตามเวลาที่บันทึกจริง'
-      :presentation==='sleep'?'Overnight Recovery':presentation==='recovery'?'Nap & Refresh':'การพักครั้งนี้'],
-    ...componentRows,
-    targetText?[adminView?'เป้าหมายเวลา':'ช่วงเวลาที่เลือก',targetText]:null,
-    q.duration_target?.eligible_rest_minutes==null?null:
-      ['เวลาพักที่นับได้',`${q.duration_target.eligible_rest_minutes} นาที`],
-    q.duration_target?.completion_pct==null?null:
-      [adminView?'ความสำเร็จตามเป้าหมาย':'ครบตามเวลาเป้าหมาย',`${q.duration_target.completion_pct}%`],
-    !adminView||q.physiology?.heart_rate_average==null?null:['ชีพจรเฉลี่ย',`${q.physiology.heart_rate_average} bpm`],
-    !adminView||q.physiology?.respiration_average==null?null:['หายใจเฉลี่ย',`${q.physiology.respiration_average} ครั้ง/นาที`],
-    q.body_response?.movement_pct==null?null:[
-      'ความนิ่งร่างกาย',
-      `${Math.max(0,Math.round(100-Number(q.body_response.movement_pct)))}%`,
-    ],
-    ['ผลที่ตรวจพบ',q.session_character==='hybrid'?'พักและมีช่วงหลับ':'พักขณะตื่น · ไม่จำเป็นต้องหลับ'],
-  ];
-  const sleepMetrics = [
-    ['รูปแบบการพัก', q.rest_mode?.label || 'ประเมินตามเวลาที่บันทึกจริง'],
-    ...componentRows,
-    ['เวลานอนโดยประมาณ', fmtDur(q.estimated_sleep_s)],
-    targetText?[adminView?'เป้าหมายเวลา':'ช่วงเวลาที่แนะนำ',targetText]:null,
-    ['เวลาที่แสดงสถานะการนอน', fmtDur(q.actual_scored_s)],
-    [adminView?'สัดส่วนเวลานอน':'สัดส่วนเวลาที่ประเมินว่าหลับ', `${q.sleep_efficiency_pct}%`],
-    ['เข้าสู่ W · ตื่น', `${q.wake_entries ?? q.awakenings ?? 0} ครั้ง`],
-    q.deep_pct == null ? null : ['N3 / หลับลึก', `${q.deep_pct}%`],
-    q.rem_pct == null ? null : ['REM / หลับฝัน', `${q.rem_pct}%`],
-    arousal.available?[adminView?'BCG disturbance proxy':'ช่วงที่มีการรบกวน',`${arousal.episodes} ครั้ง · ${arousal.index_per_hour}/ชม.`]:null,
-  ];
-  const metrics=(q.quality_type==='rest_goal'?restMetrics:sleepMetrics)
-    .filter(Boolean).map(([label,value])=>`<div><span>${label}</span><b>${value}</b></div>`).join('');
-  const technicalNote=currentPrincipal?.role==='admin'
-    ?`${q.outcome_interpretation?`${q.outcome_interpretation} · `:''}${q.score_basis || ''} · ${q.disclaimer || 'ประเมินจาก BCG/Sensor ไม่ใช่ผลวินิจฉัยจาก PSG'}`
-    :'ผลประเมินเพื่อ Wellness · ไม่ใช่การวินิจฉัยหรือทดแทนผลตรวจทางการแพทย์';
-  const levelLabel=adminView?(q.level||userScoreLevelLabel(q)):userScoreLevelLabel(q);
-  const insight=adminView
-    ?q.insight||''
-    :userScoreMeaning(q,presentation);
-  return `<section class="sleep-quality-card quality-${sleepQualityTone(q)} mode-${presentation}" style="--quality-score:${q.score}">
-    <div class="sleep-quality-ring"><strong>${q.score}</strong><small>/100</small></div>
-    <div class="sleep-quality-copy"><span class="sleep-quality-eyebrow">${scoreTitle} · ZEEP WELLNESS</span><h3>${historyEscape(levelLabel)}</h3><p>${adminView?(q.score_scope||'ค่าประเมินจาก Sensor'):'ภาพรวมจากการพักครั้งนี้'}${insight?` · ${historyEscape(insight)}`:''}</p><div class="sleep-quality-metrics">${metrics}</div><small>${technicalNote}</small></div>
-  </section>`;
 }
 
 let historyRequestSeq=0;
@@ -363,26 +271,13 @@ function userRestoreMeaning(statusKey,presentation,unavailable){
   if(unavailable)return 'ครั้งนี้ยังไม่มีคะแนน แต่ยังดูรายละเอียดการพักที่บันทึกไว้ได้';
   const meanings={
     safety_review:'พบค่าสภาพแวดล้อมบางช่วงที่ควรให้ทีมตรวจสอบก่อนใช้งานครั้งถัดไป',
+    limited_evidence:'เวลาบันทึกครบขั้นต่ำ แต่ข้อมูล Sensor ครั้งนี้มีจำกัด',
     sleep_restore_very_good:'ภาพรวมการนอนคืนนี้เป็นไปได้ดีมาก',sleep_restore_good:'ภาพรวมการนอนคืนนี้เป็นไปได้ดี',
     pace_morning:'คืนนี้ได้พักในระดับหนึ่ง',prioritise_rest:'ครั้งนี้ยังมีบางจุดที่ช่วยให้การพักสบายขึ้นได้',
     rest_goal_full:'ช่วงพักนี้เป็นไปได้ดีมาก',rest_good:'ช่วงพักนี้เป็นไปได้ดี',
     rest_partial:'ช่วงพักนี้ช่วยให้ร่างกายได้หยุดนิ่งและผ่อนคลาย',rest_more:'ครั้งนี้ยังมีบางจุดที่ลองปรับให้สบายขึ้นได้',
   };
   return meanings[statusKey]||(presentation==='recovery'?'ดูผลช่วงพักนี้ร่วมกับความรู้สึกหลังพัก':'ดูภาพรวมคืนนี้ร่วมกับความรู้สึกหลังตื่น');
-}
-
-function restoreSummaryTone(status){
-  const key=String(status?.key||status||'').toLowerCase();
-  if([
-    'excellent','very_good','good','restored','strong',
-    'sleep_restore_very_good','sleep_restore_good','rest_goal_full','rest_good',
-  ].includes(key))return 'good';
-  if(['fair','moderate','partial','pace_morning','rest_partial'].includes(key))return 'fair';
-  if([
-    'low','poor','attention','needs_attention','prioritise_rest','rest_more',
-    'safety_review',
-  ].includes(key))return 'attention';
-  return 'neutral';
 }
 
 function adminResultEvidence(report,quality,summary,presentation){
@@ -442,6 +337,7 @@ function renderRestoreSummary(source,presentation,ended=true){
   const statusLabels={
     excellent:'ยอดเยี่ยม',very_good:'ดีมาก',good:'ดี',fair:'พอใช้',
     safety_review:'ควรให้ทีมตรวจสอบ',
+    limited_evidence:'สรุปการพักครั้งนี้แล้ว',
     low:'ให้เวลากับการพักเพิ่ม',sleep_restore_very_good:'ดีมาก',
     sleep_restore_good:'ดี',pace_morning:'ได้พักในระดับหนึ่ง',
     prioritise_rest:'ให้เวลากับการพักเพิ่ม',rest_goal_full:'พักได้ดีมาก',
@@ -557,11 +453,6 @@ function renderRestoreSummary(source,presentation,ended=true){
     ${adminView?adminResultEvidence(report,quality,summary,presentation):''}
     <div class="restore-claim-note">${adminView?'ผลสรุปสำหรับตรวจสอบระบบและพัฒนาต่อ':'ผล Wellness เฉพาะการพักครั้งนี้ · ดูร่วมกับความรู้สึกของคุณ · ไม่ใช่การวินิจฉัย'}</div>
   </section>`;
-}
-
-function historyScoreMarkup(score){
-  const available=score?.available&&score?.score!=null;
-  return `<span class="history-score ${available?'available':'unavailable'}"><b>${available?historyEscape(score.score):'—'}</b><small>${historyEscape(score?.score_title||'คะแนน')}</small></span>`;
 }
 
 function renderHistorySummary(d){

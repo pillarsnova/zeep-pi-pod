@@ -290,27 +290,9 @@ def _unavailable_result_copy(
             "session_too_short",
             "ครั้งนี้ยังไม่มีคะแนน เพราะเวลาที่บันทึกสั้นกว่าเกณฑ์ของรูปแบบการพัก",
         )
-    if timing_status == "target_unknown":
-        return (
-            "target_unknown",
-            "ครั้งนี้ยังไม่มีคะแนน เพราะ Session เดิมไม่ได้บันทึกเป้าหมายเวลาไว้",
-        )
-    if timing_status in {"out_of_protocol", "implausible_outlier", "over_limit"}:
-        return (
-            "duration_out_of_protocol",
-            "ครั้งนี้ยังไม่มีคะแนน เพราะระยะเวลาที่บันทึกไม่ตรงกับรูปแบบการพักที่เลือก",
-        )
-    report = _mapping(detail.get("report"))
-    quality = _mapping(report.get("quality"))
-    physiology = _mapping(quality.get("physiology"))
-    if physiology.get("available") is False or not physiology:
-        return (
-            "insufficient_physiological_evidence",
-            "ครั้งนี้ยังไม่มีคะแนน เพราะข้อมูลชีพจรและการหายใจยังไม่ครบพอ",
-        )
     return (
-        "result_unavailable",
-        "ครั้งนี้ยังไม่มีคะแนน ระบบเก็บข้อมูลที่บันทึกไว้สำหรับการตรวจสอบแล้ว",
+        "result_integrity_review",
+        "ครั้งนี้ยังไม่มีคะแนน เพราะผลเดิมต้องตรวจความสอดคล้องก่อนแสดงผล",
     )
 
 

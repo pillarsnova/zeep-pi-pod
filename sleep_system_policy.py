@@ -26,8 +26,12 @@ SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
 SLEEP_HISTORY_BACKFILL_VERSION = (
     "zeep-sleep-history-reclass-v28-complete-occupied-epochs"
 )
-SESSION_REPORT_VERSION = "zeep-session-report-v10.11-nap-timing-advisory"
-SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.9-nap-timing-advisory"
+SESSION_REPORT_VERSION = "zeep-session-report-v10.12-minimum-only-score-release"
+SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.10-minimum-only-score-release"
+PRE_MINIMUM_ONLY_SESSION_REPORT_VERSION = (
+    "zeep-session-report-v10.11-nap-timing-advisory"
+)
+PRE_MINIMUM_ONLY_SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.9-nap-timing-advisory"
 PRE_NAP_TIMING_SESSION_REPORT_VERSION = (
     "zeep-session-report-v10.10-wellness-score-balance"
 )
@@ -44,9 +48,13 @@ PRE_RECOVERY_TIMING_SESSION_REPORT_VERSION = (
 PRE_RECOVERY_TIMING_SLEEP_QUALITY_VERSION = (
     "zeep-rest-quality-v8.6-state-evidence-coverage-split"
 )
-SLEEP_SCORE_FORMULA_VERSION = "zeep-sleep-score-v2.0-wellness-25-35-20-10-10"
-# v10.11 keeps Nap timing deviations as Admin QA instead of withholding an
-# otherwise supported Recovery Score. The point formula itself is unchanged.
+SLEEP_SCORE_FORMULA_VERSION = (
+    "zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10"
+)
+# v10.12 makes minimum eligible time the only score-release gate for a
+# resolved two-mode Session. Missing optional evidence uses the documented
+# neutral factor and lowers confidence instead of hiding the Wellness score.
+# The published component weights remain unchanged.
 # v10.8 adds a claim-bounded respiratory Wellness interpretation without
 # changing Sleep State or either score. v10.7 guarantees five-state attribution
 # for every occupied recording
@@ -72,6 +80,10 @@ PREVIOUS_SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.3-nap-goal-duration"
 APPROVED_SLEEP_RESULT_VERSION_PAIRS = frozenset(
     {
         (SESSION_REPORT_VERSION, SLEEP_QUALITY_VERSION),
+        (
+            PRE_MINIMUM_ONLY_SESSION_REPORT_VERSION,
+            PRE_MINIMUM_ONLY_SLEEP_QUALITY_VERSION,
+        ),
         (
             PRE_NAP_TIMING_SESSION_REPORT_VERSION,
             PRE_NAP_TIMING_SLEEP_QUALITY_VERSION,
@@ -103,11 +115,14 @@ APPROVED_SLEEP_RESULT_VERSION_PAIRS = frozenset(
         (PREVIOUS_SESSION_REPORT_VERSION, PREVIOUS_SLEEP_QUALITY_VERSION),
     }
 )
-RECOVERY_SCORE_FORMULA_VERSION = "zeep-recovery-score-v3.0-wellness-soft-25-35-30-10"
+RECOVERY_SCORE_FORMULA_VERSION = (
+    "zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10"
+)
 APPROVED_SCORE_FORMULA_VERSIONS_BY_GROUP = {
     "sleep": frozenset(
         {
             "zeep-sleep-score-v1.0-reviewed",
+            "zeep-sleep-score-v2.0-wellness-25-35-20-10-10",
             SLEEP_SCORE_FORMULA_VERSION,
         }
     ),
@@ -115,6 +130,7 @@ APPROVED_SCORE_FORMULA_VERSIONS_BY_GROUP = {
         {
             "zeep-recovery-score-v2.0-reviewed",
             "zeep-recovery-score-v2.1-complete-rest-25-35-30-10",
+            "zeep-recovery-score-v3.0-wellness-soft-25-35-30-10",
             RECOVERY_SCORE_FORMULA_VERSION,
         }
     ),
@@ -567,7 +583,8 @@ REST_MODE_DURATION_TARGETS_S = {
 # persisted when the Session starts; elapsed time must never silently turn a
 # 30-minute Session into a 90-minute Session (or the reverse). Timing drift or
 # a missing legacy target remains visible to Admin QA, but does not by itself
-# withhold a Recovery Score supported by sufficient duration and HR/RR.
+# withhold a Recovery Score after the minimum recorded duration is reached.
+# Missing HR/RR remains explicit evidence quality and uses a neutral component.
 NAP_RECOVERY_TARGET_OPTIONS = {
     30 * 60: {
         "key": "nap_30",
@@ -584,7 +601,7 @@ NAP_RECOVERY_TARGET_OPTIONS = {
 }
 NAP_RECOVERY_DEFAULT_TARGET_SECONDS = 30 * 60
 NAP_RECOVERY_MINIMUM_SCORE_SECONDS = 10 * 60
-NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS = 120 * 60
+NAP_RECOVERY_TIMING_REVIEW_SECONDS = 120 * 60
 RECOVERY_SCORE_COMPONENT_MAX_POINTS = {
     "goal_duration": 25.0,
     "physiological_response": 35.0,
@@ -592,9 +609,10 @@ RECOVERY_SCORE_COMPONENT_MAX_POINTS = {
     "environment_support": 10.0,
 }
 # Wellness balance keeps valid, ordinary rest away from a technical zero while
-# preserving the minimum-evidence release gates above. Timing deviations above
-# the selected Nap protocol remain Admin QA and do not withhold a supported
-# Recovery Score. These factors are product-scoring
+# preserving the minimum-duration release gate above. Missing Target, HR/RR,
+# Bed detail or environment uses a visible neutral imputation and lowers
+# confidence. Timing deviations remain Admin QA and never withhold a Recovery
+# Score. These factors are product-scoring
 # transforms, not clinical normal ranges or claims of recovery.
 WELLNESS_PHYSIOLOGY_NEUTRAL_FLOOR = 0.60
 WELLNESS_MISSING_COMPONENT_NEUTRAL_FACTOR = 0.75
@@ -653,12 +671,14 @@ REST_MODE_PROTOCOLS = {
     "nap_recovery": {
         "session_character": "rest_or_nap",
         "minimum_seconds": NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
-        "maximum_seconds": NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS,
+        "maximum_seconds": None,
+        "timing_review_threshold_seconds": NAP_RECOVERY_TIMING_REVIEW_SECONDS,
         "recommended_range_seconds": [25 * 60, 35 * 60],
         "full_credit_target_seconds": NAP_RECOVERY_DEFAULT_TARGET_SECONDS,
         "supported_target_seconds": sorted(NAP_RECOVERY_TARGET_OPTIONS),
         "target_required_for_new_sessions": True,
         "legacy_missing_target_requires_review": True,
+        "missing_target_blocks_score": False,
         "timing_review_blocks_score": False,
         "phases": ["settle", "rest_or_nap", "gentle_close"],
         "primary_outcomes": [
@@ -1731,7 +1751,9 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             ),
             "coverage_is_score_component": False,
             "sleep_required": False,
-            "stored_target_required": True,
+            "stored_target_required": False,
+            "missing_target_uses_neutral": True,
+            "minimum_only_score_release": True,
         },
         "sleep_score": {
             "formula_version": SLEEP_SCORE_FORMULA_VERSION,

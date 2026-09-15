@@ -47,7 +47,9 @@ class UiComposerTests(unittest.TestCase):
                     runtime,
                 )
                 self.assertEqual(len(matches), 1)
-                self.assertEqual(template.count(ui_composer.MARKER.format(name=filename)), 1)
+                self.assertEqual(
+                    template.count(ui_composer.MARKER.format(name=filename)), 1
+                )
 
     def test_calibration_ui_handles_untrusted_and_missing_raw_values(self):
         template = ui_composer.render()
@@ -126,7 +128,9 @@ class UiComposerTests(unittest.TestCase):
             with self.subTest(unsafe_claim=unsafe_claim):
                 self.assertNotIn(unsafe_claim, template)
 
-    def test_user_vitals_summary_groups_heart_and_breathing_without_fitness_claims(self):
+    def test_user_vitals_summary_groups_heart_and_breathing_without_fitness_claims(
+        self,
+    ):
         template = ui_composer.render()
         start = template.index("function renderRespiratoryWellness")
         end = template.index("function renderSessionOverview", start)
@@ -142,15 +146,16 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("<small>การหายใจ</small>", renderer)
         self.assertIn("value!==null&&value!==undefined&&value!==''", renderer)
         self.assertIn("<b>แนวโน้มระหว่างพัก</b>", renderer)
-        user_branch = renderer.split("if(!adminView){", 1)[1].split("const range=", 1)[0]
+        user_branch = renderer.split("if(!adminView){", 1)[1].split("const range=", 1)[
+            0
+        ]
         self.assertNotIn("คำแนะนำตามช่วงอายุ", user_branch)
         self.assertNotIn("Personal Baseline", user_branch)
         self.assertNotIn("Coverage", user_branch)
         self.assertNotIn("quality.physiology?.heart_rate_average", renderer)
-        self.assertNotIn("summary.interpretation", renderer.split("if(!adminView){", 1)[1].split("return `<section", 1)[0])
-        self.assertIn(
-            "!adminView||q.physiology?.heart_rate_average==null",
-            template,
+        self.assertNotIn(
+            "summary.interpretation",
+            renderer.split("if(!adminView){", 1)[1].split("return `<section", 1)[0],
         )
         self.assertIn('class="admin-report-details-body"', template)
         self.assertIn(
@@ -189,7 +194,9 @@ class UiComposerTests(unittest.TestCase):
 
         self.assertIn("function reportPresentationMode(source)", template)
         self.assertIn("const canonicalMode=reportModeGroup(root.mode);", template)
-        self.assertIn("const canonicalRestMode=reportModeGroup(root.rest_mode);", template)
+        self.assertIn(
+            "const canonicalRestMode=reportModeGroup(root.rest_mode);", template
+        )
         self.assertIn("explicit.length?explicit:[value.requested]", template)
         self.assertNotIn("title.includes('recovery')", template)
         self.assertNotIn("title.includes('sleep')", template)
@@ -217,7 +224,9 @@ class UiComposerTests(unittest.TestCase):
             template,
         )
         self.assertIn("NREM คือ N1 + N2 + N3", template)
-        self.assertIn("function recoveryProtocolBadge(report,adminView=false)", template)
+        self.assertIn(
+            "function recoveryProtocolBadge(report,adminView=false)", template
+        )
         self.assertIn("status==='target_unknown'", template)
         self.assertIn("`เป้าหมาย ${Math.round(targetMinutes)} นาที`", template)
         self.assertIn("'Legacy target ไม่ถูกบันทึก'", template)
@@ -316,7 +325,7 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn('class="result-safety-review"', template)
         self.assertIn(".quality-safety_review", css)
         self.assertIn(".result-safety-review", css)
-        self.assertIn("ยังดูรายละเอียดการพักครั้งนี้ได้ตามปกติ", template)
+        self.assertIn("ยังดูรายละเอียดการพักที่บันทึกไว้ได้", template)
         self.assertIn("ข้อมูลยังไม่พอสรุปคะแนน", template)
         self.assertNotIn(
             "เมื่อข้อมูลต่อเนื่องเพียงพอ ZEEP จะสรุปให้โดยอัตโนมัติ",
@@ -335,7 +344,7 @@ class UiComposerTests(unittest.TestCase):
         quality_rule = css.index(".quality-very_good")
         visual_rule = css.index(".result-summary-card {", quality_rule)
         self.assertLess(neutral_rule, quality_rule)
-        self.assertNotIn("--quality-color", css[visual_rule:visual_rule + 180])
+        self.assertNotIn("--quality-color", css[visual_rule : visual_rule + 180])
 
     def test_dashboard_keeps_user_sensors_compact_and_admin_diagnostics_separate(self):
         template = ui_composer.render()
@@ -358,7 +367,7 @@ class UiComposerTests(unittest.TestCase):
         css = (ui_composer.STATIC / "theme-modern.css").read_text(encoding="utf-8")
 
         self.assertIn("const adminView=currentPrincipal?.role==='admin';", template)
-        self.assertIn("const technicalNote=currentPrincipal?.role==='admin'", template)
+        self.assertIn("function adminResultEvidence", template)
         self.assertNotIn("function normalizeUsageDetail(payload)", template)
         self.assertIn("const legacyPath=`/api/history/", template)
         self.assertIn("requestSeq!==historyDetailRequestSeq", template)
@@ -451,23 +460,31 @@ class UiComposerTests(unittest.TestCase):
         history_start = template.index("async function refreshHistory")
         history_end = template.index("function historyLocalToday", history_start)
         restore_start = template.index("function renderRestoreSummary")
-        restore_end = template.index("function historyScoreMarkup", restore_start)
+        restore_end = template.index("function renderHistorySummary", restore_start)
 
         self.assertIn("if(adminView)", template[post_start:post_end])
         self.assertIn("ทำรายการไม่สำเร็จ กรุณาลองอีกครั้ง", template[post_start:post_end])
         self.assertNotIn("detail.message", template[qr_start:qr_end])
-        self.assertIn("userLoginFailure(code,r.status)", template[login_start:login_end])
+        self.assertIn(
+            "userLoginFailure(code,r.status)", template[login_start:login_end]
+        )
         self.assertNotIn("detail.message", template[login_start:login_end])
         self.assertIn("กำลังเตรียมรายการย้อนหลังของคุณ", template[history_start:history_end])
         self.assertIn("userRestoreMeaning", template[restore_start:restore_end])
         self.assertIn("userRestoreDriverText", template[restore_start:restore_end])
 
         dashboard_start = template.index("function setDashboardSensor")
-        dashboard_end = template.index("const dashboardAtmosphereLevels", dashboard_start)
+        dashboard_end = template.index(
+            "const dashboardAtmosphereLevels", dashboard_start
+        )
         unified_start = template.index("function setUnifiedSensor")
         unified_end = template.index("const unifiedComfortProfiles", unified_start)
-        self.assertIn("currentPrincipal?.role==='admin'", template[dashboard_start:dashboard_end])
-        self.assertIn("currentPrincipal?.role==='admin'", template[unified_start:unified_end])
+        self.assertIn(
+            "currentPrincipal?.role==='admin'", template[dashboard_start:dashboard_end]
+        )
+        self.assertIn(
+            "currentPrincipal?.role==='admin'", template[unified_start:unified_end]
+        )
 
     def test_required_safety_sensor_loss_never_invites_user_to_continue(self):
         template = ui_composer.render()
@@ -498,7 +515,9 @@ class UiComposerTests(unittest.TestCase):
         login_renderer = template[login_start:login_end]
         self.assertIn("sf.level==='emergency'", login_renderer)
         self.assertIn("เปิดประตู ออกจาก ZEEP", login_renderer)
-        emergency_copy = login_renderer.split("el.className='login-safety danger';", 1)[1]
+        emergency_copy = login_renderer.split("el.className='login-safety danger';", 1)[
+            1
+        ]
         self.assertNotIn("el.textContent=''", emergency_copy)
 
     def test_safety_emergency_alert_is_not_limited_to_monitor_route(self):
@@ -510,7 +529,9 @@ class UiComposerTests(unittest.TestCase):
 
         self.assertIn("announceNewEmergency", template[alert_start:alert_end])
         self.assertIn("key==='safety_emergency'", template[alert_start:alert_end])
-        self.assertIn("currentPrincipal?.role==='admin'", template[render_start:render_end])
+        self.assertIn(
+            "currentPrincipal?.role==='admin'", template[render_start:render_end]
+        )
         self.assertNotIn(
             "document.body.dataset.view==='monitor'",
             template[render_start:render_end],
@@ -521,7 +542,9 @@ class UiComposerTests(unittest.TestCase):
         score_start = template.index("function drawReportScore")
         score_end = template.index("function drawReportMetrics", score_start)
         finding_start = template.index("function drawReportFindings")
-        finding_end = template.index("async function drawSessionReportPng", finding_start)
+        finding_end = template.index(
+            "async function drawSessionReportPng", finding_start
+        )
         png_start = finding_end
         png_end = template.index("async function doLogout", png_start)
 
@@ -538,13 +561,15 @@ class UiComposerTests(unittest.TestCase):
     def test_unresolved_mode_never_leaks_sleep_or_recovery_results(self):
         template = ui_composer.render()
         profile_start = template.index("function reportProfileItems")
-        profile_end = template.index("function classificationAccountingMarkup", profile_start)
+        profile_end = template.index(
+            "function classificationAccountingMarkup", profile_start
+        )
         profile_renderer = template[profile_start:profile_end]
         image_start = template.index("function drawReportHeader")
         image_end = template.index("async function doLogout", image_start)
         image_renderer = template[image_start:image_end]
         summary_start = template.index("function renderRestoreSummary")
-        summary_end = template.index("function historyScoreMarkup", summary_start)
+        summary_end = template.index("function renderHistorySummary", summary_start)
         summary_renderer = template[summary_start:summary_end]
 
         self.assertIn("else{\n    items=[];", profile_renderer)
@@ -575,17 +600,19 @@ class UiComposerTests(unittest.TestCase):
     def test_user_result_copy_does_not_trust_legacy_engineering_text(self):
         template = ui_composer.render()
         finding_start = template.index("function userReportFinding")
-        finding_end = template.index("function userEnvironmentPresentation", finding_start)
+        finding_end = template.index(
+            "function userEnvironmentPresentation", finding_start
+        )
         finding_renderer = template[finding_start:finding_end]
         baseline_start = template.index("function renderRestoreSummary")
-        baseline_end = template.index("function historyScoreMarkup", baseline_start)
+        baseline_end = template.index("function renderHistorySummary", baseline_start)
         baseline_renderer = template[baseline_start:baseline_end]
 
         self.assertIn("environmentMetrics[metricKey]", finding_renderer)
         self.assertNotIn("item.title", finding_renderer)
         self.assertIn("จากการพัก ${Math.round(sessionsUsed)} ครั้ง", baseline_renderer)
         self.assertNotIn("${Math.round(sessionsUsed)} Session", baseline_renderer)
-        self.assertIn("ช่วงที่มีการรบกวน", template)
+        self.assertIn("สิ่งที่อาจรบกวนการพัก", template)
         self.assertIn("ยังไม่มีปัจจัยที่ต้องดูแลเป็นพิเศษ", template)
 
     def test_user_sleep_and_profile_copy_hides_model_implementation(self):
@@ -619,7 +646,10 @@ class UiComposerTests(unittest.TestCase):
         control_start = template.index("function renderUnifiedControl")
         control_end = template.index("/* ---- Red ambient", control_start)
         renderer = template[control_start:control_end]
-        partials = "\n".join((ui_composer.PARTIAL_DIR / filename).read_text(encoding="utf-8") for filename in ui_composer.PARTIALS.values())
+        partials = "\n".join(
+            (ui_composer.PARTIAL_DIR / filename).read_text(encoding="utf-8")
+            for filename in ui_composer.PARTIALS.values()
+        )
 
         self.assertIn("const adminView=currentPrincipal?.role==='admin';", renderer)
         self.assertIn("'กำลังเชื่อมต่อแอร์'", renderer)

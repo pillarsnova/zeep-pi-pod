@@ -13,9 +13,7 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from sleep_system_policy import (
-    RESTORE_ACTION_BANDS_VERSION,
     RESTORE_DRIVER_POLICY_VERSION,
-    RESTORE_RECOMMENDATION_VERSION,
     RESTORE_SUMMARY_VERSION,
     resolve_rest_target,
 )
@@ -27,12 +25,13 @@ from zeep_pod.sessions.restore_summary_baseline import (
     build_baseline_summary,
     build_trend_summary,
 )
-from zeep_pod.sessions.restore_summary_policy import (
-    ACTION_BANDS,
-    COMPONENT_COPY,
-    RECOMMENDATIONS,
-    STATUS_MEANINGS,
+from zeep_pod.sessions.restore_summary_copy import (
+    build_recommendation,
+    build_status,
+    claim_boundary,
+    session_scope,
 )
+from zeep_pod.sessions.restore_summary_policy import COMPONENT_COPY
 from zeep_pod.sessions.score_identity import assess_score_identity, mode_groups
 
 
@@ -107,61 +106,18 @@ def _source_target_key(
     return resolved.get("key") if resolved.get("available") else None
 
 
-def _status(
-    group: str,
-    score: float | None,
-    *,
-    safety_review: bool = False,
-) -> dict[str, Any]:
-    if safety_review:
-        return {
-            "key": "safety_review",
-            "label": "ควรให้ทีมตรวจสอบสภาพแวดล้อม",
-            "min_score": None,
-            "max_score": None,
-            "meaning": (
-                "พบค่าเกินกรอบความปลอดภัยระหว่าง Session คะแนนยังแสดงได้แต่ไม่ใช้แทนการตรวจสอบ"
-            ),
-            "version": RESTORE_ACTION_BANDS_VERSION,
-        }
-    if score is None or group == "unknown":
-        return {
-            "key": "unavailable",
-            "label": "กำลังเตรียมผลสรุป",
-            "min_score": None,
-            "max_score": None,
-            "meaning": (
-                "เลือกรูปแบบการพักเพื่อให้ ZEEP แสดงผลได้เหมาะสม"
-                if group == "unknown"
-                else "ZEEP กำลังรวบรวมข้อมูลสำหรับสรุปผลการพักครั้งนี้"
-            ),
-            "version": RESTORE_ACTION_BANDS_VERSION,
-        }
-    bands = ACTION_BANDS[group]
-    for index, (minimum, key, label) in enumerate(bands):
-        if score < minimum:
-            continue
-        maximum = 100 if index == 0 else bands[index - 1][0] - 1
-        return {
-            "key": key,
-            "label": label,
-            "min_score": minimum,
-            "max_score": maximum,
-            "meaning": STATUS_MEANINGS[key],
-            "version": RESTORE_ACTION_BANDS_VERSION,
-        }
-    raise AssertionError("action bands must include a zero floor")
-
-
 def _component_drivers(
     quality: Mapping[str, Any],
     group: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     points = quality.get("component_points") or {}
     maxima = quality.get("component_max_points") or {}
+    imputed = set((quality.get("imputed_component_points") or {}).keys())
     copy = COMPONENT_COPY.get(group, {})
     drivers = []
     for key, text in copy.items():
+        if key in imputed:
+            continue
         earned = _number(points.get(key))
         maximum = _number(maxima.get(key))
         if earned is None or maximum is None or maximum <= 0:
@@ -223,6 +179,10 @@ def _environment_drivers(
             "critical",
             "unavailable",
         }:
+            continue
+        if severity == "unavailable":
+            # Missing channels remain visible in Admin QA, but they are not a
+            # measured user outcome and cannot justify a specific adjustment.
             continue
         direction = (
             "attention"
@@ -358,45 +318,6 @@ def _subjective_outcome(
     }
 
 
-def _recommendation(
-    group: str,
-    score: float | None,
-    drivers: Mapping[str, Any],
-) -> dict[str, Any]:
-    attention = list(drivers.get("attention") or [])
-    selected = attention[0] if attention else None
-    if selected and selected.get("priority") == "safety_review":
-        message = str(
-            selected.get("action")
-            or "ตรวจเหตุการณ์ Safety และการตอบสนองของระบบก่อนใช้งานครั้งถัดไป"
-        )
-    elif score is None:
-        message = "บอกความรู้สึกหลังพักได้ตามจริง และลองใช้งานตามปกติอีกครั้ง"
-    elif selected and selected.get("category") == "environment":
-        message = str(
-            selected.get("action") or "ปรับปัจจัยแวดล้อมที่ระบบระบุ แล้วเปรียบเทียบ Session ถัดไป"
-        )
-    elif selected:
-        message = RECOMMENDATIONS.get(group, {}).get(
-            str(selected.get("key")),
-            "ทบทวนปัจจัยที่ได้คะแนนต่ำสุด แล้วเปรียบเทียบกับ Session ถัดไป",
-        )
-    elif group == "sleep":
-        message = "รักษารูปแบบที่ได้ผลและติดตามแนวโน้มจากหลายคืน"
-    elif group == "nap_recovery":
-        message = "รักษารูปแบบการพักที่ได้ผลและบันทึกความรู้สึกหลังพัก"
-    else:
-        message = "เลือกรูปแบบการพักเพื่อรับคำแนะนำที่เหมาะกับครั้งนี้"
-    return {
-        "primary": message,
-        "source_driver_key": selected.get("key") if selected else None,
-        "version": RESTORE_RECOMMENDATION_VERSION,
-        "one_action_only": True,
-        "automatic_actuation": False,
-        "medical_advice": False,
-    }
-
-
 def build_restore_summary(
     quality: Mapping[str, Any] | None,
     *,
@@ -418,44 +339,29 @@ def build_restore_summary(
     source_score, score_identity = _source_score(score_quality, group)
     score = _number(source_score["value"])
     source_target_key = _source_target_key(score_quality, group)
+    limited_evidence = bool(score_quality.get("limited_evidence_neutral_score"))
     driver_summary = _merge_drivers(
         score_quality,
         list(findings or []),
         group,
     )
-    is_sleep = group == "sleep"
-    is_recovery = group == "nap_recovery"
+    safety_review = bool(score_quality.get("safety_review_required")) or any(
+        driver.get("priority") == "safety_review"
+        for driver in driver_summary.get("attention", [])
+    )
     return {
         "version": RESTORE_SUMMARY_VERSION,
         "available": source_score["available"],
         "name": "ZEEP Restore Summary",
         "creates_independent_score": False,
         "source_score": source_score,
-        "status": _status(
+        "status": build_status(
             group,
             score,
-            safety_review=bool(score_quality.get("safety_review_required")),
+            safety_review=safety_review,
+            limited_evidence=limited_evidence,
         ),
-        "session_scope": {
-            "mode": group,
-            "label": (
-                "Overnight Recovery"
-                if is_sleep
-                else "Nap & Refresh"
-                if is_recovery
-                else "ผลการพักครั้งนี้"
-            ),
-            "question": (
-                "การนอนครั้งนี้สนับสนุนการฟื้นตัวได้ดีเพียงใด"
-                if is_sleep
-                else "ช่วงพักนี้ร่างกายสงบและพักได้ตามเป้าหมายเพียงใด"
-                if is_recovery
-                else "เลือกรูปแบบการพักเพื่อดูผลสรุปที่เหมาะสม"
-            ),
-            "whole_day_readiness": False,
-            "clinical_readiness": False,
-            "updates_during_day": False,
-        },
+        "session_scope": session_scope(group),
         "drivers": driver_summary,
         "personal_baseline": build_baseline_summary(
             personal_context if score_identity["valid"] else None,
@@ -470,16 +376,13 @@ def build_restore_summary(
             source_formula_version=source_score.get("formula_version"),
             source_target_key=source_target_key,
         ),
-        "recommendation": _recommendation(group, score, driver_summary),
+        "recommendation": build_recommendation(
+            group,
+            score,
+            driver_summary,
+            limited_evidence=limited_evidence,
+        ),
         "confidence": _confidence(score_quality),
         "subjective_outcome": _subjective_outcome(subjective_outcome),
-        "claim_boundary": {
-            "wellness_estimate": True,
-            "medical_diagnosis": False,
-            "whole_day_readiness": False,
-            "training_load_included": False,
-            "daytime_activity_included": False,
-            "freshness_not_inferred_from_sensor": True,
-            "environment_association_is_not_causation": True,
-        },
+        "claim_boundary": claim_boundary(),
     }

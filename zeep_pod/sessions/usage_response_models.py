@@ -281,6 +281,7 @@ class PublicQuality(ContractModel):
         ge=0,
         le=1,
     )
+    limited_evidence_neutral_score: bool | None = None
     score_basis: str | None = None
     formula_version: str | None = None
     version: str | None = None

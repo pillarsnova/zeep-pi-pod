@@ -234,6 +234,12 @@ def build_ingest_payload(
     interval = sample_interval_seconds(record.get("sample_interval_s"))
     sent_interval = max(1, int(round(interval)))
     segments, hypnogram = build_stage_runs(report_samples, interval)
+    if not segments and quality.get("available") is not True:
+        # Do not publish an empty, too-short record. A completed Session above
+        # its Mode minimum can still publish a bounded low-confidence score
+        # without Stage segments; an observed short Session may also publish
+        # its real segments even though it correctly has no Wellness score.
+        return None
     body: dict[str, Any] = {
         "userPublicId": public_id,
         "deviceId": device_id,

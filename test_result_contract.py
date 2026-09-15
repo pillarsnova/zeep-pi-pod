@@ -105,7 +105,6 @@ class SessionResultContractTests(unittest.TestCase):
                     "review_required": True,
                     "score_releasable": True,
                     "timing_review_threshold_seconds": 7200,
-                    "legacy_hard_max_seconds": 7200,
                 },
             },
         }

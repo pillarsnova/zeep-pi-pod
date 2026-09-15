@@ -32,7 +32,6 @@ from sleep_signal_features import (
 )
 from sleep_stage_annotations import apply_annotations, load_annotations
 from sleep_system_policy import (
-    NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS,
     SLEEP_EVIDENCE_VERSION,
     SLEEP_G2_ONTOLOGY_VERSION,
     ZEEP_SLEEP_BASELINE_VERSION,
@@ -110,9 +109,7 @@ def _stage_cadence(values: list[Dict[str, Any]], fallback: float) -> float:
         if value.get("sample_interval_s") is not None
     ]
     for value in values:
-        start_value = value.get("attribution_start") or value.get(
-            "window_start"
-        )
+        start_value = value.get("attribution_start") or value.get("window_start")
         end_value = value.get("attribution_end") or value.get("window_end")
         if not start_value or not end_value:
             continue
@@ -176,26 +173,26 @@ def _annotated_stage_events(
         owned_seconds = (
             owned_interval[1] - owned_interval[0]
             if owned_interval is not None
-            else _positive_seconds(
-                value.get("sample_interval_s"), fallback_interval_s
-            )
+            else _positive_seconds(value.get("sample_interval_s"), fallback_interval_s)
         )
         # A durable five-state event owns occupied time in the current
         # continuity contract. Legacy provisional/exclusion flags remain in
         # ``value`` for audit, but cannot reopen a scoring gap during rescore.
-        sequence.append({
-            "state": stage,
-            "timestamp": row["timestamp"],
-            # Stage analysis runs on the 30-second decision clock while the
-            # report rows normally run on the 10-second Sensor clock.  Keep
-            # each event's owned duration explicit so arousal/cycle scoring
-            # cannot silently shrink every State by threefold.
-            "sample_interval_s": owned_seconds,
-            "metrics": value.get("metrics") or {},
-            "score_eligible": True,
-            "provisional": False,
-            "held_previous_state": bool(value.get("held_previous_state")),
-        })
+        sequence.append(
+            {
+                "state": stage,
+                "timestamp": row["timestamp"],
+                # Stage analysis runs on the 30-second decision clock while the
+                # report rows normally run on the 10-second Sensor clock.  Keep
+                # each event's owned duration explicit so arousal/cycle scoring
+                # cannot silently shrink every State by threefold.
+                "sample_interval_s": owned_seconds,
+                "metrics": value.get("metrics") or {},
+                "score_eligible": True,
+                "provisional": False,
+                "held_previous_state": bool(value.get("held_previous_state")),
+            }
+        )
         estimator_version = value.get("estimator_version") or estimator_version
         if value.get("estimator_version"):
             version = str(value["estimator_version"])
@@ -238,9 +235,7 @@ def _projected_night_summary(
         stage = sample.get("sleep")
         if stage not in STAGES:
             continue
-        row_seconds = _positive_seconds(
-            sample.get("sample_interval_s"), interval_s
-        )
+        row_seconds = _positive_seconds(sample.get("sample_interval_s"), interval_s)
         if stage in SLEEP_STAGES:
             if first_sleep_at is None:
                 first_sleep_at = datetime.fromtimestamp(
@@ -260,7 +255,8 @@ def _projected_night_summary(
     return {
         "sleep_onset_proxy_s": (
             round(max(0.0, (first_sleep_at - start).total_seconds()), 1)
-            if first_sleep_at else None
+            if first_sleep_at
+            else None
         ),
         "awakenings": awakenings,
         "waso_proxy_s": round(waso_s, 1),
@@ -269,12 +265,10 @@ def _projected_night_summary(
             round(total_sleep / total_scored, 3) if total_scored else None
         ),
         "deep_ratio": (
-            round(score_counts["n3"] / total_sleep, 3)
-            if total_sleep else None
+            round(score_counts["n3"] / total_sleep, 3) if total_sleep else None
         ),
         "rem_ratio": (
-            round(score_counts["rem"] / total_sleep, 3)
-            if total_sleep else None
+            round(score_counts["rem"] / total_sleep, 3) if total_sleep else None
         ),
     }
 
@@ -286,12 +280,12 @@ def _rebuild(
     requested_target_minutes: int | None = None,
     *,
     report_only: bool = False,
-    allow_reviewed_protocol_withhold: bool = False,
 ) -> Dict[str, Any]:
     session_id = session["session_id"]
     final_row = connection.execute(
         "SELECT id,value FROM events WHERE session_id=? AND type='final_summary' "
-        "ORDER BY timestamp DESC,id DESC LIMIT 1", (session_id,),
+        "ORDER BY timestamp DESC,id DESC LIMIT 1",
+        (session_id,),
     ).fetchone()
     if final_row is None:
         raise ValueError(f"completed Session has no final_summary: {session_id}")
@@ -300,8 +294,7 @@ def _rebuild(
     previous_final_summary_sha256 = _canonical_sha256(previous_final_summary)
     start = _timestamp(session["start_time"])
     sensor_sample_seconds = _positive_seconds(
-        old_final.get("sensor_sample_interval_s")
-        or old_final.get("sample_interval_s"),
+        old_final.get("sensor_sample_interval_s") or old_final.get("sample_interval_s"),
         LEGACY_SAMPLE_SECONDS,
     )
     session_fields = set(session.keys())
@@ -339,7 +332,8 @@ def _rebuild(
     duration_s = max(0.0, float(session["duration"] or 0.0))
     stage_rows = connection.execute(
         "SELECT timestamp,value FROM events WHERE session_id=? AND type='sleep_stage' "
-        "ORDER BY timestamp,id", (session_id,),
+        "ORDER BY timestamp,id",
+        (session_id,),
     ).fetchall()
     stage_values = [_json(row["value"]) for row in stage_rows]
     status_rows = connection.execute(
@@ -353,7 +347,8 @@ def _rebuild(
     )
     annotation_rows = connection.execute(
         "SELECT value FROM events WHERE session_id=? AND type='sleep_stage_annotation' "
-        "ORDER BY timestamp,id", (session_id,),
+        "ORDER BY timestamp,id",
+        (session_id,),
     ).fetchall()
     annotations = load_annotations(annotation_rows)
     timeline = connection.execute(
@@ -361,8 +356,8 @@ def _rebuild(
         "WHERE session_id=? ORDER BY timestamp,id",
         (session_id,),
     ).fetchall()
-    raw_samples, raw_bed_status_counts, canonical_bed_status_counts = (
-        _sensor_samples(timeline)
+    raw_samples, raw_bed_status_counts, canonical_bed_status_counts = _sensor_samples(
+        timeline
     )
     if timeline:
         sensor_sample_seconds = timeline_sample_interval(
@@ -405,14 +400,11 @@ def _rebuild(
         respiration_rate_range=RR_SANITY_RANGE_PER_MIN,
     )
     if not projection["grid_summary"]["classification_complete"]:
-        raise RuntimeError(
-            f"rescore continuity invariant failed: {session_id}"
-        )
+        raise RuntimeError(f"rescore continuity invariant failed: {session_id}")
     samples = projection["report_samples"]
     stage_sample_seconds = projection["report_interval_s"]
     counts = {
-        stage: projection["sleep_state_counts"].get(stage, 0.0)
-        for stage in STAGES
+        stage: projection["sleep_state_counts"].get(stage, 0.0) for stage in STAGES
     }
     score_counts = {
         stage: projection["sleep_score_state_counts"].get(stage, 0.0)
@@ -420,15 +412,15 @@ def _rebuild(
     }
     total_scored = sum(score_counts.values())
     night = dict(old_final.get("night_summary") or {})
-    night.update(_projected_night_summary(
-        samples,
-        start=start,
-        interval_s=stage_sample_seconds,
-        score_counts=score_counts,
-    ))
-    previous_quality = (old_final.get("night_summary") or {}).get(
-        "sleep_quality"
+    night.update(
+        _projected_night_summary(
+            samples,
+            start=start,
+            interval_s=stage_sample_seconds,
+            score_counts=score_counts,
+        )
     )
+    previous_quality = (old_final.get("night_summary") or {}).get("sleep_quality")
     if report_only:
         if not isinstance(previous_quality, dict):
             raise ValueError(
@@ -450,29 +442,17 @@ def _rebuild(
             target_duration_s=target_seconds,
             score_state_counts=score_counts,
         )
-        timing = (
-            (quality.get("rest_mode") or {}).get("protocol_status") or {}
-        )
-        if (
-            quality.get("quality_type") == "rest_goal"
-            and timing.get("review_required")
-            and not timing.get("score_releasable")
-            and duration_s <= NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS
-            and not allow_reviewed_protocol_withhold
-        ):
-            raise HistoricalModeReviewRequired(
-                "recovery_timing_review",
-                str(
-                    timing.get("reason")
-                    or "Recovery Session ต้องตรวจ Mode/เป้าหมาย"
-                ),
-            )
     night["sleep_quality"] = quality
     night["wellness_score"] = quality.get("score")
     report = build_session_report(
-        duration_s, samples, night, counts, quality,
+        duration_s,
+        samples,
+        night,
+        counts,
+        quality,
         rest_mode=mode,
-        sample_interval_s=stage_sample_seconds, estimator_version=estimator_version,
+        sample_interval_s=stage_sample_seconds,
+        estimator_version=estimator_version,
         completed=True,
         timeline_schema_version=int(old_final.get("timeline_schema_version") or 3),
         target_duration_s=target_seconds,
@@ -513,9 +493,12 @@ def _rebuild(
         new_report_hash = _canonical_sha256(report)
         old_final["session_report"] = report
         old_final["session_report_refreshed_at_utc"] = now
-        if _canonical_sha256(
-            (old_final.get("night_summary") or {}).get("sleep_quality")
-        ) != quality_hash:
+        if (
+            _canonical_sha256(
+                (old_final.get("night_summary") or {}).get("sleep_quality")
+            )
+            != quality_hash
+        ):
             raise RuntimeError("report-only changed persisted sleep_quality")
         audit = {
             "version": report.get("version"),
@@ -554,29 +537,31 @@ def _rebuild(
             "sleep_stage_annotations_used": len(annotations),
             "annotated_rounds": annotated_rounds,
         }
-    old_final.update({
-        "sleep_state_counts": counts,
-        "sleep_score_state_counts": score_counts,
-        "sleep_estimator": estimator_version,
-        "sleep_estimator_versions": estimator_versions,
-        "sleep_provenance_complete": bool(stage_rows) and sum(
-            estimator_versions.values()) == len(stage_rows),
-        "sleep_evidence_version": SLEEP_EVIDENCE_VERSION,
-        "sleep_baseline_version": ZEEP_SLEEP_BASELINE_VERSION,
-        "sleep_transition_policy": ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
-        "sleep_g2_ontology": SLEEP_G2_ONTOLOGY_VERSION,
-        "rest_mode": mode,
-        "target_duration_s": target.get("seconds"),
-        "sample_interval_s": stage_sample_seconds,
-        "sensor_sample_interval_s": sensor_sample_seconds,
-        "sample_cadence_summary": projection["cadence_summary"],
-        "report_sample_grid": projection["grid_summary"],
-        "bed_status_counts": canonical_bed_status_counts,
-        "terminal_occupancy_timeline": terminal_occupancy,
-        "night_summary": night,
-        "session_report": report,
-        "quality_rescored_at_utc": now,
-    })
+    old_final.update(
+        {
+            "sleep_state_counts": counts,
+            "sleep_score_state_counts": score_counts,
+            "sleep_estimator": estimator_version,
+            "sleep_estimator_versions": estimator_versions,
+            "sleep_provenance_complete": bool(stage_rows)
+            and sum(estimator_versions.values()) == len(stage_rows),
+            "sleep_evidence_version": SLEEP_EVIDENCE_VERSION,
+            "sleep_baseline_version": ZEEP_SLEEP_BASELINE_VERSION,
+            "sleep_transition_policy": ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
+            "sleep_g2_ontology": SLEEP_G2_ONTOLOGY_VERSION,
+            "rest_mode": mode,
+            "target_duration_s": target.get("seconds"),
+            "sample_interval_s": stage_sample_seconds,
+            "sensor_sample_interval_s": sensor_sample_seconds,
+            "sample_cadence_summary": projection["cadence_summary"],
+            "report_sample_grid": projection["grid_summary"],
+            "bed_status_counts": canonical_bed_status_counts,
+            "terminal_occupancy_timeline": terminal_occupancy,
+            "night_summary": night,
+            "session_report": report,
+            "quality_rescored_at_utc": now,
+        }
+    )
     # One development-only Session previously carried a manually entered
     # seven-hour duration. Reports now use Sensor evidence exclusively.
     old_final.pop("user_report", None)
@@ -632,7 +617,6 @@ def rescore(
     apply: bool,
     requested_target_minutes: int | None = None,
     report_only: bool = False,
-    allow_reviewed_protocol_withhold: bool = False,
     since_utc: str | None = None,
 ) -> Dict[str, Any]:
     if report_only and not session_ids:
@@ -642,9 +626,7 @@ def rescore(
     if report_only and (
         requested_mode is not None or requested_target_minutes is not None
     ):
-        raise ValueError(
-            "--report-only preserves Mode/target; do not pass overrides"
-        )
+        raise ValueError("--report-only preserves Mode/target; do not pass overrides")
     connection = sqlite3.connect(data_dir / "sessions.db", timeout=30)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA busy_timeout=30000")
@@ -658,7 +640,8 @@ def rescore(
             placeholders = ",".join("?" for _ in session_ids)
             sessions = connection.execute(
                 f"SELECT * FROM sessions WHERE end_time IS NOT NULL AND session_id IN ({placeholders}) "
-                "ORDER BY start_time", session_ids,
+                "ORDER BY start_time",
+                session_ids,
             ).fetchall()
         elif since_utc:
             cutoff = _timestamp(since_utc).isoformat()
@@ -685,35 +668,62 @@ def rescore(
                     requested_mode,
                     requested_target_minutes,
                     report_only=report_only,
-                    allow_reviewed_protocol_withhold=(
-                        allow_reviewed_protocol_withhold
-                    ),
                 )
             except HistoricalModeReviewRequired as exc:
-                results.append({
-                    "session_id": session["session_id"],
-                    "status": "skipped_review_required",
-                    "reason_code": exc.code,
-                    "reason": str(exc),
-                    "persisted_record_unchanged": True,
-                })
+                results.append(
+                    {
+                        "session_id": session["session_id"],
+                        "status": "skipped_review_required",
+                        "reason_code": exc.code,
+                        "reason": str(exc),
+                        "persisted_record_unchanged": True,
+                    }
+                )
                 continue
-            results.append({key: rebuilt[key] for key in (
-                "session_id", "status", "old_score", "new_score", "score_title",
-                "estimated_sleep_s", "actual_scored_s", "rest_mode", "rounds", "counts",
-                "quality", "report", "sleep_stage_annotations_used", "annotated_rounds")})
+            results.append(
+                {
+                    key: rebuilt[key]
+                    for key in (
+                        "session_id",
+                        "status",
+                        "old_score",
+                        "new_score",
+                        "score_title",
+                        "estimated_sleep_s",
+                        "actual_scored_s",
+                        "rest_mode",
+                        "rounds",
+                        "counts",
+                        "quality",
+                        "report",
+                        "sleep_stage_annotations_used",
+                        "annotated_rounds",
+                    )
+                }
+            )
             if not apply:
                 continue
             connection.execute(
                 "UPDATE events SET value=? WHERE id=?",
-                (json.dumps(rebuilt["final_summary"], ensure_ascii=False, separators=(",", ":")),
-                 rebuilt["final_event_id"]),
+                (
+                    json.dumps(
+                        rebuilt["final_summary"],
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ),
+                    rebuilt["final_event_id"],
+                ),
             )
             connection.execute(
                 "INSERT INTO events(session_id,timestamp,type,value) VALUES (?,?,?,?)",
-                (rebuilt["session_id"], rebuilt["audit_timestamp"],
-                 rebuilt["audit_event_type"],
-                 json.dumps(rebuilt["audit"], ensure_ascii=False, separators=(",", ":"))),
+                (
+                    rebuilt["session_id"],
+                    rebuilt["audit_timestamp"],
+                    rebuilt["audit_event_type"],
+                    json.dumps(
+                        rebuilt["audit"], ensure_ascii=False, separators=(",", ":")
+                    ),
+                ),
             )
         if apply:
             connection.commit()
@@ -740,7 +750,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
     parser.add_argument("--session-id", action="append", dest="session_ids")
-    parser.add_argument("--all", action="store_true", help="Rescore every completed Session")
+    parser.add_argument(
+        "--all", action="store_true", help="Rescore every completed Session"
+    )
     parser.add_argument(
         "--since",
         dest="since_utc",
@@ -749,9 +761,19 @@ def main() -> None:
             "timestamp (for example 2026-09-01T00:00:00+07:00)"
         ),
     )
-    parser.add_argument("--rest-mode", choices=(
-        "auto", "sleep", "nap_recovery", "short_nap", "cycle_nap",
-        "shift_rest", "jet_lag", "overnight"))
+    parser.add_argument(
+        "--rest-mode",
+        choices=(
+            "auto",
+            "sleep",
+            "nap_recovery",
+            "short_nap",
+            "cycle_nap",
+            "shift_rest",
+            "jet_lag",
+            "overnight",
+        ),
+    )
     parser.add_argument("--target-minutes", type=int, choices=(30, 90))
     parser.add_argument(
         "--report-only",
@@ -768,7 +790,8 @@ def main() -> None:
     if args.since_utc and not args.all:
         parser.error("--since requires --all")
     result = rescore(
-        args.data_dir, None if args.all else args.session_ids,
+        args.data_dir,
+        None if args.all else args.session_ids,
         requested_mode=args.rest_mode,
         requested_target_minutes=args.target_minutes,
         apply=args.apply,

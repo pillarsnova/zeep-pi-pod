@@ -32,6 +32,8 @@ from sleep_system_policy import (
     PERSONAL_BEHAVIOUR_BASELINE_VERSION,
     PRE_CONTINUITY_SESSION_REPORT_VERSION,
     PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
+    PRE_MINIMUM_ONLY_SESSION_REPORT_VERSION,
+    PRE_MINIMUM_ONLY_SLEEP_QUALITY_VERSION,
     PRE_NAP_TIMING_SESSION_REPORT_VERSION,
     PRE_NAP_TIMING_SLEEP_QUALITY_VERSION,
     PRE_RESPIRATORY_SESSION_REPORT_VERSION,
@@ -523,6 +525,8 @@ class BaselineStore:
         # target-specific Personal Baseline until a reviewed workflow exists.
         if protocol_status.get("review_required") is True:
             return None
+        if (quality.get("score_confidence") or {}).get("level") == "low":
+            return None
         explicit_mode = final_summary.get("rest_mode")
         report_mode = report.get("rest_mode")
         session_mode_present = session_mode is not None and bool(
@@ -567,6 +571,10 @@ class BaselineStore:
             report.get("version") == PRE_NAP_TIMING_SESSION_REPORT_VERSION
             and quality.get("version") == PRE_NAP_TIMING_SLEEP_QUALITY_VERSION
         )
+        compatible_pre_minimum_only_versions = (
+            report.get("version") == PRE_MINIMUM_ONLY_SESSION_REPORT_VERSION
+            and quality.get("version") == PRE_MINIMUM_ONLY_SLEEP_QUALITY_VERSION
+        )
         compatible_current_quality_versions = (
             report.get("version") == PRE_RESPIRATORY_SESSION_REPORT_VERSION
             and quality.get("version") == SLEEP_QUALITY_VERSION
@@ -591,6 +599,7 @@ class BaselineStore:
             and quality.get("available") is True
             and (
                 current_versions
+                or compatible_pre_minimum_only_versions
                 or compatible_pre_nap_timing_versions
                 or compatible_current_quality_versions
                 or compatible_previous_versions

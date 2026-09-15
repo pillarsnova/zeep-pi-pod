@@ -53,14 +53,18 @@ class SessionAvailabilityTests(unittest.TestCase):
                 },
             }
 
-        same_target = history_summary([
-            nap("nap-a", 1_800, 80),
-            nap("nap-b", 1_800, 90),
-        ])
-        mixed_targets = history_summary([
-            nap("nap-a", 1_800, 80),
-            nap("nap-c", 5_400, 70),
-        ])
+        same_target = history_summary(
+            [
+                nap("nap-a", 1_800, 80),
+                nap("nap-b", 1_800, 90),
+            ]
+        )
+        mixed_targets = history_summary(
+            [
+                nap("nap-a", 1_800, 80),
+                nap("nap-c", 5_400, 70),
+            ]
+        )
 
         self.assertEqual(same_target["average_recovery_score"], 85.0)
         self.assertIsNone(mixed_targets["average_recovery_score"])
@@ -173,6 +177,15 @@ class SessionAvailabilityTests(unittest.TestCase):
         )
         self.assertEqual(completed[0]["sample_count"], 0)
         self.assertEqual(completed[1]["sample_count"], 1)
+
+        visible = service.account_history(
+            account,
+            {"email": account},
+        )
+        self.assertEqual(
+            [item["session_id"] for item in visible["sessions"]],
+            ["current-empty", "current-data"],
+        )
 
     def test_account_history_includes_legacy_keys_but_publishes_canonical_key(
         self,
@@ -362,9 +375,7 @@ class SessionAvailabilityTests(unittest.TestCase):
                 "lifetime_sessions": 1,
                 "sessions_without_data": 1,
                 "current_sessions_without_data": 1,
-                "last_available_usage_session_utc": (
-                    "2026-09-03T00:00:00+00:00"
-                ),
+                "last_available_usage_session_utc": ("2026-09-03T00:00:00+00:00"),
             }
         }
 
@@ -510,9 +521,7 @@ class SessionAvailabilityTests(unittest.TestCase):
             ),
         ):
             final_summary = {
-                "rest_mode": (
-                    "sleep" if quality_type == "sleep" else "nap_recovery"
-                ),
+                "rest_mode": ("sleep" if quality_type == "sleep" else "nap_recovery"),
                 "night_summary": {
                     "sleep_quality": {
                         "available": True,
@@ -765,21 +774,21 @@ class SessionAvailabilityTests(unittest.TestCase):
         )
         connection = sqlite3.connect(self.data_dir / "sessions.db")
         connection.execute(
-            "UPDATE sessions SET rest_mode=?,target_duration_s=? "
-            "WHERE session_id=?",
+            "UPDATE sessions SET rest_mode=?,target_duration_s=? WHERE session_id=?",
             ("nap_recovery", 5400, "corrected-session"),
         )
         connection.execute(
-            "INSERT INTO events(session_id,timestamp,type,value) "
-            "VALUES (?,?,?,?)",
+            "INSERT INTO events(session_id,timestamp,type,value) VALUES (?,?,?,?)",
             (
                 "corrected-session",
                 "2026-09-05T05:30:00+00:00",
                 "final_summary",
-                json.dumps({
-                    "rest_mode": "sleep",
-                    "target_duration_s": 1800,
-                }),
+                json.dumps(
+                    {
+                        "rest_mode": "sleep",
+                        "target_duration_s": 1800,
+                    }
+                ),
             ),
         )
         connection.commit()

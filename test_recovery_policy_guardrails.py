@@ -30,9 +30,9 @@ from zeep_pod.sessions.history_quality import released_historical_quality
 class RecoveryPolicyUnitTests(unittest.TestCase):
     def test_two_mode_docs_match_recovery_v3_contract(self):
         root = Path(__file__).resolve().parent
-        evidence = (root / "research/evidence-library/TWO_MODE_SCORE_EVIDENCE.md").read_text(
-            encoding="utf-8"
-        )
+        evidence = (
+            root / "research/evidence-library/TWO_MODE_SCORE_EVIDENCE.md"
+        ).read_text(encoding="utf-8")
         protocol = (root / "docs/zeep-pilot-two-mode-protocol.md").read_text(
             encoding="utf-8"
         )
@@ -42,7 +42,7 @@ class RecoveryPolicyUnitTests(unittest.TestCase):
             self.assertIn("การตอบสนอง HR/RR 35", document)
             self.assertIn("ความต่อเนื่อง", document)
             self.assertIn("30", document)
-            self.assertIn("สิ่งแวดล้อม", document)
+            self.assertIn("สภาพแวดล้อม", document)
             self.assertIn("10", document)
             self.assertIn("Coverage", document)
 
@@ -79,18 +79,19 @@ class RecoveryPolicyUnitTests(unittest.TestCase):
             {},
             {"wake": 360},
             rest_mode="unknown_legacy",
-            sensor_samples=[{
-                "hr": 65.0,
-                "rr": 14.0,
-                "bed": "On bed",
-            }] * 360,
+            sensor_samples=[
+                {
+                    "hr": 65.0,
+                    "rr": 14.0,
+                    "bed": "On bed",
+                }
+            ]
+            * 360,
         )
 
         self.assertFalse(quality["available"])
         self.assertIsNone(quality["rest_mode"]["group"])
-        self.assertEqual(
-            quality["validation_status"], "legacy_mode_unresolved"
-        )
+        self.assertEqual(quality["validation_status"], "legacy_mode_unresolved")
 
     def test_untouched_previous_overnight_score_remains_visible(self):
         quality = {
@@ -121,9 +122,7 @@ class RecoveryPolicyUnitTests(unittest.TestCase):
             "score": 74,
             "quality_type": "rest_goal",
             "score_title": "Recovery Score",
-            "formula_version": (
-                "zeep-recovery-score-v2.1-complete-rest-25-35-30-10"
-            ),
+            "formula_version": ("zeep-recovery-score-v2.1-complete-rest-25-35-30-10"),
             "version": PRE_WELLNESS_BALANCE_SLEEP_QUALITY_VERSION,
             "rest_mode": {"group": "nap_recovery"},
         }
@@ -141,9 +140,7 @@ class RecoveryPolicyUnitTests(unittest.TestCase):
 
         self.assertTrue(released["available"])
         self.assertEqual(released["score"], 74)
-        self.assertTrue(
-            released["compatible_pre_wellness_balance_result"]
-        )
+        self.assertTrue(released["compatible_pre_wellness_balance_result"])
 
     def test_unresolved_auto_history_is_not_labelled_recovery(self):
         quality = {
@@ -168,12 +165,15 @@ class RecoveryPolicyUnitTests(unittest.TestCase):
         self.assertNotEqual(released["score_title"], "Recovery Score")
 
     def test_recovery_v3_weights_total_one_hundred_without_coverage(self):
-        self.assertEqual(RECOVERY_SCORE_COMPONENT_MAX_POINTS, {
-            "goal_duration": 25.0,
-            "physiological_response": 35.0,
-            "rest_continuity": 30.0,
-            "environment_support": 10.0,
-        })
+        self.assertEqual(
+            RECOVERY_SCORE_COMPONENT_MAX_POINTS,
+            {
+                "goal_duration": 25.0,
+                "physiological_response": 35.0,
+                "rest_continuity": 30.0,
+                "environment_support": 10.0,
+            },
+        )
         self.assertEqual(sum(RECOVERY_SCORE_COMPONENT_MAX_POINTS.values()), 100)
         self.assertNotIn("data_coverage", RECOVERY_SCORE_COMPONENT_MAX_POINTS)
 
@@ -188,11 +188,20 @@ class RecoveryPolicyUnitTests(unittest.TestCase):
         self.assertTrue(summary["transient_critical_observed"])
 
     def test_missing_optional_sound_reduces_coverage_not_environment_result(self):
-        samples = [{
-            "bed": "On bed", "hr": 62.0, "rr": 14.0,
-            "temp": 24.0, "hum": 50.0, "co2": 750.0,
-            "lux": 1.0, "pm2_5": 8.0, "voc": 100.0,
-        } for _ in range(240)]
+        samples = [
+            {
+                "bed": "On bed",
+                "hr": 62.0,
+                "rr": 14.0,
+                "temp": 24.0,
+                "hum": 50.0,
+                "co2": 750.0,
+                "lux": 1.0,
+                "pm2_5": 8.0,
+                "voc": 100.0,
+            }
+            for _ in range(240)
+        ]
         quality = build_sleep_quality(
             20 * 60,
             {},
@@ -346,17 +355,18 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
         for index in range(stage_count):
             timestamp = start + timedelta(seconds=(index + 1) * 30)
             connection.execute(
-                "INSERT INTO events(session_id,timestamp,type,value) "
-                "VALUES (?,?,?,?)",
+                "INSERT INTO events(session_id,timestamp,type,value) VALUES (?,?,?,?)",
                 (
                     "nap-1",
                     min(timestamp, end).isoformat(),
                     "sleep_stage",
-                    json.dumps({
-                        "state": "wake",
-                        "sample_interval_s": 30,
-                        "metrics": {},
-                    }),
+                    json.dumps(
+                        {
+                            "state": "wake",
+                            "sample_interval_s": 30,
+                            "metrics": {},
+                        }
+                    ),
                 ),
             )
         timeline_count = max(6, int(duration_s // 5))
@@ -364,8 +374,7 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
             timestamp = start + timedelta(seconds=(index + 1) * 5)
             sound = 80.0 if sound_spike and index < 6 else 38.0
             connection.execute(
-                "INSERT INTO timeline VALUES "
-                "(NULL,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO timeline VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     "nap-1",
                     min(timestamp, end).isoformat(),
@@ -391,7 +400,7 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
         connection.close()
         return quality, before_stage_count, before_timeline_count
 
-    def test_missing_legacy_target_is_withheld_for_admin_review(self):
+    def test_missing_legacy_target_scores_and_keeps_admin_review_flag(self):
         with tempfile.TemporaryDirectory() as temporary:
             data_dir = Path(temporary)
             original, _, _ = self._database(data_dir, duration_s=60 * 60)
@@ -404,17 +413,22 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
             )
 
             item = result["sessions"][0]
-            self.assertEqual(item["status"], "skipped_review_required")
-            self.assertEqual(item["reason_code"], "recovery_timing_review")
-            self.assertTrue(item["persisted_record_unchanged"])
-            connection = sqlite3.connect(data_dir / "sessions.db")
-            final = json.loads(connection.execute(
-                "SELECT value FROM events WHERE type='final_summary'"
-            ).fetchone()[0])
-            connection.close()
-            self.assertEqual(
-                final["night_summary"]["sleep_quality"], original
+            self.assertEqual(item["status"], "rescored")
+            self.assertIsInstance(item["new_score"], int)
+            self.assertTrue(item["quality"]["review_required"])
+            self.assertTrue(item["quality"]["score_releasable"])
+            self.assertTrue(
+                item["quality"]["release_requirements"]["missing_target_uses_neutral"]
             )
+            connection = sqlite3.connect(data_dir / "sessions.db")
+            final = json.loads(
+                connection.execute(
+                    "SELECT value FROM events WHERE type='final_summary'"
+                ).fetchone()[0]
+            )
+            connection.close()
+            self.assertNotEqual(final["night_summary"]["sleep_quality"], original)
+            self.assertIsInstance(final["night_summary"]["sleep_quality"]["score"], int)
 
     def test_reviewed_target_rebuilds_legacy_session_without_stored_target(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -427,7 +441,6 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
                 requested_mode="nap_recovery",
                 requested_target_minutes=30,
                 apply=False,
-                allow_reviewed_protocol_withhold=True,
             )
 
             item = result["sessions"][0]
@@ -478,9 +491,11 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
                 30 * 60,
             )
             connection = sqlite3.connect(data_dir / "sessions.db")
-            persisted = json.loads(connection.execute(
-                "SELECT value FROM events WHERE type='final_summary'"
-            ).fetchone()[0])
+            persisted = json.loads(
+                connection.execute(
+                    "SELECT value FROM events WHERE type='final_summary'"
+                ).fetchone()[0]
+            )
             connection.close()
             self.assertEqual(persisted["rest_mode"], "nap_recovery")
             self.assertEqual(persisted["target_duration_s"], 30 * 60)
@@ -573,8 +588,7 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
                 "AND type='final_summary'"
             ).fetchone()[0]
             audit_count = connection.execute(
-                "SELECT COUNT(*) FROM events "
-                "WHERE type='session_report_rescored'"
+                "SELECT COUNT(*) FROM events WHERE type='session_report_rescored'"
             ).fetchone()[0]
             connection.close()
             self.assertEqual(after_final, first_final)
@@ -621,18 +635,16 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
             self.assertIsInstance(item["new_score"], int)
             self.assertTrue(item["quality"]["score_releasable"])
             self.assertTrue(
-                item["quality"]["rest_mode"]["protocol_status"][
-                    "review_required"
-                ]
+                item["quality"]["rest_mode"]["protocol_status"]["review_required"]
             )
             connection = sqlite3.connect(data_dir / "sessions.db")
-            final = json.loads(connection.execute(
-                "SELECT value FROM events WHERE type='final_summary'"
-            ).fetchone()[0])
-            connection.close()
-            self.assertNotEqual(
-                final["night_summary"]["sleep_quality"], original
+            final = json.loads(
+                connection.execute(
+                    "SELECT value FROM events WHERE type='final_summary'"
+                ).fetchone()[0]
             )
+            connection.close()
+            self.assertNotEqual(final["night_summary"]["sleep_quality"], original)
 
     def test_reviewed_promotion_persists_available_out_of_protocol_result(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -648,7 +660,6 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
                 ["nap-1"],
                 requested_mode="nap_recovery",
                 apply=True,
-                allow_reviewed_protocol_withhold=True,
             )
 
             item = result["sessions"][0]
@@ -665,21 +676,20 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
                 ]["holds"]
             )
             connection = sqlite3.connect(data_dir / "sessions.db")
-            final = json.loads(connection.execute(
-                "SELECT value FROM events WHERE type='final_summary'"
-            ).fetchone()[0])
+            final = json.loads(
+                connection.execute(
+                    "SELECT value FROM events WHERE type='final_summary'"
+                ).fetchone()[0]
+            )
             audit_count = connection.execute(
-                "SELECT COUNT(*) FROM events "
-                "WHERE type='session_report_rescored'"
+                "SELECT COUNT(*) FROM events WHERE type='session_report_rescored'"
             ).fetchone()[0]
             connection.close()
             self.assertNotEqual(
                 final["night_summary"]["sleep_quality"],
                 original,
             )
-            self.assertIsInstance(
-                final["night_summary"]["sleep_quality"]["score"], int
-            )
+            self.assertIsInstance(final["night_summary"]["sleep_quality"]["score"], int)
             self.assertEqual(audit_count, 1)
 
     def test_full_rescore_audit_keeps_complete_previous_summary(self):
@@ -691,9 +701,11 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
                 target_duration_s=30 * 60,
             )
             connection = sqlite3.connect(data_dir / "sessions.db")
-            previous = json.loads(connection.execute(
-                "SELECT value FROM events WHERE type='final_summary'"
-            ).fetchone()[0])
+            previous = json.loads(
+                connection.execute(
+                    "SELECT value FROM events WHERE type='final_summary'"
+                ).fetchone()[0]
+            )
             connection.close()
 
             rescore(
@@ -704,13 +716,16 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
             )
 
             connection = sqlite3.connect(data_dir / "sessions.db")
-            audit = json.loads(connection.execute(
-                "SELECT value FROM events "
-                "WHERE type='session_report_rescored'"
-            ).fetchone()[0])
-            current = json.loads(connection.execute(
-                "SELECT value FROM events WHERE type='final_summary'"
-            ).fetchone()[0])
+            audit = json.loads(
+                connection.execute(
+                    "SELECT value FROM events WHERE type='session_report_rescored'"
+                ).fetchone()[0]
+            )
+            current = json.loads(
+                connection.execute(
+                    "SELECT value FROM events WHERE type='final_summary'"
+                ).fetchone()[0]
+            )
             connection.close()
 
             self.assertEqual(audit["previous_final_summary"], previous)
@@ -783,38 +798,43 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
             self.assertEqual(result["refreshed_count"], 1)
             self.assertEqual(result["rescored_count"], 0)
             connection = sqlite3.connect(data_dir / "sessions.db")
-            final = json.loads(connection.execute(
-                "SELECT value FROM events WHERE type='final_summary'"
-            ).fetchone()[0])
-            report = final["session_report"]
-            sound = next(
-                item for item in report["findings"] if item["key"] == "sound"
+            final = json.loads(
+                connection.execute(
+                    "SELECT value FROM events WHERE type='final_summary'"
+                ).fetchone()[0]
             )
+            report = final["session_report"]
+            sound = next(item for item in report["findings"] if item["key"] == "sound")
             self.assertEqual(final["night_summary"]["sleep_quality"], original)
             self.assertEqual(report["version"], SESSION_REPORT_VERSION)
-            self.assertEqual(
-                report["quality"]["version"], SLEEP_QUALITY_VERSION
-            )
+            self.assertEqual(report["quality"]["version"], SLEEP_QUALITY_VERSION)
             self.assertEqual(sound["severity"], "excellent")
             self.assertTrue(sound["transient_critical_observed"])
             self.assertEqual(
                 report["rest_mode"]["protocol_status"]["display_status"],
                 "TARGET_UNKNOWN",
             )
-            self.assertEqual(connection.execute(
-                "SELECT COUNT(*) FROM events WHERE type='sleep_stage'"
-            ).fetchone()[0], stage_count)
-            self.assertEqual(connection.execute(
-                "SELECT COUNT(*) FROM timeline"
-            ).fetchone()[0], timeline_count)
-            self.assertEqual(connection.execute(
-                "SELECT COUNT(*) FROM events "
-                "WHERE type='session_report_refreshed'"
-            ).fetchone()[0], 1)
-            audit = json.loads(connection.execute(
-                "SELECT value FROM events "
-                "WHERE type='session_report_refreshed'"
-            ).fetchone()[0])
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM events WHERE type='sleep_stage'"
+                ).fetchone()[0],
+                stage_count,
+            )
+            self.assertEqual(
+                connection.execute("SELECT COUNT(*) FROM timeline").fetchone()[0],
+                timeline_count,
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM events WHERE type='session_report_refreshed'"
+                ).fetchone()[0],
+                1,
+            )
+            audit = json.loads(
+                connection.execute(
+                    "SELECT value FROM events WHERE type='session_report_refreshed'"
+                ).fetchone()[0]
+            )
             self.assertEqual(
                 audit["report_refresh_scope"],
                 "full_derived_session_report",
@@ -848,18 +868,25 @@ class HistoricalRecoveryGuardrailTests(unittest.TestCase):
                 )
 
             connection = sqlite3.connect(data_dir / "sessions.db")
-            final = json.loads(connection.execute(
-                "SELECT value FROM events WHERE type='final_summary'"
-            ).fetchone()[0])
+            final = json.loads(
+                connection.execute(
+                    "SELECT value FROM events WHERE type='final_summary'"
+                ).fetchone()[0]
+            )
             self.assertEqual(final["night_summary"]["sleep_quality"], original)
             self.assertEqual(final["session_report"]["version"], "legacy-report")
-            self.assertEqual(connection.execute(
-                "SELECT COUNT(*) FROM events WHERE type='sleep_stage'"
-            ).fetchone()[0], stage_count)
-            self.assertEqual(connection.execute(
-                "SELECT COUNT(*) FROM events "
-                "WHERE type='session_report_refreshed'"
-            ).fetchone()[0], 0)
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM events WHERE type='sleep_stage'"
+                ).fetchone()[0],
+                stage_count,
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM events WHERE type='session_report_refreshed'"
+                ).fetchone()[0],
+                0,
+            )
             connection.close()
 
     def test_report_only_refuses_all_sessions(self):

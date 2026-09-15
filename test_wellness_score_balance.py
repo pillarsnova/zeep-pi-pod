@@ -68,11 +68,9 @@ class WellnessScoreBalanceTests(unittest.TestCase):
             quality["rest_mode"]["protocol_status"]["status"],
             "too_short",
         )
-        self.assertFalse(
-            quality["release_requirements"]["timing_releasable"]
-        )
+        self.assertFalse(quality["release_requirements"]["timing_releasable"])
 
-    def test_missing_nap_target_is_unavailable_even_with_no_components(self):
+    def test_missing_nap_target_uses_neutral_components_with_low_confidence(self):
         quality = _nap(
             [],
             duration_s=3600,
@@ -80,11 +78,16 @@ class WellnessScoreBalanceTests(unittest.TestCase):
             target_s=None,
         )
 
-        self.assertFalse(quality["available"])
-        self.assertIsNone(quality["score"])
-        self.assertEqual(quality["level_key"], "unavailable")
-        self.assertEqual(quality["level"], "ข้อมูลยังไม่พอ")
-        self.assertEqual(quality["insight"], quality["reason"])
+        self.assertTrue(quality["available"])
+        self.assertEqual(quality["score"], 50)
+        self.assertEqual(quality["score_unrounded"], 50.0)
+        self.assertEqual(
+            sum(quality["effective_component_points"].values()),
+            50.0,
+        )
+        self.assertTrue(quality["limited_evidence_neutral_score"])
+        self.assertEqual(quality["score_confidence"]["level"], "low")
+        self.assertIsNone(quality["reason"])
         self.assertEqual(
             quality["rest_mode"]["protocol_status"]["status"],
             "target_unknown",
@@ -105,7 +108,8 @@ class WellnessScoreBalanceTests(unittest.TestCase):
 
         quality = _nap(rows, counts={"wake": 360})
 
-        self.assertFalse(quality["available"])
+        self.assertTrue(quality["available"])
+        self.assertIsInstance(quality["score"], int)
         self.assertLess(quality["engineering_shadow_score"], 80)
         self.assertEqual(quality["score_confidence"]["level"], "low")
         self.assertAlmostEqual(
@@ -116,10 +120,7 @@ class WellnessScoreBalanceTests(unittest.TestCase):
 
     def test_missing_optional_components_are_neutral_not_score_inflating(self):
         complete = _nap([_row() for _ in range(360)])
-        missing = _nap([
-            {"hr": 60.0, "rr": 14.0, "sleep": "wake"}
-            for _ in range(360)
-        ])
+        missing = _nap([{"hr": 60.0, "rr": 14.0, "sleep": "wake"} for _ in range(360)])
 
         self.assertTrue(missing["available"])
         self.assertLess(missing["score"], complete["score"])
@@ -128,9 +129,7 @@ class WellnessScoreBalanceTests(unittest.TestCase):
             missing["imputed_component_points"],
             {"rest_continuity": 22.5, "environment_support": 7.5},
         )
-        self.assertFalse(
-            missing["score_normalized_for_available_components"]
-        )
+        self.assertFalse(missing["score_normalized_for_available_components"])
 
     def test_recovery_continuity_counts_confirmed_off_bed_time(self):
         occupied = [_row() for _ in range(120)]
@@ -201,19 +200,14 @@ class WellnessScoreBalanceTests(unittest.TestCase):
         )
         self.assertLess(interrupted["score"], uninterrupted["score"])
 
-    def test_physiology_extremes_are_reviewed_or_withheld(self):
+    def test_physiology_extremes_are_reviewed_without_hiding_score(self):
         normal = _nap([_row() for _ in range(360)])
         for heart_rate, respiration in ((35.0, 6.0), (160.0, 40.0)):
             with self.subTest(heart_rate=heart_rate, respiration=respiration):
-                edge = _nap([
-                    _row(hr=heart_rate, rr=respiration)
-                    for _ in range(360)
-                ])
+                edge = _nap([_row(hr=heart_rate, rr=respiration) for _ in range(360)])
                 self.assertTrue(edge["available"])
                 self.assertTrue(edge["review_required"])
-                self.assertTrue(
-                    edge["physiology"]["edge_context_review_required"]
-                )
+                self.assertTrue(edge["physiology"]["edge_context_review_required"])
                 self.assertEqual(
                     edge["physiology"]["wellness_factor"],
                     0.6,
@@ -221,15 +215,16 @@ class WellnessScoreBalanceTests(unittest.TestCase):
                 self.assertLess(edge["score"], normal["score"])
 
         outside = _nap([_row(hr=200.0, rr=50.0) for _ in range(360)])
-        self.assertFalse(outside["available"])
-        self.assertIsNone(outside["score"])
+        self.assertTrue(outside["available"])
+        self.assertIsInstance(outside["score"], int)
         self.assertFalse(outside["physiology"]["available"])
+        self.assertTrue(outside["review_required"])
+        self.assertEqual(outside["score_confidence"]["level"], "low")
 
     def test_half_implausible_vitals_reduce_lift_and_confidence(self):
         normal = _nap([_row() for _ in range(360)])
         mixed = _nap(
-            [_row() for _ in range(180)]
-            + [_row(hr=180.0, rr=50.0) for _ in range(180)]
+            [_row() for _ in range(180)] + [_row(hr=180.0, rr=50.0) for _ in range(180)]
         )
 
         self.assertTrue(mixed["available"])
@@ -241,22 +236,18 @@ class WellnessScoreBalanceTests(unittest.TestCase):
         )
 
     def test_nonfinite_vitals_are_invalid_instead_of_crashing(self):
-        quality = _nap([
-            _row(hr=math.nan, rr=math.inf) for _ in range(360)
-        ])
+        quality = _nap([_row(hr=math.nan, rr=math.inf) for _ in range(360)])
 
-        self.assertFalse(quality["available"])
-        self.assertIsNone(quality["score"])
+        self.assertTrue(quality["available"])
+        self.assertIsInstance(quality["score"], int)
+        self.assertEqual(quality["score_confidence"]["level"], "low")
         self.assertEqual(
             quality["physiology"]["plausible_paired_samples"],
             0,
         )
 
     def test_sparse_environment_frames_lower_confidence_not_score(self):
-        rows = [
-            _row(sample_interval_s=300.0)
-            for _ in range(6)
-        ]
+        rows = [_row(sample_interval_s=300.0) for _ in range(6)]
 
         quality = _nap(rows, counts={"wake": 6})
 
@@ -277,9 +268,7 @@ class WellnessScoreBalanceTests(unittest.TestCase):
         self.assertTrue(quality["available"])
         self.assertEqual(quality["level_key"], "safety_review")
         self.assertTrue(quality["safety_review_required"])
-        self.assertTrue(
-            quality["environment_support"]["safety_score_cap_applied"]
-        )
+        self.assertTrue(quality["environment_support"]["safety_score_cap_applied"])
         self.assertEqual(summary["status"]["key"], "safety_review")
 
     def test_high_recovery_score_does_not_claim_partial_timing_met_target(self):
@@ -331,10 +320,7 @@ class WellnessScoreBalanceTests(unittest.TestCase):
         self.assertEqual(result["validation_status"], "score_formula_mismatch")
 
     def test_public_contract_exposes_formula_inputs_without_raw_values(self):
-        quality = _nap([
-            {"hr": 60.0, "rr": 14.0, "sleep": "wake"}
-            for _ in range(360)
-        ])
+        quality = _nap([{"hr": 60.0, "rr": 14.0, "sleep": "wake"} for _ in range(360)])
 
         public = public_quality_payload(quality)
         parsed = PublicQuality.model_validate(public)

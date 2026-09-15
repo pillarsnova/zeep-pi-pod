@@ -281,7 +281,14 @@ function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
     tone:environmentTone,icon:'unknown',title:'ภาพรวมสภาพแวดล้อม',value:'',status:environmentStatus,
     summary:environmentSummary,detail:`${environmentAction} · ค่าราย Sensor อยู่ด้านบน`,
   }):'<div class="admin-live-explanation-empty">ยังไม่มีข้อมูล Sensor ที่ใช้แปลผลได้</div>';
-  const modeLabel=({sleep:'Overnight Recovery',nap_recovery:'Nap & Refresh',relax_meditation:'Relax / Meditation',recovery_readiness:'Recovery / Readiness'})[result.mode]||session.rest_mode||'รอ Mode';
+  const modeLabel=({
+    sleep:'Overnight Recovery',
+    nap_recovery:'Nap & Refresh',
+    relax_meditation:'Nap & Refresh',
+    recovery_readiness:'Nap & Refresh',
+    performance_prep:'Nap & Refresh',
+    physical_comfort:'Nap & Refresh',
+  })[result.mode]||session.rest_mode||'รอ Mode';
   modeRoot.textContent=`โหมด · ${modeLabel}`;
 }
 function renderSimpleDashboard(state={},environment={},bcg={},session={}){

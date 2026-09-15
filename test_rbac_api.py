@@ -37,7 +37,9 @@ def route_endpoint(path: str):
         for route in pod_app.app.routes
         for child in getattr(getattr(route, "original_router", None), "routes", [])
     )
-    return next(route.endpoint for route in routes if getattr(route, "path", None) == path)
+    return next(
+        route.endpoint for route in routes if getattr(route, "path", None) == path
+    )
 
 
 class RbacApiTests(unittest.TestCase):
@@ -110,7 +112,9 @@ class RbacApiTests(unittest.TestCase):
         ):
             security = document["paths"][path]["get"].get("security") or []
             self.assertTrue(
-                any(cookie_schemes.intersection(requirement) for requirement in security),
+                any(
+                    cookie_schemes.intersection(requirement) for requirement in security
+                ),
                 path,
             )
 
@@ -234,7 +238,9 @@ class RbacApiTests(unittest.TestCase):
                 response = client.get(path)
                 self.assertEqual(response.status_code, 200)
                 self.assertIn("no-store", response.headers.get("cache-control", ""))
-        ui = (Path(__file__).resolve().parent / "static" / "index.html").read_text(encoding="utf-8")
+        ui = (Path(__file__).resolve().parent / "static" / "index.html").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("const USER_LOGIN_PATH='/login'", ui)
         self.assertIn("const ADMIN_LOGIN_PATH='/admin/login'", ui)
         self.assertIn("'/admin/login'", ui)
@@ -250,9 +256,13 @@ class RbacApiTests(unittest.TestCase):
             json={"identifier": "test-admin", "password": "test-admin-password"},
         )
         self.assertEqual(login.status_code, 200)
-        self.assertEqual(client.get("/api/auth/me").json()["principal"]["role"], "admin")
+        self.assertEqual(
+            client.get("/api/auth/me").json()["principal"]["role"], "admin"
+        )
         self.assertEqual(client.post("/api/safety/disarm").status_code, 403)
-        self.assertEqual(client.post("/api/safety/disarm", headers=csrf(client)).status_code, 200)
+        self.assertEqual(
+            client.post("/api/safety/disarm", headers=csrf(client)).status_code, 200
+        )
 
     def test_daily_history_overview_is_admin_only(self) -> None:
         anonymous = TestClient(pod_app.app)
@@ -294,7 +304,9 @@ class RbacApiTests(unittest.TestCase):
         )
         self.assertEqual(account_history.headers.get("pragma"), "no-cache")
 
-    def test_finalization_writer_error_keeps_live_session_and_restart_checkpoint(self) -> None:
+    def test_finalization_writer_error_keeps_live_session_and_restart_checkpoint(
+        self,
+    ) -> None:
         active = {
             "record": {
                 "session_id": "writer-failure-session",
@@ -318,7 +330,9 @@ class RbacApiTests(unittest.TestCase):
                 patch.object(pod_app, "database", writer),
                 patch.object(pod_app.bcg_storage, "start_session") as restart_bcg,
                 patch.object(pod_app.report_shares, "discard") as discard_share,
-                patch.object(pod_app, "_clear_active_session_checkpoint") as clear_checkpoint,
+                patch.object(
+                    pod_app, "_clear_active_session_checkpoint"
+                ) as clear_checkpoint,
             ):
                 with self.assertRaisesRegex(
                     RuntimeError,
@@ -361,7 +375,9 @@ class RbacApiTests(unittest.TestCase):
         self.assertEqual(login.status_code, 200)
         catalog = admin.get("/api/admin/brainwave/presets")
         self.assertEqual(catalog.status_code, 200)
-        self.assertIn("control-pink", [item["id"] for item in catalog.json()["presets"]])
+        self.assertIn(
+            "control-pink", [item["id"] for item in catalog.json()["presets"]]
+        )
 
         rendered = {
             "path": Path("/tmp/zeep-test-brainwave.wav"),
@@ -410,7 +426,9 @@ class RbacApiTests(unittest.TestCase):
                 json={"preset_id": "relax-alpha", "duration_seconds": 30},
             )
         self.assertEqual(response.status_code, 409)
-        self.assertEqual(response.json()["detail"]["code"], "occupied_confirmation_required")
+        self.assertEqual(
+            response.json()["detail"]["code"], "occupied_confirmation_required"
+        )
 
     def test_music_routes_enforce_owner_admin_and_csrf_boundaries(self) -> None:
         anonymous = TestClient(pod_app.app)
@@ -521,7 +539,9 @@ class RbacApiTests(unittest.TestCase):
         self.assertEqual(health.status_code, 200)
         self.assertEqual(health.json()["schema"], "zeep.api.response")
         self.assertEqual(health.json()["api_version"], "1.0")
-        self.assertEqual(anonymous.get("/api/v1/admin/contracts/sensors").status_code, 401)
+        self.assertEqual(
+            anonymous.get("/api/v1/admin/contracts/sensors").status_code, 401
+        )
         self.assertEqual(anonymous.get("/api/v1/admin/adaptive/live").status_code, 401)
         self.assertEqual(anonymous.get("/api/bcg/trend").status_code, 401)
 
@@ -662,10 +682,14 @@ class RbacApiTests(unittest.TestCase):
             self.assertEqual(health["blood_group"], "O+")
             self.assertEqual(health["source"], "zeep_profile")
             self.assertEqual(health["intended_use"], "health_reference_only")
-            checkpoint_text = pod_app.ACTIVE_SESSION_CHECKPOINT_PATH.read_text(encoding="utf-8")
+            checkpoint_text = pod_app.ACTIVE_SESSION_CHECKPOINT_PATH.read_text(
+                encoding="utf-8"
+            )
             self.assertNotIn("must-never-enter-checkpoint", checkpoint_text)
             self.assertEqual(
-                pod_app.database.read_sessions("SELECT session_id FROM sessions WHERE session_id=?", (session_id,)),
+                pod_app.database.read_sessions(
+                    "SELECT session_id FROM sessions WHERE session_id=?", (session_id,)
+                ),
                 [],
             )
             previous_db_error = pod_app.database.health()["last_error"]
@@ -674,7 +698,9 @@ class RbacApiTests(unittest.TestCase):
             self.assertTrue(pod_app.database.flush(5))
             self.assertEqual(pod_app.database.health()["last_error"], previous_db_error)
             self.assertEqual(
-                pod_app.database.read_sessions("SELECT id FROM events WHERE session_id=?", (session_id,)),
+                pod_app.database.read_sessions(
+                    "SELECT id FROM events WHERE session_id=?", (session_id,)
+                ),
                 [],
             )
 
@@ -696,14 +722,18 @@ class RbacApiTests(unittest.TestCase):
             self.assertIsNotNone(restored)
             self.assertEqual(restored["phase"], "waiting_bed")
             self.assertEqual(restored["record"]["session_id"], session_id)
-            self.assertEqual(restored["record"]["health_reference"]["blood_group"], "O+")
+            self.assertEqual(
+                restored["record"]["health_reference"]["blood_group"], "O+"
+            )
             me = user.get("/api/auth/me")
             self.assertEqual(me.status_code, 200, me.text)
             self.assertTrue(me.json()["pod"]["owns_active_session"])
             closed = pod_app._finalize_active_session("restart_waiting_test_cleanup")
             self.assertFalse(closed["recording_started"])
             self.assertEqual(
-                pod_app.database.read_sessions("SELECT session_id FROM sessions WHERE session_id=?", (session_id,)),
+                pod_app.database.read_sessions(
+                    "SELECT session_id FROM sessions WHERE session_id=?", (session_id,)
+                ),
                 [],
             )
         finally:
@@ -728,7 +758,9 @@ class RbacApiTests(unittest.TestCase):
         self.assertEqual(ref["weight_kg"], 72.5)
         self.assertEqual(ref["blood_group"], "AB-")
         self.assertIsInstance(ref["age_years"], int)
-        self.assertIsNone(pod_app._zeep_health_reference({"heightCm": 999})["height_cm"])
+        self.assertIsNone(
+            pod_app._zeep_health_reference({"heightCm": 999})["height_cm"]
+        )
 
     def test_each_login_refreshes_health_reference_without_stale_profile_fields(
         self,
@@ -827,7 +859,10 @@ class RbacApiTests(unittest.TestCase):
         """An open recording resumes the same row, owner Login and Rest Mode."""
         original = pod_app._authenticate_zeep_account
         with pod_app.state_lock:
-            original_safety = {key: pod_app.state["safety"].get(key) for key in ("armed", "latched", "last_action")}
+            original_safety = {
+                key: pod_app.state["safety"].get(key)
+                for key in ("armed", "latched", "last_action")
+            }
 
         def fake_auth(_identifier: str, _password: str):
             return (
@@ -841,7 +876,12 @@ class RbacApiTests(unittest.TestCase):
                     "access_token": "ephemeral",
                     "refresh_token": None,
                 },
-                {"gender": "male", "dateOfBirth": "1988-02-03", "heightCm": 170.0, "weightKg": 62.0},
+                {
+                    "gender": "male",
+                    "dateOfBirth": "1988-02-03",
+                    "heightCm": 170.0,
+                    "weightKg": 62.0,
+                },
             )
 
         pod_app._authenticate_zeep_account = fake_auth
@@ -872,12 +912,17 @@ class RbacApiTests(unittest.TestCase):
                         "respiration_current_valid": True,
                         "heart_rate_held": False,
                         "respiration_held": False,
-                        "packets": (active["vital_gate_start_packet_count"] + pod_app.SESSION_VITAL_START_PACKETS),
+                        "packets": (
+                            active["vital_gate_start_packet_count"]
+                            + pod_app.SESSION_VITAL_START_PACKETS
+                        ),
                         "vital_valid_streak": pod_app.SESSION_VITAL_START_PACKETS,
                     }
                 )
             pod_app._begin_recording(active)
-            self.assertEqual(pod_app._load_active_session_checkpoint()["phase"], "recording")
+            self.assertEqual(
+                pod_app._load_active_session_checkpoint()["phase"], "recording"
+            )
             with patch.object(pod_app, "_safety_faults", return_value=[]):
                 pod_app.safety_arm()
             with (
@@ -1002,7 +1047,9 @@ class RbacApiTests(unittest.TestCase):
         }
         frame = {
             "sequence": int(now // pod_app.SLEEP_SAMPLE_SECONDS),
-            "timestamp": pod_app.datetime.fromtimestamp(now, pod_app.timezone.utc).isoformat(),
+            "timestamp": pod_app.datetime.fromtimestamp(
+                now, pod_app.timezone.utc
+            ).isoformat(),
             "epoch_s": now,
             "refresh_s": pod_app.SLEEP_SAMPLE_SECONDS,
             "source": "pi_local_sensor_tick",
@@ -1093,7 +1140,11 @@ class RbacApiTests(unittest.TestCase):
             self.assertNotIn("sound_dba_firmware_est", environment)
             self.assertNotIn("sound_firmware_window_ms", environment)
             self.assertNotIn("sound_preview_evidence_count", environment)
-            temp = next(item for item in environment["assessment"]["evaluations"] if item["key"] == "temperature")
+            temp = next(
+                item
+                for item in environment["assessment"]["evaluations"]
+                if item["key"] == "temperature"
+            )
             self.assertEqual(temp["display"], "23.4 °C")
             self.assertEqual(temp["status"], "unavailable")
             self.assertTrue(restored["sensor_frame"]["restored_after_restart"])
@@ -1101,7 +1152,9 @@ class RbacApiTests(unittest.TestCase):
             self.assertFalse(restored["sensor"]["bcg"]["analysis_valid"])
             self.assertTrue(restored["sleep"]["classification_active"])
             self.assertEqual(restored["sleep"]["confirmed_state"], "n3")
-            self.assertEqual(restored["sleep"]["data_status"], "restored_confirmed_state")
+            self.assertEqual(
+                restored["sleep"]["data_status"], "restored_confirmed_state"
+            )
             self.assertTrue(restored["sleep"]["held_previous_state"])
             self.assertFalse(restored["sleep"]["display_only_after_restart"])
             self.assertFalse(restored["sleep"]["evidence_active"])
@@ -1147,7 +1200,12 @@ class RbacApiTests(unittest.TestCase):
                     "access_token": "not-persisted",
                     "refresh_token": None,
                 },
-                {"gender": "female", "dateOfBirth": "1992-04-03", "heightCm": 170.0, "weightKg": 62.0},
+                {
+                    "gender": "female",
+                    "dateOfBirth": "1992-04-03",
+                    "heightCm": 170.0,
+                    "weightKg": 62.0,
+                },
             )
 
         pod_app._authenticate_zeep_account = fake_auth
@@ -1240,7 +1298,11 @@ class RbacApiTests(unittest.TestCase):
                 "LSM-800-T",
             },
         )
-        sound = next(channel for channel in inspector.json()["channels"] if channel["metric"] == "sound_dba_est")
+        sound = next(
+            channel
+            for channel in inspector.json()["channels"]
+            if channel["metric"] == "sound_dba_est"
+        )
         self.assertEqual(sound["raw_unit"], "dBA")
         self.assertEqual(sound["unit"], "dBA")
         self.assertFalse(sound["editable"])
@@ -1368,7 +1430,9 @@ class RbacApiTests(unittest.TestCase):
             commands.append(command)
             return {"ok": True, "command": command, "tx_count": len(commands)}
 
-        def fake_publish_sequence(sequence: list[str], _minimum_gaps: list[float] | None = None) -> list[dict[str, object]]:
+        def fake_publish_sequence(
+            sequence: list[str], _minimum_gaps: list[float] | None = None
+        ) -> list[dict[str, object]]:
             nonlocal sequence_gaps
             sequence_gaps = _minimum_gaps
             return [fake_publish(command) for command in sequence]
@@ -1407,7 +1471,9 @@ class RbacApiTests(unittest.TestCase):
             self.assertEqual(changed["commanded_temperature_c"], 17)
         finally:
             pod_app.controlhub1_mqtt.publish_and_wait = original_publish
-            pod_app.controlhub1_mqtt.publish_sequence_and_wait = original_publish_sequence
+            pod_app.controlhub1_mqtt.publish_sequence_and_wait = (
+                original_publish_sequence
+            )
 
     def test_music_play_defaults_to_repeat_and_queue_overrides_loop(self) -> None:
         track = pod_app.MUSIC_DIR / "default-repeat-test.wav"
@@ -1615,7 +1681,9 @@ class RbacApiTests(unittest.TestCase):
             commands.append(command)
             return {"ok": True, "command": command, "tx_count": len(commands)}
 
-        def fake_publish_sequence(sequence: list[str], minimum_gaps: list[float] | None = None) -> list[dict[str, object]]:
+        def fake_publish_sequence(
+            sequence: list[str], minimum_gaps: list[float] | None = None
+        ) -> list[dict[str, object]]:
             sequences.append((list(sequence), minimum_gaps))
             return [fake_publish(command) for command in sequence]
 
@@ -1630,18 +1698,27 @@ class RbacApiTests(unittest.TestCase):
         pod_app.controlhub1_mqtt.publish_and_wait = fake_publish
         pod_app.controlhub1_mqtt.publish_sequence_and_wait = fake_publish_sequence
         try:
-            direct = pod_app.aircon_command(pod_app.AirconCommand(command="temp 5", direct=True), admin)
+            direct = pod_app.aircon_command(
+                pod_app.AirconCommand(command="temp 5", direct=True), admin
+            )
             self.assertEqual(commands, ["temp 5"])
             self.assertTrue(direct["direct"])
             self.assertIsNone(direct["desired_temperature_c"])
             self.assertEqual(direct["commanded_temperature_c"], 5)
 
             with self.assertRaises(pod_app.HTTPException) as denied:
-                pod_app.aircon_command(pod_app.AirconCommand(command="temp 10", direct=True), user)
+                pod_app.aircon_command(
+                    pod_app.AirconCommand(command="temp 10", direct=True), user
+                )
             self.assertEqual(denied.exception.status_code, 403)
 
             with patch.object(pod_app, "_persist_aircon_fan_level") as persist_fan:
-                levels = [pod_app.aircon_command(pod_app.AirconCommand(command="fan"), admin)["fan_level"] for _ in range(6)]
+                levels = [
+                    pod_app.aircon_command(pod_app.AirconCommand(command="fan"), admin)[
+                        "fan_level"
+                    ]
+                    for _ in range(6)
+                ]
             self.assertEqual(levels, [1, 2, 3, 4, 5, 1])
             self.assertEqual(persist_fan.call_count, 6)
             self.assertEqual(
@@ -1657,7 +1734,9 @@ class RbacApiTests(unittest.TestCase):
             self.assertEqual(commands[1:], ["status", "fan"] * 6)
         finally:
             pod_app.controlhub1_mqtt.publish_and_wait = original_publish
-            pod_app.controlhub1_mqtt.publish_sequence_and_wait = original_publish_sequence
+            pod_app.controlhub1_mqtt.publish_sequence_and_wait = (
+                original_publish_sequence
+            )
             with pod_app.state_lock:
                 pod_app.state["aircon"] = original_aircon
 
@@ -1666,7 +1745,9 @@ class RbacApiTests(unittest.TestCase):
         admin = SimpleNamespace(is_admin=True)
         sent: list[str] = []
 
-        def fail_during_preflight(sequence: list[str], _minimum_gaps: list[float] | None = None) -> list[dict[str, object]]:
+        def fail_during_preflight(
+            sequence: list[str], _minimum_gaps: list[float] | None = None
+        ) -> list[dict[str, object]]:
             sent.append(sequence[0])
             raise pod_app.HTTPException(504, "status ack timeout")
 
@@ -1716,7 +1797,9 @@ class RbacApiTests(unittest.TestCase):
                 ) as persist,
                 patch.object(pod_app.controlhub1_mqtt, "publish_and_wait") as publish,
             ):
-                result = pod_app.set_aircon_fan_level_reference(pod_app.AirconFanLevelReferenceCommand(level=4), admin)
+                result = pod_app.set_aircon_fan_level_reference(
+                    pod_app.AirconFanLevelReferenceCommand(level=4), admin
+                )
             self.assertEqual(result["fan_level"], 4)
             self.assertTrue(result["persisted"])
             self.assertFalse(result["ir_transmitted"])
@@ -1733,14 +1816,18 @@ class RbacApiTests(unittest.TestCase):
         """The 1..5 logical fan reference is recoverable after a Pi restart."""
         reference_path = _test_root / "fan-reference-test.json"
         with patch.object(pod_app, "AIRCON_CONTROL_STATE_PATH", reference_path):
-            pod_app._persist_aircon_fan_level(3, "admin_declared_reference", operator="test-admin")
+            pod_app._persist_aircon_fan_level(
+                3, "admin_declared_reference", operator="test-admin"
+            )
             loaded = pod_app._load_aircon_fan_level_reference()
         self.assertEqual(loaded["fan_level"], 3)
         self.assertEqual(loaded["fan_level_source"], "admin_declared_reference")
 
     def test_user_fan_control_never_claims_a_measured_level(self) -> None:
         """User copy stays generic because the AC has no speed feedback."""
-        ui = (Path(__file__).resolve().parent / "static" / "index.html").read_text(encoding="utf-8")
+        ui = (Path(__file__).resolve().parent / "static" / "index.html").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("const showFanReference=currentPrincipal?.role==='admin'", ui)
         self.assertIn("'ส่งคำสั่งปรับแรงลมแล้ว · กรุณาสังเกตการตอบสนองของแอร์'", ui)
         self.assertIn("'กดเพื่อปรับแรงลมหนึ่งระดับ'", ui)
@@ -1749,7 +1836,9 @@ class RbacApiTests(unittest.TestCase):
 
     def test_user_aircon_power_control_is_one_ack_driven_toggle(self) -> None:
         """The touch UI toggles from the latest ESP32-acknowledged reference."""
-        ui = (Path(__file__).resolve().parent / "static" / "index.html").read_text(encoding="utf-8")
+        ui = (Path(__file__).resolve().parent / "static" / "index.html").read_text(
+            encoding="utf-8"
+        )
         self.assertIn('id="unifiedAirconPowerBtn"', ui)
         self.assertIn("function unifiedAirconPowerToggle", ui)
         self.assertIn("const command=aircon.power===true?'off':'on'", ui)
@@ -1760,9 +1849,15 @@ class RbacApiTests(unittest.TestCase):
 
     def test_fullscreen_control_is_shared_by_every_primary_view(self) -> None:
         """One common dock control remains available across all app views."""
-        ui = (Path(__file__).resolve().parent / "static" / "index.html").read_text(encoding="utf-8")
-        shell = (Path(__file__).resolve().parent / "static" / "app-shell.js").read_text(encoding="utf-8")
-        css = (Path(__file__).resolve().parent / "static" / "theme-modern.css").read_text(encoding="utf-8")
+        ui = (Path(__file__).resolve().parent / "static" / "index.html").read_text(
+            encoding="utf-8"
+        )
+        shell = (Path(__file__).resolve().parent / "static" / "app-shell.js").read_text(
+            encoding="utf-8"
+        )
+        css = (
+            Path(__file__).resolve().parent / "static" / "theme-modern.css"
+        ).read_text(encoding="utf-8")
         self.assertEqual(ui.count('id="appFullscreenBtn"'), 1)
         self.assertIn('src="/static/app-shell.js?', ui)
         self.assertIn("function toggleFullscreen", shell)
@@ -1771,7 +1866,9 @@ class RbacApiTests(unittest.TestCase):
         self.assertIn("body.control-focus-mode .top", css)
 
     def test_dashboard_has_non_diagnostic_health_reference_fields(self) -> None:
-        ui = (Path(__file__).resolve().parent / "static" / "index.html").read_text(encoding="utf-8")
+        ui = (Path(__file__).resolve().parent / "static" / "index.html").read_text(
+            encoding="utf-8"
+        )
         for element_id in (
             "dashProfileGender",
             "dashProfileAge",
@@ -1790,8 +1887,12 @@ class RbacApiTests(unittest.TestCase):
         self,
     ) -> None:
         """Admin gets actionable context while the current-value cards stay canonical."""
-        ui = (Path(__file__).resolve().parent / "static" / "index.html").read_text(encoding="utf-8")
-        css = (Path(__file__).resolve().parent / "static" / "theme-modern.css").read_text(encoding="utf-8")
+        ui = (Path(__file__).resolve().parent / "static" / "index.html").read_text(
+            encoding="utf-8"
+        )
+        css = (
+            Path(__file__).resolve().parent / "static" / "theme-modern.css"
+        ).read_text(encoding="utf-8")
         self.assertIn('id="adminLiveExplanation" data-admin-panel', ui)
         self.assertIn('id="adminBioExplanation"', ui)
         self.assertIn('id="adminEnvironmentExplanation"', ui)
@@ -1809,14 +1910,18 @@ class RbacApiTests(unittest.TestCase):
         self.assertIn("INSIGHTS &amp; ACTIONS", ui)
         self.assertIn("Data-quality gate ยังไม่ครบ", ui)
         self.assertIn("สอดคล้องกับโมเดล", ui)
-        self.assertIn("environmentRoot.innerHTML=evaluations.length?adminExplanationRow", ui)
+        self.assertIn(
+            "environmentRoot.innerHTML=evaluations.length?adminExplanationRow", ui
+        )
         self.assertIn('<details class="admin-atmosphere-reference">', ui)
         self.assertIn("const actionRows=optimisationActions.map", ui)
         self.assertIn(".admin-atmosphere-reference-grid", css)
         self.assertIn('body:not([data-role="admin"]) [data-admin-panel]', css)
 
     def test_sensor_integrity_displays_every_sensor_and_primary_reading(self) -> None:
-        ui = (Path(__file__).resolve().parent / "static" / "index.html").read_text(encoding="utf-8")
+        ui = (Path(__file__).resolve().parent / "static" / "index.html").read_text(
+            encoding="utf-8"
+        )
         for device in (
             "SHT3x-DIS",
             "OPT3001",
@@ -1835,7 +1940,9 @@ class RbacApiTests(unittest.TestCase):
         self.assertIn("renderSensorIntegrity(env,b)", ui)
 
     def test_each_control_scene_has_one_short_purpose_caption(self) -> None:
-        ui = (Path(__file__).resolve().parent / "static" / "index.html").read_text(encoding="utf-8")
+        ui = (Path(__file__).resolve().parent / "static" / "index.html").read_text(
+            encoding="utf-8"
+        )
         captions = (
             "เลื่อนเปิด–ปิดทางเข้า ZEEP",
             "ทำความเย็นและกระจายลมทั่ว ZEEP",
@@ -1878,7 +1985,9 @@ class RbacApiTests(unittest.TestCase):
                     "ZEEP-ATMOSPHERE-OPS-v1.0",
                 ),
                 patch.object(pod_app, "SAFETY_THRESHOLD_BASIS_APPROVED", True),
-                patch.object(pod_app, "build_environment_snapshot", return_value=environment),
+                patch.object(
+                    pod_app, "build_environment_snapshot", return_value=environment
+                ),
                 patch.object(
                     pod_app,
                     "system_health_cached",
@@ -1910,7 +2019,7 @@ class RbacApiTests(unittest.TestCase):
                 pod_app.state["session"] = original_session
 
     def test_sleep_quality_is_explainable_and_never_fabricated(self) -> None:
-        """Completed sleep data gets a score; missing/active data does not."""
+        """Minimum-duration results score without inventing missing evidence."""
         quality = pod_app._sleep_quality_summary(
             8 * 3600,
             {
@@ -1925,17 +2034,21 @@ class RbacApiTests(unittest.TestCase):
         )
         # This fixture contains only 816 five-second stage rounds (68 minutes)
         # across an eight-hour wall-clock Session and no paired HR/RR samples.
-        # The current wellness release gate must retain the explainable shadow
-        # score for audit while withholding the public Sleep Score.
-        self.assertFalse(quality["available"])
-        self.assertIsNone(quality["score"])
+        # Minimum duration is the only score-release gate. Coverage and missing
+        # paired HR/RR therefore lower confidence without hiding the score.
+        self.assertTrue(quality["available"])
+        self.assertIsNotNone(quality["score"])
+        self.assertEqual(quality["score_confidence"]["level"], "low")
+        self.assertTrue(
+            quality["release_requirements"]["missing_paired_hr_rr_uses_neutral"]
+        )
         # Counts are the source of truth: 720 sleep / 816 scored rounds = 88%,
         # even when a legacy night_summary says 90%. The 8-hour wall duration
         # must not fabricate unobserved Sleep State coverage.
         # The opportunity component uses the 720 recorded sleep rounds (1 h),
         # not the legacy 7.2-hour summary value, so the shadow score remains
-        # explainable without publishing an under-covered result.
-        self.assertGreaterEqual(quality["engineering_shadow_score"], 65)
+        # explainable without presenting neutral HR/RR as measured evidence.
+        self.assertEqual(quality["engineering_shadow_score"], quality["score"])
         self.assertEqual(quality["sleep_efficiency_pct"], 88)
         self.assertEqual(quality["deep_pct"], 15)
         self.assertEqual(
@@ -1962,7 +2075,9 @@ class RbacApiTests(unittest.TestCase):
         self.assertFalse(all_wake["available"])
         self.assertIsNone(all_wake["score"])
         self.assertEqual(all_wake["engineering_shadow_score"], 0)
-        active = pod_app._sleep_quality_summary(8 * 3600, {"sleep_efficiency": 0.9}, completed=False)
+        active = pod_app._sleep_quality_summary(
+            8 * 3600, {"sleep_efficiency": 0.9}, completed=False
+        )
         self.assertFalse(active["available"])
         self.assertIn("เมื่อจบการพัก", active["reason"])
 
@@ -2002,7 +2117,9 @@ class RbacApiTests(unittest.TestCase):
                 "metrics": {"mean_hr": 64, "mean_rr": 16, "bed_status": "On bed"},
             },
         ]
-        periods = pod_app._compress_sleep_stage_points(points, report_end="2026-01-01T00:00:35+00:00")
+        periods = pod_app._compress_sleep_stage_points(
+            points, report_end="2026-01-01T00:00:35+00:00"
+        )
         self.assertEqual([item["state"] for item in periods], ["n2", "n2", "rem"])
         self.assertEqual([item["round_count"] for item in periods], [2, 1, 1])
         self.assertEqual([item["duration_s"] for item in periods], [10.0, 5.0, 5.0])
@@ -2217,7 +2334,12 @@ class RbacApiTests(unittest.TestCase):
                     "access_token": "not-persisted",
                     "refresh_token": None,
                 },
-                {"gender": "male", "dateOfBirth": "1990-01-01", "heightCm": 170.0, "weightKg": 62.0},
+                {
+                    "gender": "male",
+                    "dateOfBirth": "1990-01-01",
+                    "heightCm": 170.0,
+                    "weightKg": 62.0,
+                },
             )
 
         pod_app._authenticate_zeep_account = fake_auth
@@ -2237,7 +2359,9 @@ class RbacApiTests(unittest.TestCase):
                 json={"identifier": "sleeper", "password": "valid-password"},
             )
             self.assertEqual(login.status_code, 200, login.text)
-            self.assertEqual(login.json()["principal"]["account_key"], "sleeper@example.test")
+            self.assertEqual(
+                login.json()["principal"]["account_key"], "sleeper@example.test"
+            )
             self.assertEqual(login.json()["principal"]["display_name"], "Sleeper")
             user_state = user.get("/api/state")
             self.assertEqual(user_state.status_code, 200)
@@ -2277,11 +2401,15 @@ class RbacApiTests(unittest.TestCase):
             history = user.get("/api/history/sleeper%40example.test")
             self.assertEqual(history.status_code, 200)
             self.assertEqual(history.json()["total"], 0)
-            detail = user.get(f"/api/history/sleeper%40example.test/{ended.json()['session_id']}")
+            detail = user.get(
+                f"/api/history/sleeper%40example.test/{ended.json()['session_id']}"
+            )
             self.assertEqual(detail.status_code, 404, detail.text)
             self.assertEqual(user.get("/api/history/other-user").status_code, 403)
             self.assertEqual(admin.get("/api/sessions").status_code, 200)
-            self.assertEqual(user.post("/api/auth/logout", headers=csrf(user)).status_code, 200)
+            self.assertEqual(
+                user.post("/api/auth/logout", headers=csrf(user)).status_code, 200
+            )
         finally:
             with pod_app.state_lock:
                 pod_app.state["safety"].update(
@@ -2311,7 +2439,12 @@ class RbacApiTests(unittest.TestCase):
                     "access_token": "not-persisted",
                     "refresh_token": None,
                 },
-                {"gender": "female", "dateOfBirth": "1991-02-03", "heightCm": 170.0, "weightKg": 62.0},
+                {
+                    "gender": "female",
+                    "dateOfBirth": "1991-02-03",
+                    "heightCm": 170.0,
+                    "weightKg": 62.0,
+                },
             )
 
         pod_app._authenticate_zeep_account = fake_auth
@@ -2322,10 +2455,14 @@ class RbacApiTests(unittest.TestCase):
                 json={"identifier": "rename-user", "password": "valid-password"},
             )
             self.assertEqual(first.status_code, 200, first.text)
-            self.assertEqual(first.json()["principal"]["account_key"], "rename.user@example.test")
+            self.assertEqual(
+                first.json()["principal"]["account_key"], "rename.user@example.test"
+            )
             first_end = user.post("/api/session/logout", headers=csrf(user))
             self.assertEqual(first_end.status_code, 200, first_end.text)
-            self.assertEqual(user.post("/api/auth/logout", headers=csrf(user)).status_code, 200)
+            self.assertEqual(
+                user.post("/api/auth/logout", headers=csrf(user)).status_code, 200
+            )
 
             display_name[0] = "ชื่อใหม่จากแอป"
             second = user.post(
@@ -2377,7 +2514,12 @@ class RbacApiTests(unittest.TestCase):
                     "access_token": "not-persisted",
                     "refresh_token": None,
                 },
-                {"gender": "unspecified", "dateOfBirth": "1974-01-01", "heightCm": 170.0, "weightKg": 62.0},
+                {
+                    "gender": "unspecified",
+                    "dateOfBirth": "1974-01-01",
+                    "heightCm": 170.0,
+                    "weightKg": 62.0,
+                },
             )
 
         pod_app._authenticate_zeep_account = fake_auth
@@ -2389,7 +2531,9 @@ class RbacApiTests(unittest.TestCase):
             )
             self.assertEqual(login.status_code, 200, login.text)
             session_id = login.json()["session"]["session_id"]
-            self.assertEqual(login.json()["principal"]["display_name"], "Anonymous-263999")
+            self.assertEqual(
+                login.json()["principal"]["display_name"], "Anonymous-263999"
+            )
 
             admin = TestClient(pod_app.app)
             self.assertEqual(
@@ -2412,7 +2556,9 @@ class RbacApiTests(unittest.TestCase):
                 admin.post("/api/admin/session/profile", json=payload).status_code,
                 403,
             )
-            corrected = admin.post("/api/admin/session/profile", json=payload, headers=csrf(admin))
+            corrected = admin.post(
+                "/api/admin/session/profile", json=payload, headers=csrf(admin)
+            )
             self.assertEqual(corrected.status_code, 200, corrected.text)
             self.assertTrue(corrected.json()["account_key_unchanged"])
             self.assertEqual(corrected.json()["display_name"], "Noi")
@@ -2426,7 +2572,9 @@ class RbacApiTests(unittest.TestCase):
 
             ended = user.post("/api/session/logout", headers=csrf(user))
             self.assertEqual(ended.status_code, 200, ended.text)
-            self.assertEqual(user.post("/api/auth/logout", headers=csrf(user)).status_code, 200)
+            self.assertEqual(
+                user.post("/api/auth/logout", headers=csrf(user)).status_code, 200
+            )
 
             # A later external displayName/gender response does not erase the
             # explicitly verified Pod research Profile correction.
@@ -2438,9 +2586,15 @@ class RbacApiTests(unittest.TestCase):
             self.assertEqual(again.status_code, 200, again.text)
             self.assertEqual(again.json()["principal"]["display_name"], "Noi")
             self.assertEqual(again.json()["session"]["gender"], "female")
-            self.assertEqual(again.json()["principal"]["account_key"], "noi@example.test")
-            self.assertEqual(user.post("/api/session/logout", headers=csrf(user)).status_code, 200)
-            self.assertEqual(user.post("/api/auth/logout", headers=csrf(user)).status_code, 200)
+            self.assertEqual(
+                again.json()["principal"]["account_key"], "noi@example.test"
+            )
+            self.assertEqual(
+                user.post("/api/session/logout", headers=csrf(user)).status_code, 200
+            )
+            self.assertEqual(
+                user.post("/api/auth/logout", headers=csrf(user)).status_code, 200
+            )
 
             with pod_app.profile_lock:
                 profile = pod_app._load_profiles()["noi@example.test"]

@@ -392,6 +392,7 @@ def public_quality_payload(value: Any) -> dict[str, Any]:
             "scored_max_points",
             "score_normalized_for_available_components",
             "missing_component_neutral_factor",
+            "limited_evidence_neutral_score",
             "score_basis",
             "formula_version",
             "version",

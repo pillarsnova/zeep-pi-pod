@@ -828,7 +828,7 @@ class SleepSessionReportTests(unittest.TestCase):
         self.assertFalse(quality["continuity"]["wake_pct_score_component"])
         self.assertEqual(quality["continuity"]["efficiency_points"], 22.4)
 
-    def test_overnight_score_is_withheld_without_paired_hr_rr(self):
+    def test_overnight_score_is_released_with_low_confidence_without_hr_rr(self):
         quality = build_sleep_quality(
             25_200,
             {"sleep_onset_proxy_s": 600},
@@ -836,9 +836,13 @@ class SleepSessionReportTests(unittest.TestCase):
             rest_mode="overnight",
             sensor_samples=[{"hr": None, "rr": None} for _ in range(5040)],
         )
-        self.assertFalse(quality["available"])
-        self.assertIsNone(quality["score"])
-        self.assertFalse(quality["release_requirements"]["passed"])
+        self.assertTrue(quality["available"])
+        self.assertIsInstance(quality["score"], int)
+        self.assertTrue(quality["release_requirements"]["passed"])
+        self.assertTrue(
+            quality["release_requirements"]["missing_paired_hr_rr_uses_neutral"]
+        )
+        self.assertEqual(quality["score_confidence"]["level"], "low")
         self.assertEqual(
             quality["release_requirements"]["paired_hr_rr_coverage_pct"],
             0.0,
@@ -859,6 +863,48 @@ class SleepSessionReportTests(unittest.TestCase):
         self.assertEqual(quality["score_confidence"]["level"], "low")
         self.assertFalse(
             quality["release_requirements"]["confirmed_stage_coverage_blocks_score"]
+        )
+
+    def test_overnight_minimum_without_state_evidence_uses_neutral_low_confidence(self):
+        quality = build_sleep_quality(
+            5 * 3600,
+            {},
+            {},
+            rest_mode="sleep",
+            sensor_samples=[],
+            sample_interval_s=30,
+        )
+        report = build_session_report(
+            5 * 3600,
+            [],
+            {},
+            {},
+            quality,
+            rest_mode="sleep",
+            sample_interval_s=30,
+        )
+
+        self.assertTrue(quality["available"])
+        self.assertEqual(quality["score"], 50)
+        self.assertEqual(quality["score_unrounded"], 50.0)
+        self.assertEqual(
+            sum(quality["effective_component_points"].values()),
+            50.0,
+        )
+        self.assertTrue(quality["limited_evidence_neutral_score"])
+        self.assertEqual(quality["score_confidence"]["level"], "low")
+        self.assertTrue(
+            quality["release_requirements"]["missing_state_evidence_uses_neutral"]
+        )
+        self.assertTrue(report["available"])
+        self.assertIn("หลักฐาน Sleep State", quality["insight"])
+        self.assertEqual(
+            report["restore_summary"]["status"]["key"],
+            "limited_evidence",
+        )
+        self.assertEqual(
+            report["restore_summary"]["recommendation"]["primary"],
+            "บันทึกความรู้สึกหลังพัก และใช้งานครั้งถัดไปตามปกติ",
         )
 
     def test_continuity_attribution_does_not_inflate_evidence_coverage(self):
@@ -1160,7 +1206,7 @@ class SleepSessionReportTests(unittest.TestCase):
         self.assertEqual(quality["quality_type"], "rest_goal")
         self.assertIn("ไม่บังคับให้หลับ", quality["outcome_interpretation"])
 
-    def test_recovery_score_requires_paired_hr_and_rr_coverage(self):
+    def test_recovery_score_uses_neutral_component_without_paired_hr_rr(self):
         rows = [
             {
                 "hr": 65.0,
@@ -1181,8 +1227,12 @@ class SleepSessionReportTests(unittest.TestCase):
             rest_mode="nap_recovery",
             sensor_samples=rows,
         )
-        self.assertFalse(quality["available"])
-        self.assertIsNone(quality["score"])
+        self.assertTrue(quality["available"])
+        self.assertIsInstance(quality["score"], int)
+        self.assertTrue(
+            quality["release_requirements"]["missing_paired_hr_rr_uses_neutral"]
+        )
+        self.assertEqual(quality["score_confidence"]["level"], "low")
         self.assertEqual(
             quality["physiology"]["paired_hr_rr_coverage_pct"],
             0.0,
@@ -1290,6 +1340,7 @@ class SleepSessionReportTests(unittest.TestCase):
             (90, 90, "recommended", True),
             (110, 90, "extended", True),
             (121, 90, "implausible_outlier", True),
+            (448, 90, "implausible_outlier", True),
         )
         for minutes, target, status, available in cases:
             with self.subTest(minutes=minutes, target=target):
@@ -1328,19 +1379,24 @@ class SleepSessionReportTests(unittest.TestCase):
         )
 
         timing = quality["rest_mode"]["protocol_status"]
-        self.assertFalse(quality["available"])
-        self.assertIsNone(quality["score"])
+        self.assertTrue(quality["available"])
+        self.assertIsInstance(quality["score"], int)
         self.assertEqual(timing["status"], "target_unknown")
         self.assertEqual(timing["display_status"], "TARGET_UNKNOWN/extended")
         self.assertTrue(timing["review_required"])
-        self.assertFalse(timing["score_releasable"])
+        self.assertTrue(timing["score_releasable"])
+        self.assertEqual(quality["score_confidence"]["level"], "low")
+        self.assertEqual(
+            quality["score_confidence"]["limiting_factors"],
+            ["missing_rest_target"],
+        )
         self.assertIsNone(quality["component_points"]["goal_duration"])
         self.assertEqual(
             quality["imputed_component_points"]["goal_duration"],
             18.8,
         )
 
-    def test_recovery_over_120_minutes_still_requires_a_persisted_target(self):
+    def test_recovery_over_120_minutes_scores_without_a_persisted_target(self):
         samples = [
             {
                 "hr": 65.0,
@@ -1362,11 +1418,12 @@ class SleepSessionReportTests(unittest.TestCase):
         timing = quality["rest_mode"]["protocol_status"]
         self.assertEqual(timing["status"], "target_unknown")
         self.assertTrue(timing["review_required"])
-        self.assertFalse(timing["score_releasable"])
-        self.assertFalse(quality["available"])
-        self.assertIsNone(quality["score"])
+        self.assertTrue(timing["score_releasable"])
+        self.assertTrue(quality["available"])
+        self.assertIsInstance(quality["score"], int)
+        self.assertTrue(quality["release_requirements"]["missing_target_uses_neutral"])
 
-    def test_recovery_over_120_minutes_still_requires_hr_rr_evidence(self):
+    def test_recovery_over_120_minutes_scores_without_hr_rr_evidence(self):
         samples = [
             {
                 "hr": 65.0,
@@ -1388,10 +1445,13 @@ class SleepSessionReportTests(unittest.TestCase):
         timing = quality["rest_mode"]["protocol_status"]
         self.assertEqual(timing["status"], "implausible_outlier")
         self.assertTrue(timing["score_releasable"])
-        self.assertFalse(quality["available"])
-        self.assertIsNone(quality["score"])
+        self.assertTrue(quality["available"])
+        self.assertIsInstance(quality["score"], int)
+        self.assertTrue(
+            quality["release_requirements"]["missing_paired_hr_rr_uses_neutral"]
+        )
 
-    def test_recovery_over_120_minutes_still_requires_ten_minutes_on_bed(self):
+    def test_recovery_over_120_minutes_uses_on_bed_time_as_quality_evidence(self):
         present = {
             "hr": 65.0,
             "rr": 14.0,
@@ -1425,8 +1485,14 @@ class SleepSessionReportTests(unittest.TestCase):
             quality["duration_target"]["eligible_rest_minutes"],
             9.0,
         )
-        self.assertFalse(quality["available"])
-        self.assertIsNone(quality["score"])
+        self.assertTrue(quality["available"])
+        self.assertIsInstance(quality["score"], int)
+        self.assertFalse(
+            quality["release_requirements"]["eligible_duration_releasable"]
+        )
+        self.assertFalse(
+            quality["release_requirements"]["eligible_duration_blocks_score"]
+        )
 
     def test_recovery_v3_keeps_coverage_out_of_wellness_score(self):
         samples = [
@@ -1879,7 +1945,7 @@ class SleepSessionReportTests(unittest.TestCase):
             83.3,
         )
 
-    def test_recovery_requires_ten_minutes_of_eligible_rest_not_wall_time(self):
+    def test_recovery_minimum_uses_recorded_wall_time_not_eligible_rest(self):
         present = {
             "hr": 65.0,
             "rr": 14.0,
@@ -1905,8 +1971,8 @@ class SleepSessionReportTests(unittest.TestCase):
             target_duration_s=30 * 60,
         )
 
-        self.assertFalse(quality["available"])
-        self.assertIsNone(quality["score"])
+        self.assertTrue(quality["available"])
+        self.assertIsInstance(quality["score"], int)
         self.assertEqual(
             quality["duration_target"]["eligible_rest_minutes"],
             5.0,
@@ -1914,7 +1980,10 @@ class SleepSessionReportTests(unittest.TestCase):
         self.assertFalse(
             quality["release_requirements"]["eligible_duration_releasable"]
         )
-        self.assertIn("ยังไม่ถึง 10 นาที", quality["reason"])
+        self.assertFalse(
+            quality["release_requirements"]["eligible_duration_blocks_score"]
+        )
+        self.assertIsNone(quality["reason"])
 
     def test_recovery_scopes_off_bed_vitals_and_environment_out_of_score(self):
         present = [

@@ -32,8 +32,8 @@ from sleep_system_policy import (
     ENVIRONMENT_SAMPLE_CREDIT_CAP_SECONDS,
     ENVIRONMENT_SCORE_FACTORS,
     ENVIRONMENT_SESSION_AGGREGATION_VERSION,
-    NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS,
     NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
+    NAP_RECOVERY_TIMING_REVIEW_SECONDS,
     OVERNIGHT_ARCHITECTURE_MAX_POINTS,
     OVERNIGHT_N2_FULL_CREDIT_PCT,
     OVERNIGHT_N2_SOFT_CREDIT_PCT,
@@ -727,10 +727,7 @@ def _nap_protocol_status(
         "canonical_mode": "nap_recovery",
         "observed_seconds": round(observed, 1),
         "minimum_score_seconds": NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
-        "timing_review_threshold_seconds": (NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS),
-        # Compatibility alias for clients predating v8.9. This is no longer a
-        # score-release maximum; use score_releasable as the authority.
-        "legacy_hard_max_seconds": NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS,
+        "timing_review_threshold_seconds": NAP_RECOVERY_TIMING_REVIEW_SECONDS,
         "target": dict(target),
     }
     if observed < NAP_RECOVERY_MINIMUM_SCORE_SECONDS:
@@ -757,13 +754,13 @@ def _nap_protocol_status(
             "within_operational_window": None,
             "within_recommended_range": None,
             "review_required": True,
-            "score_releasable": False,
+            "score_releasable": True,
             "reason": (
-                "Session เดิมไม่ได้เก็บเป้าหมาย 30/90 นาที "
-                "จึงไม่เดาเป้าหมายและไม่เผยแพร่ Recovery Score"
+                "Session เดิมไม่ได้เก็บเป้าหมาย 30/90 นาที; "
+                "องค์ประกอบเวลาใช้ค่ากลางและให้ผู้ดูแลตรวจย้อนหลัง"
             ),
         }
-    if observed > NAP_RECOVERY_LEGACY_HARD_MAX_SECONDS:
+    if observed > NAP_RECOVERY_TIMING_REVIEW_SECONDS:
         return {
             **common,
             "status": "implausible_outlier",
@@ -834,10 +831,10 @@ def _wellness_component_totals(
     """Keep the denominator fixed and impute missing optional context.
 
     Dividing by only the components that happened to be available can make a
-    score rise when a Sensor disappears.  A documented 75% neutral value is
-    therefore used for a missing optional component.  Core release gates such
-    as HR/RR plausibility, duration and stored Nap target remain independent
-    and can still withhold the public score.
+    score rise when a Sensor disappears. A documented 75% neutral value is
+    therefore used for a missing optional component. The selected Mode's
+    minimum duration is the only score-release gate; missing evidence remains
+    explicit in confidence and must never be described as measured physiology.
     """
     effective = {}
     imputed = {}
@@ -860,6 +857,62 @@ def _wellness_component_totals(
         "total": round(sum(effective.values()), 1),
         "max_points": round(sum(maxima.values()), 1),
         "neutral_factor": WELLNESS_MISSING_COMPONENT_NEUTRAL_FACTOR,
+    }
+
+
+def _limited_evidence_component_totals(
+    points: Dict[str, Optional[float]],
+    maxima: Dict[str, float],
+    *,
+    neutral_total: float = 50.0,
+) -> Dict[str, Any]:
+    """Reconcile a bounded neutral score when core evidence is wholly absent.
+
+    Real components (for example a persisted Nap target) remain visible. The
+    remaining points are distributed only across missing components so the
+    exposed component total equals the published score. These imputed values
+    are labelled separately and must never be described as measurements.
+    """
+    effective: Dict[str, float] = {}
+    imputed: Dict[str, float] = {}
+    raw_available = 0.0
+    missing_keys = []
+    for key, maximum in maxima.items():
+        value = _number(points.get(key))
+        if value is None:
+            missing_keys.append(key)
+            continue
+        bounded = max(0.0, min(float(maximum), float(value)))
+        effective[key] = round(bounded, 1)
+        raw_available += bounded
+
+    remaining = max(0.0, float(neutral_total) - raw_available)
+    missing_capacity = sum(float(maxima[key]) for key in missing_keys)
+    factor = min(1.0, remaining / missing_capacity) if missing_capacity else 0.0
+    for key in missing_keys:
+        value = round(float(maxima[key]) * factor, 1)
+        effective[key] = value
+        imputed[key] = value
+
+    rounding_delta = round(
+        min(float(neutral_total), raw_available + missing_capacity)
+        - sum(effective.values()),
+        1,
+    )
+    if missing_keys and rounding_delta:
+        key = missing_keys[-1]
+        adjusted = max(0.0, min(float(maxima[key]), effective[key] + rounding_delta))
+        effective[key] = round(adjusted, 1)
+        imputed[key] = effective[key]
+
+    return {
+        "raw_available_points": round(raw_available, 1),
+        "effective_points": effective,
+        "imputed_points": imputed,
+        "total": round(sum(effective.values()), 1),
+        "max_points": round(sum(maxima.values()), 1),
+        "neutral_factor": round(factor, 3),
+        "limited_evidence_neutral": True,
     }
 
 
@@ -934,9 +987,8 @@ def _score_confidence(
 ) -> Dict[str, Any]:
     """Describe score evidence completeness without suppressing the score.
 
-    Session coverage remains visible to Admin QA and already contributes a
-    bounded score component.  It must not become a second, hidden veto after
-    minimum paired HR/RR evidence has passed.
+    Coverage remains visible to Admin QA and confidence. It is not a score
+    component and must never become a hidden score-release veto.
     """
     evidence_inputs = [
         timeline_coverage_ratio,
@@ -1004,9 +1056,10 @@ def _physiology_response(
     """Summarise coarse HR/RR regularity for a Wellness score.
 
     This intentionally is not beat-to-beat HRV and does not classify health or
-    fitness.  Once the independent paired-HR/RR release gate is satisfied, an
-    ordinary valid response starts at a neutral floor instead of a technical
-    zero.  The observed regularity and gentle settling can improve the factor.
+    fitness. An ordinary valid response starts at a neutral floor instead of a
+    technical zero. Missing paired HR/RR uses the separate neutral-component
+    policy and lowers confidence; observed regularity and gentle settling can
+    improve the factor when evidence exists.
     """
     measured_rows = [row for row in rows if _row_has_measured_paired_vitals(row)]
     hr_low, hr_high = WELLNESS_SCORE_HR_PLAUSIBLE_RANGE_BPM
@@ -1503,9 +1556,9 @@ def _build_awake_rest_quality(
             "description": "พักใน ZEEP ตามข้อมูลที่บันทึกได้",
         },
     )
-    # Legacy callers may only have aggregate Wake counts.  Without the raw
-    # Sensor rows there is no defensible evidence for an awake-rest score, so
-    # keep the historical zero instead of awarding duration-only points.
+    # Legacy callers may only have the completed wall-clock interval. Publish
+    # a bounded neutral result after the minimum duration, but never describe
+    # missing Sensor evidence as a measured response or a positive outcome.
     no_sensor_evidence = not rows
     target = dict(mode.get("target") or {})
     duration_goal_s = _rest_goal_seconds(target)
@@ -1542,9 +1595,7 @@ def _build_awake_rest_quality(
     )
     duration_points = (
         None
-        if duration_factor is None
-        else 0.0
-        if no_sensor_evidence
+        if no_sensor_evidence or duration_factor is None
         else round(25.0 * duration_factor, 1)
     )
 
@@ -1620,9 +1671,10 @@ def _build_awake_rest_quality(
         "environment_support": environment_points,
     }
     component_max = dict(RECOVERY_SCORE_COMPONENT_MAX_POINTS)
-    component_totals = _wellness_component_totals(
-        component_points,
-        component_max,
+    component_totals = (
+        _limited_evidence_component_totals(component_points, component_max)
+        if no_sensor_evidence
+        else _wellness_component_totals(component_points, component_max)
     )
     scored_components = [
         key for key, points in component_points.items() if points is not None
@@ -1661,24 +1713,9 @@ def _build_awake_rest_quality(
     )
     timing_releasable = bool(protocol_status.get("score_releasable"))
     eligible_duration_releasable = eligible_rest_s >= NAP_RECOVERY_MINIMUM_SCORE_SECONDS
-    score_available = bool(
-        target_available
-        and evidence_available
-        and timing_releasable
-        and eligible_duration_releasable
-    )
+    score_available = timing_releasable
     if score_available:
         unavailable_reason = None
-    elif not target_available:
-        unavailable_reason = (
-            "ไม่มีเป้าหมาย Nap & Refresh 30/90 นาทีที่บันทึกไว้ จึงไม่เผยแพร่ Recovery Score"
-        )
-    elif not eligible_duration_releasable:
-        unavailable_reason = "เวลาพักที่ยืนยันได้ยังไม่ถึง 10 นาที จึงยังไม่ออก Recovery Score"
-    elif not evidence_available:
-        unavailable_reason = (
-            "ข้อมูล HR/RR ที่จับคู่กันและผ่านการตรวจคุณภาพยังไม่พอ สำหรับคำนวณ Recovery Score"
-        )
     else:
         unavailable_reason = (
             protocol_status.get("reason") or "ข้อมูลสำคัญยังไม่พอสำหรับคำนวณ Recovery Score"
@@ -1709,6 +1746,18 @@ def _build_awake_rest_quality(
         state_attribution_ratio=state_attribution_ratio,
         component_evidence_ratio=component_evidence_ratio,
     )
+    if not target_available:
+        score_confidence["evidence_level_before_metadata_review"] = score_confidence[
+            "level"
+        ]
+        score_confidence.update(
+            {
+                "level": "low",
+                "label": "หลักฐานจำกัด",
+                "metadata_review_required": True,
+                "limiting_factors": ["missing_rest_target"],
+            }
+        )
     safety_review_required = bool(environment.get("safety_review_required"))
     if not score_available:
         level, level_key = "ข้อมูลยังไม่พอ", "unavailable"
@@ -1716,6 +1765,8 @@ def _build_awake_rest_quality(
     elif safety_review_required:
         level, level_key = "ควรให้ทีมตรวจสอบ", "safety_review"
         quality_insight = "พบค่าสภาพแวดล้อมที่ควรให้ทีมตรวจสอบก่อนตีความคะแนน"
+    elif no_sensor_evidence:
+        quality_insight = "บันทึกครบเวลาขั้นต่ำและแสดงคะแนนกลาง โดยข้อมูล Sensor ครั้งนี้มีจำกัด"
     elif protocol_status.get("status") == "partial":
         quality_insight = "ร่างกายได้พักในเวลาที่มี แม้ระยะเวลายังสั้นกว่าเป้าหมายที่เลือก"
     elif protocol_status.get("status") == "extended":
@@ -1725,6 +1776,12 @@ def _build_awake_rest_quality(
         "implausible_outlier",
     }:
         quality_insight = "ผลนี้สรุปจากการพักจริง แต่ระยะเวลาต่างจากรูปแบบที่เลือกไว้"
+    elif protocol_status.get("status") == "target_unknown":
+        quality_insight = "สรุปจากข้อมูลที่มี โดยองค์ประกอบเวลาใช้ค่ากลางเพราะไม่มีเป้าหมายเดิม"
+    elif not eligible_duration_releasable:
+        quality_insight = "บันทึกครบเวลาขั้นต่ำ แต่ช่วงที่ยืนยันว่าอยู่บนเตียงครั้งนี้มีจำกัด"
+    elif not evidence_available:
+        quality_insight = "สรุปจากการพักที่บันทึกได้ โดยข้อมูล HR/RR ครั้งนี้มีจำกัด"
     elif score < 85:
         quality_insight = insights.get(
             lowest,
@@ -1744,10 +1801,13 @@ def _build_awake_rest_quality(
             "minimum_paired_hr_rr_coverage_pct_for_high_confidence": 80,
             "paired_hr_rr_coverage_blocks_score": False,
             "minimum_paired_samples": 6,
-            "paired_hr_rr_required": True,
+            "paired_hr_rr_required": False,
+            "missing_paired_hr_rr_uses_neutral": not evidence_available,
             "physiology_plausibility_passed": bool(physiology.get("available")),
-            "stored_target_required": True,
+            "stored_target_required": False,
             "stored_target_available": target_available,
+            "missing_target_uses_neutral": not target_available,
+            "minimum_only_score_release": True,
             "state_attribution_coverage_pct": round(state_attribution_ratio * 100.0, 1),
             "physiological_evidence_coverage_pct": round(
                 physiological_evidence_ratio * 100.0, 1
@@ -1763,6 +1823,7 @@ def _build_awake_rest_quality(
             "minimum_session_seconds": NAP_RECOVERY_MINIMUM_SCORE_SECONDS,
             "eligible_rest_seconds": round(eligible_rest_s, 1),
             "eligible_duration_releasable": eligible_duration_releasable,
+            "eligible_duration_blocks_score": False,
             "timing_status": protocol_status.get("status"),
             "timing_releasable": timing_releasable,
             "physiology_review_required": bool(
@@ -1828,7 +1889,7 @@ def _build_awake_rest_quality(
                 "ที่ไม่ใช่ confirmed OFF BED; เวลาที่ต่างจากเป้าหมายเป็น "
                 "Admin QA และไม่ปิด Recovery Score"
                 if target.get("available")
-                else "ไม่มีเป้าหมายเดิม 30/90 นาที; ไม่เดาเป้าหมาย และไม่เผยแพร่ Recovery Score"
+                else "ไม่มีเป้าหมายเดิม 30/90 นาที; ไม่เดาเป้าหมาย ใช้คะแนนเวลา neutral และลด confidence"
             ),
         },
         "physiology": {
@@ -1904,6 +1965,7 @@ def _build_awake_rest_quality(
         "effective_component_points": effective_component_points,
         "imputed_component_points": component_totals["imputed_points"],
         "missing_component_neutral_factor": component_totals["neutral_factor"],
+        "limited_evidence_neutral_score": no_sensor_evidence,
         "score_unrounded": round(score_unrounded, 1),
         "scored_max_points": component_totals["max_points"],
         "score_normalized_for_available_components": False,
@@ -2267,6 +2329,9 @@ def build_sleep_quality(
             if not completed
             else "ZEEP กำลังรวบรวมข้อมูลสำหรับสรุปผลการพักครั้งนี้"
         ),
+        "insight": (
+            "กำลังบันทึกข้อมูลการพัก" if not completed else "เวลาที่บันทึกยังสั้นเกินกว่าจะสรุปคะแนน"
+        ),
         "version": SLEEP_QUALITY_VERSION,
         "score_title": (
             REST_SESSION_GROUPS.get(requested_mode, {}).get("score_title")
@@ -2323,12 +2388,7 @@ def build_sleep_quality(
     # awake, contained N1/N2, or became a short nap. Sleep is an optional
     # observation and must not switch the user onto Overnight architecture.
     if mode.get("group") == "nap_recovery" or mode["resolved"] in _AWAKE_REST_MODES:
-        if not rows and total_scored_samples <= 0:
-            unavailable["reason"] = "ไม่มีข้อมูล Sensor เพียงพอสำหรับประเมินการพัก"
-            return unavailable
         return _build_awake_rest_quality(duration, mode, counts, rows, interval)
-    if total_scored_samples <= 0:
-        return unavailable
 
     # Every term deliberately comes from the same recorded state rounds. It is
     # not mixed with user-reported sleep before/after Sensor recording.
@@ -2368,7 +2428,9 @@ def build_sleep_quality(
     # already represented by efficiency, so it is not deducted a second time.
     # BCG disturbance remains a small, bounded context penalty and is not EEG.
     efficiency_points = round(25.0 * efficiency**0.5, 1)
-    wake_pct = counts["wake"] * 100.0 / total_scored_samples
+    wake_pct = (
+        counts["wake"] * 100.0 / total_scored_samples if total_scored_samples else 0.0
+    )
     arousal = analyse_arousal_proxy(
         score_stage_sequence,
         sample_interval_s=interval,
@@ -2421,8 +2483,8 @@ def build_sleep_quality(
     cycles["max_points"] = 0.0
     cycles["score_note"] = "แสดงลำดับ NREM→REM เป็นบริบทเท่านั้น ไม่ใช้ตัดคะแนน"
 
-    # 4) Coarse HR/RR response — 10 points. The minimum paired-evidence gate is
-    # independent; once valid, the bounded factor is Wellness context, not HRV.
+    # 4) Coarse HR/RR response — 10 points. Available evidence contributes a
+    # bounded Wellness factor; missing evidence stays neutral and is not HRV.
     sleep_physiology_rows = [
         row
         for row in rows
@@ -2457,17 +2519,21 @@ def build_sleep_quality(
         round(10.0 * environment_factor, 1) if environment_factor is not None else None
     )
 
+    no_state_evidence = total_scored_samples <= 0
     component_points = {
-        "sleep_opportunity": opportunity_points,
-        "sleep_stability": stability_points,
-        "restorative_architecture": architecture["total"],
+        "sleep_opportunity": None if no_state_evidence else opportunity_points,
+        "sleep_stability": None if no_state_evidence else stability_points,
+        "restorative_architecture": (
+            None if no_state_evidence else architecture["total"]
+        ),
         "physiological_response": physiology_points,
         "environment_support": environment_points,
     }
     component_max = dict(SLEEP_QUALITY_COMPONENT_MAX_POINTS)
-    component_totals = _wellness_component_totals(
-        component_points,
-        component_max,
+    component_totals = (
+        _limited_evidence_component_totals(component_points, component_max)
+        if no_state_evidence
+        else _wellness_component_totals(component_points, component_max)
     )
     effective_component_points = component_totals["effective_points"]
     score_unrounded = float(component_totals["total"])
@@ -2479,9 +2545,10 @@ def build_sleep_quality(
         "physiological_response": "การตอบสนอง HR/RR",
         "environment_support": "สภาพแวดล้อมสนับสนุน",
     }
-    score = (
-        0 if estimated_sleep_s <= 0 else max(0, min(100, int(round(score_unrounded))))
-    )
+    if estimated_sleep_s <= 0 and not no_state_evidence:
+        score = 0
+    else:
+        score = max(0, min(100, int(round(score_unrounded))))
 
     if score >= 85:
         level, level_key = "ดีมาก", "very_good"
@@ -2510,12 +2577,7 @@ def build_sleep_quality(
     protocol_status = dict(mode.get("protocol_status") or {})
     protocol_releasable = bool(protocol_status.get("score_releasable"))
     physiology_available = bool(physiology.get("available"))
-    score_available = bool(
-        estimated_sleep_s > 0
-        and paired_vital_rows >= 6
-        and physiology_available
-        and protocol_releasable
-    )
+    score_available = protocol_releasable
     safety_review_required = bool(environment.get("safety_review_required"))
     if score_available:
         unavailable_reason = None
@@ -2524,20 +2586,20 @@ def build_sleep_quality(
             protocol_status.get("reason")
             or "ระยะเวลา Overnight Recovery ยังไม่ถึงเกณฑ์เผยแพร่ Sleep Score"
         )
-    elif not physiology_available:
-        unavailable_reason = (
-            "ข้อมูล HR/RR ที่จับคู่กันและผ่านการตรวจคุณภาพยังไม่พอ สำหรับคำนวณ Sleep Score"
-        )
     else:
-        unavailable_reason = (
-            "ยังไม่พบ Sleep State หรือข้อมูล HR/RR ที่จับคู่กันไม่พอ สำหรับคำนวณ Sleep Score"
-        )
+        unavailable_reason = "ระยะเวลา Overnight Recovery ยังไม่ถึงเกณฑ์เผยแพร่ Sleep Score"
     if not score_available:
         level, level_key = "ข้อมูลยังไม่พอ", "unavailable"
         insight = unavailable_reason
     elif safety_review_required:
         level, level_key = "ควรให้ทีมตรวจสอบ", "safety_review"
         insight = "พบค่าสภาพแวดล้อมที่ควรให้ทีมตรวจสอบก่อนตีความคะแนน"
+    elif no_state_evidence:
+        insight = "บันทึกครบเวลาขั้นต่ำและแสดงคะแนนกลาง โดยหลักฐาน Sleep State ครั้งนี้มีจำกัด"
+    elif estimated_sleep_s <= 0:
+        insight = "ยังไม่พบช่วงหลับจากข้อมูลที่บันทึก จึงแสดงคะแนนต่ำพร้อมความชัดเจนที่จำกัด"
+    elif not physiology_available:
+        insight = "สรุปจากเวลาและรูปแบบการนอนที่มี โดยข้อมูล HR/RR ครั้งนี้มีจำกัด"
     physiology_usable_ratio = float(
         physiology.get("usable_evidence_coverage_ratio") or 0.0
     )
@@ -2560,12 +2622,19 @@ def build_sleep_quality(
         "release_requirements": {
             "minimum_confirmed_stage_coverage_pct_for_high_confidence": 80,
             "confirmed_stage_coverage_blocks_score": False,
-            "confirmed_sleep_required": True,
+            "confirmed_sleep_required": False,
+            "missing_confirmed_sleep_sets_low_score": bool(
+                estimated_sleep_s <= 0 and not no_state_evidence
+            ),
+            "missing_state_evidence_uses_neutral": no_state_evidence,
+            "limited_evidence_score_cap": 50 if no_state_evidence else None,
             "minimum_paired_hr_rr_coverage_pct_for_high_confidence": 80,
             "paired_hr_rr_coverage_blocks_score": False,
             "minimum_paired_samples": 6,
-            "paired_hr_rr_required": True,
+            "paired_hr_rr_required": False,
+            "missing_paired_hr_rr_uses_neutral": not physiology_available,
             "physiology_plausibility_passed": physiology_available,
+            "minimum_only_score_release": True,
             "minimum_session_seconds": REST_MODE_PROTOCOLS["sleep"]["minimum_seconds"],
             "timing_status": protocol_status.get("status"),
             "timing_releasable": protocol_releasable,
@@ -2714,6 +2783,7 @@ def build_sleep_quality(
         "effective_component_points": effective_component_points,
         "imputed_component_points": component_totals["imputed_points"],
         "missing_component_neutral_factor": component_totals["neutral_factor"],
+        "limited_evidence_neutral_score": no_state_evidence,
         "score_unrounded": round(score_unrounded, 1),
         "scored_max_points": component_totals["max_points"],
         "score_normalized_for_available_components": False,
@@ -3445,7 +3515,11 @@ def build_session_report(
         subjective_outcome=effective_subjective_outcome,
     )
     return {
-        "available": bool(duration > 0 and (rows or scored_count)),
+        # Report availability means a completed interval can be summarised.
+        # Evidence availability/confidence remains explicit inside ``quality``;
+        # an empty Sensor payload must not contradict an otherwise releasable
+        # minimum-duration Wellness score.
+        "available": bool(duration > 0),
         "version": SESSION_REPORT_VERSION,
         "product_positioning": "ZEEP Wellness & Longevity",
         "intended_use": "wellness_sleep_and_recovery_estimation_not_diagnosis",

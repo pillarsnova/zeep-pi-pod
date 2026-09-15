@@ -136,7 +136,7 @@ def local_history_day(timezone_name: str = "Asia/Bangkok") -> str:
 
 
 class SessionHistoryService:
-    """Read completed, data-backed Session summaries from SQLite."""
+    """Read every completed Session summary from SQLite."""
 
     def __init__(
         self,
@@ -171,7 +171,7 @@ class SessionHistoryService:
         window: HistoryWindow | None,
         *,
         session_id: str | None = None,
-        require_timeline: bool = True,
+        require_timeline: bool = False,
     ) -> list[dict[str, Any]]:
         clauses = [
             "s.start_time>=?",
@@ -364,7 +364,7 @@ class SessionHistoryService:
         *,
         window: HistoryWindow | None = None,
     ) -> list[dict[str, Any]]:
-        """Return every completed data-backed Session for one account.
+        """Return every completed Session for one account.
 
         This internal method deliberately has no pagination because the
         longitudinal profile must not change when the history page changes
@@ -459,7 +459,7 @@ class SessionHistoryService:
         *,
         account_key: str | None = None,
     ) -> dict[str, Any] | None:
-        """Return one completed data-backed Session within product history.
+        """Return one completed Session within product history.
 
         Supplying ``account_key`` performs the ownership filter in SQL.  A
         caller therefore receives the same not-found result for an unknown

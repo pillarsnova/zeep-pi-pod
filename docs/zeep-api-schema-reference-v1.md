@@ -290,7 +290,7 @@ Admin จะมีหลายรายการ
 | `sleep_required` | `boolean` | ไม่ได้ | Overnight=true; Nap=false |
 | `target` | `Target` | nullable | เป้าหมาย duration; Overnight อาจไม่มี |
 | `review_required` | `boolean` | ไม่ได้ | true เมื่อ mode unresolved, metadata conflict หรือเวลา Session ต้องตรวจเทียบ Protocol |
-| `protocol_review_required` | `boolean` | ไม่ได้ | true เฉพาะเมื่อเวลาของ Session ต้องให้ Admin ตรวจ โดยไม่ปิดคะแนนที่มีหลักฐานครบ |
+| `protocol_review_required` | `boolean` | ไม่ได้ | true เมื่อเวลา/Target ของ Session ต้องให้ Admin ตรวจ โดยไม่ปิดคะแนนเมื่อผ่านเวลาขั้นต่ำของโหมด |
 | `validation_status` | `enum<string>` | ไม่ได้ | `mode_confirmed`, `mode_unresolved`, `mode_metadata_conflict` |
 | `conflicts` | `array<ModeConflict>` | ไม่ได้ | ปกติว่าง; รายละเอียดแหล่งที่ขัดกัน |
 
@@ -324,6 +324,21 @@ Admin จะมีหลายรายการ
 
 Invariant สำคัญ: `available=false` ⇒ `value=null`, UI ต้องไม่ fallback ไปใช้
 `engineering_shadow_score`, `score_unrounded` หรือค่าเดิมจาก report
+
+นโยบาย v10.12/v8.10 ใช้เวลา Session ขั้นต่ำเป็น score-release gate เพียงข้อเดียว
+หลังยืนยันโหมด: Overnight Recovery ≥5 ชั่วโมง และ Nap & Refresh ≥10 นาที
+สำหรับ Nap ค่า Target, HR/RR, State/Bed หรือ Environment ที่ขาดใช้ neutral 75%
+ในองค์ประกอบนั้นพร้อม confidence ต่ำ สำหรับ Overnight หากไม่มี State evidence เลย
+ใช้คะแนนกลางแบบจำกัดไม่เกิน 50; HR/RR หรือ Environment component ที่ขาดใช้
+neutral 75% แต่ Timeline ที่มีหลักฐานยืนยันว่าไม่พบช่วงหลับให้ Sleep Score 0
+ค่า neutral ทุกกรณีต้องมี availability ตามจริงและห้ามนำเสนอว่า Sensor วัดได้
+ระยะเวลา Nap ที่ต่างจากเป้าหมายหรือเกิน 120 นาทีเป็น Admin review เท่านั้น ไม่ใช่
+hard maximum และไม่ปิดคะแนน
+
+เมื่อหลักฐาน Sensor หลักไม่มีเลย API ใช้ bounded neutral 50, ตั้ง
+`limited_evidence_neutral_score=true` และทำให้ผลรวม
+`effective_component_points` ตรงกับ `score_unrounded=50.0`; UI ต้องใช้ข้อความ
+หลักฐานจำกัดและไม่สร้างคำแนะนำจาก Sensor ที่ไม่ได้วัด
 
 ### 7.4 DataQuality
 
@@ -594,7 +609,7 @@ State และ event เป็น association ไม่ใช่ causation Clie
 | `intended_use` | `string` | nullable |
 | `timeline_schema_version` | `integer\|string` | nullable | รองรับทั้งเลข schema และ legacy string |
 | `estimator_version` | `string` | nullable |
-| `headline` | `string` | nullable; unavailable จะถูกแทนด้วย “กำลังเตรียมผลสรุป” |
+| `headline` | `string` | nullable; Session ที่ปิดแล้วและ unavailable ใช้ “ครั้งนี้ยังไม่มีคะแนน”; “กำลังเตรียมผลสรุป” ใช้เฉพาะ Session ที่ยังไม่ปิด |
 | `insight` | `string` | nullable |
 | `quality` | `PublicQuality` | nullable/อาจถูกละเว้น; ใช้ nested positive allowlist |
 | `rest_mode` | `Mode` | canonical report เป็น non-null; legacy report ที่ไม่ผ่าน release policy อาจไม่มี |
@@ -609,6 +624,7 @@ State และ event เป็น association ไม่ใช่ causation Clie
 | `disclaimer` | `string` | nullable |
 
 เมื่อ `score.available=false` ระบบจะ override ข้อความและคำแนะนำที่อิงคะแนน:
+Session ที่ปิดแล้วใช้ `headline="ครั้งนี้ยังไม่มีคะแนน"` ส่วน Session ที่ยังไม่ปิดใช้
 `headline="กำลังเตรียมผลสรุป"` และ
 `post_session_guidance.score_derived_claims_suppressed=true` ห้าม client แสดง
 ข้อความเชิงบวกจาก report เก่าหรือ field ภายใน อย่างไรก็ตาม Safety evidence
@@ -773,8 +789,8 @@ engineering shadow score
       "value": 76,
       "available": true,
       "level": "ดี",
-      "formula_version": "zeep-sleep-score-v2.0-wellness-25-35-20-10-10",
-      "quality_model_version": "zeep-sleep-quality-v1",
+      "formula_version": "zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10",
+      "quality_model_version": "zeep-rest-quality-v8.10-minimum-only-score-release",
       "validation_status": "preliminary_wellness_estimate",
       "clinical_validated": false,
       "reason": null,
@@ -790,7 +806,7 @@ engineering shadow score
         "title": "Sleep Score",
         "value": 76,
         "available": true,
-        "formula_version": "zeep-sleep-score-v2.0-wellness-25-35-20-10-10",
+        "formula_version": "zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10",
         "copied_without_recalculation": true
       },
       "status": {
@@ -911,9 +927,9 @@ engineering shadow score
     },
     "versions": {
       "result_contract": "zeep.session-result.v1",
-      "session_report": "report-v-test",
-      "score_formula": "zeep-sleep-score-v2.0-wellness-25-35-20-10-10",
-      "score_quality_model": "zeep-sleep-quality-v1",
+      "session_report": "zeep-session-report-v10.12-minimum-only-score-release",
+      "score_formula": "zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10",
+      "score_quality_model": "zeep-rest-quality-v8.10-minimum-only-score-release",
       "restore_summary": "zeep-restore-summary-v1.0",
       "product_language": "zeep-product-language-v1.0"
     },
@@ -981,8 +997,8 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       "value": 74,
       "available": true,
       "level": "ช่วงพักนี้เป็นไปได้ดี",
-      "formula_version": "zeep-recovery-score-v3.0-wellness-soft-25-35-30-10",
-      "quality_model_version": "zeep-recovery-quality-v2",
+      "formula_version": "zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10",
+      "quality_model_version": "zeep-rest-quality-v8.10-minimum-only-score-release",
       "validation_status": "preliminary_wellness_estimate",
       "clinical_validated": false,
       "reason": null,
@@ -998,7 +1014,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
         "title": "Recovery Score",
         "value": 74,
         "available": true,
-        "formula_version": "zeep-recovery-score-v3.0-wellness-soft-25-35-30-10",
+        "formula_version": "zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10",
         "copied_without_recalculation": true
       },
       "status": {
@@ -1119,9 +1135,9 @@ Nap ไม่บังคับให้หลับและไม่ควร�
     },
     "versions": {
       "result_contract": "zeep.session-result.v1",
-      "session_report": "report-v-test",
-      "score_formula": "zeep-recovery-score-v3.0-wellness-soft-25-35-30-10",
-      "score_quality_model": "zeep-recovery-quality-v2",
+      "session_report": "zeep-session-report-v10.12-minimum-only-score-release",
+      "score_formula": "zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10",
+      "score_quality_model": "zeep-rest-quality-v8.10-minimum-only-score-release",
       "restore_summary": "zeep-restore-summary-v1.0",
       "product_language": "zeep-product-language-v1.0"
     },
@@ -1202,7 +1218,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       },
       "status": {
         "key": "unavailable",
-        "label": "กำลังเตรียมผลสรุป",
+        "label": "ครั้งนี้ยังไม่มีคะแนน",
         "min_score": null,
         "max_score": null,
         "meaning": "เลือกรูปแบบการพักเพื่อให้ ZEEP แสดงผลได้เหมาะสม",
@@ -1252,7 +1268,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       },
       "confidence": {
         "level": "unknown",
-        "label": "กำลังเตรียมผลสรุป",
+        "label": "ข้อมูลยังไม่พอสรุป",
         "session_coverage_pct": null,
         "paired_hr_rr_coverage_pct": null,
         "changes_source_score": false,
@@ -1358,7 +1374,7 @@ Admin ได้แก่ `score_release`, `data_quality`, `score_components`,
 |---|---|
 | Transport | `schema=zeep.api.response`, `api_version=1.0` |
 | Resource contract | `zeep.usage-session.v1` |
-| Score/summary | `zeep-sleep-score-v2.0-wellness-25-35-20-10-10`, `zeep-recovery-score-v3.0-wellness-soft-25-35-30-10`, `zeep-restore-summary-v1.0` |
+| Score/summary | `zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10`, `zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10`, `zeep-restore-summary-v1.0` |
 
 การเพิ่ม optional field ที่ไม่เปลี่ยนความหมายเดิมเป็น backward-compatible ได้
 แต่ client ต้อง ignore unknown fields และรองรับ optional/nullable field เสมอ

@@ -9,9 +9,11 @@
 
 ## 1. หลักการแบ่งระบบ
 
-`app.py` เป็น **composition root**: สร้าง FastAPI app, ต่อ lifecycle thread,
-ประกอบ state และเรียก hardware adapters เท่านั้น กฎที่คำนวณได้แบบ deterministic
-ต้องแยกเป็น pure module เพื่อให้ทดสอบได้โดยไม่เปิด GPIO, Serial, MQTT หรือเสียง
+`app.py` เป็น **legacy composition root**: Sensor-frame sampler ถูกย้ายออกแล้วและ
+เหลือเพียง compatibility facade แต่ Session/Sleep orchestration และ routes บางส่วน
+ยังอยู่ เป้าหมายที่บังคับด้วย architecture ratchet คือให้เหลือเฉพาะการสร้าง FastAPI
+app, ต่อ lifecycle, ประกอบ dependency และเรียก adapters เท่านั้น กฎ deterministic
+ใหม่ต้องอยู่ใน pure module เพื่อให้ทดสอบได้โดยไม่เปิด GPIO, Serial, MQTT หรือเสียง
 
 | Layer | Source of truth | หน้าที่ |
 |---|---|---|
@@ -25,6 +27,9 @@
 | Calibration | `sensor_calibration.py` | calibration spec, validation และ atomic JSON persistence |
 | Sensor runtime | `sensor_runtime.py` | normalize Hub 1, compose Hub 1/2, stale/hold และ Sound Leq |
 | Sensor transports | `zeep_pod/hardware/sensorhub1.py`, `sensorhub2.py` | USB/MQTT readers ที่รับ state และ callback จาก composition root |
+| BCG transport | `zeep_pod/hardware/bcg.py` | LSM-800-T framing/reconnect และ live-state publication; `app.bcg_reader()` เป็น compatibility facade |
+| Sensor-frame sampling | `zeep_pod/sessions/sensor_frame_sampler.py` | รวม BCG + canonical environment ตาม cadence 10 วินาที; ไม่ตัดสิน Sleep Stage |
+| Live API projection | `zeep_pod/api_state_projection.py` | ประกอบ freshness/stale/fallback ของ Hub, BCG และ Control จาก detached snapshot โดยไม่แก้ live reader state |
 | Control transports | `zeep_pod/hardware/controlhub1.py`, `controlhub2.py` | MQTT command/ACK ของแอร์และเตียง แยกจาก HTTP routes |
 | Audio controls | `zeep_pod/hardware/audio.py`, `audio_api.py` | MPV/fallback player และนโยบาย HTTP ของเพลง/Brainwave ที่ทดสอบได้โดยไม่เปิด audio hardware |
 | Shadow guidance | `smart_response.py` | ประเมินคำแนะนำสภาพแวดล้อมโดยไม่สั่งอุปกรณ์ |
@@ -39,6 +44,7 @@
 | Identity erasure | `zeep_pod/identity/account_erasure.py`, `account_erasure_api.py` | ลบ local active store ของ canonical account/aliases, Session, BCG, Baseline, checkpoint และ capability ที่ค้าง |
 | Final report | `sleep_session_report.py` | Mode-aware Sleep/Rest score และรายงานหลังจบ Session |
 | Account ingest outbox | `zeep_pod/sessions/ingest_payload.py`, `ingest_outbox.py` | สร้าง payload แบบ allowlist, เขียนคิว atomic และ retry โดยไม่ทำให้ Session finalization ล้ม |
+| Atomic Session finalization | `zeep_pod/sessions/finalization_commit.py` | commit ผลที่สร้างแล้วลง DB, กู้ live Session เมื่อ persistence ล้ม และลบ checkpoint หลัง durable flush เท่านั้น |
 | Storage | `database.py`, `bcg_storage.py`, `backup.py` | SQLite writer, raw BCG และ Daily backup |
 | UI source | `static/index.template.html`, `static/partials/control/*`, `static/partials/app/*` | App shell, Control cards, Base CSS และ ordered JavaScript fragments |
 | UI bundle | `ui_composer.py`, `static/index.html` | ประกอบและตรวจ runtime HTML โดยไม่ fetch partial ตอนใช้งาน |
@@ -151,13 +157,20 @@ git diff --check
 
 ลำดับ refactor ถัดไปควรเป็น:
 
-1. **เสร็จแล้ว:** แยก GPIO, Audio player/API, Sensor Hub 1/2, Control Hub 1/2
-   และ Account ingest outbox เป็น adapters/services
-2. เพิ่ม fake-serial characterization แล้วแยก BCG reader; จากนั้นแยก Session
-   lifecycle/checkpoint/sampler เป็น service
-   ที่ inject dependency ได้
-3. แบ่ง FastAPI routes ตาม domain: auth, control, session, admin/monitor
-4. ลด `app.py` ให้เหลือ construction, dependency wiring และ process lifecycle
+1. **เสร็จแล้ว:** แยก GPIO, Audio player/API, Sensor Hub 1/2, Control Hub 1/2,
+   BCG reader, Account ingest outbox และ live device/API projection เป็น
+   adapters/services
+2. **เสร็จแล้ว:** แยก 10-second Sensor frame sampler เป็น service ที่ inject
+   clock/state ports ได้
+3. **เริ่มแล้ว:** แยก atomic finalization commit; ขั้นต่อไปแยก Session
+   lifecycle/checkpoint orchestration ตาม use case
+4. แบ่ง FastAPI routes ตาม domain: auth, control, session, admin/monitor
+5. ลด `app.py` ให้เหลือ construction, dependency wiring และ process lifecycle
 
 แต่ละขั้นต้องเป็น behavior-preserving commit ขนาดเล็กและผ่าน regression ก่อนเริ่ม
 ขั้นถัดไป ห้ามรวมการเปลี่ยนสูตรสุขภาพหรือ hardware behavior ไว้ใน refactor commit
+
+แผนละเอียดและ Definition of Done อยู่ที่
+[ZEEP v1 Refactor Roadmap](onboarding/refactor-roadmap-v1.md) ส่วน transport,
+ownership และ failure behavior ของอุปกรณ์อยู่ที่
+[Hardware and Hub Map](onboarding/hardware-hub-map.md)

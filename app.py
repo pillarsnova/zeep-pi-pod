@@ -79,7 +79,11 @@ from control_protocol import (
 from database import DatabaseManager
 from api_v1 import create_api_v1_router
 from zeep_pod.adaptive_learning import build_adaptive_learning_snapshot
-from zeep_pod.api_state_projection import project_consumer_snapshot
+from zeep_pod.api_state_projection import (
+    LiveDeviceProjectionPolicy,
+    project_consumer_snapshot,
+    project_live_device_statuses,
+)
 from zeep_pod.identity.account_aliases import verified_alias_mapping
 from zeep_pod.identity.account_erasure_api import create_account_erasure_router
 from zeep_pod.identity.lifecycle_lock import synchronized_by
@@ -97,6 +101,13 @@ from zeep_pod.identity.profile_fields import (
 from zeep_pod.identity.zeep_account import authenticate_password, identity_from_auth_data
 from zeep_pod.hardware.audio import AudioPlayer, default_music_state
 from zeep_pod.hardware.audio_api import AudioControlService, create_audio_router
+from zeep_pod.hardware.bcg import (
+    BCGPacketPublisher,
+    BCGPublicationPorts,
+    BCGReaderConfig,
+    BCGReaderPorts,
+    LSM800TReader,
+)
 from zeep_pod.hardware.controlhub1 import ControlHub1MQTT, configure_controlhub1
 from zeep_pod.hardware.controlhub2 import ControlHub2BedMQTT, configure_controlhub2
 from zeep_pod.hardware.gpio import GPIOManager
@@ -112,6 +123,10 @@ from zeep_pod.sessions.cadence import (
     normalise_samples_for_report as _normalise_samples_for_report,
     sample_interval_seconds as _sample_interval_seconds_impl,
     timeline_sample_interval as _timeline_sample_interval,
+)
+from zeep_pod.sessions.finalization_commit import (
+    FinalizationPorts,
+    commit_live_session_finalization as commit_session_finalization,
 )
 from zeep_pod.sessions.lifecycle import (
     SESSION_CHECKPOINT_VERSION,
@@ -150,6 +165,11 @@ from zeep_pod.sessions.sleep_between_epochs import (
     between_evidence_epoch_value,
     current_frame_issue,
     sensor_frame_wait_value,
+)
+from zeep_pod.sessions.sensor_frame_sampler import (
+    SensorFramePolicy,
+    SensorFrameRuntime,
+    SensorFrameSampler,
 )
 from zeep_pod.sessions.sleep_runtime_evidence import (
     baseline_interval_proximity as _baseline_interval_proximity,
@@ -621,6 +641,17 @@ CONTROLHUB2_ACK_TIMEOUT_SECONDS = float(os.getenv("CONTROLHUB2_ACK_TIMEOUT_SECON
 # direction cannot continue indefinitely. Safety Supervisor can still stop it
 # immediately through the internal bed_stop command.
 BED_MOVE_SECONDS = max(0.5, float(os.getenv("BED_MOVE_SECONDS", "2")))
+
+LIVE_DEVICE_PROJECTION_POLICY = LiveDeviceProjectionPolicy(
+    esp32_stale_s=ESP32_STALE_SECONDS,
+    sensorhub2_stale_s=SENSORHUB2_STALE_SECONDS,
+    bcg_stale_s=BCG_STALE_SECONDS,
+    controlhub1_stale_s=CONTROLHUB1_STALE_SECONDS,
+    controlhub2_stale_s=CONTROLHUB2_STALE_SECONDS,
+    aircon_power_on_default_c=AIRCON_POWER_ON_DEFAULT_TEMP_C,
+    aircon_temperature_min_c=AIRCON_TEMPERATURE_MIN_C,
+    aircon_temperature_max_c=AIRCON_TEMPERATURE_MAX_C,
+)
 
 # Calibration file for environmental channels. Sensor Hub 1 owns SPH0645
 # processing; the Pi consumes its finite, in-range ``sound_dba`` directly.
@@ -3641,53 +3672,13 @@ def snapshot() -> Dict[str, Any]:
     now = time.time()
     result["system"]["uptime_s"] = int(now - result["system"]["started_at"])
     result["system"]["health"] = system_health_cached()
-    # ESP32 readline() timeout returns empty without raising, so a hub that
-    # stops sending would otherwise stay "connected" with frozen values.
-    esp32 = result["sensor"].get("esp32") or {}
-    last = esp32.get("last_update")
-    esp32["data_age_s"] = round(max(0.0, now - last), 1) if isinstance(last, (int, float)) else None
-    if esp32.get("connected") and (last is None or now - last > ESP32_STALE_SECONDS):
-        esp32["connected"] = False
-        esp32["stale"] = True
-    esp32["fallback_active"] = bool(not esp32.get("connected") and last is not None)
-    if esp32["fallback_active"]:
-        esp32["fallback_reason"] = "stale" if esp32.get("stale") else "serial_disconnected"
-    hub2 = result["sensor"].get("sensorhub2") or {}
-    hub2_last = hub2.get("last_update")
-    hub2["data_age_s"] = round(max(0.0, now - hub2_last), 1) if isinstance(hub2_last, (int, float)) else None
-    if hub2.get("connected") and (hub2_last is None or now - hub2_last > SENSORHUB2_STALE_SECONDS):
-        hub2["connected"] = False
-        hub2["stale"] = True
-    hub2["fallback_active"] = bool(not hub2.get("connected") and hub2_last is not None)
-    if hub2["fallback_active"]:
-        hub2["fallback_reason"] = "stale" if hub2.get("stale") else "mqtt_disconnected"
-    aircon = result.get("aircon") or {}
-    aircon_last = aircon.get("last_update")
-    aircon["data_age_s"] = round(max(0.0, now - aircon_last), 1) if isinstance(aircon_last, (int, float)) else None
-    if aircon.get("connected") and (aircon_last is None or now - aircon_last > CONTROLHUB1_STALE_SECONDS):
-        aircon["connected"] = False
-        aircon["stale"] = True
-    # ESP32 reports the setpoint sent over IR. The selected and sent values are
-    # intentionally identical; discard stale metadata from earlier releases.
-    aircon.pop("temperature_bias_c", None)
-    aircon["temperature_mapping"] = "direct_1_to_1"
-    aircon["power_on_default_temperature_c"] = AIRCON_POWER_ON_DEFAULT_TEMP_C
-    aircon["desired_temperature_min_c"] = AIRCON_TEMPERATURE_MIN_C
-    aircon["desired_temperature_max_c"] = AIRCON_TEMPERATURE_MAX_C
-    commanded_temperature = aircon.get("temperature_c")
-    if isinstance(commanded_temperature, (int, float)) and not isinstance(commanded_temperature, bool):
-        desired_temperature = int(commanded_temperature)
-        aircon["desired_temperature_c"] = desired_temperature if AIRCON_TEMPERATURE_MIN_C <= desired_temperature <= AIRCON_TEMPERATURE_MAX_C else None
-    else:
-        aircon["desired_temperature_c"] = None
-    result["aircon"] = aircon
-    bed_control = result.get("bed_control") or {}
-    bed_control_last = bed_control.get("last_update")
-    bed_control["data_age_s"] = round(max(0.0, now - bed_control_last), 1) if isinstance(bed_control_last, (int, float)) else None
-    if bed_control.get("connected") and (bed_control_last is None or now - bed_control_last > CONTROLHUB2_STALE_SECONDS):
-        bed_control["connected"] = False
-        bed_control["stale"] = True
-    result["bed_control"] = bed_control
+    # Display freshness is projected from last_update on the detached copy;
+    # quiet or stale transports must never mutate their live reader state.
+    esp32, hub2, bcg = project_live_device_statuses(
+        result,
+        now=now,
+        policy=LIVE_DEVICE_PROJECTION_POLICY,
+    )
     live_environment = build_environment_snapshot(esp32, hub2, now)
     analysis_frame = analysis_frame_cached()
     frame_available = bool(analysis_frame)
@@ -3734,17 +3725,6 @@ def snapshot() -> Dict[str, Any]:
         require_live_devices=True,
     )
     result["sensor"]["environment"] = environment_view
-    # BCG freshness is decided here (display level), not in the reader —
-    # the serial line being quiet between frames is normal device behaviour.
-    bcg = result["sensor"].get("bcg") or {}
-    bcg_last = bcg.get("last_update")
-    bcg["data_age_s"] = round(max(0.0, now - bcg_last), 1) if isinstance(bcg_last, (int, float)) else None
-    if bcg.get("connected") and (bcg_last is None or now - bcg_last > BCG_STALE_SECONDS):
-        bcg["connected"] = False
-        bcg["stale"] = True
-    bcg["fallback_active"] = bool(not bcg.get("connected") and bcg_last is not None)
-    if bcg["fallback_active"]:
-        bcg["fallback_reason"] = "stale" if bcg.get("stale") else "serial_disconnected"
     if frame_available:
         for key, value in analysis_frame["bcg"].items():
             bcg[key] = value
@@ -4034,273 +4014,66 @@ def _schedule_bed_auto_stop(source_command: str) -> None:
     ).start()
 
 
-def _read_exact(ser: serial.Serial, n: int) -> bytes:
-    buf = bytearray()
-    while len(buf) < n:
-        chunk = ser.read(n - len(buf))
-        if not chunk:
-            raise TimeoutError("serial timeout")
-        buf.extend(chunk)
-    return bytes(buf)
-
-
 def bcg_reader():
-    """66-byte Odata/Bdata frame: 25 x int16 samples + confirmed summary bytes.
-
-    The LSM-800-T sends a frame only every few seconds. A quiet line is NOT a
-    failure — treating the inter-frame gap as an error made the UI flap
-    connected/disconnected constantly. The reader now keeps the port open
-    through silence and mid-frame hiccups; only real port errors reconnect.
-    Freshness for the UI comes from last_update + BCG_STALE_SECONDS.
-    """
-    last_error = None
-    while True:
-        try:
-            with serial.Serial(BCG_PORT, BCG_BAUD, timeout=1) as ser:
-                log_event("bcg", "connected", port=BCG_PORT, baud=BCG_BAUD)
-                last_error = None
-                with state_lock:
-                    state["sensor"]["bcg"].pop("error", None)
-                sync = bytearray()
-                while True:
-                    b = ser.read(1)
-                    if not b:
-                        continue  # quiet gap between frames — normal, stay open
-                    sync += b
-                    if len(sync) > 5:
-                        del sync[0]
-                    if bytes(sync) != b"Odata":
-                        continue
-                    try:
-                        rest = _read_exact(ser, 61)
-                    except TimeoutError:
-                        sync.clear()
-                        continue  # partial frame — drop it and resync
-                    frame = b"Odata" + rest
-                    if frame[57:62] != b"Bdata":
-                        continue
-                    parsed = parse_lsm800t_frame(frame)
-                    samples = parsed["samples"]
-                    status_code = parsed["status_code"]
-                    hr_value = parsed["heart_rate_bpm"]
-                    rr_value = parsed["respiration_rate"]
-                    hr_current_valid = bool(hr_value is not None and HR_SANITY_RANGE_BPM[0] <= hr_value <= HR_SANITY_RANGE_BPM[1])
-                    rr_current_valid = bool(rr_value is not None and RR_SANITY_RANGE_PER_MIN[0] <= rr_value <= RR_SANITY_RANGE_PER_MIN[1])
-                    # Persist raw packet to SQLite (epoch-batched, queue-based)
-                    bcg_storage.add_packet(
-                        frame,
-                        sensor_packet_id=parsed["sensor_packet_id"],
-                        status_code=status_code,
-                        heart_rate=hr_value,
-                        respiration_rate=rr_value,
-                    )
-                    with history_lock:
-                        bcg_history.append(
-                            {
-                                "t": time.time(),
-                                "status": status_code,
-                                "hr": hr_value,
-                                "rr": rr_value,
-                                "samples": samples,
-                            }
-                        )
-                        bcg_raw_history.append(
-                            {
-                                "t": time.time(),
-                                "packet_id": parsed["sensor_packet_id"],
-                                "status_code": status_code,
-                                "heart_rate": hr_value,
-                                "respiration_raw": parsed["respiration_raw"],
-                                "respiration_rate": rr_value,
-                                "samples": samples,
-                                "raw_hex": frame.hex(" "),
-                            }
-                        )
-                    packet_time = time.time()
-                    with state_lock:
-                        bcg = state["sensor"]["bcg"]
-                        current_vitals_valid = bool(status_code in ON_BED_CODES and hr_current_valid and rr_current_valid)
-                        previous_streak = int(bcg.get("vital_valid_streak") or 0)
-                        bcg.update(
-                            {
-                                "connected": True,
-                                "samples": samples,
-                                "sensor_packet_id": parsed["sensor_packet_id"],
-                                "status_code": status_code,
-                                "status_text": STATUS_TEXT.get(status_code, "Unknown"),
-                                "respiration_raw": parsed["respiration_raw"],
-                                "heart_rate_current_valid": hr_current_valid,
-                                "respiration_current_valid": rr_current_valid,
-                                "vital_valid_streak": (previous_streak + 1 if current_vitals_valid else 0),
-                                "vital_valid_since": (bcg.get("vital_valid_since") if current_vitals_valid and previous_streak > 0 else packet_time if current_vitals_valid else None),
-                                "last_update": packet_time,
-                                "packets": int(bcg.get("packets", 0)) + 1,
-                            }
-                        )
-                        # Raw zeros remain stored as None in bcg.db. The live
-                        # interface alone gets a short hold to avoid flicker
-                        # between valid packets while the user is still on bed.
-                        for field, last_field, held_field, value in (
-                            (
-                                "heart_rate_bpm",
-                                "heart_rate_last_valid",
-                                "heart_rate_held",
-                                hr_value,
-                            ),
-                            (
-                                "respiration_rate",
-                                "respiration_last_valid",
-                                "respiration_held",
-                                rr_value,
-                            ),
-                        ):
-                            if value is not None:
-                                bcg[field] = value
-                                bcg[last_field] = packet_time
-                                bcg[held_field] = False
-                            else:
-                                last_valid = bcg.get(last_field)
-                                can_hold = status_code in ON_BED_CODES and isinstance(last_valid, (int, float)) and packet_time - last_valid <= BCG_VITAL_HOLD_SECONDS
-                                if not can_hold:
-                                    bcg[field] = None
-                                bcg[held_field] = bool(can_hold)
-        except Exception as exc:
-            if str(exc) != last_error:  # log แค่ตอนอาการเปลี่ยน ไม่ spam ทุก 2 วิ
-                log_event("bcg", "disconnected", error=str(exc))
-                last_error = str(exc)
-            with state_lock:
-                state["sensor"]["bcg"]["connected"] = False
-                state["sensor"]["bcg"]["error"] = str(exc)
-            time.sleep(2)
+    """Compatibility facade for the extracted LSM-800-T adapter."""
+    config = BCGReaderConfig(
+        port=BCG_PORT,
+        baud=BCG_BAUD,
+        status_text=STATUS_TEXT,
+        on_bed_codes=frozenset(ON_BED_CODES),
+        heart_rate_range=HR_SANITY_RANGE_BPM,
+        respiration_range=RR_SANITY_RANGE_PER_MIN,
+        vital_hold_seconds=BCG_VITAL_HOLD_SECONDS,
+    )
+    publisher = BCGPacketPublisher(
+        config=config,
+        ports=BCGPublicationPorts(
+            storage=bcg_storage,
+            shared_state=state,
+            state_lock=state_lock,
+            history=bcg_history,
+            raw_history=bcg_raw_history,
+            history_lock=history_lock,
+        ),
+    )
+    LSM800TReader(
+        config=config,
+        ports=BCGReaderPorts(
+            serial_factory=serial.Serial,
+            parse_frame=parse_lsm800t_frame,
+            publisher=publisher,
+            log_event=log_event,
+        ),
+    ).run_forever()
 
 
 def sensor_frame_sampler():
-    """Publish one canonical 10-second display/recording Sensor frame.
-
-    Serial readers remain event-driven at each device's native cadence. This
-    sampler aggregates every BCG frame that actually arrived in the bucket and
-    joins the freshest ESP32 environment payload without resampling serial I/O.
-    Environment, HR, RR and Bed Status therefore share this clock independently
-    of whether a User Session exists. Sleep Evidence is the only downstream
-    consumer that aggregates these frames further to 30/60 seconds.
-    """
-    next_tick = time.monotonic()
-    bucket_start = time.time()
-    while True:
-        next_tick += SLEEP_SAMPLE_SECONDS
-        time.sleep(max(0.0, next_tick - time.monotonic()))
-        bucket_end = time.time()
-        with history_lock:
-            bcg_frames = [f for f in bcg_history if bucket_start < f["t"] <= bucket_end]
-        with state_lock:
-            b = dict(state["sensor"]["bcg"])
-            e = dict(state["sensor"].get("esp32") or {})
-            h2 = dict(state["sensor"].get("sensorhub2") or {})
-        raw_hr = [f.get("hr") for f in bcg_frames]
-        raw_rr = [f.get("rr") for f in bcg_frames]
-        # A physiological frame is valid only when HR and RR came from the
-        # same vendor packet.  Averaging two independently filtered lists can
-        # otherwise pair an old/invalid heart rate with a different breath.
-        paired_vitals = []
-        for bcg_frame in bcg_frames:
-            hr_values = filter_vital_values([bcg_frame.get("hr")], HR_SANITY_RANGE_BPM)
-            rr_values = filter_vital_values([bcg_frame.get("rr")], RR_SANITY_RANGE_PER_MIN)
-            if hr_values and rr_values:
-                paired_vitals.append((hr_values[0], rr_values[0]))
-        valid_hr = [pair[0] for pair in paired_vitals]
-        valid_rr = [pair[1] for pair in paired_vitals]
-        statuses = [f.get("status") for f in bcg_frames if f.get("status") is not None]
-        raw_points = [v for f in bcg_frames for v in (f.get("samples") or [])]
-        clipped = sum(1 for v in raw_points if v in (-32768, 32767))
-        clip_ratio = clipped / len(raw_points) if raw_points else None
-        # Any motion within the bucket is more informative than the final quiet frame.
-        bucket_status = 2 if 2 in statuses else (statuses[-1] if statuses else None)
-        raw_exit_frames = sum(status == 1 for status in statuses)
-        # Keep enough completed buckets for the configured exit debounce. The
-        # previous implementation supplied only one previous bucket, making a
-        # three-bucket confirmation mathematically impossible in the live path.
-        with history_lock:
-            previous_features = list(sleep_feature_history)[-max(0, BED_EXIT_CONFIRM_BUCKETS - 1) :]
-        previous_feature = previous_features[-1] if previous_features else None
-        recent_raw_statuses = [previous.get("status") for previous in previous_features if previous.get("status") is not None]
-        if bucket_status is not None:
-            recent_raw_statuses.append(bucket_status)
-        bed_exit_evidence = bed_exit_window_evidence(
-            recent_raw_statuses,
-            latest_raw_exit_frames=raw_exit_frames,
-            latest_raw_total_frames=len(statuses),
-            minimum_consecutive_buckets=BED_EXIT_CONFIRM_BUCKETS,
-            minimum_raw_frames=BED_EXIT_RAW_MIN_FRAMES,
-            minimum_raw_ratio=BED_EXIT_RAW_MIN_RATIO,
-            raw_packet_confirmation_enabled=BED_EXIT_RAW_CONFIRMATION_ENABLED,
-        )
-        confirmed_status = bucket_status
-        if bucket_status == 1 and not bed_exit_evidence["confirmed"]:
-            previous_confirmed = previous_feature.get("confirmed_status", previous_feature.get("status")) if previous_feature is not None else None
-            # A transient code must not manufacture a bed exit. During an
-            # active stream, hold the last canonical on-bed status for this
-            # analysis decision; startup with no history defaults to On bed.
-            confirmed_status = previous_confirmed if previous_confirmed in ON_BED_CODES else 0
-        environment = build_environment_snapshot(e, h2, bucket_end)
-        sound_summary = sound_window_summary(bucket_start, bucket_end)
-        with state_lock:
-            state["system"]["sound_analysis"] = {
-                **sound_summary,
-                "window_start": datetime.fromtimestamp(bucket_start, timezone.utc).isoformat(),
-                "window_end": datetime.fromtimestamp(bucket_end, timezone.utc).isoformat(),
-            }
-        device_status = {key: device.get("status") == "live" for key, device in (environment.get("devices") or {}).items()}
-        esp_fresh = any(device_status.values())
-        paired_packet_coverage = len(paired_vitals) / len(bcg_frames) if bcg_frames else 0.0
-        bcg_bucket_valid = bool(len(bcg_frames) >= SLEEP_BUCKET_MIN_BCG_PACKETS and paired_packet_coverage >= SLEEP_MIN_PAIRED_VITAL_COVERAGE)
-        feature = {
-            "t": bucket_end,
-            "bucket_start": bucket_start,
-            "status": bucket_status,
-            "confirmed_status": confirmed_status,
-            "bed_exit_evidence": bed_exit_evidence,
-            # Preserve every vendor status observed inside the analysis
-            # bucket. The final status alone can hide a short snoring or weak-
-            # breathing flag that returned to ordinary On-bed before the tick.
-            "status_codes_seen": sorted({int(value) for value in statuses}),
-            "hr": round(sum(valid_hr) / len(valid_hr), 2) if valid_hr else None,
-            "rr": round(sum(valid_rr) / len(valid_rr), 2) if valid_rr else None,
-            "invalid_hr_count": len([value for value in raw_hr if value is not None]) - len(valid_hr),
-            "invalid_rr_count": len([value for value in raw_rr if value is not None]) - len(valid_rr),
-            "packet_count": b.get("packets"),
-            "bcg_frames": len(bcg_frames),
-            "bcg_latest_t": bcg_frames[-1]["t"] if bcg_frames else None,
-            "clip_ratio": round(clip_ratio, 4) if clip_ratio is not None else None,
-            # HR/RR/status are device summary bytes and remain usable even when
-            # the raw waveform clips; clipping lowers confidence separately.
-            "bcg_valid": bcg_bucket_valid,
-            "paired_vital_packets": len(paired_vitals),
-            "paired_vital_coverage": round(paired_packet_coverage, 4),
-            "minimum_bcg_packets": SLEEP_BUCKET_MIN_BCG_PACKETS,
-            # Internal rolling waveform only. It is not copied into the public
-            # analysis frame; the canonical raw record remains bcg.db.
-            "bcg_samples": raw_points,
-            "temperature": environment.get("temperature_c") if device_status.get("sht3x_dis") else None,
-            "humidity": environment.get("humidity_rh") if device_status.get("sht3x_dis") else None,
-            "co2": environment.get("co2_ppm") if device_status.get("mhz19c") else None,
-            "lux": environment.get("lux") if device_status.get("opt3001") else None,
-            "sound_dba": environment.get("sound_dba_est") if device_status.get("sph0645") else None,
-            # Analytical audio evidence must use samples captured inside this
-            # exact bucket, never a held display value from an older packet.
-            "sound_leq_dba": (sound_summary.get("leq_dba") if device_status.get("sph0645") else None),
-            "sound_sample_count": int(sound_summary.get("sample_count") or 0),
-            "sound_window_status": sound_summary.get("status"),
-            "sound_span_db": sound_summary.get("span_db"),
-            "sound_large_step": bool(sound_summary.get("large_step_detected")),
-            "pm2_5": environment.get("pm2_5_ug_m3") if device_status.get("pms7003") else None,
-            "voc": environment.get("voc_index") if device_status.get("sgp40") else None,
-            "esp_fresh": esp_fresh,
-            "sensor_status": device_status,
-        }
-        with history_lock:
-            sleep_feature_history.append(feature)
-        _publish_sensor_frame(feature, environment, b)
-        bucket_start = bucket_end
+    """Compatibility facade for the extracted fixed-cadence sampler."""
+    policy = SensorFramePolicy(
+        sample_seconds=SLEEP_SAMPLE_SECONDS,
+        minimum_bcg_packets=SLEEP_BUCKET_MIN_BCG_PACKETS,
+        minimum_paired_vital_coverage=SLEEP_MIN_PAIRED_VITAL_COVERAGE,
+        bed_exit_confirm_buckets=BED_EXIT_CONFIRM_BUCKETS,
+        bed_exit_raw_min_frames=BED_EXIT_RAW_MIN_FRAMES,
+        bed_exit_raw_min_ratio=BED_EXIT_RAW_MIN_RATIO,
+        bed_exit_raw_confirmation_enabled=BED_EXIT_RAW_CONFIRMATION_ENABLED,
+        on_bed_codes=frozenset(ON_BED_CODES),
+        heart_rate_range=HR_SANITY_RANGE_BPM,
+        respiration_range=RR_SANITY_RANGE_PER_MIN,
+    )
+    runtime = SensorFrameRuntime(
+        shared_state=state,
+        state_lock=state_lock,
+        history_lock=history_lock,
+        bcg_history=bcg_history,
+        feature_history=sleep_feature_history,
+        build_environment=build_environment_snapshot,
+        summarize_sound_window=sound_window_summary,
+        filter_vital_values=filter_vital_values,
+        bed_exit_window_evidence=bed_exit_window_evidence,
+        publish_frame=_publish_sensor_frame,
+    )
+    SensorFrameSampler(policy, runtime).run_forever()
 
 
 def _sleep_value_between_evidence_epochs(
@@ -4859,38 +4632,20 @@ def _commit_live_session_finalization(
     final_summary: Dict[str, Any],
     terminal_wake: Optional[Dict[str, Any]],
 ) -> None:
-    """Atomically close a Session, then and only then remove restart recovery."""
-    record = active["record"]
-    terminal_event = None
-    if terminal_wake is not None:
-        terminal_event = {
-            "timestamp": terminal_wake["start_time"],
-            "value": terminal_wake,
-        }
-    try:
-        database.enqueue(
-            "sessions",
-            "session_finalize",
-            {
-                "session_id": record["session_id"],
-                "end_time": record["ended_at_utc"],
-                "duration": record["duration_s"],
-                "note": record.get("note"),
-                "end_reason": record["end_reason"],
-                "terminal_wake": terminal_event,
-                "final_summary": final_summary,
-            },
-        )
-        if not database.flush(30):
-            raise _database_flush_failure("before Session finalization")
-    except Exception:
-        _restore_active_after_finalization_failure(active)
-        raise
-    record.pop("started_monotonic", None)
-    # Explicit User/Admin completion is the only point that clears restart
-    # recovery. A committed row is authoritative if the process crashes in
-    # the narrow window immediately before this unlink.
-    _clear_active_session_checkpoint()
+    """Compatibility facade for the extracted atomic commit boundary."""
+    commit_session_finalization(
+        active,
+        final_summary,
+        terminal_wake,
+        ports=FinalizationPorts(
+            enqueue=database.enqueue,
+            flush=database.flush,
+            flush_failure=_database_flush_failure,
+            recover_active=_restore_active_after_finalization_failure,
+            clear_checkpoint=_clear_active_session_checkpoint,
+        ),
+        flush_timeout_s=30,
+    )
 
 
 @synchronized_by(session_lock)

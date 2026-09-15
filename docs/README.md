@@ -14,6 +14,7 @@
 
 | เรื่อง | เอกสารที่มีอำนาจ | ใช้สำหรับ |
 |---|---|---|
+| เริ่มงานสมาชิกใหม่ | [ZEEP v1 Team Onboarding](onboarding/README.md) | เส้นทางอ่านตามบทบาท, Lifecycle, Hardware map, API/Data/Privacy และ First-week checklist |
 | ส่งมอบและ Code Freeze | [v1 System Handover and Freeze Readiness](zeep-v1-system-handover-and-freeze-readiness.md) | Lifecycle ครบวงจร, invariant, test gate และรายการลงนามก่อน Freeze |
 | ภาพรวมระบบ | [Pi 5 Software Architecture](pi5-software-architecture.md) | ขอบเขต module, dependency และลำดับ refactor |
 | ปฏิบัติการเครื่อง | [Pi 5 Operations Runbook](pi5-operations-runbook.md) | Pull, verified Pod sync, test, deploy, backup, restart และ recovery |

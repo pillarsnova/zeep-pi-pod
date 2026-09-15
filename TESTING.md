@@ -5,11 +5,14 @@ pi5/.venv/bin/activate` บน Mac workspace หรือ `source .venv/bin/acti
 บน Pi) ชุดเร็วใช้ตรวจระหว่างแก้ module ส่วนชุดเต็มเป็น release gate ก่อน
 push/deploy
 
-ตัวเลข `964 tests` เป็น audit baseline ของ commit `40aa523` และหมายถึง **Pi
+ตัวเลข `1,027 tests` เป็น pushed baseline ของ commit `d2c7af7` และหมายถึง **Pi
 application suite ที่ root repository เท่านั้น** จำนวนจริงอาจเพิ่มเมื่อมี
 regression ใหม่ และต้องรายงานจากผลรันแต่ละครั้ง ตัวเลขนี้ไม่รวมการประกอบ UI,
 Evidence registry check หรือ Ruff จึงห้ามใช้เพียงอย่างเดียวเพื่อประกาศว่า Full
 Product Gate ผ่าน
+
+Working candidate วันที่ 16 กันยายน 2026 เพิ่ม regression 33 เคส และรันล่าสุด
+ผ่าน `1,060 tests`; ตัวเลขนี้เป็นหลักฐานของ candidate ไม่ใช่ Production smoke
 
 ## Fast focused suites
 
@@ -17,8 +20,10 @@ Product Gate ผ่าน
 # Hardware และขอบเขต module
 python -m unittest -q \
   test_modular_architecture.py test_sensor_contract.py \
-  test_sensor_services.py test_control_protocol.py test_audio_api.py \
-  test_session_lifecycle.py
+  test_sensor_services.py test_api_state_projection.py \
+  test_bcg_reader.py test_sensor_frame_sampler.py \
+  test_control_protocol.py test_audio_api.py \
+  test_session_lifecycle.py test_session_finalization_commit.py
 
 # Sleep State, Baseline และคะแนน
 python -m unittest -q \
@@ -43,13 +48,15 @@ python ui_composer.py check
 และไม่เชื่อมต่อ Production):
 
 ```bash
-python -m unittest -q test_pod_data_sync.py test_workstation_approval.py
+python -m unittest -q \
+  test_pod_data_sync.py test_workstation_approval.py \
+  test_pod_snapshot_export_limits.py
 ```
 
 ## Application release gate
 
-Pi application suite เก็บไฟล์ `test_*.py` ที่ root โดย audit baseline มี 964 tests
-ที่ commit `40aa523` และต้องผ่านโดยไม่มี failure/error ก่อน push หรือ deploy ส่วน
+Pi application suite เก็บไฟล์ `test_*.py` ที่ root โดย pushed baseline มี 1,027 tests
+ที่ commit `d2c7af7` และต้องผ่านโดยไม่มี failure/error ก่อน push หรือ deploy ส่วน
 JSON Schema test ต้องมี `jsonschema` จาก `requirements-dev.txt`; เป้าหมาย Code
 Freeze คือ `skipped=0`
 
@@ -71,9 +78,9 @@ python -m unittest -q \
   test_modular_architecture.py test_sensor_services.py test_control_protocol.py
 ```
 
-ชุด 39 tests นี้ตรวจขอบเขต module, Sensor services และ Control protocol เท่านั้น
-ไม่ใช่ Full Product Gate หากแก้ Sleep, Session, Auth หรือ API ต้องเพิ่ม focused
-suite ของส่วนนั้นก่อน restart
+ชุดนี้ตรวจขอบเขต module, Sensor services และ Control protocol เท่านั้น จำนวนจริง
+เพิ่มได้ตาม regression ใหม่และต้องรายงานจากผลรัน ไม่ใช่ Full Product Gate หากแก้
+Sleep, Session, Auth หรือ API ต้องเพิ่ม focused suite ของส่วนนั้นก่อน restart
 
 ## v1 Code Freeze / Full Product Gate
 

@@ -6,6 +6,8 @@ defined in [Pi 5 Software Architecture](docs/pi5-software-architecture.md).
 ดูแลเครื่อง/Deploy ดูที่ [Operations Runbook](docs/pi5-operations-runbook.md)
 ส่วนภาพรวม Login ถึงผลลัพธ์และรายการตรวจ v1 ดูที่
 [v1 System Handover and Freeze Readiness](docs/zeep-v1-system-handover-and-freeze-readiness.md)
+สมาชิกทีมใหม่ให้เริ่มจาก [ZEEP v1 Team Onboarding](docs/onboarding/README.md)
+กติกาการเขียนและส่ง Review อยู่ที่ [CONTRIBUTING.md](CONTRIBUTING.md)
 
 จอควบคุมภายในตู้ ZEEP Pod สำหรับ Raspberry Pi 5 — ธีม J.A.R.V.I.S. HUD
 ใช้งานผ่านแท็บเล็ต/เบราว์เซอร์บน Wi-Fi hotspot ของ Pi ได้โดย**ไม่ต้องมีอินเทอร์เน็ต**
@@ -16,7 +18,7 @@ defined in [Pi 5 Software Architecture](docs/pi5-software-architecture.md).
 
 ```
 pi5/
-├── app.py                  # Composition root: FastAPI, lifecycle, hardware orchestration
+├── app.py                  # Legacy composition root ที่กำลังทยอยเหลือเฉพาะ wiring/lifecycle
 ├── api_models.py           # Pydantic request contracts ของ HTTP API
 ├── control_protocol.py     # ตรวจคำสั่ง Aircon/Bed และขอบเขตอุณหภูมิ 15–28°C
 ├── access_control.py       # Browser session, User/Admin RBAC, CSRF, offline ticket
@@ -31,6 +33,10 @@ pi5/
 ├── sensor_contracts.py     # Datasheet/as-built/telemetry contract กลาง
 ├── sensor_calibration.py   # Calibration spec, validation และ atomic persistence
 ├── sensor_runtime.py       # Normalize/validate/compose Hub + direct sound_dba
+├── zeep_pod/api_state_projection.py # Live freshness/status projection ของอุปกรณ์
+├── zeep_pod/hardware/bcg.py # LSM-800-T serial reader + live-state publisher
+├── zeep_pod/sessions/sensor_frame_sampler.py # Canonical Sensor frame ทุก 10 วินาที
+├── zeep_pod/sessions/finalization_commit.py # Atomic Session close/persistence boundary
 ├── smart_response.py       # Shadow recommendations แบบ pure/read-only
 ├── api_v1.py               # Versioned read API envelope
 ├── sleep_signal_features.py# BCG/movement/arousal/HR-RR engineering proxies
@@ -67,8 +73,9 @@ pi5/
 
 หลักการแบ่ง module และ dependency/data flow ฉบับสำหรับทีมพัฒนาอยู่ที่
 [Pi5 Software Architecture](docs/pi5-software-architecture.md) โดย `app.py`
-ทำหน้าที่ประกอบระบบและ side effects เท่านั้น ส่วนกฎที่คำนวณได้ต้องอยู่ใน pure
-module ที่ import และทดสอบได้โดยไม่เปิด GPIO, Serial, MQTT หรือเว็บเซิร์ฟเวอร์
+ยังเป็น legacy composition root ที่กำลังทยอยแยกออก เป้าหมายคือให้เหลือเฉพาะ
+การประกอบระบบและ process lifecycle ส่วนกฎที่คำนวณได้ต้องอยู่ใน pure module ที่
+import และทดสอบได้โดยไม่เปิด GPIO, Serial, MQTT หรือเว็บเซิร์ฟเวอร์
 
 เอกสารวิจัยที่ทีมใช้ทบทวนระบบอยู่ใน
 [ZEEP Research Evidence Library](research/evidence-library/README.md) พร้อมทะเบียน

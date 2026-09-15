@@ -1,0 +1,114 @@
+# ZEEP v1 — Team Onboarding
+
+สถานะ: **คู่มือเริ่มงานสำหรับ Internal Pilot**
+
+ขอบเขต: Pi 5 runtime, Web UI, Sensor/Control Hubs, Session results และงานปฏิบัติการ
+
+ปรับปรุงล่าสุด: 16 กันยายน 2026
+
+> ชุดนี้เป็นแผนที่สำหรับเริ่มงาน ไม่ได้แทนเอกสารสัญญาหลักหรือการอนุมัติ
+> Production ปัจจุบัน v1 ยังเป็น **freeze candidate** และยังต้องปิดรายการ P0/
+> ลงนามใน closure record ก่อนประกาศ Final Code Freeze
+
+## เริ่มอ่านจากตรงไหน
+
+อ่านตามลำดับนี้ในวันแรก:
+
+1. [Product และ Session lifecycle](product-and-lifecycle.md) — ZEEP ทำอะไร,
+   สองโหมดต่างกันอย่างไร และข้อมูลเดินจาก Login ไปถึงผลลัพธ์อย่างไร
+2. [Hardware และ Hub map](hardware-hub-map.md) — อุปกรณ์, transport, owner และ
+   fail-safe boundary ของแต่ละ Hub
+3. [API, Data และ Privacy](api-data-and-privacy.md) — ใครอ่านอะไรได้,
+   ข้อมูลใดอยู่บน Pod/ออกจาก Pod และขอบเขตการลบข้อมูล
+4. [Operations และ First-week checklist](operations-and-first-week.md) —
+   เตรียมเครื่อง, เลือก test, deploy อย่างปลอดภัย และเป้าหมายสัปดาห์แรก
+5. [Refactor Roadmap v1](refactor-roadmap-v1.md) — ลำดับแยก composition root
+   ตาม function/feature โดยคง behavior, compatibility และ release gate
+
+หากต้องตอบคำถามส่งมอบ v1 ให้เริ่มจาก
+[v1 System Handover and Freeze Readiness](../zeep-v1-system-handover-and-freeze-readiness.md)
+และตรวจสถานะล่าสุดที่ closure record ก่อนเสมอ
+
+## สถานะที่ทุกคนต้องเข้าใจ
+
+| ระดับ | ความหมายปัจจุบัน |
+|---|---|
+| **Internal Pilot** | ใช้กับทีม/ผู้ทดสอบในสภาพแวดล้อมควบคุมได้ ตาม two-mode protocol และ operations runbook |
+| **Freeze candidate** | Behavior หลักและ contract มี regression รองรับ แต่ยังไม่ใช่ Final Code Freeze |
+| **Production-ready** | **ยังห้ามอ้าง** จน P0, Production smoke, Safety/Product Owner sign-off, Git SHA/tag และ data-governance controls ครบ |
+
+คำว่า “ผ่าน test” ไม่เท่ากับ “พร้อม Production” การอนุมัติต้องรวมเครื่องจริง,
+อุปกรณ์จริง, privacy/retention, operator procedure และ owner sign-off ด้วย
+
+## Source of truth
+
+Onboarding สรุปเส้นทาง ไม่ทำสำเนารายละเอียดที่เปลี่ยนบ่อย ให้ใช้แหล่งต่อไปนี้:
+
+| เรื่อง | แหล่งที่มีอำนาจ |
+|---|---|
+| แผนที่เอกสารปัจจุบัน | [Documentation Index](../README.md) |
+| มาตรฐานเขียนโค้ดและส่ง Review | [CONTRIBUTING.md](../../CONTRIBUTING.md) |
+| Lifecycle, invariant และสถานะ Freeze | [v1 System Handover](../zeep-v1-system-handover-and-freeze-readiness.md) |
+| ขอบเขต module และลำดับ refactor | [Pi 5 Software Architecture](../pi5-software-architecture.md) |
+| Sleep State, score และ policy version | [Sleep System Current](../zeep-sleep-system-current.md) และ [`sleep_system_policy.py`](../../sleep_system_policy.py) |
+| API สำหรับ App | [ZEEP API v1](../zeep-api-v1.md), [Schema Reference](../zeep-api-schema-reference-v1.md), Pydantic models และ `/openapi.json` ของ release ที่ deploy |
+| Sensor field/range/provenance | [Sensor Interface Contract](../zeep-sensor-interface-contract-v1.2.md) และ [`sensor_contracts.py`](../../sensor_contracts.py) |
+| Test/release gate | [TESTING.md](../../TESTING.md) |
+| Pull, Sync, Deploy, Backup | [Pi 5 Operations Runbook](../pi5-operations-runbook.md) |
+| คำที่แสดงต่อผู้ใช้ | [Product Language Guideline](../zeep-product-language-guideline-v1.md) |
+
+ถ้าเอกสาร, runtime model, OpenAPI หรือ approved replay evidence ขัดกัน
+ให้ **หยุดการเผยแพร่ผล** บันทึก version/SHA ที่พบ และส่งให้ owner แก้ความขัดแย้ง
+ใน release เดียวกัน ห้ามเลือกคำตอบที่ดูสมเหตุผลกว่าเอง
+
+## เส้นทางตามบทบาท
+
+| บทบาท | อ่านเพิ่ม | จุดเริ่มในโค้ด |
+|---|---|---|
+| Product / UX | [Two-Mode Protocol](../zeep-pilot-two-mode-protocol.md), [Session Result Presentation](../zeep-session-result-presentation-v1.md) | [`zeep_pod/product_language.py`](../../zeep_pod/product_language.py), `static/partials/` |
+| Pi / Backend | [Software Architecture](../pi5-software-architecture.md), [Refactor Roadmap](refactor-roadmap-v1.md), [API v1](../zeep-api-v1.md) | [`app.py`](../../app.py), [`api_v1.py`](../../api_v1.py), `zeep_pod/` |
+| Mobile / Web integration | [API Schema Reference](../zeep-api-schema-reference-v1.md) | [`zeep_pod/sessions/usage_api.py`](../../zeep_pod/sessions/usage_api.py), response models |
+| Hardware / Firmware | [Hardware และ Hub map](hardware-hub-map.md), [Sensor Interface Contract](../zeep-sensor-interface-contract-v1.2.md) | `sensor_*`, `control_protocol.py`, `zeep_pod/hardware/` |
+| QA / Data | [TESTING.md](../../TESTING.md), [Sleep History Promotion Policy](../sleep-history-promotion-policy-v2.md) | `test_*.py`, [`maintenance_registry.py`](../../maintenance_registry.py) |
+| Operations / Safety | [Operations Runbook](../pi5-operations-runbook.md), [Remote Access](../../REMOTE-ACCESS.md) | [`start_work.sh`](../../start_work.sh), service units, `zeep_pod/operations/` |
+
+## กฎหยุดงานทันที
+
+- ห้าม restart/deploy/shutdown ขณะมีผู้ใช้งานหรือ Session กำลังบันทึก
+- ห้ามแก้ Raw BCG, Raw Sensor หรือ Timeline เพื่อทำให้ Derived result ดูดีขึ้น
+- ห้ามเปิด port `8000` ตรงสู่ Public Internet หรือใส่ credential ใน URL,
+  source, log, client bundle หรือไฟล์ที่ส่งให้ลูกค้า
+- ห้ามใช้ Pod snapshot เป็น `DATA_DIR`, ส่งต่อ snapshot หรือเก็บบนเครื่องส่วนตัว/
+  เครื่องที่ไม่ได้เข้ารหัสดิสก์
+- ห้าม Flash `firmware/sensorhub1-esp32s3/`; เป็น replacement candidate ที่
+  archive แล้วและไม่ใช่ v1 Production firmware
+- ห้ามให้ Sleep State หรือ Shadow recommendation สั่งอุปกรณ์อัตโนมัติ;
+  v1 ต้องคง `automatic_actuation=false`
+- ห้ามสื่อว่า ZEEP วินิจฉัยโรค, เทียบเท่า PSG, วัด SpO2/True HRV หรือบอก
+  whole-day readiness
+
+## คำศัพท์ย่อ
+
+| คำ | ความหมายในระบบ |
+|---|---|
+| Auth Session | สิทธิ์ของ Browser ผ่าน cookie; ไม่ใช่การครอบครองตู้ |
+| Pod Session | การครอบครองตู้จริงของผู้ใช้หนึ่งคน |
+| `waiting_bed` | Login/จอง Pod แล้ว แต่ยังไม่ผ่าน start gate และยังไม่สร้าง Recorded Session |
+| Recording | Session ที่ผ่าน Bed + fresh HR/RR gate และเริ่มเก็บ Timeline/BCG |
+| Canonical snapshot | ค่าสภาพแวดล้อมชุดเดียวที่ Dashboard, Session, Safety และ report ใช้ร่วมกัน |
+| Derived result | Sleep State, score, report หรือ baseline ที่สร้างจาก Raw พร้อม version/provenance |
+| Restore Summary | คำอธิบายคะแนนหลัก ไม่ใช่คะแนนที่สาม |
+| OFF BED | Occupancy exception แยกจาก Wake และไม่เข้า Sleep Stage ratio |
+| Shadow | คำแนะนำ/การประเมินที่ไม่มีสิทธิ์สั่ง Hardware |
+
+## พร้อมรับงานชิ้นแรกเมื่อ
+
+- [ ] อ่าน 4 หน้านี้และ canonical docs ของ domain ที่จะรับผิดชอบ
+- [ ] ใช้ workstation ที่ทีมอนุมัติและเปิด FileVault หรือ LUKS/dm-crypt
+- [ ] เข้าใจว่า Local/Mock pass ไม่ใช่ Hardware/Production smoke pass
+- [ ] รัน focused suite ของ domain ได้โดยไม่อ่าน/เขียน Production data
+- [ ] ระบุ owner, invariant, privacy impact และ deployment impact ของงานได้
+- [ ] รู้ว่าจะหยุดและส่งต่อให้ Product, Safety, Privacy หรือ Hardware owner เมื่อใด
+
+ขั้นตอนปฏิบัติจริงและแบบตรวจสัปดาห์แรกอยู่ที่
+[Operations และ First-week checklist](operations-and-first-week.md)

@@ -186,7 +186,7 @@ class UiComposerTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         self.assertIn(
-            "/static/styles/interface-consistency.css?v=20260916-1",
+            "/static/styles/interface-consistency.css?v=20260916-2",
             template,
         )
         self.assertIn("--zeep-touch-target: 44px;", css)
@@ -196,11 +196,12 @@ class UiComposerTests(unittest.TestCase):
             '    grid-template-columns: minmax(0, 1fr);',
             css,
         )
-        self.assertIn('@media (min-width: 1100px)', css)
+        self.assertIn('@media (min-width: 621px)', css)
         self.assertIn(
-            'grid-template-columns: repeat(3, minmax(0, 1fr));',
+            'grid-template-columns: repeat(2, minmax(0, 1fr));',
             css,
         )
+        self.assertIn('grid-auto-flow: row;', css)
         self.assertIn('body[data-view="control_debug"]', css)
         self.assertIn('body[data-view="monitor"]', css)
         self.assertIn('body[data-view="sessions"]', css)

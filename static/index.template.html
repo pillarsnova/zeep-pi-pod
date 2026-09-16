@@ -326,6 +326,11 @@
   </div>
 
   <div class="grid">
+    <details class="card monitor-provenance-card adaptive-version-panel" data-pages="monitor" data-admin-panel>
+      <summary><span><b>Version &amp; Provenance</b><small>รุ่นของข้อมูล Model และ Logic ที่กำลังทำงาน</small></span><em>เปิดรายละเอียด</em></summary>
+      <div class="adaptive-version-grid" id="adaptiveVersionRows"></div>
+      <div class="adaptive-guardrail" id="adaptiveGuardrails"></div>
+    </details>
     <header class="monitor-section-heading monitor-section-now" id="monitorNowHeading" data-pages="monitor">
       <span>01</span><div><h3>ต้องดูตอนนี้</h3><p>ความปลอดภัย Session และความพร้อมของ Sensor</p></div>
     </header>
@@ -670,11 +675,6 @@
           <div class="adaptive-panel-head"><div><b>Device Intent ล่าสุด</b><span>สถานะ ACK/คำสั่งล่าสุด ไม่ถือเป็นหลักฐานสถานะกายภาพ</span></div></div>
           <div class="adaptive-device-grid" id="adaptiveDeviceState"><div class="adaptive-empty">กำลังรอข้อมูลอุปกรณ์</div></div>
         </section>
-        <details class="adaptive-panel adaptive-version-panel">
-          <summary><span><b>Version &amp; Provenance</b><small>ตรวจรุ่นของข้อมูลและ Logic ที่กำลังทำงาน</small></span><em>เปิดรายละเอียด</em></summary>
-          <div class="adaptive-version-grid" id="adaptiveVersionRows"></div>
-          <div class="adaptive-guardrail" id="adaptiveGuardrails"></div>
-        </details>
       </div>
     </section>
     <section class="card admin-atmosphere-card" id="adminAtmosphereCard" data-pages="monitor" data-admin-panel aria-label="แผนปรับสภาพแวดล้อมสำหรับผู้ดูแลระบบ">

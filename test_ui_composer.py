@@ -150,6 +150,15 @@ class UiComposerTests(unittest.TestCase):
             ".adaptive-feature-row > span:nth-of-type(3) { display: block; }",
             monitor_css,
         )
+        self.assertLess(
+            template.index('class="card monitor-provenance-card'),
+            template.index('id="monitorNowHeading"'),
+        )
+        self.assertNotIn(
+            ".adaptive-device-panel,\n  .adaptive-version-panel",
+            monitor_css,
+        )
+        self.assertIn(".monitor-provenance-card {", monitor_css)
 
     def test_sessions_tablet_filters_fit_and_login_is_a_dialog(self):
         template = ui_composer.render()

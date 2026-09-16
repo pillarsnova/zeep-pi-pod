@@ -1892,7 +1892,11 @@ class RbacApiTests(unittest.TestCase):
     def test_fan_reference_survives_reload(self) -> None:
         """The 1..5 logical fan reference is recoverable after a Pi restart."""
         reference_path = _test_root / "fan-reference-test.json"
-        with patch.object(pod_app, "AIRCON_CONTROL_STATE_PATH", reference_path):
+        with patch.object(
+            pod_app.aircon_fan_reference_store,
+            "path",
+            reference_path,
+        ):
             pod_app._persist_aircon_fan_level(
                 3, "admin_declared_reference", operator="test-admin"
             )

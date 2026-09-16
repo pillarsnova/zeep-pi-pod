@@ -98,6 +98,7 @@ from identity.profile_fields import (
     zeep_health_reference as _zeep_health_reference,
 )
 from identity.zeep_account import authenticate_password, identity_from_auth_data
+from hardware.aircon_reference import AirconFanReferenceStore
 from hardware.audio import AudioPlayer, default_music_state
 from hardware.audio_api import AudioControlService, create_audio_router
 from hardware.bcg import (
@@ -546,7 +547,6 @@ LAST_SENSOR_FRAME_PATH = DATA_DIR / "last_sensor_frame.json"
 # backend. The file holds the finished upload payload so a retry never has
 # to rebuild it from SQLite. PDPA: same personal boundary as DATA_DIR.
 INGEST_OUTBOX_DIR = DATA_DIR / "ingest_outbox"
-AIRCON_CONTROL_STATE_LOCK = threading.Lock()
 AIRCON_FAN_LEVEL_DEFAULT = int(os.getenv("AIRCON_FAN_LEVEL_DEFAULT", "1"))
 if not 1 <= AIRCON_FAN_LEVEL_DEFAULT <= 5:
     raise RuntimeError("AIRCON_FAN_LEVEL_DEFAULT must be between 1 and 5")
@@ -842,60 +842,21 @@ def _persist_aircon_fan_level(
     This small on-device file lets the Pi keep its 1..5 IR-cycle reference
     across service restarts. It contains no user or Session data.
     """
-    if not isinstance(level, int) or not 1 <= level <= 5:
-        raise ValueError("aircon fan level reference must be between 1 and 5")
-    payload: Dict[str, Any] = {
-        "schema_version": 1,
-        "fan_level": level,
-        "source": str(source or "unknown"),
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
-    if operator:
-        payload["operator"] = str(operator)[:120]
-    with AIRCON_CONTROL_STATE_LOCK:
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        tmp = AIRCON_CONTROL_STATE_PATH.with_suffix(".json.tmp")
-        with tmp.open("w", encoding="utf-8") as file:
-            json.dump(payload, file, ensure_ascii=False, indent=2)
-        tmp.replace(AIRCON_CONTROL_STATE_PATH)
-    return payload
+    return aircon_fan_reference_store.save(
+        level,
+        source,
+        operator=operator,
+    )
 
 
 def _load_aircon_fan_level_reference() -> Dict[str, Any]:
     """Load the persisted fan-cycle reference or establish Pod default level 1."""
-    try:
-        with AIRCON_CONTROL_STATE_PATH.open("r", encoding="utf-8") as file:
-            saved = json.load(file)
-        level = saved.get("fan_level") if isinstance(saved, dict) else None
-        if not isinstance(level, int) or not 1 <= level <= 5:
-            raise ValueError("fan_level is outside 1..5")
-        return {
-            "fan_level": level,
-            "fan_level_source": saved.get("source") or "persisted_reference",
-            "fan_level_updated_at": saved.get("updated_at"),
-        }
-    except FileNotFoundError:
-        source = "pod_default_reference"
-        saved = _persist_aircon_fan_level(AIRCON_FAN_LEVEL_DEFAULT, source)
-        return {
-            "fan_level": AIRCON_FAN_LEVEL_DEFAULT,
-            "fan_level_source": source,
-            "fan_level_updated_at": saved["updated_at"],
-        }
-    except Exception as exc:
-        # A corrupt reference must not stop the safety service. Replace it with
-        # the installation default and leave an explicit diagnostic on stdout.
-        print(f"[AIRCON] replacing invalid fan-level reference: {exc}")
-        source = "recovered_default_reference"
-        saved = _persist_aircon_fan_level(AIRCON_FAN_LEVEL_DEFAULT, source)
-        return {
-            "fan_level": AIRCON_FAN_LEVEL_DEFAULT,
-            "fan_level_source": source,
-            "fan_level_updated_at": saved["updated_at"],
-        }
-
-
-_INITIAL_AIRCON_FAN_REFERENCE = _load_aircon_fan_level_reference()
+    saved = aircon_fan_reference_store.initialize()
+    return {
+        "fan_level": saved["fan_level"],
+        "fan_level_source": saved["source"],
+        "fan_level_updated_at": saved["updated_at"],
+    }
 
 
 state_lock = threading.Lock()
@@ -940,9 +901,9 @@ state: Dict[str, Any] = {
         # Control Hub 1 currently acknowledges that an IR frame was sent but
         # cannot read the air conditioner's physical fan state.  Keep the
         # latest acknowledged FAN step (1..5) as an operator-facing intent.
-        "fan_level": _INITIAL_AIRCON_FAN_REFERENCE["fan_level"],
-        "fan_level_source": _INITIAL_AIRCON_FAN_REFERENCE["fan_level_source"],
-        "fan_level_updated_at": _INITIAL_AIRCON_FAN_REFERENCE["fan_level_updated_at"],
+        "fan_level": AIRCON_FAN_LEVEL_DEFAULT,
+        "fan_level_source": "startup_default_pending",
+        "fan_level_updated_at": None,
         "tx_count": 0,
         "last_command": None,
         "last_event": None,
@@ -1085,6 +1046,23 @@ state: Dict[str, Any] = {
         },
     },
 }
+
+
+aircon_fan_reference_store = AirconFanReferenceStore(
+    AIRCON_CONTROL_STATE_PATH,
+    AIRCON_FAN_LEVEL_DEFAULT,
+    on_invalid=lambda exc: print(
+        f"[AIRCON] replacing invalid fan-level reference: {exc}"
+    ),
+)
+
+
+def _initialize_aircon_fan_reference() -> Dict[str, Any]:
+    """Load durable fan intent and publish it after lifespan initialization."""
+    reference = _load_aircon_fan_level_reference()
+    with state_lock:
+        state["aircon"].update(reference)
+    return reference
 
 
 gpio = GPIOManager(GPIO_PINS, state, state_lock)
@@ -5501,6 +5479,7 @@ async def lifespan(_: FastAPI):
     auth_sessions.initialize()
     occupancy_store.initialize()
     baselines.initialize()
+    _initialize_aircon_fan_reference()
     gpio.initialize()
     log_event("system", "start", gpio=gpio.ready, player=player.backend)
     with state_lock:

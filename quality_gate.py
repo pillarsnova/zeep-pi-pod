@@ -49,6 +49,7 @@ PROFILE_TESTS: dict[str, tuple[str, ...]] = {
     ),
     "control": (
         "test_control_protocol.py",
+        "test_aircon_reference.py",
         "test_gpio_lifecycle.py",
         "test_audio_api.py",
         "test_audio_defaults.py",
@@ -113,7 +114,7 @@ PROFILE_PATTERNS: dict[str, tuple[str, ...]] = {
         "firmware/sensorhub1",
         "smart_response",
     ),
-    "control": ("control", "gpio", "audio", "brainwave", "music"),
+    "control": ("control", "aircon", "gpio", "audio", "brainwave", "music"),
     "sleep": (
         "sleep_stage",
         "sleep_signal",

@@ -32,6 +32,7 @@ app, ต่อ lifecycle, ประกอบ dependency และเรียก
 | Sensor-frame sampling | `sessions/sensor_frame_sampler.py` | รวม BCG + canonical environment ตาม cadence 10 วินาที; ไม่ตัดสิน Sleep Stage |
 | Live API projection | `api/state_projection.py` | ประกอบ freshness/stale/fallback ของ Hub, BCG และ Control จาก detached snapshot โดยไม่แก้ live reader state |
 | Control transports | `hardware/controlhub1.py`, `controlhub2.py` | MQTT command/ACK ของแอร์และเตียง แยกจาก HTTP routes |
+| Control intent persistence | `hardware/aircon_reference.py` | Repository เก็บค่าอ้างอิงพัดลม 1–5 แบบ atomic; constructor ไม่เปิดไฟล์และ initialize ใน lifespan |
 | Audio controls | `hardware/audio.py`, `audio_api.py` | MPV/fallback player และนโยบาย HTTP ของเพลง/Brainwave ที่ทดสอบได้โดยไม่เปิด audio hardware |
 | Shadow guidance | `smart_response.py` | ประเมินคำแนะนำสภาพแวดล้อมโดยไม่สั่งอุปกรณ์ |
 | Adaptive learning monitor | `adaptive/learning.py`, `adaptive/features.py` | เทียบ Live กับ Baseline และรวม version/device intent ใน Shadow mode |
@@ -101,7 +102,8 @@ Dashboard, Session และ Safety ต้องอ่านค่าจาก *
 - Pure helper ห้ามเปิดไฟล์, Serial, MQTT, GPIO หรือ database ตอน import
 - Resource ที่ย้ายแล้ว ได้แก่ Database, Auth, Occupancy, Personal Baseline และ GPIO
   ใช้ constructor ที่ไม่เปิด I/O แล้ว initialize ใน Production lifespan ตามลำดับ
-  Database → Auth → Occupancy → Baseline → GPIO; Music/Aircon/Audio ยังเป็นงานถัดไป
+  Database → Auth → Occupancy → Baseline → Aircon reference → GPIO; Music/Audio
+  discovery ยังเป็นงานถัดไป
 - Module ใหม่ภายใต้ top-level domain packages ไม่เกิน 500 บรรทัด
 - Function/method ใหม่ไม่เกิน 90 บรรทัด
 - Public boundary และ safety decision ต้องมี type hints และ docstring
@@ -178,8 +180,9 @@ Onboarding ใช้เอกสารนี้เป็น Roadmap ทางเ
 | R4a | เสร็จแล้ว | Atomic finalization commit และ recovery order |
 | R5 | เสร็จแล้ว | API package, response envelope และ thin compatibility facades |
 | R6 | เสร็จแล้ว | Sensor package แยก contract/catalog/constants/BCG/calibration/environment/normalization/sound และ shared value library |
+| R7a | เสร็จแล้ว | Aircon fan-reference ใช้ Repository + explicit lifespan initialization; import `app.py` ไม่อ่านหรือเขียนไฟล์ reference |
 
-`app.py` คงอยู่ที่ไม่เกิน 8,025 บรรทัด และเป็น composition root ต่อไป ส่วน API,
+`app.py` คงอยู่ที่ไม่เกิน 8,004 บรรทัด และเป็น composition root ต่อไป ส่วน API,
 Sensor contract/calibration/normalization/environment/sound และ value helpers อยู่ใน
 package ตามโดเมนแล้ว ไฟล์ชื่อเดิมที่ root เหลือเป็น facade บางเพื่อรักษา script/test
 เดิม การย้ายนี้ไม่เปลี่ยน Sleep/Score formula, Sensor cadence, public JSON key หรือ
@@ -198,8 +201,8 @@ package ตามโดเมนแล้ว ไฟล์ชื่อเดิ�
 
 ### 6.3 ลำดับถัดไป
 
-1. ปิด import side effects ของ Music, Aircon reference และ Audio discovery พร้อม
-   lifecycle rollback/thread registry ที่ deterministic
+1. ปิด import side effects ของ Music/Audio discovery พร้อม lifecycle rollback และ
+   thread registry ที่ deterministic
 2. แยก Session lifecycle: waiting-bed, vital gate, start, resume, finalize และ
    checkpoint orchestration โดยรักษา Restart continuity
 3. ทำ Sleep estimator facade ให้รับ typed input แล้ว delegate ไปยัง feature,

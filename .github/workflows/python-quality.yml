@@ -32,7 +32,7 @@ jobs:
         run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
       - name: Check extracted package style
         run: |
-          ruff check zeep_pod
-          ruff format --check zeep_pod
+          ruff check acoustics adaptive api common hardware identity operations presentation safety sensors sessions
+          ruff format --check acoustics adaptive api common hardware identity operations presentation safety sensors sessions
       - name: Run regression suite
         run: python -m unittest discover -q

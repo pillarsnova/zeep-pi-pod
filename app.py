@@ -45,8 +45,8 @@ from fastapi import (
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.security import APIKeyCookie
 from fastapi.staticfiles import StaticFiles
-from api_history import create_history_router
-from api_models import (
+from api.history import create_history_router
+from api.models import (
     ActiveSessionProfileCommand,
     AdminLoginCommand,
     AirconCommand,
@@ -75,19 +75,19 @@ from control_protocol import (
     resolve_aircon_temperature_command,
 )
 from database import DatabaseManager
-from api_v1 import create_api_v1_router
-from zeep_pod.acoustics import build_acoustic_monitor_snapshot
-from zeep_pod.adaptive_learning import build_adaptive_learning_snapshot
-from zeep_pod.api_state_projection import (
+from api.v1 import create_api_v1_router
+from acoustics import build_acoustic_monitor_snapshot
+from adaptive.learning import build_adaptive_learning_snapshot
+from api.state_projection import (
     LiveDeviceProjectionPolicy,
     project_consumer_snapshot,
     project_live_device_statuses,
 )
-from zeep_pod.identity.account_aliases import verified_alias_mapping
-from zeep_pod.identity.account_erasure_api import create_account_erasure_router
-from zeep_pod.identity.lifecycle_lock import synchronized_by
-from zeep_pod.identity.startup_migration import migrate_identity_stores
-from zeep_pod.identity.profile_fields import (
+from identity.account_aliases import verified_alias_mapping
+from identity.account_erasure_api import create_account_erasure_router
+from identity.lifecycle_lock import synchronized_by
+from identity.startup_migration import migrate_identity_stores
+from identity.profile_fields import (
     health_reference_from_profile as build_health_reference,
     normalise_blood_group as _normalise_blood_group,
     normalise_body_measurement as _normalise_body_measurement,
@@ -97,93 +97,93 @@ from zeep_pod.identity.profile_fields import (
     normalize_username as _normalize_username,
     zeep_health_reference as _zeep_health_reference,
 )
-from zeep_pod.identity.zeep_account import authenticate_password, identity_from_auth_data
-from zeep_pod.hardware.audio import AudioPlayer, default_music_state
-from zeep_pod.hardware.audio_api import AudioControlService, create_audio_router
-from zeep_pod.hardware.bcg import (
+from identity.zeep_account import authenticate_password, identity_from_auth_data
+from hardware.audio import AudioPlayer, default_music_state
+from hardware.audio_api import AudioControlService, create_audio_router
+from hardware.bcg import (
     BCGPacketPublisher,
     BCGPublicationPorts,
     BCGReaderConfig,
     BCGReaderPorts,
     LSM800TReader,
 )
-from zeep_pod.hardware.controlhub1 import ControlHub1MQTT, configure_controlhub1
-from zeep_pod.hardware.controlhub2 import ControlHub2BedMQTT, configure_controlhub2
-from zeep_pod.hardware.gpio import GPIOManager
-from zeep_pod.hardware.sensorhub2 import run_sensorhub2_reader
-from zeep_pod.safety_faults import SafetyThresholds, evaluate_safety_faults
-from zeep_pod.hardware.sensorhub1 import (
+from hardware.controlhub1 import ControlHub1MQTT, configure_controlhub1
+from hardware.controlhub2 import ControlHub2BedMQTT, configure_controlhub2
+from hardware.gpio import GPIOManager
+from hardware.sensorhub2 import run_sensorhub2_reader
+from safety.faults import SafetyThresholds, evaluate_safety_faults
+from hardware.sensorhub1 import (
     SensorHub1Reader,
     SensorHub1StateStore,
 )
-from zeep_pod.sessions.cadence import (
+from sessions.cadence import (
     cadence_interval_at as _cadence_interval_at,
     normalise_cadence_segments as _normalise_cadence_segments,
     normalise_samples_for_report as _normalise_samples_for_report,
     sample_interval_seconds as _sample_interval_seconds_impl,
     timeline_sample_interval as _timeline_sample_interval,
 )
-from zeep_pod.sessions.finalization_commit import (
+from sessions.finalization_commit import (
     FinalizationPorts,
     commit_live_session_finalization as commit_session_finalization,
 )
-from zeep_pod.sessions.lifecycle import (
+from sessions.lifecycle import (
     SESSION_CHECKPOINT_VERSION,
     SessionCheckpointStore,
     bed_is_occupied,
     evaluate_vital_start_gate,
     service_resume_event,
 )
-from zeep_pod.sessions.sleep_context import (
+from sessions.sleep_context import (
     checkpoint_sleep_context,
     restore_session_sleep_context,
 )
-from zeep_pod.sessions.history import (
+from sessions.history import (
     session_availability_by_account,
     users_ordered_by_latest_session as _users_ordered_by_latest_session,
 )
-from zeep_pod.sessions.history_service import SessionHistoryService, local_history_day
-from zeep_pod.sessions.history_service import resolve_history_window, safe_account_profile
-from zeep_pod.sessions.history_quality import (
+from sessions.history_service import SessionHistoryService, local_history_day
+from sessions.history_service import resolve_history_window, safe_account_profile
+from sessions.history_quality import (
     released_historical_quality as _released_historical_quality,
 )
-from zeep_pod.sessions import history_detail_support as history_support
-from zeep_pod.sessions import respiratory_evidence as rr_evidence
-from zeep_pod.sessions.history_sleep_timeline import (
+from sessions import history_detail_support as history_support
+from sessions import respiratory_evidence as rr_evidence
+from sessions.history_sleep_timeline import (
     clip_history_sleep_timeline as _clip_history_sleep_timeline,  # noqa: F401
     compress_sleep_stage_points as _compress_sleep_stage_points,  # noqa: F401
     history_sleep_timeline as _history_sleep_timeline,  # noqa: F401
 )
-from zeep_pod.sessions import report_projection
-from zeep_pod.sessions.ingest_payload import (
+from sessions import report_projection
+from sessions.ingest_payload import (
     build_ingest_payload as _build_account_ingest_payload,
     sample_off_bed as _sample_off_bed,
 )
-from zeep_pod.sessions.ingest_outbox import IngestOutbox
-from zeep_pod.sessions.sleep_between_epochs import (
+from sessions.ingest_outbox import IngestOutbox
+from sessions.sleep_between_epochs import (
     between_evidence_epoch_value,
     current_frame_issue,
     sensor_frame_wait_value,
 )
-from zeep_pod.sessions.sensor_frame_sampler import (
+from sessions.sensor_frame_sampler import (
     SensorFramePolicy,
     SensorFrameRuntime,
     SensorFrameSampler,
 )
-from zeep_pod.sessions.sleep_runtime_evidence import (
+from sessions.sleep_runtime_evidence import (
     baseline_interval_proximity as _baseline_interval_proximity,
     sleep_auxiliary_evidence as _build_sleep_auxiliary_evidence,
     sleep_environment_context as _build_sleep_environment_context,
     sleep_status_event as _build_sleep_status_event,
 )
-from zeep_pod.sessions.sleep_transition_state import (
+from sessions.sleep_transition_state import (
     stabilize_path_transition,
     transition_allowed as _path_transition_allowed,
     transition_fallback_state as _path_transition_fallback_state,
 )
-from zeep_pod.sessions.report_share import ReportShareRegistry, create_report_share_router
-from zeep_pod.sessions.usage_api import create_usage_sessions_router
-from zeep_pod.sessions.user_baseline_context import rest_window
+from sessions.report_share import ReportShareRegistry, create_report_share_router
+from sessions.usage_api import create_usage_sessions_router
+from sessions.user_baseline_context import rest_window
 from maintenance_registry import maintenance_contract_snapshot
 from migration import migrate_jsonl
 from personal import BaselineStore
@@ -207,7 +207,7 @@ from pod_occupancy import (
     create_occupancy_router,
     pod_id_from_env,
 )
-from sensor_contracts import (
+from sensors.contracts import (
     ENVIRONMENT_DEVICE_SPECS,
     SOUND_DBA_DISPLAY_MAX,
     SOUND_DBA_DISPLAY_MIN,
@@ -215,7 +215,7 @@ from sensor_contracts import (
     parse_lsm800t_frame,
     sensor_contract_snapshot,
 )
-from sensor_calibration import (
+from sensors.calibration import (
     SENSOR_CALIBRATION_SPECS,
     apply_additive_bias,
     load_calibration,
@@ -223,7 +223,7 @@ from sensor_calibration import (
     resolve_biases,
     sound_inspector_channel,
 )
-from sensor_runtime import (
+from sensors.runtime import (
     compose_environment_snapshot,
     energy_average_db,
     hold_last_valid_sound as hold_sound_value,

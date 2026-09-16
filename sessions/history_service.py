@@ -1,0 +1,492 @@
+"""Filtered, role-neutral read service for ZEEP Session history.
+
+The service assigns a completed Session to the local calendar day on which it
+ended.  That convention puts an Overnight result on the morning it is reviewed
+and keeps same-day Nap & Refresh results on their natural day.  Authorization
+remains at the FastAPI route boundary; this module only reads and shapes data.
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, time, timedelta
+from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from database import DatabaseManager
+from sessions import score_summary
+from sessions.history_detail_support import (
+    canonical_history_rest_metadata,
+)
+from sessions.history_identity import (
+    account_boundary_keys as _account_boundary_keys,
+)
+from sessions.history_identity import (
+    canonicalize_identity as _canonical_identity,
+)
+from sessions.history_identity import (
+    identity as _identity,
+)
+from sessions.history_identity import (
+    matches_identity as _matches_identity,
+)
+from sessions.history_identity import (
+    profile_for_record as _profile_for_record,
+)
+from sessions.history_identity import (
+    safe_account_profile,
+)
+from sleep_system_policy import APPROVED_SLEEP_RESULT_VERSION_PAIRS
+
+QualityRelease = Callable[[dict[str, Any], Any], dict[str, Any]]
+HealthReference = Callable[[dict[str, Any]], dict[str, Any]]
+APPROVED_SESSION_REPORT_VERSIONS = frozenset(
+    report_version
+    for report_version, _quality_version in APPROVED_SLEEP_RESULT_VERSION_PAIRS
+)
+
+
+@dataclass(frozen=True)
+class HistoryWindow:
+    """UTC query bounds plus the local values needed by the UI."""
+
+    start_utc: str
+    end_utc: str
+    start_local: str
+    end_local: str
+    timezone_name: str
+
+    def public_snapshot(self) -> dict[str, str]:
+        return {
+            "start_utc": self.start_utc,
+            "end_utc": self.end_utc,
+            "start_local": self.start_local,
+            "end_local": self.end_local,
+            "timezone": self.timezone_name,
+            "day_assignment": "session_end_local_date",
+        }
+
+
+def _parse_day(value: str, field: str) -> date:
+    try:
+        return date.fromisoformat(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field} ต้องเป็น YYYY-MM-DD") from exc
+
+
+def _parse_minute(value: str, field: str) -> time:
+    try:
+        return datetime.strptime(value, "%H:%M").time()
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field} ต้องเป็น HH:MM") from exc
+
+
+def resolve_history_window(
+    date_from: str | None,
+    date_to: str | None,
+    time_from: str = "00:00",
+    time_to: str = "23:59",
+    *,
+    timezone_name: str = "Asia/Bangkok",
+    maximum_days: int = 366,
+) -> HistoryWindow | None:
+    """Convert inclusive local minute filters into an exclusive UTC range.
+
+    No dates means no range filter, preserving compatibility for API clients
+    that request their latest Sessions.  The tablet always sends dates and
+    therefore defaults to the current local day.
+    """
+    if not date_from and not date_to:
+        return None
+    first_day = _parse_day(date_from or str(date_to), "date_from")
+    last_day = _parse_day(date_to or str(date_from), "date_to")
+    first_time = _parse_minute(time_from, "time_from")
+    last_time = _parse_minute(time_to, "time_to")
+    try:
+        local_zone = ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError as exc:
+        raise ValueError("ไม่รู้จัก Timezone ของตู้ ZEEP") from exc
+
+    start = datetime.combine(first_day, first_time, local_zone)
+    # Browser time inputs have minute precision. Add one minute so the chosen
+    # ending minute is inclusive while the SQL bound stays safely exclusive.
+    end = datetime.combine(last_day, last_time, local_zone) + timedelta(minutes=1)
+    if end <= start:
+        raise ValueError("ช่วงเวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม")
+    if end - start > timedelta(days=maximum_days, minutes=1):
+        raise ValueError(f"ช่วงเวลาต้องไม่เกิน {maximum_days} วัน")
+    return HistoryWindow(
+        start_utc=start.astimezone(UTC).isoformat(),
+        end_utc=end.astimezone(UTC).isoformat(),
+        start_local=start.isoformat(),
+        end_local=end.isoformat(),
+        timezone_name=timezone_name,
+    )
+
+
+def local_history_day(timezone_name: str = "Asia/Bangkok") -> str:
+    """Return today's ISO date at the physical Pod location."""
+    try:
+        local_zone = ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError as exc:
+        raise ValueError("ไม่รู้จัก Timezone ของตู้ ZEEP") from exc
+    return datetime.now(local_zone).date().isoformat()
+
+
+class SessionHistoryService:
+    """Read every completed Session summary from SQLite."""
+
+    def __init__(
+        self,
+        database: DatabaseManager,
+        *,
+        history_start_utc: str,
+        report_version: str,
+        release_quality: QualityRelease,
+        health_reference: HealthReference,
+        approved_report_versions: Iterable[str] | None = None,
+    ) -> None:
+        self.database = database
+        self.history_start_utc = history_start_utc
+        self.report_version = report_version
+        compatible_versions = (
+            APPROVED_SESSION_REPORT_VERSIONS
+            if approved_report_versions is None
+            else approved_report_versions
+        )
+        self.approved_report_versions = frozenset(
+            {
+                report_version,
+                *(str(version) for version in compatible_versions if version),
+            }
+        )
+        self.release_quality = release_quality
+        self.health_reference = health_reference
+
+    def _records(
+        self,
+        account_keys: Iterable[str] | None,
+        window: HistoryWindow | None,
+        *,
+        session_id: str | None = None,
+        require_timeline: bool = False,
+    ) -> list[dict[str, Any]]:
+        clauses = [
+            "s.start_time>=?",
+            "s.end_time IS NOT NULL",
+        ]
+        if require_timeline:
+            clauses.append(
+                "EXISTS (SELECT 1 FROM timeline AS visible_timeline "
+                "WHERE visible_timeline.session_id=s.session_id)"
+            )
+        params: list[Any] = [self.history_start_utc]
+        keys = [str(key).strip().casefold() for key in account_keys or [] if key]
+        if account_keys is not None:
+            if not keys:
+                return []
+            placeholders = ",".join("?" for _ in keys)
+            clauses.append(f"lower(trim(s.username_key)) IN ({placeholders})")
+            params.extend(keys)
+        if window is not None:
+            clauses.extend(("s.end_time>=?", "s.end_time<?"))
+            params.extend((window.start_utc, window.end_utc))
+        if session_id:
+            clauses.append("s.session_id=?")
+            params.append(str(session_id))
+        sql = f"""
+            SELECT s.*,
+                (SELECT COUNT(*) FROM timeline AS aggregate_timeline
+                 WHERE aggregate_timeline.session_id=s.session_id) AS sample_count,
+                (SELECT AVG(temperature) FROM timeline AS temperature_timeline
+                 WHERE temperature_timeline.session_id=s.session_id) AS avg_temperature,
+                (SELECT AVG(heart_rate) FROM timeline AS heart_timeline
+                 WHERE heart_timeline.session_id=s.session_id) AS avg_heart_rate,
+                (SELECT value FROM events AS summary_event
+                 WHERE summary_event.session_id=s.session_id
+                   AND summary_event.type='final_summary'
+                 ORDER BY summary_event.timestamp DESC LIMIT 1) AS final_summary_json
+            FROM sessions AS s
+            WHERE {" AND ".join(clauses)}
+            ORDER BY s.end_time DESC, s.start_time DESC
+        """
+        return self.database.read_sessions(sql, tuple(params))
+
+    def _serialize(
+        self,
+        record: dict[str, Any],
+        profile: dict[str, Any],
+    ) -> dict[str, Any]:
+        try:
+            final_summary = json.loads(record.get("final_summary_json") or "{}")
+        except (TypeError, json.JSONDecodeError):
+            final_summary = {}
+        if not isinstance(final_summary, dict):
+            final_summary = {}
+        rest_mode, target_duration_s = canonical_history_rest_metadata(
+            record,
+            final_summary,
+        )
+        night_summary = final_summary.get("night_summary") or {}
+        quality = self.release_quality(
+            final_summary,
+            night_summary.get("sleep_quality"),
+        )
+        report = final_summary.get("session_report")
+        if not (
+            isinstance(report, dict)
+            and report.get("version") in self.approved_report_versions
+        ):
+            report = None
+        account_key = str(record.get("username_key") or "").strip().casefold()
+        identity = _identity(profile, account_key)
+        temperature = record.get("avg_temperature")
+        heart_rate = record.get("avg_heart_rate")
+        return {
+            "session_id": record.get("session_id"),
+            "username": record.get("user"),
+            **identity,
+            "gender": record.get("gender"),
+            "started_at_utc": record.get("start_time"),
+            "ended_at_utc": record.get("end_time"),
+            "duration_s": record.get("duration"),
+            "end_reason": record.get("end_reason"),
+            "rest_mode": rest_mode,
+            "target_duration_s": target_duration_s,
+            "sample_count": int(record.get("sample_count") or 0),
+            "sleep_estimator": final_summary.get("sleep_estimator"),
+            "sleep_estimator_versions": final_summary.get("sleep_estimator_versions")
+            or {},
+            "sleep_provenance_complete": final_summary.get("sleep_provenance_complete"),
+            "sleep_policy_versions": {
+                "evidence": final_summary.get("sleep_evidence_version"),
+                "baseline": final_summary.get("sleep_baseline_version"),
+                "transition": final_summary.get("sleep_transition_policy"),
+                "g2_ontology": final_summary.get("sleep_g2_ontology"),
+                "terminal_wake": final_summary.get("terminal_wake_policy"),
+            },
+            "sleep_quality": quality,
+            "session_report": report,
+            "restore_summary": (
+                report.get("restore_summary")
+                if isinstance(report, dict)
+                else final_summary.get("restore_summary")
+            ),
+            "health_reference": (
+                final_summary.get("health_reference")
+                if isinstance(final_summary.get("health_reference"), dict)
+                else self.health_reference(profile)
+            ),
+            "wellness_context_available": bool(final_summary.get("wellness_context")),
+            "summary": {
+                "temperature_c": (
+                    {"avg": round(float(temperature), 1)}
+                    if temperature is not None
+                    else None
+                ),
+                "heart_rate_bpm": (
+                    {"avg": round(float(heart_rate), 1)}
+                    if heart_rate is not None
+                    else None
+                ),
+            },
+        }
+
+    @staticmethod
+    def _canonical_results(
+        sessions: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        return score_summary.canonical_results(sessions)
+
+    @classmethod
+    def _summary(
+        cls,
+        sessions: list[dict[str, Any]],
+        *,
+        canonical_results: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        return score_summary.history_summary(
+            sessions,
+            canonical=canonical_results,
+        )
+
+    @classmethod
+    def _participants(
+        cls,
+        sessions: list[dict[str, Any]],
+        *,
+        canonical_results: list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
+        return score_summary.history_participants(
+            sessions,
+            canonical=canonical_results,
+        )
+
+    def account_history(
+        self,
+        account_key: str,
+        profile: dict[str, Any],
+        *,
+        window: HistoryWindow | None = None,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        key = str(account_key or "").strip().casefold()
+        all_sessions = self.account_sessions(key, profile, window=window)
+        start = max(0, int(offset))
+        size = max(1, min(500, int(limit)))
+        sessions = all_sessions[start : start + size]
+        canonical_results = self._canonical_results(all_sessions)
+        return {
+            **_identity(profile, key),
+            "health_reference": self.health_reference(profile),
+            "sessions": sessions,
+            "participants": self._participants(
+                all_sessions,
+                canonical_results=canonical_results,
+            ),
+            "summary": self._summary(
+                all_sessions,
+                canonical_results=canonical_results,
+            ),
+            "total": len(all_sessions),
+            "range": window.public_snapshot() if window else None,
+            "history_start_utc": self.history_start_utc,
+            "older_sessions_archived_from_product_results": True,
+        }
+
+    def account_sessions(
+        self,
+        account_key: str,
+        profile: dict[str, Any],
+        *,
+        window: HistoryWindow | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return every completed Session for one account.
+
+        This internal method deliberately has no pagination because the
+        longitudinal profile must not change when the history page changes
+        page.  Callers publish only compact aggregates and never Raw Sensor
+        rows.
+        """
+        key = str(account_key or "").strip().casefold()
+        return [
+            _canonical_identity(self._serialize(record, profile), key, profile)
+            for record in self._records(
+                _account_boundary_keys(key, profile),
+                window,
+            )
+        ]
+
+    def account_completed_sessions(
+        self,
+        account_key: str,
+        profile: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Return all completed Sessions, including Sessions without Sensor rows."""
+        key = str(account_key or "").strip().casefold()
+        return [
+            _canonical_identity(self._serialize(record, profile), key, profile)
+            for record in self._records(
+                _account_boundary_keys(key, profile),
+                None,
+                require_timeline=False,
+            )
+        ]
+
+    def admin_history(
+        self,
+        profiles: dict[str, dict[str, Any]],
+        *,
+        window: HistoryWindow | None,
+        account_key: str | None = None,
+        query: str | None = None,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        requested_key = str(account_key or "").strip().casefold()
+        requested_profile = safe_account_profile(
+            requested_key,
+            dict(profiles.get(requested_key) or {}),
+            profiles,
+        )
+        keys = (
+            _account_boundary_keys(requested_key, requested_profile)
+            if requested_key
+            else None
+        )
+        records = self._records(keys, window)
+        sessions: list[dict[str, Any]] = []
+        for record in records:
+            key = str(record.get("username_key") or "").strip().casefold()
+            identity_key, profile = (
+                (requested_key, requested_profile)
+                if requested_key
+                else _profile_for_record(key, profiles)
+            )
+            profile.setdefault("username", record.get("user"))
+            if not _matches_identity(profile, identity_key, query):
+                continue
+            session = self._serialize(record, profile)
+            sessions.append(_canonical_identity(session, identity_key, profile))
+        total = len(sessions)
+        start = max(0, int(offset))
+        size = max(1, min(1000, int(limit)))
+        visible_sessions = sessions[start : start + size]
+        canonical_results = self._canonical_results(sessions)
+        return {
+            "sessions": visible_sessions,
+            "participants": self._participants(
+                sessions,
+                canonical_results=canonical_results,
+            ),
+            "summary": self._summary(
+                sessions,
+                canonical_results=canonical_results,
+            ),
+            "total": total,
+            "range": window.public_snapshot() if window else None,
+            "history_start_utc": self.history_start_utc,
+            "older_sessions_archived_from_product_results": True,
+        }
+
+    def session_by_id(
+        self,
+        session_id: str,
+        profiles: dict[str, dict[str, Any]],
+        *,
+        account_key: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Return one completed Session within product history.
+
+        Supplying ``account_key`` performs the ownership filter in SQL.  A
+        caller therefore receives the same not-found result for an unknown
+        Session and another person's Session, avoiding an identity oracle at
+        the API boundary.
+        """
+        requested_key = str(account_key or "").strip().casefold()
+        requested_profile = safe_account_profile(
+            requested_key,
+            dict(profiles.get(requested_key) or {}),
+            profiles,
+        )
+        keys = (
+            _account_boundary_keys(requested_key, requested_profile)
+            if requested_key
+            else None
+        )
+        records = self._records(keys, None, session_id=session_id)
+        if not records:
+            return None
+        record = records[0]
+        key = str(record.get("username_key") or "").strip().casefold()
+        identity_key, profile = (
+            (requested_key, requested_profile)
+            if requested_key
+            else _profile_for_record(key, profiles)
+        )
+        profile.setdefault("username", record.get("user"))
+        session = self._serialize(record, profile)
+        return _canonical_identity(session, identity_key, profile)

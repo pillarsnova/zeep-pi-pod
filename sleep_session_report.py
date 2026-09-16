@@ -14,7 +14,6 @@ dashboard. They are not medical diagnostic limits.
 
 from __future__ import annotations
 
-import math
 from typing import Any, Dict, Iterable, Optional
 
 from sleep_signal_features import (
@@ -70,16 +69,17 @@ from sleep_system_policy import (
     resolve_rest_target,
     summarize_environment_session_levels,
 )
-from zeep_pod.sessions.environment_safety import (
+from common.numbers import as_finite_number as _number
+from sessions.environment_safety import (
     safety_limit_text,
     summarize_safety_excursions,
 )
-from zeep_pod.sessions.respiratory_wellness import (
+from sessions.respiratory_wellness import (
     build_respiratory_wellness,
 )
-from zeep_pod.sessions.restore_summary import build_restore_summary
-from zeep_pod.sessions.score_identity import assess_score_identity
-from zeep_pod.sessions.sleep_occupancy import sample_confirms_off_bed
+from sessions.restore_summary import build_restore_summary
+from sessions.score_identity import assess_score_identity
+from sessions.sleep_occupancy import sample_confirms_off_bed
 
 STAGE_ORDER = ("wake", "n1", "n2", "n3", "rem")
 SLEEP_STAGES = {"n1", "n2", "n3", "rem"}
@@ -156,15 +156,6 @@ _INITIAL_WAIT_STATUSES = {
     "confirming_initial_state",
     "initial_confirmation_wait",
 }
-
-
-def _number(value: Any) -> Optional[float]:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    number = float(value)
-    return number if math.isfinite(number) else None
-
-
 def _row_duration_seconds(
     row: Dict[str, Any],
     fallback_interval_s: float,

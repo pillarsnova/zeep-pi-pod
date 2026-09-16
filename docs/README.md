@@ -15,7 +15,7 @@
 ## ลำดับอำนาจเมื่อข้อมูลขัดกัน
 
 1. Executable policy และ runtime contract: `sleep_system_policy.py`, Pydantic/
-   OpenAPI, `sensor_contracts.py`, `calibration.json` และ effective Pod config
+   OpenAPI, `sensors/contracts.py`, `calibration.json` และ effective Pod config
 2. เอกสาร Current ของ domain: Sleep System, Sensor/API contract, Architecture และ
    Operations Runbook
 3. Onboarding: แผนที่และคำอธิบายที่คนอ่านง่าย โดยต้องไม่คัดลอกค่าที่เปลี่ยนบ่อย

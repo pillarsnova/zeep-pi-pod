@@ -28,8 +28,8 @@ from sleep_system_policy import (
     SLEEP_QUALITY_VERSION,
     SLEEP_SCORE_FORMULA_VERSION,
 )
-from zeep_pod.sessions.history_quality import released_historical_quality
-from zeep_pod.sessions.restore_summary import build_restore_summary
+from sessions.history_quality import released_historical_quality
+from sessions.restore_summary import build_restore_summary
 
 
 def _sleep_quality(score=82):

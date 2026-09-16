@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from zeep_pod.api_state_projection import (
+from api_state_projection import (
     LiveDeviceProjectionPolicy,
     project_aircon_status,
     project_live_device_statuses,

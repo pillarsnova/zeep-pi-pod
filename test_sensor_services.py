@@ -31,7 +31,7 @@ from sensor_runtime import (
     source_freshness,
 )
 from smart_response import SmartResponsePolicy, evaluate_smart_response
-from zeep_pod.hardware.sensorhub2 import _publish_payload, run_sensorhub2_reader
+from hardware.sensorhub2 import _publish_payload, run_sensorhub2_reader
 
 
 NOW = 1_800_000_000.0

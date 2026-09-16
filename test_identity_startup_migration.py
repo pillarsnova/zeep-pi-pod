@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import Mock
 
-from zeep_pod.identity.startup_migration import migrate_identity_stores
+from identity.startup_migration import migrate_identity_stores
 
 
 class IdentityStartupMigrationTests(unittest.TestCase):

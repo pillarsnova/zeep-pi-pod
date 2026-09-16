@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from zeep_pod.operations import workstation_approval
+from operations import workstation_approval
 
 
 def _status(enabled: bool) -> dict[str, object]:

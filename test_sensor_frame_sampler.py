@@ -9,7 +9,7 @@ from dataclasses import replace
 from typing import Any
 
 from sleep_signal_features import bed_exit_window_evidence, filter_vital_values
-from zeep_pod.sessions.sensor_frame_sampler import (
+from sessions.sensor_frame_sampler import (
     SensorFramePolicy,
     SensorFrameRuntime,
     SensorFrameSampler,

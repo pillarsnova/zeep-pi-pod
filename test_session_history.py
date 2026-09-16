@@ -11,17 +11,17 @@ from sleep_system_policy import (
     SESSION_REPORT_VERSION,
     SLEEP_SCORE_FORMULA_VERSION,
 )
-from zeep_pod.sessions.history import (
+from sessions.history import (
     apply_session_availability,
     session_availability_by_account,
     users_ordered_by_latest_session,
 )
-from zeep_pod.sessions.history_service import (
+from sessions.history_service import (
     SessionHistoryService,
     resolve_history_window,
     safe_account_profile,
 )
-from zeep_pod.sessions.score_summary import history_summary
+from sessions.score_summary import history_summary
 
 
 class SessionAvailabilityTests(unittest.TestCase):

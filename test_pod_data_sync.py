@@ -15,14 +15,14 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from zeep_pod.operations import (
+from operations import (
     pod_data_sync,
     pod_snapshot_export,
     pod_snapshot_lock,
     pod_snapshot_transport,
     secure_paths,
 )
-from zeep_pod.operations.workstation_approval import WorkstationApprovalError
+from operations.workstation_approval import WorkstationApprovalError
 
 
 def _database(path: Path, tables: set[str], value: int = 0) -> None:
@@ -677,7 +677,7 @@ class PodSnapshotBoundaryTest(unittest.TestCase):
         self.assertIn("PermitLocalCommand=no", captured)
         remote_command = captured[-1]
         self.assertIn("PYTHONPATH=/home/pod1/pi5", remote_command)
-        self.assertIn("zeep_pod.operations.pod_snapshot_export", remote_command)
+        self.assertIn("operations.pod_snapshot_export", remote_command)
         self.assertNotIn("sh", captured)
 
     def test_transport_stops_before_writing_beyond_cap(self) -> None:

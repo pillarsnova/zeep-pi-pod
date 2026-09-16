@@ -5,8 +5,8 @@ from __future__ import annotations
 import copy
 import unittest
 
-from zeep_pod.adaptive_learning import build_adaptive_learning_snapshot
-from zeep_pod.api_state_projection import project_consumer_snapshot
+from adaptive.learning import build_adaptive_learning_snapshot
+from api_state_projection import project_consumer_snapshot
 
 
 def live_snapshot() -> dict:

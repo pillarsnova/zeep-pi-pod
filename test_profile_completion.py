@@ -21,7 +21,7 @@ from profile_completion import (
     missing_required_fields,
 )
 from testing_support import configure_app_test_environment
-from zeep_pod.identity.profile_fields import normalise_blood_group
+from identity.profile_fields import normalise_blood_group
 
 _test_root = configure_app_test_environment()
 

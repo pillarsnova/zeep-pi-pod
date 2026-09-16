@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 
 from sleep_system_policy import sleep_policy_snapshot
-from zeep_pod.sessions.sleep_context import (
+from sessions.sleep_context import (
     apply_sleep_decisions_to_samples,
     checkpoint_sleep_context,
     restore_session_sleep_context,

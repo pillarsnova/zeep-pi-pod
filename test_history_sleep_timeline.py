@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from zeep_pod.sessions.history_sleep_timeline import (
+from sessions.history_sleep_timeline import (
     fill_history_sleep_timeline_continuity,
     history_sleep_state_counts,
     history_sleep_timeline,

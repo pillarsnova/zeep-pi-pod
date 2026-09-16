@@ -49,13 +49,13 @@ Control Hub 1 ยืนยันเพียงว่า ESP32 เรียก�
 
 | กลุ่ม | อุปกรณ์/หน้าที่ที่ source ระบุ | Pi transport default | Live state owner | Module ปัจจุบัน |
 |---|---|---|---|---|
-| Sensor Hub 1 | SHT3x-DIS: temperature/humidity; OPT3001: lux; SPH0645LM4H-B: `sound_dba`/diagnostic dBFS | `/dev/ttyACM0`, 115200, JSON หนึ่ง object ต่อบรรทัด | `state["sensor"]["esp32"]` | `zeep_pod/hardware/sensorhub1.py` + `sensor_contracts.py` + `sensor_runtime.py` |
-| Sensor Hub 2 | MH-Z19C: CO2; PMS7003: PM1/2.5/10; SGP40: raw/VOC Index | MQTT `127.0.0.1:1883`, telemetry/status topics | `state["sensor"]["sensorhub2"]` | `zeep_pod/hardware/sensorhub2.py` |
-| BCG | LSM-800-T waveform 25 samples, bed status, HR, RR | `/dev/ttyUSB_HRB`, 115200, binary frame 66 bytes | `state["sensor"]["bcg"]`; raw Session epochs in `bcg.db` | `zeep_pod/hardware/bcg.py`; parser `sensor_contracts.py`; storage `bcg_storage.py` |
-| Control Hub 1 | ESP32-S3 bridge ส่งคำสั่ง IR ไปเครื่องปรับอากาศ | MQTT command/status/event | `state["aircon"]` | `zeep_pod/hardware/controlhub1.py`; route/sequence policy ยังอยู่ใน `app.py` |
-| Control Hub 2 | ESP32 bridge ใช้ servo 4 ตัวกดรีโมตเตียงปรับระดับ | MQTT command/status/event | `state["bed_control"]` | `zeep_pod/hardware/controlhub2.py`; auto-stop policy ยังอยู่ใน `app.py` |
-| Audio | เพลง local และ Brainwave preview ออกลำโพงของ Pi | MPV IPC ผ่าน Unix socket; `afplay`/`ffplay` เป็น development fallback | `state["music"]`, `state["system"]["player"]` | `zeep_pod/hardware/audio.py`, `audio_api.py`, `brainwave_audio.py` |
-| GPIO | ประตู 2 ทิศ, ไฟเพดาน/ดาว, Aroma 4, Steam, Red light 3 zone | Pi BCM GPIO ผ่าน `gpiozero` + `lgpio` chip 0 | `state["gpio"]` เป็น commanded state | `zeep_pod/hardware/gpio.py`; pulse/route policy ยังอยู่ใน `app.py` |
+| Sensor Hub 1 | SHT3x-DIS: temperature/humidity; OPT3001: lux; SPH0645LM4H-B: `sound_dba`/diagnostic dBFS | `/dev/ttyACM0`, 115200, JSON หนึ่ง object ต่อบรรทัด | `state["sensor"]["esp32"]` | `hardware/sensorhub1.py` + `sensors/contracts.py` + `sensors/runtime.py` |
+| Sensor Hub 2 | MH-Z19C: CO2; PMS7003: PM1/2.5/10; SGP40: raw/VOC Index | MQTT `127.0.0.1:1883`, telemetry/status topics | `state["sensor"]["sensorhub2"]` | `hardware/sensorhub2.py` |
+| BCG | LSM-800-T waveform 25 samples, bed status, HR, RR | `/dev/ttyUSB_HRB`, 115200, binary frame 66 bytes | `state["sensor"]["bcg"]`; raw Session epochs in `bcg.db` | `hardware/bcg.py`; parser `sensors/bcg.py`; storage `bcg_storage.py` |
+| Control Hub 1 | ESP32-S3 bridge ส่งคำสั่ง IR ไปเครื่องปรับอากาศ | MQTT command/status/event | `state["aircon"]` | `hardware/controlhub1.py`; route/sequence policy ยังอยู่ใน `app.py` |
+| Control Hub 2 | ESP32 bridge ใช้ servo 4 ตัวกดรีโมตเตียงปรับระดับ | MQTT command/status/event | `state["bed_control"]` | `hardware/controlhub2.py`; auto-stop policy ยังอยู่ใน `app.py` |
+| Audio | เพลง local และ Brainwave preview ออกลำโพงของ Pi | MPV IPC ผ่าน Unix socket; `afplay`/`ffplay` เป็น development fallback | `state["music"]`, `state["system"]["player"]` | `hardware/audio.py`, `audio_api.py`, `brainwave_audio.py` |
+| GPIO | ประตู 2 ทิศ, ไฟเพดาน/ดาว, Aroma 4, Steam, Red light 3 zone | Pi BCM GPIO ผ่าน `gpiozero` + `lgpio` chip 0 | `state["gpio"]` เป็น commanded state | `hardware/gpio.py`; pulse/route policy ยังอยู่ใน `app.py` |
 
 ## 1. Sensor Hub 1 — USB Serial JSONL
 
@@ -83,10 +83,11 @@ Control Hub 1 ยืนยันเพียงว่า ESP32 เรียก�
 
 - `SensorHub1Reader` เป็นเจ้าของ framing, UTF-8/JSON parse, packet classification,
   reconnect และ timestamp ตอนรับ packet.
-- `sensor_contracts.decode_hub_payload()` เป็นเจ้าของ wire-to-flat adaptation และ
+- `sensors.contracts.decode_hub_payload()` เป็นเจ้าของ wire-to-flat adaptation และ
   nested field ownership.
-- `sensor_runtime.normalize_hub1_sensor()` เป็นเจ้าของ alias/range/finite validation;
-  `compose_environment_snapshot()` เป็นเจ้าของ canonical environment view.
+- `sensors.normalization.normalize_hub1_sensor()` เป็นเจ้าของ
+  alias/range/finite validation; `sensors.environment.compose_environment_snapshot()`
+  เป็นเจ้าของ canonical environment view.
 - `SensorHub1StateStore` เขียน latest raw-normalized payload ที่ legacy key
   `state["sensor"]["esp32"]`. ชื่อนี้คือ compatibility debt; อย่า rename เป็น
   `sensorhub1` โดยตรงเพราะ API/UI/tests ยังอ่าน key เดิม.
@@ -193,7 +194,7 @@ BOM/firmware repository ของ hardware team แยกต่างหาก
 
 ### Data ownership
 
-- `sensor_contracts.parse_lsm800t_frame()` เป็นเจ้าของ byte map แบบ deterministic.
+- `sensors.bcg.parse_lsm800t_frame()` เป็นเจ้าของ byte map แบบ deterministic.
 - `LSM800TReader` เป็นเจ้าของ serial sync/reconnect; `BCGPacketPublisher` เป็น
   เจ้าของ live vital hold, in-memory histories และการส่ง packet เข้า storage.
 - `app.py::bcg_reader()` เหลือ compatibility facade สำหรับประกอบ config/dependency
@@ -205,7 +206,7 @@ BOM/firmware repository ของ hardware team แยกต่างหาก
   batch default 60 packet เป็นหนึ่ง epoch/transaction label และ enqueue ไป `bcg.db`.
   ตอน end/restart/shutdown จะ flush partial epoch.
 - `sensor_frame_sampler()` รวม BCG packets ที่มาจริงใน bucket 10 วินาทีกับ
-  canonical environment ผ่าน `zeep_pod/sessions/sensor_frame_sampler.py`; BCG
+  canonical environment ผ่าน `sessions/sensor_frame_sampler.py`; BCG
   summary ต้องมี paired HR+RR ใน packet เดียวกัน.
 
 ### Failure behavior
@@ -382,7 +383,7 @@ Current state ระบุ `ventilation_control_available=false`; แม้ Dash
 |---|---|---|---|
 | Hub 1 latest payload | `SensorHub1StateStore` -> `state.sensor.esp32` | memory; orderly shutdown มี derived last Sensor frame cache | canonical environment, Admin diagnostic |
 | Hub 2 latest payload/status | Sensor Hub 2 adapter -> `state.sensor.sensorhub2` | memory; derived frame cache เช่นเดียวกัน | canonical environment, Safety CO2, Admin |
-| Canonical environment | `sensor_runtime.compose_environment_snapshot` + 10 s frame sampler | Session sample/derived frame ตาม lifecycle; ไม่ rewrite raw | Dashboard, Session, Safety, Shadow advice |
+| Canonical environment | `sensors.environment.compose_environment_snapshot` + 10 s frame sampler | Session sample/derived frame ตาม lifecycle; ไม่ rewrite raw | Dashboard, Session, Safety, Shadow advice |
 | BCG latest/raw windows | `LSM800TReader` + `BCGPacketPublisher` | bounded memory; byte-exact `bcg.db` เฉพาะ Recording ผ่าน `BCGStorage` | Recording gate, Sensor frame, Sleep evidence, Admin raw |
 | Aircon | Control Hub 1 adapter + route service policy | live state memory; fan intent/reference JSON เท่านั้น | Control UI, Session activity, Safety guard |
 | Bed control | Control Hub 2 adapter + auto-stop policy | live state memory; Session activity log | Control UI, Safety stop |
@@ -390,7 +391,7 @@ Current state ระบุ `ventilation_control_available=false`; แม้ Dash
 | Audio | `AudioPlayer` | state memory; track/preview filesบน disk | Control UI, Session activity, Safe profile |
 
 Consumer API รับ detached snapshot และตัด engineering telemetry ออกผ่าน
-`zeep_pod/api_state_projection.py`/`sound_observability.py`; Admin จึงเห็น diagnostic
+`api/state_projection.py`/`sensors/observability.py`; Admin จึงเห็น diagnostic
 มากกว่า User โดยตั้งใจ ห้ามส่ง raw state dictionary ตรงไป public endpoint
 
 Freshness ของ Hub 1/2, BCG และ Control Hub 1/2 ถูก project บน detached response

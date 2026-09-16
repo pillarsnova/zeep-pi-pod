@@ -11,7 +11,7 @@ import asyncio
 import base64
 import unittest
 
-from zeep_pod.sessions.report_share import (
+from sessions.report_share import (
     MAX_ATTEMPTS,
     SIGNED_URL_TTL_MINUTES,
     UPLOAD_PATH,

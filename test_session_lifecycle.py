@@ -8,7 +8,7 @@ import time
 import unittest
 from pathlib import Path
 
-from zeep_pod.sessions.lifecycle import (
+from sessions.lifecycle import (
     SessionCheckpointStore,
     bed_is_occupied,
     evaluate_vital_start_gate,

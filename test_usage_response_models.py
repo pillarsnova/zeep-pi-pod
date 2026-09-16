@@ -20,9 +20,9 @@ from sleep_system_policy import (
     RECOVERY_SCORE_FORMULA_VERSION,
     SLEEP_SCORE_FORMULA_VERSION,
 )
-from zeep_pod.sessions._response_model_base import ContractModel
-from zeep_pod.sessions.quality_publication import public_quality_payload
-from zeep_pod.sessions.response_models import (
+from sessions._response_model_base import ContractModel
+from sessions.quality_publication import public_quality_payload
+from sessions.response_models import (
     PublicQuality,
     PublicSessionReport,
     RestoreSummary,
@@ -31,9 +31,9 @@ from zeep_pod.sessions.response_models import (
     UsageSessionListResponse,
     UsageSessionSummaryResponse,
 )
-from zeep_pod.sessions.restore_summary import build_restore_summary
-from zeep_pod.sessions.usage_response_models import UsageTarget
-from zeep_pod.sessions.usage_service import UsageSessionService
+from sessions.restore_summary import build_restore_summary
+from sessions.usage_response_models import UsageTarget
+from sessions.usage_service import UsageSessionService
 
 
 def _validate(model, value):
@@ -47,11 +47,11 @@ def _schema(model):
 
 
 _RESPONSE_MODEL_MODULES = (
-    "zeep_pod.sessions.quality_response_models",
-    "zeep_pod.sessions.report_response_models",
-    "zeep_pod.sessions.restore_response_models",
-    "zeep_pod.sessions.usage_nested_response_models",
-    "zeep_pod.sessions.usage_response_models",
+    "sessions.quality_response_models",
+    "sessions.report_response_models",
+    "sessions.restore_response_models",
+    "sessions.usage_nested_response_models",
+    "sessions.usage_response_models",
 )
 
 
@@ -761,14 +761,14 @@ import sys
 import pydantic.v1 as pydantic_v1
 
 sys.modules["pydantic"] = pydantic_v1
-from zeep_pod.sessions._response_model_base import ContractModel
+from sessions._response_model_base import ContractModel
 
 modules = (
-    "zeep_pod.sessions.quality_response_models",
-    "zeep_pod.sessions.report_response_models",
-    "zeep_pod.sessions.restore_response_models",
-    "zeep_pod.sessions.usage_nested_response_models",
-    "zeep_pod.sessions.usage_response_models",
+    "sessions.quality_response_models",
+    "sessions.report_response_models",
+    "sessions.restore_response_models",
+    "sessions.usage_nested_response_models",
+    "sessions.usage_response_models",
 )
 required = {}
 for module_name in modules:
@@ -791,7 +791,7 @@ print(json.dumps(required, sort_keys=True))
         legacy = json.loads(completed.stdout)
 
         self.assertEqual(current, legacy)
-        summary_key = "zeep_pod.sessions.usage_response_models:UsageSessionSummary"
+        summary_key = "sessions.usage_response_models:UsageSessionSummary"
         for field in (
             "started_at_utc",
             "ended_at_utc",

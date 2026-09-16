@@ -9,7 +9,7 @@ from collections import deque
 from typing import Any
 
 from sensor_contracts import parse_lsm800t_frame
-from zeep_pod.hardware.bcg import (
+from hardware.bcg import (
     BCGPacketPublisher,
     BCGPublicationPorts,
     BCGReaderConfig,

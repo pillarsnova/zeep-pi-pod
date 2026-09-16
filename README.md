@@ -67,7 +67,7 @@ Tailscale หรือ reverse proxy ที่ใช้ HTTPS, access policy แ
 | Pull, test, deploy, backup และ recovery | [Operations and First Week](docs/onboarding/operations-and-first-week.md) |
 | Sleep State, score และ version ปัจจุบัน | [Sleep System Current](docs/zeep-sleep-system-current.md) และ [`sleep_system_policy.py`](sleep_system_policy.py) |
 | API field/enum | [API Schema Reference](docs/zeep-api-schema-reference-v1.md), Pydantic models และ `/openapi.json` ของ release ที่ deploy |
-| Sensor field/calibration | [Sensor Interface Contract](docs/zeep-sensor-interface-contract-v1.2.md), [`sensor_contracts.py`](sensor_contracts.py) และ [`calibration.json`](calibration.json) |
+| Sensor field/calibration | [Sensor Interface Contract](docs/zeep-sensor-interface-contract-v1.2.md), [`sensors/contracts.py`](sensors/contracts.py), [`catalog.py`](sensors/catalog.py) และ [`calibration.json`](calibration.json) |
 | Test และ release gate | [TESTING.md](TESTING.md) |
 | Code ownership/refactor | [Pi 5 Software Architecture](docs/pi5-software-architecture.md) และ [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Freeze/P0/P1/sign-off | [v1 Handover and Freeze Readiness](docs/zeep-v1-system-handover-and-freeze-readiness.md) |
@@ -81,9 +81,17 @@ policy, Pydantic/OpenAPI, Sensor contract, effective configuration และ Git
 
 ```text
 app.py                       legacy composition root ที่กำลังลดเหลือ wiring/lifecycle
-zeep_pod/hardware/           Serial, MQTT, GPIO และ Audio adapters
-zeep_pod/sessions/           Session, report, history, baseline และ replay services
-zeep_pod/identity/           ZEEP account, profile, occupancy และ erasure
+api/                         HTTP models, response envelope, routes และ projections
+common/                      pure helper กลางสำหรับ Mapping และ numeric coercion
+hardware/                    Serial, MQTT, GPIO และ Audio adapters
+sensors/                     Sensor contract, calibration และ normalization
+sessions/                    Session, report, history, baseline และ replay services
+identity/                    ZEEP account, profile, occupancy และ erasure
+operations/                  snapshot sync, export และ workstation approval
+acoustics/                   Acoustic Intelligence contract และ Admin projection
+adaptive/                    Baseline features และ Shadow recommendation
+presentation/                ภาษาผลลัพธ์ Wellness ที่ใช้ร่วมกัน
+safety/                      Safety threshold และ fault evaluation
 sleep_signal_features.py     engineering evidence จาก BCG/Bed/HR/RR/Movement
 sleep_stage_scoring.py       shared five-state evidence scorer
 sleep_system_policy.py       version, gate, transition, mode และ score manifest

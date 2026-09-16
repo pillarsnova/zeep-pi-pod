@@ -1,0 +1,215 @@
+"""Canonical public context copied from a persisted Restore Summary."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any
+
+from common.mappings import as_mapping as _mapping
+from common.numbers import as_number as _number
+from sessions.restore_summary_baseline import build_baseline_summary
+
+
+def canonical_personal_baseline(
+    source: Any,
+    fallback: Mapping[str, Any],
+    *,
+    group: str,
+    score: float | None,
+    source_formula_version: str | None,
+    source_target_key: str | None,
+) -> dict[str, Any]:
+    """Rebuild a Baseline result from an explicit, same-mode allowlist."""
+    persisted = _mapping(source)
+    if persisted.get("mode") != group:
+        return dict(fallback)
+    maturity = _mapping(persisted.get("maturity"))
+    comparison = _mapping(persisted.get("comparison"))
+    sessions = _number(maturity.get("sessions_used"))
+    if sessions is None:
+        return dict(fallback)
+    context: dict[str, Any] = {
+        "baseline_policy_version": persisted.get("baseline_policy_version"),
+        "target_specific": persisted.get("target_specific") is True,
+        "target_key": persisted.get("target_key"),
+        "score_reference": {
+            "sessions_used": max(0, int(sessions)),
+            "formula_version": persisted.get("score_formula_version"),
+        },
+    }
+    median = _number(comparison.get("baseline_median"))
+    typical = comparison.get("typical_range")
+    if median is not None and 0.0 <= median <= 100.0:
+        context["score_reference"]["median"] = median
+    if isinstance(typical, list | tuple) and len(typical) == 2:
+        low, high = _number(typical[0]), _number(typical[1])
+        if low is not None and high is not None and 0.0 <= low <= high <= 100.0:
+            context["score_reference"]["typical_range"] = [low, high]
+    return build_baseline_summary(
+        context,
+        score,
+        group,
+        source_formula_version=source_formula_version,
+        source_target_key=source_target_key,
+    )
+
+
+def canonical_trend(
+    source: Any,
+    fallback: Mapping[str, Any],
+    *,
+    score_available: bool,
+    baseline_policy_version: str | None,
+    score_formula_version: str | None,
+    target_specific: bool,
+    target_key: str | None,
+) -> dict[str, Any]:
+    """Allow only same-mode Session score windows, never day readiness."""
+    persisted = _mapping(source)
+    if (
+        not score_available
+        or persisted.get("available") is not True
+        or persisted.get("baseline_policy_version") != baseline_policy_version
+        or persisted.get("score_formula_version") != score_formula_version
+        or persisted.get("target_specific") is not target_specific
+        or persisted.get("target_key") != target_key
+    ):
+        return dict(fallback)
+    windows = _mapping(persisted.get("windows"))
+    public_windows: dict[str, Any] = {}
+    for key in ("7", "14", "30"):
+        window = _mapping(windows.get(key))
+        count = _number(window.get("session_count"))
+        average = _number(window.get("average"))
+        latest = _number(window.get("latest"))
+        if (
+            count is None
+            or average is None
+            or latest is None
+            or count < 1
+            or not 0.0 <= average <= 100.0
+            or not 0.0 <= latest <= 100.0
+        ):
+            continue
+        public_windows[key] = {
+            "session_count": int(count),
+            "average": round(average, 1),
+            "latest": round(latest, 1),
+        }
+    if not public_windows:
+        return dict(fallback)
+    return {
+        "available": True,
+        "unit": "sessions",
+        "windows": public_windows,
+        "mode_specific": True,
+        "whole_day_readiness_trend": False,
+        "baseline_policy_version": baseline_policy_version,
+        "score_formula_version": score_formula_version,
+        "target_specific": target_specific,
+        "target_key": target_key,
+    }
+
+
+def canonical_subjective_outcome(source: Any) -> dict[str, Any]:
+    """Expose self-report values only with explicit questionnaire provenance."""
+    persisted = _mapping(source)
+    approved_sources = {
+        "pre_post_questionnaire",
+        "session_questionnaire",
+        "zeep_pre_post_questionnaire",
+    }
+    provenance = str(persisted.get("source") or "").strip().casefold()
+    freshness = _number(persisted.get("freshness_delta"))
+    readiness = _number(persisted.get("activity_readiness"))
+    has_measurement = (
+        freshness is not None
+        and -10.0 <= freshness <= 10.0
+        or readiness is not None
+        and 0.0 <= readiness <= 10.0
+    )
+    valid = bool(
+        persisted.get("status") == "measured"
+        and persisted.get("sensor_inferred") is False
+        and provenance in approved_sources
+        and has_measurement
+    )
+    if not valid:
+        return {
+            "status": "not_measured",
+            "label": "ยังไม่ได้บันทึกความรู้สึกหลังพัก",
+            "freshness_delta": None,
+            "activity_readiness": None,
+            "sensor_inferred": False,
+        }
+    return {
+        "status": "measured",
+        "label": "บันทึกความรู้สึกก่อน–หลังการพักแล้ว",
+        "freshness_delta": freshness,
+        "activity_readiness": readiness,
+        "source": provenance,
+        "sensor_inferred": False,
+    }
+
+
+def persisted_restore_matches(
+    existing: Mapping[str, Any],
+    canonical: Mapping[str, Any],
+    group: str,
+) -> bool:
+    """Confirm that persisted context belongs to this score and mode."""
+    persisted_source = _mapping(existing.get("source_score"))
+    canonical_source = _mapping(canonical.get("source_score"))
+    persisted_scope = _mapping(existing.get("session_scope"))
+    persisted_baseline = _mapping(existing.get("personal_baseline"))
+    canonical_baseline = _mapping(canonical.get("personal_baseline"))
+    return bool(
+        existing
+        and existing.get("version") == canonical.get("version")
+        and persisted_source.get("type") == canonical_source.get("type")
+        and _number(persisted_source.get("value"))
+        == _number(canonical_source.get("value"))
+        and persisted_source.get("formula_version")
+        == canonical_source.get("formula_version")
+        and persisted_scope.get("mode") == group
+        and persisted_baseline.get("target_key") == canonical_baseline.get("target_key")
+    )
+
+
+def canonical_restore_contexts(
+    summary: Mapping[str, Any],
+    existing: Mapping[str, Any],
+    canonical: Mapping[str, Any],
+    *,
+    group: str,
+    score_value: float | None,
+    score_available: bool,
+) -> dict[str, Any]:
+    """Return the three persisted context sections through strict adapters."""
+    source = _mapping(canonical.get("source_score"))
+    baseline = _mapping(canonical.get("personal_baseline"))
+    source_formula = source.get("formula_version")
+    source_target = baseline.get("target_key")
+    personal = canonical_personal_baseline(
+        summary.get("personal_baseline"),
+        _mapping(canonical.get("personal_baseline")),
+        group=group,
+        score=score_value if score_available else None,
+        source_formula_version=source_formula,
+        source_target_key=source_target,
+    )
+    return {
+        "personal_baseline": personal,
+        "trend": canonical_trend(
+            summary.get("trend"),
+            _mapping(canonical.get("trend")),
+            score_available=score_available,
+            baseline_policy_version=personal.get("baseline_policy_version"),
+            score_formula_version=source_formula,
+            target_specific=personal.get("target_specific") is True,
+            target_key=source_target,
+        ),
+        "subjective_outcome": canonical_subjective_outcome(
+            existing.get("subjective_outcome")
+        ),
+    }

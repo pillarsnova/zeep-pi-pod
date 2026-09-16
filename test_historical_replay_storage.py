@@ -14,7 +14,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import reclassify_sleep_history as replay
-from zeep_pod.sessions.historical_replay_storage import (
+from sessions.historical_replay_storage import (
     ReplayStorageError,
     load_bcg_packets,
     load_session_sleep_events,

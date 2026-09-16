@@ -6,7 +6,7 @@ import json
 import unittest
 from datetime import UTC, datetime
 
-from zeep_pod.acoustics import (
+from acoustics import (
     acoustic_contract_snapshot,
     build_acoustic_monitor_snapshot,
 )

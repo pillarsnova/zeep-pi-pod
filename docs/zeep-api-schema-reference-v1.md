@@ -11,10 +11,10 @@
 `Usage Session API` โดยระบุเส้นทาง, การยืนยันตัวตน, response envelope,
 ชนิดข้อมูล, enum, nullable rules และกฎการแสดงผล `restore_summary` อย่างเป็น
 ทางการ หาก implementation และเอกสารขัดกัน ให้ยึด Pydantic models ใน
-[`restore_response_models.py`](../zeep_pod/sessions/restore_response_models.py),
-[`usage_response_models.py`](../zeep_pod/sessions/usage_response_models.py),
-[`presentation_response_models.py`](../zeep_pod/sessions/presentation_response_models.py) และ
-[`user_profile_response_models.py`](../zeep_pod/sessions/user_profile_response_models.py)
+[`restore_response_models.py`](../sessions/restore_response_models.py),
+[`usage_response_models.py`](../sessions/usage_response_models.py),
+[`presentation_response_models.py`](../sessions/presentation_response_models.py) และ
+[`user_profile_response_models.py`](../sessions/user_profile_response_models.py)
 ร่วมกับ OpenAPI ของ API ที่ deploy จริงเป็น source of truth แล้วแก้เอกสารนี้
 ตามโมเดลใน release เดียวกัน
 
@@ -1604,11 +1604,11 @@ Client ควร parse `detail` ได้ทั้ง `string` และ object,
 ระบบเผยแพร่ Pydantic response models ของ envelope, list, item, score, mode,
 Restore Summary และ public report แล้วในโมดูลต่อไปนี้:
 
-- `zeep_pod/sessions/restore_response_models.py`
-- `zeep_pod/sessions/usage_response_models.py`
-- `zeep_pod/sessions/presentation_response_models.py`
-- `zeep_pod/sessions/user_profile_response_models.py`
-- `zeep_pod/sessions/response_models.py` สำหรับ public re-export
+- `sessions/restore_response_models.py`
+- `sessions/usage_response_models.py`
+- `sessions/presentation_response_models.py`
+- `sessions/user_profile_response_models.py`
+- `sessions/response_models.py` สำหรับ public re-export
 
 FastAPI ผูก model เหล่านี้เป็น `response_model` ของ Usage Session ทั้งเจ็ด
 endpoint และสร้าง machine-readable schema ที่ `/openapi.json` อัตโนมัติ

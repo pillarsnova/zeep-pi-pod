@@ -90,7 +90,7 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 | ขอบเขต module และลำดับ refactor | [Pi 5 Software Architecture](../pi5-software-architecture.md) |
 | Sleep State, score และ policy version | [Sleep System Current](../zeep-sleep-system-current.md) และ [`sleep_system_policy.py`](../../sleep_system_policy.py) |
 | API สำหรับ App | [ZEEP API v1](../zeep-api-v1.md), [Schema Reference](../zeep-api-schema-reference-v1.md), Pydantic models และ `/openapi.json` ของ release ที่ deploy |
-| Sensor field/range/provenance | [Sensor Interface Contract](../zeep-sensor-interface-contract-v1.2.md) และ [`sensor_contracts.py`](../../sensor_contracts.py) |
+| Sensor field/range/provenance | [Sensor Interface Contract](../zeep-sensor-interface-contract-v1.2.md) และ [`sensors/contracts.py`](../../sensors/contracts.py) |
 | Tech stack, database และเครื่องมือ | [Technology Stack, Data และเครื่องมือ](technology-stack-and-tools.md) เป็น orientation; runtime ยึด requirements/config/service จริง |
 | แผนจำแนกเสียง/DSP | [หูอัจฉริยะ · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md) และ [Validation Protocol](../../research/evidence-library/ACOUSTIC_INTELLIGENCE_VALIDATION.md); P0.5 contract เป็น runtime ส่วน classifier ยังเป็น ROADMAP |
 | Test/release gate | [TESTING.md](../../TESTING.md) |
@@ -105,13 +105,13 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 
 | บทบาท | อ่านเพิ่ม | จุดเริ่มในโค้ด |
 |---|---|---|
-| Product / UX | [Two-Mode Protocol](../zeep-pilot-two-mode-protocol.md), [Session Result Presentation](../zeep-session-result-presentation-v1.md) | [`zeep_pod/product_language.py`](../../zeep_pod/product_language.py), `static/partials/` |
-| Pi / Backend | [Software Architecture](../pi5-software-architecture.md), [API v1](../zeep-api-v1.md) | [`app.py`](../../app.py), [`api_v1.py`](../../api_v1.py), `zeep_pod/` |
-| Mobile / Web integration | [API Schema Reference](../zeep-api-schema-reference-v1.md) | [`zeep_pod/sessions/usage_api.py`](../../zeep_pod/sessions/usage_api.py), response models |
-| Hardware / Firmware | [Hardware และ Hub map](hardware-hub-map.md), [Sensor Interface Contract](../zeep-sensor-interface-contract-v1.2.md) | `sensor_*`, `control_protocol.py`, `zeep_pod/hardware/` |
-| Acoustics / Data / Monitor | [หูอัจฉริยะ · DSP Plan](smart-ear-dsp-plan.md), [API/Data/Privacy](api-data-and-privacy.md) | Current: `sensor_runtime.py`, `zeep_pod/sessions/sensor_frame_sampler.py`, `zeep_pod/acoustics/`; Planned: feature parser/classifier/event tracker |
+| Product / UX | [Two-Mode Protocol](../zeep-pilot-two-mode-protocol.md), [Session Result Presentation](../zeep-session-result-presentation-v1.md) | [`presentation/language.py`](../../presentation/language.py), `static/partials/` |
+| Pi / Backend | [Software Architecture](../pi5-software-architecture.md), [API v1](../zeep-api-v1.md) | [`app.py`](../../app.py), [`api/`](../../api/), [`sessions/`](../../sessions/), [`hardware/`](../../hardware/) |
+| Mobile / Web integration | [API Schema Reference](../zeep-api-schema-reference-v1.md) | [`sessions/usage_api.py`](../../sessions/usage_api.py), response models |
+| Hardware / Firmware | [Hardware และ Hub map](hardware-hub-map.md), [Sensor Interface Contract](../zeep-sensor-interface-contract-v1.2.md) | `sensor_*`, `control_protocol.py`, `hardware/` |
+| Acoustics / Data / Monitor | [หูอัจฉริยะ · DSP Plan](smart-ear-dsp-plan.md), [API/Data/Privacy](api-data-and-privacy.md) | Current: `sensors/`, `sessions/sensor_frame_sampler.py`, `acoustics/`; Planned: feature parser/classifier/event tracker |
 | QA / Data | [TESTING.md](../../TESTING.md), [Sleep History Promotion Policy](../sleep-history-promotion-policy-v2.md) | `test_*.py`, [`maintenance_registry.py`](../../maintenance_registry.py) |
-| Operations / Safety | [Operations Runbook](../pi5-operations-runbook.md), [TESTING.md](../../TESTING.md) | [`start_work.sh`](../../start_work.sh), service units, `zeep_pod/operations/` |
+| Operations / Safety | [Operations Runbook](../pi5-operations-runbook.md), [TESTING.md](../../TESTING.md) | [`start_work.sh`](../../start_work.sh), service units, `operations/` |
 
 ## กฎหยุดงานทันที
 

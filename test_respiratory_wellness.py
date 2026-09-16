@@ -7,9 +7,9 @@ from sleep_system_policy import (
     RESPIRATORY_WELLNESS_VERSION,
     SLEEP_SCORE_FORMULA_VERSION,
 )
-from zeep_pod.sessions.report_publication import public_report_field
-from zeep_pod.sessions.respiratory_response_models import RespiratoryWellness
-from zeep_pod.sessions.respiratory_wellness import (
+from sessions.report_publication import public_report_field
+from sessions.respiratory_response_models import RespiratoryWellness
+from sessions.respiratory_wellness import (
     build_respiratory_wellness,
 )
 

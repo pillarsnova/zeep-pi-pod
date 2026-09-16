@@ -10,10 +10,10 @@ from sleep_system_policy import (
     RECOVERY_SCORE_FORMULA_VERSION,
     SLEEP_SCORE_FORMULA_VERSION,
 )
-from zeep_pod.sessions.quality_publication import public_quality_payload
-from zeep_pod.sessions.restore_summary import build_restore_summary
-from zeep_pod.sessions.score_identity import assess_score_identity
-from zeep_pod.sessions.usage_response_models import PublicQuality
+from sessions.quality_publication import public_quality_payload
+from sessions.restore_summary import build_restore_summary
+from sessions.score_identity import assess_score_identity
+from sessions.usage_response_models import PublicQuality
 
 
 def _row(**overrides):

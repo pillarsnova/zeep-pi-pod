@@ -109,16 +109,16 @@ from sleep_system_policy import (
     gender_adjusted_baseline,
     rest_mode_group,
 )
-from zeep_pod.sessions.cadence import (
+from sessions.cadence import (
     materialise_report_sample_grid,
     timeline_sample_interval,
 )
-from zeep_pod.sessions.report_projection import project_report_samples
-from zeep_pod.sessions.report_timeline import (
+from sessions.report_projection import project_report_samples
+from sessions.report_timeline import (
     sensor_samples as shared_sensor_samples,
     timeline_projection,
 )
-from zeep_pod.sessions.sleep_decision_projection import (
+from sessions.sleep_decision_projection import (
     apply_sleep_decisions_to_samples,
 )
 
@@ -148,11 +148,11 @@ REPLAY_SOURCE_FILES = (
     "sleep_stage_scoring.py",
     "sleep_system_policy.py",
     "sleep_session_report.py",
-    "zeep_pod/sessions/cadence.py",
-    "zeep_pod/sessions/report_projection.py",
-    "zeep_pod/sessions/report_timeline.py",
-    "zeep_pod/sessions/sleep_decision_projection.py",
-    "zeep_pod/sessions/sleep_event_data.py",
+    "sessions/cadence.py",
+    "sessions/report_projection.py",
+    "sessions/report_timeline.py",
+    "sessions/sleep_decision_projection.py",
+    "sessions/sleep_event_data.py",
 )
 STAGES = tuple(ZEEP_SLEEP_STATES)
 SLEEP_STAGES = {"n1", "n2", "n3", "rem"}

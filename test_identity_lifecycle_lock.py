@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 import unittest
 
-from zeep_pod.identity.lifecycle_lock import synchronized_by
+from identity.lifecycle_lock import synchronized_by
 
 
 class IdentityLifecycleLockTests(unittest.TestCase):

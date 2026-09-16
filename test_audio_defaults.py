@@ -6,7 +6,7 @@ import threading
 import unittest
 
 from api_models import TrackCommand
-from zeep_pod.hardware.audio import (
+from hardware.audio import (
     DEFAULT_AUDIO_MODE,
     DEFAULT_AUDIO_VOLUME_PERCENT,
     AudioPlayer,

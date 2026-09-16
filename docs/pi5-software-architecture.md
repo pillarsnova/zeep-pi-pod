@@ -17,46 +17,47 @@ app, ต่อ lifecycle, ประกอบ dependency และเรียก
 
 | Layer | Source of truth | หน้าที่ |
 |---|---|---|
-| HTTP contracts | `api_models.py`, `api_v1.py` | รูปแบบ request/response และ versioned envelope |
+| HTTP contracts | `api/models.py`, `responses.py`, `v1.py`, `history.py` | รูปแบบ request/response, versioned envelope และ route factories; ไฟล์ชื่อเดิมที่ root เป็น compatibility facade เท่านั้น |
+| Shared pure values | `common/mappings.py`, `numbers.py` | แปลง Mapping/ตัวเลขด้วย semantics เดียว ลด helper ซ้ำโดยไม่ parse string หรือเปิด I/O |
 | Authentication | `access_control.py`, `admin_accounts.py` | Browser session, RBAC, CSRF และ Admin identity; Production เตรียม schema/config ใน lifespan และ direct caller มี guarded lazy fallback |
-| ZEEP account binding | `zeep_pod/identity/zeep_account.py` | ผูก `{tokens, user}` จาก Password/QR login เข้ากับตัวตนในตู้ |
+| ZEEP account binding | `identity/zeep_account.py` | ผูก `{tokens, user}` จาก Password/QR login เข้ากับตัวตนในตู้ |
 | QR login | `qr_login.py` | Pi ทำ handshake แทนแท็บเล็ต และถือ `pollSecret` ไว้เอง |
 | Occupancy | `pod_occupancy.py` | หนึ่งผู้ใช้ต่อหนึ่งตู้และป้องกัน login ซ้ำหลายตู้; lease store initialize แบบ explicit/idempotent |
 | Device protocol | `control_protocol.py` | validate/normalize คำสั่ง Aircon และ Bed |
-| Hardware contracts | `sensor_contracts.py` | sensor model, alias, physical range, frame/telemetry contract |
-| Calibration | `sensor_calibration.py` | calibration spec, validation และ atomic JSON persistence |
-| Sensor runtime | `sensor_runtime.py` | normalize Hub 1, compose Hub 1/2, stale/hold และ packet-level sound aggregation |
-| Sensor transports | `zeep_pod/hardware/sensorhub1.py`, `sensorhub2.py` | USB/MQTT readers ที่รับ state และ callback จาก composition root |
-| BCG transport | `zeep_pod/hardware/bcg.py` | LSM-800-T framing/reconnect และ live-state publication; `app.bcg_reader()` เป็น compatibility facade |
-| Sensor-frame sampling | `zeep_pod/sessions/sensor_frame_sampler.py` | รวม BCG + canonical environment ตาม cadence 10 วินาที; ไม่ตัดสิน Sleep Stage |
-| Live API projection | `zeep_pod/api_state_projection.py` | ประกอบ freshness/stale/fallback ของ Hub, BCG และ Control จาก detached snapshot โดยไม่แก้ live reader state |
-| Control transports | `zeep_pod/hardware/controlhub1.py`, `controlhub2.py` | MQTT command/ACK ของแอร์และเตียง แยกจาก HTTP routes |
-| Audio controls | `zeep_pod/hardware/audio.py`, `audio_api.py` | MPV/fallback player และนโยบาย HTTP ของเพลง/Brainwave ที่ทดสอบได้โดยไม่เปิด audio hardware |
+| Hardware contracts | `sensors/contracts.py`, `catalog.py`, `constants.py`, `bcg.py` | แยก wire contract, device catalog/range, shared constants และ byte parser |
+| Calibration | `sensors/calibration.py` | calibration spec, validation และ atomic JSON persistence |
+| Sensor runtime | `sensors/environment.py`, `normalization.py`, `sound.py` | แยก compose Hub 1/2, normalize direct sound และ packet-level sound aggregation; `runtime.py` เป็น stable package facade |
+| Sensor transports | `hardware/sensorhub1.py`, `sensorhub2.py` | USB/MQTT readers ที่รับ state และ callback จาก composition root |
+| BCG transport | `hardware/bcg.py`, `sensors/bcg.py` | LSM-800-T framing/reconnect, byte parser และ live-state publication; `app.bcg_reader()` เป็น compatibility facade |
+| Sensor-frame sampling | `sessions/sensor_frame_sampler.py` | รวม BCG + canonical environment ตาม cadence 10 วินาที; ไม่ตัดสิน Sleep Stage |
+| Live API projection | `api/state_projection.py` | ประกอบ freshness/stale/fallback ของ Hub, BCG และ Control จาก detached snapshot โดยไม่แก้ live reader state |
+| Control transports | `hardware/controlhub1.py`, `controlhub2.py` | MQTT command/ACK ของแอร์และเตียง แยกจาก HTTP routes |
+| Audio controls | `hardware/audio.py`, `audio_api.py` | MPV/fallback player และนโยบาย HTTP ของเพลง/Brainwave ที่ทดสอบได้โดยไม่เปิด audio hardware |
 | Shadow guidance | `smart_response.py` | ประเมินคำแนะนำสภาพแวดล้อมโดยไม่สั่งอุปกรณ์ |
-| Adaptive learning monitor | `zeep_pod/adaptive_learning.py` | เทียบ Live กับ Baseline และรวม version/device intent ใน Shadow mode |
+| Adaptive learning monitor | `adaptive/learning.py`, `adaptive/features.py` | เทียบ Live กับ Baseline และรวม version/device intent ใน Shadow mode |
 | Sleep evidence | `sleep_signal_features.py` | Movement, Bed Exit, Arousal, HR/RR และ waveform features |
 | Sleep scoring | `sleep_stage_scoring.py` | หลักฐานและ probability ของ W/N1/N2/N3/REM |
 | Sleep policy | `sleep_system_policy.py` | version, gate, confirmation, transition และ environment context |
-| Personal baseline | `personal.py`, `zeep_pod/sessions/baseline_cache.py` | Adaptive baseline รายบุคคลแบบ versioned; derived cache โหลดใน lifespan |
-| Historical replay | `zeep_pod/sessions/historical_replay_runtime.py`, `historical_replay_storage.py`, `historical_replay_audit.py`, `reclassify_sleep_history.py` | ใช้ policy/version เดียวกับ Live, อ่าน SQLite แบบ read-only และ audit โดยไม่ import FastAPI composition root |
-| User learning profile | `zeep_pod/sessions/user_learning_profile.py` | รวมประวัติรายบัญชี แยก Observed/Trend/AI readiness และแยก Overnight/Nap |
-| Personal behavior cohorts | `zeep_pod/sessions/personal_behaviour.py`, `user_baseline_context.py`, `user_score_history.py` | แยกสูตรและเป้าหมาย Overnight/Nap 30/Nap 90 ก่อนเทียบ Baseline หรือ trend |
-| Advisory AI projection | `zeep_pod/sessions/user_ai_context.py`, `user_profile_api.py` | Positive allowlist ที่ตัด direct identifiers; ยังคงเป็น Personal Wellness Data และไม่สั่งอุปกรณ์ |
-| Identity erasure | `zeep_pod/identity/account_erasure.py`, `account_erasure_api.py` | ลบ local active store ของ canonical account/aliases, Session, BCG, Baseline, checkpoint และ capability ที่ค้าง |
+| Personal baseline | `personal.py`, `sessions/baseline_cache.py` | Adaptive baseline รายบุคคลแบบ versioned; derived cache โหลดใน lifespan |
+| Historical replay | `sessions/historical_replay_runtime.py`, `historical_replay_storage.py`, `historical_replay_audit.py`, `reclassify_sleep_history.py` | ใช้ policy/version เดียวกับ Live, อ่าน SQLite แบบ read-only และ audit โดยไม่ import FastAPI composition root |
+| User learning profile | `sessions/user_learning_profile.py` | รวมประวัติรายบัญชี แยก Observed/Trend/AI readiness และแยก Overnight/Nap |
+| Personal behavior cohorts | `sessions/personal_behaviour.py`, `user_baseline_context.py`, `user_score_history.py` | แยกสูตรและเป้าหมาย Overnight/Nap 30/Nap 90 ก่อนเทียบ Baseline หรือ trend |
+| Advisory AI projection | `sessions/user_ai_context.py`, `user_profile_api.py` | Positive allowlist ที่ตัด direct identifiers; ยังคงเป็น Personal Wellness Data และไม่สั่งอุปกรณ์ |
+| Identity erasure | `identity/account_erasure.py`, `account_erasure_api.py` | ลบ local active store ของ canonical account/aliases, Session, BCG, Baseline, checkpoint และ capability ที่ค้าง |
 | Final report | `sleep_session_report.py` | Mode-aware Sleep Score/Recovery Score และรายงานหลังจบ Session |
-| Account ingest outbox | `zeep_pod/sessions/ingest_payload.py`, `ingest_outbox.py` | สร้าง payload แบบ allowlist, เขียนคิว atomic และ retry โดยไม่ทำให้ Session finalization ล้ม |
-| Atomic Session finalization | `zeep_pod/sessions/finalization_commit.py` | commit ผลที่สร้างแล้วลง DB, กู้ live Session เมื่อ persistence ล้ม และลบ checkpoint หลัง durable flush เท่านั้น |
+| Account ingest outbox | `sessions/ingest_payload.py`, `ingest_outbox.py` | สร้าง payload แบบ allowlist, เขียนคิว atomic และ retry โดยไม่ทำให้ Session finalization ล้ม |
+| Atomic Session finalization | `sessions/finalization_commit.py` | commit ผลที่สร้างแล้วลง DB, กู้ live Session เมื่อ persistence ล้ม และลบ checkpoint หลัง durable flush เท่านั้น |
 | Storage | `database.py`, `bcg_storage.py`, `backup.py` | SQLite writer, raw BCG และ Daily backup |
 | UI source | `static/index.template.html`, `static/partials/control/*`, `static/partials/app/*` | App shell, Control cards, Base CSS และ ordered JavaScript fragments |
 | UI bundle | `ui_composer.py`, `static/index.html` | ประกอบและตรวจ runtime HTML โดยไม่ fetch partial ตอนใช้งาน |
-| User History availability | `zeep_pod/sessions/history.py` | นับ Session จาก SQLite ที่จบแล้วและมี Timeline ให้ตรงกับรายการที่เปิดดูได้ |
-| Wake lock-in QA | `audit_wake_lock_in.py`, `zeep_pod/sessions/wake_lock_audit.py` | Shadow audit แบบ read-only; ไม่แก้ State, Score หรือ Raw data |
+| User History availability | `sessions/history.py` | นับ Session จาก SQLite ที่จบแล้วและมี Timeline ให้ตรงกับรายการที่เปิดดูได้ |
+| Wake lock-in QA | `audit_wake_lock_in.py`, `sessions/wake_lock_audit.py` | Shadow audit แบบ read-only; ไม่แก้ State, Score หรือ Raw data |
 
 ## 2. Data flow ที่อนุญาต
 
 ```text
 ESP32 Hub 1 (USB) ─┐
-ESP32 Hub 2 (MQTT) ├─> transport reader ─> sensor_runtime ─> canonical state
+ESP32 Hub 2 (MQTT) ├─> transport reader ─> sensors ─> canonical state
 LSM-800-T (USB) ───┘                                      │
                                                           ├─> Dashboard / API
                                                           ├─> Session samples
@@ -95,13 +96,13 @@ Dashboard, Session และ Safety ต้องอ่านค่าจาก *
 
 ## 3.1 Dependency และขนาด Code
 
-- `app.py` import domain/hardware modules ได้ แต่ module ภายใต้ `zeep_pod/`
+- `app.py` import domain/hardware modules ได้ แต่ module ภายใต้ top-level domain packages
   ห้าม import `app.py`
 - Pure helper ห้ามเปิดไฟล์, Serial, MQTT, GPIO หรือ database ตอน import
 - Resource ที่ย้ายแล้ว ได้แก่ Database, Auth, Occupancy, Personal Baseline และ GPIO
   ใช้ constructor ที่ไม่เปิด I/O แล้ว initialize ใน Production lifespan ตามลำดับ
   Database → Auth → Occupancy → Baseline → GPIO; Music/Aircon/Audio ยังเป็นงานถัดไป
-- Module ใหม่ภายใต้ `zeep_pod/` ไม่เกิน 500 บรรทัด
+- Module ใหม่ภายใต้ top-level domain packages ไม่เกิน 500 บรรทัด
 - Function/method ใหม่ไม่เกิน 90 บรรทัด
 - Public boundary และ safety decision ต้องมี type hints และ docstring
 - การย้าย behavior ต้องคง compatibility facade จน caller และเครื่องมือย้อนหลัง
@@ -113,9 +114,9 @@ Dashboard, Session และ Safety ต้องอ่านค่าจาก *
 
 ### Sensor/calibration
 
-1. เพิ่ม datasheet/range/alias ใน `sensor_contracts.py`
-2. เพิ่ม parameter ที่ปรับได้ใน `sensor_calibration.py` เฉพาะเมื่อมีวิธีอ้างอิง
-3. normalize/compose ใน `sensor_runtime.py`
+1. เพิ่ม device metadata/datasheet/range ใน `sensors/catalog.py`; แก้ wire schema ใน `contracts.py` เฉพาะเมื่อ transport contract เปลี่ยน
+2. เพิ่ม parameter ใน `sensors/calibration.py` เฉพาะเมื่อมีวิธีอ้างอิง
+3. normalize ใน `normalization.py`, compose ใน `environment.py` และสรุปเสียงใน `sound.py`
 4. เพิ่ม pure unit test ก่อน wire transport ใน `app.py`
 5. แสดง Raw → Parameter → Derived พร้อม unit/provenance ใน Admin เท่านั้น
 
@@ -175,11 +176,14 @@ Onboarding ใช้เอกสารนี้เป็น Roadmap ทางเ
 | R2 | เสร็จแล้ว | BCG framing, reconnect และ publication |
 | R3 | เสร็จแล้ว | Canonical Sensor frame ทุก 10 วินาที |
 | R4a | เสร็จแล้ว | Atomic finalization commit และ recovery order |
+| R5 | เสร็จแล้ว | API package, response envelope และ thin compatibility facades |
+| R6 | เสร็จแล้ว | Sensor package แยก contract/catalog/constants/BCG/calibration/environment/normalization/sound และ shared value library |
 
-รอบนี้ลด `app.py` จาก 8,270 เหลือ 8,025 บรรทัด, ลด `snapshot()` จาก 169
-เหลือ 118 บรรทัด และย้าย BCG reader, Sensor sampler กับ finalization ไปยัง module
-ที่ทดสอบแยกได้ โดยยังคง facade เดิมไว้ชั่วคราว ไม่เปลี่ยน Sleep/Score formula,
-Sensor cadence, public JSON key หรือคำสั่ง Hardware
+`app.py` คงอยู่ที่ไม่เกิน 8,025 บรรทัด และเป็น composition root ต่อไป ส่วน API,
+Sensor contract/calibration/normalization/environment/sound และ value helpers อยู่ใน
+package ตามโดเมนแล้ว ไฟล์ชื่อเดิมที่ root เหลือเป็น facade บางเพื่อรักษา script/test
+เดิม การย้ายนี้ไม่เปลี่ยน Sleep/Score formula, Sensor cadence, public JSON key หรือ
+คำสั่ง Hardware
 
 ### 6.2 Working candidate ที่ยังไม่ใช่ Release fact
 
@@ -201,11 +205,11 @@ Sensor cadence, public JSON key หรือคำสั่ง Hardware
 3. ทำ Sleep estimator facade ให้รับ typed input แล้ว delegate ไปยัง feature,
    scorer และ policy เดิม พร้อม golden replay; ห้ามเปลี่ยน threshold ใน change นี้
 4. รวม report pipeline ที่ซ้ำระหว่าง Live, Replay, Rescore และ Trim ให้ใช้ contract เดียว
-5. แบ่ง FastAPI router ตาม auth, control, session และ admin/monitor
+5. แบ่ง FastAPI router ที่ยังอยู่ใน `app.py` ตาม auth, control, session และ admin/monitor
 6. ลด `app.py` ให้เหลือ configuration, dependency wiring, lifespan และ router wiring
 
 Acoustic Intelligence ที่เสนอใน
-[DSP Plan](onboarding/smart-ear-dsp-plan.md) มี `zeep_pod/acoustics/` เฉพาะ P0.5
+[DSP Plan](onboarding/smart-ear-dsp-plan.md) มี `acoustics/` เฉพาะ P0.5
 contract และ Admin level-only projection แล้ว ส่วน feature parser, classifier,
 event tracker และ persistence ยังเป็น ROADMAP และห้ามเพิ่มก่อนผ่าน Gate ที่กำหนด
 

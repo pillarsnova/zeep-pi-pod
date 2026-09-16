@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 import unittest
 
-from zeep_pod.identity.account_erasure import (
+from identity.account_erasure import (
     AccountErasureError,
     erase_local_user_account,
 )

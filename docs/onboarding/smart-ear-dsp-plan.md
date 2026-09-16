@@ -155,7 +155,7 @@ spectral features ที่ไม่ถูก weighting จนสูญข้อ
 ### Module boundary ที่เสนอ
 
 ```text
-zeep_pod/acoustics/
+acoustics/
   contracts.py          validate schema/version/range/quality
   feature_projection.py map firmware telemetry to typed features
   classifier.py         interpretable rules/model + abstain

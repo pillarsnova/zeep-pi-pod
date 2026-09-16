@@ -19,19 +19,19 @@
 ## โครงสร้างและ Dependency
 
 - `app.py` เป็น legacy composition root และต้องลดลงเท่านั้น
-- Feature service อยู่ตาม domain เช่น `zeep_pod/sessions/`
-- Hardware I/O อยู่ใน `zeep_pod/hardware/`
+- Feature service อยู่ตาม domain เช่น `sessions/`
+- Hardware I/O อยู่ใน `hardware/`
 - HTTP router ตรวจ Auth/RBAC/CSRF และแปลง request/response เท่านั้น
 - Pure policy ห้ามเปิดไฟล์, database, network, Serial, MQTT, GPIO หรือ subprocess
   ตอน import
 - Dependency ไหลจาก composition → service → adapter → pure contract; module ใน
-  `zeep_pod/` ห้าม import `app.py`
+  top-level domain packages ห้าม import `app.py`
 - ห้ามสร้าง `hub.py`, `utils.py` หรือ `helpers.py` ขนาดใหญ่ที่รวมหลาย failure domain
 
 ## Python Standard
 
 - Python 3.11+, PEP 8, Ruff line length 88
-- โมดูลใหม่ใน `zeep_pod/` ไม่เกิน 500 บรรทัด
+- โมดูลใหม่ใน top-level domain packages ไม่เกิน 500 บรรทัด
 - Function/method ใหม่ไม่เกิน 90 บรรทัด และควรทำหน้าที่เดียว
 - Public boundary, safety decision และ data contract ต้องมี type hints และ docstring
 - ใช้ `dataclass`/Protocol หรือ typed model เมื่อช่วยทำ dependency ให้ชัด

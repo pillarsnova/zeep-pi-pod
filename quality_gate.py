@@ -16,6 +16,19 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+DOMAIN_PACKAGES = (
+    "acoustics",
+    "adaptive",
+    "api",
+    "common",
+    "hardware",
+    "identity",
+    "operations",
+    "presentation",
+    "safety",
+    "sensors",
+    "sessions",
+)
 
 PROFILE_TESTS: dict[str, tuple[str, ...]] = {
     "core": (
@@ -199,8 +212,11 @@ def run_full(*, dry_run: bool) -> None:
     python = sys.executable
     run([python, "-m", "unittest", "discover", "-q"], dry_run=dry_run)
     run([python, "ui_composer.py", "check"], dry_run=dry_run)
-    run([python, "-m", "ruff", "check", "zeep_pod"], dry_run=dry_run)
-    run([python, "-m", "ruff", "format", "--check", "zeep_pod"], dry_run=dry_run)
+    run([python, "-m", "ruff", "check", *DOMAIN_PACKAGES], dry_run=dry_run)
+    run(
+        [python, "-m", "ruff", "format", "--check", *DOMAIN_PACKAGES],
+        dry_run=dry_run,
+    )
     root_python = sorted(
         path.name for path in ROOT.glob("*.py") if not path.name.startswith("test_")
     )

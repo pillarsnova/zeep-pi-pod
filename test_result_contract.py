@@ -8,7 +8,7 @@ from sleep_system_policy import (
     RESTORE_SUMMARY_VERSION,
     SLEEP_SCORE_FORMULA_VERSION,
 )
-from zeep_pod.sessions.result_contract import build_result_contract
+from sessions.result_contract import build_result_contract
 
 
 class SessionResultContractTests(unittest.TestCase):

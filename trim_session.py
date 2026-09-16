@@ -22,7 +22,7 @@ from sleep_system_policy import (
     SLEEP_EVIDENCE_EPOCH_SECONDS,
     ZEEP_OFF_BED_DATA_STATUSES,
 )
-from zeep_pod.sessions.report_projection import project_report_samples
+from sessions.report_projection import project_report_samples
 
 
 MAINTENANCE_TOOL_NAME = "trim_session.py"

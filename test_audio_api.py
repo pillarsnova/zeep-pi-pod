@@ -11,7 +11,7 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 
 from api_models import BrainwavePreviewCommand, TrackCommand, VolumeCommand
-from zeep_pod.hardware.audio_api import AudioControlService, create_audio_router
+from hardware.audio_api import AudioControlService, create_audio_router
 
 
 class FakePlayer:

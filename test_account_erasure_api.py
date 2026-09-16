@@ -8,7 +8,7 @@ import unittest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from zeep_pod.identity.account_erasure_api import (
+from identity.account_erasure_api import (
     create_account_erasure_router,
 )
 

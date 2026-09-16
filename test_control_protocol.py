@@ -17,7 +17,7 @@ from control_protocol import (
     normalize_bed_command,
     resolve_aircon_temperature_command,
 )
-from zeep_pod.hardware import controlhub2
+from hardware import controlhub2
 
 
 class AirconProtocolTests(unittest.TestCase):

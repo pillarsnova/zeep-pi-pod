@@ -19,7 +19,7 @@ configure_app_test_environment()
 
 import app  # noqa: E402  (must follow the environment setup)
 from sleep_session_report import build_session_report, build_sleep_quality  # noqa: E402
-from zeep_pod.sessions.ingest_payload import resolve_score_type  # noqa: E402
+from sessions.ingest_payload import resolve_score_type  # noqa: E402
 
 # The upload is disabled unless both are configured. Another test module may
 # already have imported app, so override the resolved values rather than the

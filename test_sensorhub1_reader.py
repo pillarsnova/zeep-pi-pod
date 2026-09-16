@@ -6,7 +6,7 @@ import json
 import threading
 import unittest
 
-from zeep_pod.hardware.sensorhub1 import SensorHub1Reader, SensorHub1StateStore
+from hardware.sensorhub1 import SensorHub1Reader, SensorHub1StateStore
 
 
 def canonical_packet(*, sound_valid: bool = True) -> dict:

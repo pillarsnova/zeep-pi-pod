@@ -14,10 +14,10 @@ from sleep_system_policy import (
     RECOVERY_SCORE_FORMULA_VERSION,
     SLEEP_SCORE_FORMULA_VERSION,
 )
-from zeep_pod.sessions.response_models import UsageSessionListResponse
-from zeep_pod.sessions.score_summary import canonical_results, history_participants
-from zeep_pod.sessions.usage_api import USAGE_LIST_EXAMPLE, create_usage_sessions_router
-from zeep_pod.sessions.usage_service import UsageSessionService
+from sessions.response_models import UsageSessionListResponse
+from sessions.score_summary import canonical_results, history_participants
+from sessions.usage_api import USAGE_LIST_EXAMPLE, create_usage_sessions_router
+from sessions.usage_service import UsageSessionService
 
 
 def _session(session_id: str, email: str, mode: str) -> dict:

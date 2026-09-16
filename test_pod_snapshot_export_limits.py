@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from zeep_pod.operations import pod_snapshot_export
+from operations import pod_snapshot_export
 
 
 def _database(path: Path, tables: set[str]) -> None:

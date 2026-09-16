@@ -46,8 +46,14 @@ Canonical in-process state ──> 10-second analysis frame
 ```
 
 `app.py` ยังเป็น legacy composition root และ compatibility facade บางส่วน
-โค้ดใหม่ควรอยู่ตาม domain ใน `zeep_pod/` ตาม
+โค้ดใหม่ควรอยู่ใน top-level domain packages ตาม
 [Pi 5 Software Architecture](../pi5-software-architecture.md) แทนการขยายไฟล์กลาง
+
+โครงสร้างหลักที่ใช้พัฒนาต่อคือ `api/` สำหรับ HTTP contract/router,
+`sensors/` สำหรับ contract/calibration/normalization/environment,
+`common/` สำหรับ pure helper ที่ใช้ซ้ำ, `hardware/` สำหรับ
+transport และ `sessions/` สำหรับ lifecycle/result ของการพัก ไฟล์ API และ
+Sensor ชื่อเดิมที่ root เป็น compatibility facade และห้ามใส่ business logic ใหม่
 
 ## Backend และ Frontend
 
@@ -123,13 +129,13 @@ checkpoint/store ระบุไว้ชัด การ debug จึงต้�
 
 | เส้นทาง | Protocol ปัจจุบัน | จุดเริ่มตรวจ |
 |---|---|---|
-| Sensor Hub 1 | USB Serial JSONL, default `/dev/ttyACM0`, 115200 | `zeep_pod/hardware/sensorhub1.py` |
-| Sensor Hub 2 | MQTT JSON ผ่าน local broker | `zeep_pod/hardware/sensorhub2.py` |
-| BCG LSM-800-T | USB Serial binary 66-byte frame, default 115200 | `zeep_pod/hardware/bcg.py` |
-| Control Hub 1 | MQTT command/status/event → IR แอร์ | `zeep_pod/hardware/controlhub1.py` |
-| Control Hub 2 | MQTT command/status/event → servo รีโมตเตียง | `zeep_pod/hardware/controlhub2.py` |
-| Door/light/aroma/steam | BCM GPIO ผ่าน `gpiozero`/`lgpio` | `zeep_pod/hardware/gpio.py` |
-| Audio output | MPV IPC ผ่าน Unix socket; fallback สำหรับ development | `zeep_pod/hardware/audio.py` |
+| Sensor Hub 1 | USB Serial JSONL, default `/dev/ttyACM0`, 115200 | `hardware/sensorhub1.py` |
+| Sensor Hub 2 | MQTT JSON ผ่าน local broker | `hardware/sensorhub2.py` |
+| BCG LSM-800-T | USB Serial binary 66-byte frame, default 115200 | `hardware/bcg.py` |
+| Control Hub 1 | MQTT command/status/event → IR แอร์ | `hardware/controlhub1.py` |
+| Control Hub 2 | MQTT command/status/event → servo รีโมตเตียง | `hardware/controlhub2.py` |
+| Door/light/aroma/steam | BCM GPIO ผ่าน `gpiozero`/`lgpio` | `hardware/gpio.py` |
+| Audio output | MPV IPC ผ่าน Unix socket; fallback สำหรับ development | `hardware/audio.py` |
 
 รายละเอียด field, ownership, freshness และ failure behavior อยู่ที่
 [Hardware และ Hub map](hardware-hub-map.md) และ
@@ -154,7 +160,7 @@ source/weighting/window metadata ยังไม่ได้อยู่ใน r
 เป็นเสียงคอมเพรสเซอร์ พัดลม ประตู เพลง หรือเสียงจากภายนอก แผนเพิ่มความสามารถอยู่ที่
 [หูอัจฉริยะ · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md)
 
-P0.5 มี `zeep_pod/acoustics/` สำหรับ versioned capability contract และ Admin
+P0.5 มี `acoustics/` สำหรับ versioned capability contract และ Admin
 level-only projection พร้อม endpoint `/api/v1/admin/contracts/acoustics` และ
 `/api/v1/admin/acoustics/live` แล้ว Candidate เช่น `snore_like`/`speech_like`
 แสดงเป็น `planned/not_evaluated` เท่านั้น ยังไม่มี feature parser หรือ classifier
@@ -168,7 +174,7 @@ level-only projection พร้อม endpoint `/api/v1/admin/contracts/acoustic
 | เลือก regression | `python quality_gate.py changed` | ใช้ risk-based profile จากไฟล์ที่เปลี่ยน |
 | ทดสอบ domain | `python quality_gate.py <domain>` | เช่น `sensor`, `ui`, `session`, `sleep` |
 | Full application gate | `python quality_gate.py full` | ใช้เมื่อข้ามระบบ, ไม่มั่นใจ, migration หรือก่อน Freeze |
-| Style | Ruff ตาม `pyproject.toml` | ตรวจ package ที่แยกแล้วใน `zeep_pod/` |
+| Style | Ruff ตาม `pyproject.toml` | ตรวจ top-level domain packages ทั้งหมด |
 | UI bundle | `python ui_composer.py check` | ยืนยัน generated bundle ตรงกับ source partials |
 | Evidence | JSON Schema/checksum updater | ตรวจทะเบียนงานวิจัยและ provenance |
 | Production process | `systemd` service/watchdog | restart-on-failure; deploy เฉพาะ maintenance window |
@@ -204,7 +210,8 @@ backup, deploy, restart และ recovery ให้ยึด
 - Architecture/module boundary: [Pi 5 Software Architecture](../pi5-software-architecture.md)
 - API: [ZEEP API v1](../zeep-api-v1.md), typed models/manual envelopes และ
   `/openapi.json` ของ release ที่ deploy
-- Sensor: [`sensor_contracts.py`](../../sensor_contracts.py),
+- Sensor: [`sensors/contracts.py`](../../sensors/contracts.py),
+  [`catalog.py`](../../sensors/catalog.py),
   [`calibration.json`](../../calibration.json) และ effective Pod config
 - Sleep/Score: [`sleep_system_policy.py`](../../sleep_system_policy.py)
 - Test: [TESTING.md](../../TESTING.md)

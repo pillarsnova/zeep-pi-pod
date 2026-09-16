@@ -1,6 +1,6 @@
 import unittest
 
-from zeep_pod.product_language import (
+from presentation.language import (
     USER_ENVIRONMENT_LEVELS,
     USER_WELLNESS_DISCLAIMER,
     user_confidence_level,
@@ -9,12 +9,12 @@ from zeep_pod.product_language import (
     user_respiratory_age_context,
     user_score_level,
 )
-from zeep_pod.sessions.quality_publication import (
+from sessions.quality_publication import (
     public_environment_metric,
     public_quality_payload,
 )
-from zeep_pod.sessions.report_publication import public_report_field
-from zeep_pod.sessions.result_context import canonical_subjective_outcome
+from sessions.report_publication import public_report_field
+from sessions.result_context import canonical_subjective_outcome
 
 
 class ProductLanguageTests(unittest.TestCase):

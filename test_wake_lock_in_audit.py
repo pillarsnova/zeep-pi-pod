@@ -1,6 +1,6 @@
 import unittest
 
-from zeep_pod.sessions.wake_lock_audit import find_suspected_wake_lock_ins
+from sessions.wake_lock_audit import find_suspected_wake_lock_ins
 
 
 ESTIMATOR = "regression-estimator"

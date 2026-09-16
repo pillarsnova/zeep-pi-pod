@@ -9,12 +9,12 @@ from sleep_system_policy import (
     RESTORE_BASELINE_MIN_COMPARISON_SESSIONS,
     SLEEP_SCORE_FORMULA_VERSION,
 )
-from zeep_pod.sessions.personal_behaviour import aggregate_behaviour_by_mode
-from zeep_pod.sessions.restore_summary_baseline import (
+from sessions.personal_behaviour import aggregate_behaviour_by_mode
+from sessions.restore_summary_baseline import (
     build_baseline_summary,
     build_trend_summary,
 )
-from zeep_pod.sessions.user_baseline_context import (
+from sessions.user_baseline_context import (
     baseline_context,
     best_rest_window_context,
 )

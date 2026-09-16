@@ -24,7 +24,7 @@ from sleep_system_policy import (
     resolve_rest_target,
     summarize_environment_session_levels,
 )
-from zeep_pod.sessions.history_quality import released_historical_quality
+from sessions.history_quality import released_historical_quality
 
 
 class RecoveryPolicyUnitTests(unittest.TestCase):

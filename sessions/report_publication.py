@@ -1,0 +1,323 @@
+"""Positive nested allowlists for the application-facing Session report.
+
+Historical report rows are flexible JSON.  A top-level allowlist alone is not
+safe because an unexpected timeline, identifier or private field could hide in
+an approved section.  Each helper below publishes only documented aggregates.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from presentation.language import (
+    USER_WELLNESS_DISCLAIMER,
+    user_confidence_level,
+    user_environment_level,
+    user_report_finding_copy,
+    user_rest_mode_label,
+)
+from sessions.publication_values import (
+    SCALAR_TYPES,
+    copy_scalars,
+    mapping,
+    scalar_map,
+)
+from sessions.quality_publication import (
+    public_cycle,
+    public_environment_metric,
+    public_safety_excursion,
+)
+from sessions.respiratory_publication import public_respiratory_wellness
+
+
+def _public_sleep_summary(value: Any) -> dict[str, Any]:
+    source = mapping(value)
+    public = copy_scalars(
+        source,
+        {
+            "recording_s",
+            "estimated_sleep_s",
+            "wake_s",
+            "score_wake_s",
+            "sleep_onset_proxy_s",
+            "waso_proxy_s",
+            "score_waso_proxy_s",
+            "sleep_efficiency_pct",
+            "actual_scored_s",
+            "direct_confirmed_s",
+            "continuity_carried_forward_s",
+            "initial_wait_s",
+            "no_data_s",
+            "off_bed_s",
+            "restart_display_hold_s",
+            "sensor_gap_s",
+            "provisional_hold_s",
+            "excluded_from_score_s",
+            "wake_pct_recorded",
+            "score_wake_pct",
+            "wake_entries",
+            "awakenings",
+            "movement_pct",
+            "bed_exit_events",
+            "transient_bed_exit_samples",
+            "confirmed_bed_exit_samples",
+            "weak_breathing_samples",
+            "snoring_samples",
+        },
+    )
+    if source.get("cycles") is None and "cycles" in source:
+        public["cycles"] = None
+    elif "cycles" in source:
+        public["cycles"] = public_cycle(source["cycles"])
+    if "classification_accounting" in source:
+        public["classification_accounting"] = _public_classification_accounting(
+            source["classification_accounting"]
+        )
+    return public
+
+
+def _public_classification_accounting(value: Any) -> dict[str, Any]:
+    source = mapping(value)
+    public = copy_scalars(
+        source,
+        {
+            "version",
+            "method",
+            "direct_confirmed_s",
+            "continuity_carried_forward_s",
+            "initial_wait_s",
+            "no_data_s",
+            "off_bed_s",
+            "restart_display_hold_s",
+            "sensor_gap_s",
+            "provisional_hold_s",
+            "classified_s",
+            "display_attributed_s",
+            "score_eligible_s",
+            "excluded_from_score_s",
+            "operational_unscored_s",
+            "accounted_s",
+            "recording_s",
+            "display_stage_total_s",
+            "display_stage_total_delta_s",
+            "display_stage_total_reconciles",
+            "score_stage_total_s",
+            "score_stage_total_delta_s",
+            "score_stage_total_reconciles",
+            "restart_display_hold_derived",
+            "challenger_time_before_confirmation_s",
+            "legacy_carry_provenance_available",
+        },
+    )
+    if "arithmetic_invariant" in source:
+        public["arithmetic_invariant"] = copy_scalars(
+            source["arithmetic_invariant"],
+            {"expression", "left_s", "right_s", "delta_s", "holds"},
+        )
+    return public
+
+
+def _public_stage(value: Any) -> dict[str, Any]:
+    return copy_scalars(
+        value,
+        {
+            "state",
+            "samples",
+            "duration_s",
+            "pct_scored",
+            "pct_sleep",
+            "score_eligible_samples",
+            "score_eligible_duration_s",
+            "pct_score_eligible",
+            "pct_score_eligible_sleep",
+        },
+    )
+
+
+def _public_environment_assessment(value: Any) -> dict[str, Any]:
+    source = mapping(value)
+    public = copy_scalars(
+        source,
+        {
+            "version",
+            "aggregation_version",
+            "aggregation_method",
+            "mode",
+            "mode_label",
+            "acceptable_min_level",
+            "acceptable_min_label",
+            "overall_level",
+            "overall_label",
+            "meets_expected",
+            "required_count",
+            "advisory_count",
+            "optimisation_count",
+            "maintain_count",
+            "available_count",
+            "expected_count",
+            "required_expected_count",
+            "blocking_unavailable_count",
+            "optional_unavailable_count",
+            "assessment_quality",
+            "safety_excursion_observed",
+            "safety_review_required",
+            "safety_excursion_count",
+            "safety_excursions_change_sustained_assessment",
+            "safety_excursions_change_score",
+            "context_only",
+            "sleep_stage_context_only",
+            "contributes_to_primary_score",
+            "primary_score",
+            "max_score_points",
+            "direct_stage_influence",
+            "safety_thresholds_unchanged",
+        },
+    )
+    if isinstance(source.get("safety_excursions"), (list, tuple)):
+        public["safety_excursions"] = [
+            public_safety_excursion(item) for item in source["safety_excursions"]
+        ]
+    if "overall_level" in source or "overall_label" in source:
+        public["overall_label"] = user_environment_level(
+            source.get("overall_level"),
+            source.get("overall_label"),
+        )
+    if "mode" in source or "mode_label" in source:
+        public["mode_label"] = user_rest_mode_label(source.get("mode"))
+    if "acceptable_min_level" in source or "acceptable_min_label" in source:
+        public["acceptable_min_label"] = user_environment_level(
+            source.get("acceptable_min_level")
+        )
+    return public
+
+
+def _public_finding(value: Any) -> dict[str, Any]:
+    source = mapping(value)
+    public = copy_scalars(
+        value,
+        {
+            "key",
+            "metric_key",
+            "severity",
+            "level_key",
+            "decision",
+            "title",
+            "detail",
+            "action",
+            "context_only",
+            "sleep_stage_context_only",
+            "contributes_to_primary_score",
+            "legacy_timeline_not_persisted",
+            "blocks_overall",
+            "aggregation_version",
+            "peak_status_key",
+            "transient_critical_observed",
+            "changes_sustained_assessment",
+            "changes_score",
+            "threshold",
+            "critical_below",
+            "critical_above",
+            "minimum",
+            "maximum",
+            "sample_count",
+            "sample_pct",
+        },
+    )
+    title, detail, action = user_report_finding_copy(
+        source.get("metric_key") or source.get("key"),
+        source.get("severity"),
+        source.get("decision"),
+    )
+    public.update({"title": title, "detail": detail, "action": action})
+    return public
+
+
+def _public_report_data_quality(value: Any) -> dict[str, Any]:
+    source = mapping(value)
+    public = copy_scalars(source, {"level"})
+    if "level" in source or "label" in source:
+        public["label"] = user_confidence_level(source.get("level"))
+    if "note" in source:
+        public["note"] = "ความมั่นใจของผลครั้งนี้ดูจากความครบถ้วนของข้อมูลที่ ZEEP บันทึกได้"
+    if "coverage" in source:
+        public["coverage"] = scalar_map(
+            source["coverage"],
+            {
+                "recording_pct",
+                "bcg_pct",
+                "sleep_stage_pct",
+                "state_attribution_pct",
+                "physiological_evidence_pct",
+                "environment_pct",
+            },
+        )
+    if "confidence_pct" in source:
+        public["confidence_pct"] = scalar_map(
+            source["confidence_pct"], {"high", "medium", "low"}
+        )
+    return public
+
+
+def _public_guidance(value: Any) -> dict[str, Any]:
+    source = mapping(value)
+    public = copy_scalars(
+        source,
+        {
+            "mode",
+            "score_used",
+            "score_released",
+            "basis",
+            "available",
+            "score_derived_claims_suppressed",
+        },
+    )
+    # User-facing guidance is rebuilt from the canonical Restore Summary by
+    # UsageSessionService.  Never pass stored advice or a medical claim through
+    # this low-level projector.
+    public["medical_diagnosis"] = False
+    return public
+
+
+def public_report_field(key: str, value: Any) -> Any:
+    """Sanitize one approved report section with its positive nested schema."""
+    scalar_fields = {
+        "available",
+        "version",
+        "product_positioning",
+        "intended_use",
+        "timeline_schema_version",
+        "estimator_version",
+        "headline",
+        "insight",
+    }
+    if key in scalar_fields:
+        return value if isinstance(value, SCALAR_TYPES) else None
+    if key == "disclaimer":
+        return USER_WELLNESS_DISCLAIMER
+    if key == "reason":
+        # The read service derives a current, mode-aware reason from the
+        # released result contract. Historical prose is Admin/Audit data.
+        return None
+    if key == "sleep":
+        return _public_sleep_summary(value)
+    if key == "stages":
+        return (
+            [_public_stage(item) for item in value] if isinstance(value, list) else []
+        )
+    if key == "environment":
+        if not isinstance(value, list):
+            return []
+        return [public_environment_metric(item) for item in value]
+    if key == "environment_assessment":
+        return _public_environment_assessment(value)
+    if key == "findings":
+        return (
+            [_public_finding(item) for item in value] if isinstance(value, list) else []
+        )
+    if key == "post_session_guidance":
+        return _public_guidance(value)
+    if key == "data_quality":
+        return _public_report_data_quality(value)
+    if key == "respiratory_wellness":
+        return public_respiratory_wellness(value)
+    return None

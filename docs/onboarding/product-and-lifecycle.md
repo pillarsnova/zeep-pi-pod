@@ -137,16 +137,16 @@ sleep onset และ awake reference เดิมได้ เมื่อห�
 | Function / feature | Policy หรือ contract | Implementation entry point | Regression เริ่มต้น |
 |---|---|---|---|
 | Browser auth, RBAC, CSRF | [README: User/Admin](../../README.md) | [`access_control.py`](../../access_control.py), [`admin_accounts.py`](../../admin_accounts.py) | `test_rbac_api.py`, `test_access_and_occupancy.py` |
-| Password/QR account binding | Handover §2.1 | [`zeep_pod/identity/zeep_account.py`](../../zeep_pod/identity/zeep_account.py), [`qr_login.py`](../../qr_login.py) | `test_qr_login.py`, `test_qr_login_api.py` |
-| Profile completion | Handover §2.1 | [`profile_completion.py`](../../profile_completion.py), `zeep_pod/identity/profile_fields.py` | `test_profile_completion.py` |
+| Password/QR account binding | Handover §2.1 | [`identity/zeep_account.py`](../../identity/zeep_account.py), [`qr_login.py`](../../qr_login.py) | `test_qr_login.py`, `test_qr_login_api.py` |
+| Profile completion | Handover §2.1 | [`profile_completion.py`](../../profile_completion.py), `identity/profile_fields.py` | `test_profile_completion.py` |
 | Pod occupancy | Handover §2.2 | [`pod_occupancy.py`](../../pod_occupancy.py) | `test_access_and_occupancy.py` |
-| Session gate/restart/finalize | Handover §2 | [`app.py`](../../app.py), [`zeep_pod/sessions/lifecycle.py`](../../zeep_pod/sessions/lifecycle.py) | `test_session_lifecycle.py`, `test_sleep_restart_context.py` |
-| Sensor normalize/canonical snapshot | [Sensor Interface Contract](../zeep-sensor-interface-contract-v1.2.md) | [`sensor_contracts.py`](../../sensor_contracts.py), [`sensor_runtime.py`](../../sensor_runtime.py), [`zeep_pod/api_state_projection.py`](../../zeep_pod/api_state_projection.py) | `test_sensor_contract.py`, `test_sensor_services.py`, `test_api_state_projection.py` |
+| Session gate/restart/finalize | Handover §2 | [`app.py`](../../app.py), [`sessions/lifecycle.py`](../../sessions/lifecycle.py) | `test_session_lifecycle.py`, `test_sleep_restart_context.py` |
+| Sensor normalize/canonical snapshot | [Sensor Interface Contract](../zeep-sensor-interface-contract-v1.2.md) | [`sensors/contracts.py`](../../sensors/contracts.py), [`runtime.py`](../../sensors/runtime.py), [`api/state_projection.py`](../../api/state_projection.py) | `test_sensor_contract.py`, `test_sensor_services.py`, `test_api_state_projection.py` |
 | Sleep evidence และ State | [Sleep System Current](../zeep-sleep-system-current.md) | [`sleep_signal_features.py`](../../sleep_signal_features.py), [`sleep_stage_scoring.py`](../../sleep_stage_scoring.py), [`sleep_system_policy.py`](../../sleep_system_policy.py) | `test_sleep_signal_features.py`, `test_sleep_system_consistency.py` |
-| Score และ report | [Session Result Presentation](../zeep-session-result-presentation-v1.md) | [`sleep_session_report.py`](../../sleep_session_report.py), `zeep_pod/sessions/report_*` | `test_sleep_session_report.py`, `test_result_contract.py` |
-| Usage history / API projection | [API v1](../zeep-api-v1.md) | [`zeep_pod/sessions/usage_service.py`](../../zeep_pod/sessions/usage_service.py), [`usage_api.py`](../../zeep_pod/sessions/usage_api.py) | `test_usage_session_api.py` |
-| Baseline / user learning | [User Learning Profile](../zeep-user-learning-profile-v1.md) | [`personal.py`](../../personal.py), `zeep_pod/sessions/user_*` | `test_personal_baseline_policy.py`, `test_user_learning_profile.py` |
-| Account ingest | API v1 §รูปแบบเชื่อมต่อ | [`zeep_pod/sessions/ingest_payload.py`](../../zeep_pod/sessions/ingest_payload.py), [`ingest_outbox.py`](../../zeep_pod/sessions/ingest_outbox.py) | `test_session_ingest.py` |
+| Score และ report | [Session Result Presentation](../zeep-session-result-presentation-v1.md) | [`sleep_session_report.py`](../../sleep_session_report.py), `sessions/report_*` | `test_sleep_session_report.py`, `test_result_contract.py` |
+| Usage history / API projection | [API v1](../zeep-api-v1.md) | [`sessions/usage_service.py`](../../sessions/usage_service.py), [`usage_api.py`](../../sessions/usage_api.py) | `test_usage_session_api.py` |
+| Baseline / user learning | [User Learning Profile](../zeep-user-learning-profile-v1.md) | [`personal.py`](../../personal.py), `sessions/user_*` | `test_personal_baseline_policy.py`, `test_user_learning_profile.py` |
+| Account ingest | API v1 §รูปแบบเชื่อมต่อ | [`sessions/ingest_payload.py`](../../sessions/ingest_payload.py), [`ingest_outbox.py`](../../sessions/ingest_outbox.py) | `test_session_ingest.py` |
 | UI / Product copy | [Product Language](../zeep-product-language-guideline-v1.md) | [`static/index.template.html`](../../static/index.template.html), `static/partials/`, [`ui_composer.py`](../../ui_composer.py) | `test_ui_composer.py`, `test_product_language.py` |
 
 กฎ dependency และขนาด module/function อยู่ที่

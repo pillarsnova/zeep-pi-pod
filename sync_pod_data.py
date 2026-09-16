@@ -6,7 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
-from zeep_pod.operations.pod_data_sync import (
+from operations.pod_data_sync import (
     DEFAULT_DESTINATION,
     DEFAULT_HOSTS,
     DEFAULT_MAX_AGE_HOURS,
@@ -17,7 +17,7 @@ from zeep_pod.operations.pod_data_sync import (
     latest_verified_snapshot,
     sync_pod_data,
 )
-from zeep_pod.operations.workstation_approval import (
+from operations.workstation_approval import (
     WorkstationApprovalError,
     require_workstation_approval,
 )

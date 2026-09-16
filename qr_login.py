@@ -21,9 +21,9 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Response
 
-from api_models import QrLoginPollCommand
-from zeep_pod.identity.lifecycle_lock import synchronized_by
-from zeep_pod.identity.zeep_account import identity_from_auth_data
+from api.models import QrLoginPollCommand
+from identity.lifecycle_lock import synchronized_by
+from identity.zeep_account import identity_from_auth_data
 
 # ZEEP issues a 180 s QR plus a further 60 s window to collect tokens after the
 # phone approves.  The Pi keeps the secret for both windows so a poll that

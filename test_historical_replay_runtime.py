@@ -17,7 +17,7 @@ from unittest.mock import patch
 
 import reclassify_sleep_history as replay
 import sleep_system_policy as policy
-from zeep_pod.sessions.historical_replay_runtime import HistoricalReplayRuntime
+from sessions.historical_replay_runtime import HistoricalReplayRuntime
 
 
 class HistoricalReplayRuntimeTests(unittest.TestCase):

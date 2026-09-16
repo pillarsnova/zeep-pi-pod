@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import unittest
 
-from zeep_pod.sessions.cadence import (
+from sessions.cadence import (
     materialise_report_sample_grid,
     normalise_samples_for_report,
 )
-from zeep_pod.sessions.sleep_decision_projection import (
+from sessions.sleep_decision_projection import (
     apply_sleep_decisions_to_samples,
 )
-from zeep_pod.sessions.report_projection import project_report_samples
+from sessions.report_projection import project_report_samples
 
 
 def _utc_timestamp(seconds: int) -> str:

@@ -9,8 +9,8 @@ from sleep_system_policy import (
     PERSONAL_REST_WINDOW_BASELINE_VERSION,
     RECOVERY_SCORE_FORMULA_VERSION,
 )
-from zeep_pod.sessions.user_learning_profile import build_user_learning_profile
-from zeep_pod.sessions.user_profile_response_models import UserLearningProfile
+from sessions.user_learning_profile import build_user_learning_profile
+from sessions.user_profile_response_models import UserLearningProfile
 
 
 def session(

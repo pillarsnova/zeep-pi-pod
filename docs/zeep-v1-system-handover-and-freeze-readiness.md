@@ -404,8 +404,8 @@ Firmware ที่ประกาศ `ARCHIVED / DO NOT FLASH` ไม่อย�
 # Mac / CI
 pi5/.venv/bin/python -m unittest discover -q
 pi5/.venv/bin/python ui_composer.py check
-pi5/.venv/bin/ruff check zeep_pod
-pi5/.venv/bin/ruff format --check zeep_pod
+pi5/.venv/bin/ruff check acoustics adaptive api common hardware identity operations presentation safety sensors sessions
+pi5/.venv/bin/ruff format --check acoustics adaptive api common hardware identity operations presentation safety sensors sessions
 pi5/.venv/bin/python -m py_compile app.py *.py
 pi5/.venv/bin/python research/evidence-library/update_research_library.py check
 git diff --check

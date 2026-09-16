@@ -10,15 +10,15 @@ from sleep_system_policy import (
     APPROVED_SCORE_FORMULA_VERSIONS_BY_GROUP,
     RECOVERY_SCORE_FORMULA_VERSION,
 )
-from zeep_pod.sessions.user_ai_context import (
+from sessions.user_ai_context import (
     build_user_ai_context,
     validated_user_ai_context,
 )
-from zeep_pod.sessions.user_ai_response_models import (
+from sessions.user_ai_response_models import (
     ScoreFormulaVersion,
     UserAiContext,
 )
-from zeep_pod.sessions.user_learning_profile import build_user_learning_profile
+from sessions.user_learning_profile import build_user_learning_profile
 
 
 class UserAiContextTests(unittest.TestCase):
@@ -207,9 +207,9 @@ class UserAiContextTests(unittest.TestCase):
 import sys
 import pydantic.v1 as pydantic_v1
 sys.modules['pydantic'] = pydantic_v1
-from zeep_pod.sessions.user_ai_response_models import UserAiContext
-from zeep_pod.sessions.user_profile_response_models import UserLearningProfile
-from zeep_pod.sessions.user_ai_context import validated_user_ai_context
+from sessions.user_ai_response_models import UserAiContext
+from sessions.user_profile_response_models import UserLearningProfile
+from sessions.user_ai_context import validated_user_ai_context
 assert UserAiContext.schema()['title'] == 'UserAiContext'
 assert UserLearningProfile.schema()['title'] == 'UserLearningProfile'
 assert validated_user_ai_context({})['learning_readiness'][

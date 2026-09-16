@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from sleep_system_policy import SLEEP_ESTIMATOR_VERSION
-from zeep_pod.sessions.wake_lock_audit import (
+from sessions.wake_lock_audit import (
     AUDIT_POLICY_VERSION,
     find_suspected_wake_lock_ins,
 )

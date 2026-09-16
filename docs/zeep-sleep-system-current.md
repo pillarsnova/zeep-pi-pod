@@ -699,7 +699,7 @@ health record เดิม การแก้ derived record จริงยั�
 | Live state + 10 s cadence | `app.py` | `test_sleep_baseline_policy.py` |
 | Shared scorer | `sleep_stage_scoring.py` | baseline/signal tests |
 | Adaptive baseline รายบุคคล | `personal.py` | หลัง cutover, Session >25 นาที, completed `quality_type=sleep`, detected sleep ≥20 นาที; เรียนเฉพาะ epoch ที่ `excluded_from_personal_baseline=false` และกัน low-confidence carry ออก; ใช้ context-only; `test_personal_baseline_policy.py` |
-| Personal rest-window observation | `zeep_pod/sessions/personal_behaviour.py`, `zeep_pod/sessions/user_baseline_context.py`, `zeep_pod/sessions/user_profile_response_models.py` | prior completed same-mode/same-target only; visible visit 2; no source ID/exact timestamp/AI context/score/state/control; `test_user_learning_profile.py`, `test_usage_session_api.py` |
+| Personal rest-window observation | `sessions/personal_behaviour.py`, `sessions/user_baseline_context.py`, `sessions/user_profile_response_models.py` | prior completed same-mode/same-target only; visible visit 2; no source ID/exact timestamp/AI context/score/state/control; `test_user_learning_profile.py`, `test_usage_session_api.py` |
 | Historical shadow replay | `audit_sleep_history_shadow.py` | `test_audit_sleep_history_shadow.py` |
 | Mode-aware score/report | `sleep_session_report.py` | `test_sleep_session_report.py` |
 | Derived report rescore | `rescore_session_reports.py` | dry-run + DB audit event |

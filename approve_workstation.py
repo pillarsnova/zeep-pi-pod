@@ -6,7 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
-from zeep_pod.operations.workstation_approval import (
+from operations.workstation_approval import (
     WorkstationApprovalError,
     approve_workstation,
     require_workstation_approval,

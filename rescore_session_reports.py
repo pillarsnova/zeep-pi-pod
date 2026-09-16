@@ -39,15 +39,15 @@ from sleep_system_policy import (
     is_approved_sleep_result_version,
     resolve_rest_target,
 )
-from zeep_pod.sessions.cadence import timeline_sample_interval
-from zeep_pod.sessions.report_projection import project_report_samples
-from zeep_pod.sessions.report_timeline import (
+from sessions.cadence import timeline_sample_interval
+from sessions.report_projection import project_report_samples
+from sessions.report_timeline import (
     sensor_samples as shared_sensor_samples,
 )
-from zeep_pod.sessions.report_timeline import (
+from sessions.report_timeline import (
     timeline_projection as shared_timeline_projection,
 )
-from zeep_pod.sessions.sleep_event_data import decision_interval
+from sessions.sleep_event_data import decision_interval
 
 MAINTENANCE_TOOL_NAME = "rescore_session_reports.py"
 STAGES = ("wake", "n1", "n2", "n3", "rem")

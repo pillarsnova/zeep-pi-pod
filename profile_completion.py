@@ -22,9 +22,9 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Response
 
-from api_models import ProfileCompletionCommand
-from zeep_pod.identity.lifecycle_lock import synchronized_by
-from zeep_pod.identity.profile_fields import (
+from api.models import ProfileCompletionCommand
+from identity.lifecycle_lock import synchronized_by
+from identity.profile_fields import (
     age_from_dob,
     normalise_body_measurement,
     normalise_date_of_birth,

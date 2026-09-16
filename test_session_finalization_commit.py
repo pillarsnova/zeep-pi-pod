@@ -6,7 +6,7 @@ import unittest
 from typing import Any
 from unittest.mock import MagicMock, call
 
-from zeep_pod.sessions.finalization_commit import (
+from sessions.finalization_commit import (
     FinalizationPorts,
     build_session_finalize_payload,
     commit_live_session_finalization,

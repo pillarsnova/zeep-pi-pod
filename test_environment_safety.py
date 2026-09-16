@@ -1,6 +1,6 @@
 import unittest
 
-from zeep_pod.sessions.environment_safety import (
+from sessions.environment_safety import (
     safety_limit_text,
     summarize_safety_excursions,
 )

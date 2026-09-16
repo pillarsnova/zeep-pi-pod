@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
-from zeep_pod.hardware import gpio as gpio_module
+from hardware import gpio as gpio_module
 
 
 class FakeFactory:
@@ -215,7 +215,7 @@ class AppGPIOImportSafetyTests(unittest.TestCase):
                 import os
                 from pathlib import Path
 
-                import zeep_pod.hardware.gpio as gpio_module
+                import hardware.gpio as gpio_module
 
                 marker = Path(os.environ["GPIO_TEST_MARKER"])
 

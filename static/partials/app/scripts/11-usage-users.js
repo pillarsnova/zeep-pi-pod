@@ -87,7 +87,8 @@ function openUsageUserHistory(account){
   }
   select.value=account;
   const query=document.getElementById('historyNameFilter');if(query)query.value='';
-  const start=String(usageUserDirectory?.history_start_utc||'').slice(0,10);
+  const historyStart=usageUserDirectory?.history_start_utc;
+  const start=historyStart?historyLocalDate(historyStart):'';
   if(start)document.getElementById('historyDateFrom').value=start;
   document.getElementById('historyDateTo').value=historyLocalToday();
   document.getElementById('historyTimeFrom').value='00:00';

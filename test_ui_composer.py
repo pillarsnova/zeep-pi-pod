@@ -967,6 +967,7 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn('id="historyPeopleSearch"', template)
         self.assertIn("/api/v1/usage-sessions/users", template)
         self.assertIn("function openUsageUserHistory(account)", template)
+        self.assertIn("historyLocalDate(historyStart)", template)
         self.assertIn("ครั้งที่ใช้งาน", template)
         self.assertIn("history-person-card", sessions_css)
         self.assertIn("grid-template-columns: repeat(3", sessions_css)

@@ -153,13 +153,15 @@ async function refreshHistory(btn){
   return btn ? withBusy(btn, run) : run();
 }
 
-function historyLocalToday(){
+function historyLocalDate(value=new Date()){
   const parts=new Intl.DateTimeFormat('en-CA',{
     timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit',
-  }).formatToParts(new Date());
+  }).formatToParts(new Date(value));
   const part=type=>parts.find(item=>item.type===type)?.value;
   return `${part('year')}-${part('month')}-${part('day')}`;
 }
+
+function historyLocalToday(){return historyLocalDate(new Date());}
 
 function ensureHistoryFilterDefaults(){
   const from=document.getElementById('historyDateFrom');

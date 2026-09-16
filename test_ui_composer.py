@@ -195,18 +195,19 @@ class UiComposerTests(unittest.TestCase):
             ui_composer.STATIC / "styles" / "sessions.css"
         ).read_text(encoding="utf-8")
 
-        self.assertIn('/static/styles/sessions.css?v=20260916-1', template)
+        self.assertIn('/static/styles/sessions.css?v=20260917-1', template)
         self.assertIn(
             'id="login" class="hide" role="dialog" aria-modal="true" '
             'aria-labelledby="loginTitle"',
             template,
         )
         self.assertIn(
-            "@media (min-width: 761px) and (max-width: 1120px)",
+            "@media (max-width: 1120px)",
             sessions_css,
         )
         self.assertIn(".history-filter-actions {", sessions_css)
-        self.assertIn("grid-column: 1 / -1;", sessions_css)
+        self.assertIn(".history-results-workspace {", sessions_css)
+        self.assertIn("min-height: 44px", sessions_css)
 
     def test_interface_consistency_layer_covers_touch_and_responsive_contract(self):
         template = ui_composer.render()
@@ -609,7 +610,14 @@ class UiComposerTests(unittest.TestCase):
         )
         self.assertIn("หลักฐานและคุณภาพข้อมูลสำหรับผู้ดูแล", template)
         self.assertIn("ใช้พัฒนาระบบต่ออย่างไร", template)
-        self.assertIn('class="report-details user-result-details"', template)
+        self.assertIn(
+            'class="report-details user-result-details session-overview-details"',
+            template,
+        )
+        self.assertIn(
+            'class="report-details admin-overview-details session-overview-details"',
+            template,
+        )
         self.assertIn('class="report-details admin-report-details"', template)
         self.assertIn("ไม่ใช่การวินิจฉัย", template)
         self.assertIn(".result-summary-card", css)
@@ -998,9 +1006,79 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("/api/v1/usage-sessions/users", template)
         self.assertIn("function openUsageUserHistory(account)", template)
         self.assertIn("historyLocalDate(historyStart)", template)
-        self.assertIn("ครั้งที่ใช้งาน", template)
+        self.assertIn("function sortUsageUserDirectory(users)", template)
+        self.assertIn("function sortHistoryUsersByEmail(users)", template)
+        self.assertIn("เรียงตามอีเมล A ถึง Z", template)
+        self.assertIn('id="historyAllUsers"', template)
+        self.assertIn("openUsageUserHistory('')", template)
+        self.assertIn("function syncUsageUserSelection()", template)
+        self.assertIn('class="history-filter-group history-admin-filter admin-only" aria-hidden="true"', template)
+        self.assertIn('id="historyUser" tabindex="-1"', template)
+        self.assertIn('class="history-results-workspace"', template)
+        self.assertLess(
+            template.index('history-list-section'),
+            template.index('history-detail-section'),
+        )
         self.assertIn("history-person-card", sessions_css)
-        self.assertIn("grid-template-columns: repeat(3", sessions_css)
+        self.assertIn("grid-template-columns: minmax(0, 1fr);", sessions_css)
+        self.assertIn("minmax(220px, 1.2fr) minmax(160px, .7fr)", sessions_css)
+        self.assertIn("max-height: 260px", sessions_css)
+        self.assertIn("#historyToolbar .history-admin-filter", sessions_css)
+        self.assertIn("display: none !important", sessions_css)
+        self.assertIn(".sleep-quality-value", sessions_css)
+        self.assertIn("function wellnessScoreDisplay(value)", template)
+        self.assertIn("function fmtDurCompact(seconds)", template)
+        self.assertIn('class="stage-donut" role="img" aria-label=', template)
+
+        directory_renderer = template[
+            template.index("function renderUsageUserDirectory(payload)") :
+            template.index("function filterUsageUserDirectory()")
+        ]
+        self.assertIn("const users=sortUsageUserDirectory(", directory_renderer)
+        self.assertIn('aria-label="${historyEscape(count?', directory_renderer)
+
+        usage_renderer = template[
+            template.index("function openUsageUserHistory(account)") :
+        ]
+        self.assertIn("const selected=String(account||'')", usage_renderer)
+        self.assertIn("select.value=selected", usage_renderer)
+        self.assertIn("syncUsageUserSelection()", usage_renderer)
+        self.assertNotIn("if(!account)return", usage_renderer)
+        self.assertEqual(template.count('id="historyUser"'), 1)
+        self.assertEqual(template.count('id="historyAllUsers"'), 1)
+        self.assertIn(
+            'id="sessionDetail" aria-busy="false" tabindex="-1"',
+            template,
+        )
+        self.assertNotIn('id="sessionDetail" role="region"', template)
+        self.assertIn("detail.setAttribute('aria-busy','true')", template)
+        self.assertIn('role="status" aria-live="polite"', template)
+        self.assertIn('class="history-empty" role="alert"', template)
+        self.assertIn("detail.focus({preventScroll:true})", template)
+        self.assertIn("function historyScrollBehavior()", template)
+        self.assertIn("prefers-reduced-motion: reduce", template)
+        self.assertNotIn("scrollIntoView({behavior:'smooth'", template)
+
+        refresh_renderer = template[
+            template.index("async function refreshHistory(btn)") :
+            template.index("function historyLocalDate", template.index("async function refreshHistory(btn)"))
+        ]
+        self.assertIn("historyDetailRequestSeq+=1", refresh_renderer)
+        self.assertIn("historyDetail.setAttribute('aria-busy','false')", refresh_renderer)
+        detail_renderer = template[
+            template.index("async function loadDetail(user, sid, row)") :
+            template.index("function statBlock", template.index("async function loadDetail(user, sid, row)"))
+        ]
+        self.assertIn("if(requestSeq!==historyDetailRequestSeq)return", detail_renderer)
+        self.assertIn("finally{", detail_renderer)
+
+        touch_css = sessions_css[sessions_css.index("@media (max-width: 1280px)") :]
+        self.assertIn(".history-all-users-button", touch_css)
+        self.assertIn(".history-people-search input { min-height: 44px; }", touch_css)
+        mobile_css = sessions_css[sessions_css.index("@media (max-width: 760px)") :]
+        self.assertIn(".hist-list {", mobile_css)
+        self.assertIn("max-height: none", mobile_css)
+        self.assertIn("overflow: visible", mobile_css)
 
 
 if __name__ == "__main__":

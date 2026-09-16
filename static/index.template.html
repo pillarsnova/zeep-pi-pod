@@ -18,8 +18,8 @@
   -->
   <link rel="stylesheet" href="/static/theme-modern.css?v=20260916-155" />
   <link rel="stylesheet" href="/static/styles/monitor.css?v=20260916-1" />
-  <link rel="stylesheet" href="/static/styles/sessions.css?v=20260916-1" />
   <link rel="stylesheet" href="/static/styles/interface-consistency.css?v=20260916-2" />
+  <link rel="stylesheet" href="/static/styles/sessions.css?v=20260917-1" />
 </head>
 <body>
 <!-- Shared line-icon library: every interactive view reuses the same 24 px
@@ -1143,14 +1143,15 @@
       </div>
       <section class="history-section history-people-section admin-only" aria-labelledby="historyPeopleTitle">
         <div class="history-section-head history-people-head">
-          <div><h4 id="historyPeopleTitle">ผู้ใช้งานทั้งหมด</h4><small>รวมตามอีเมล · จำนวนครั้งตั้งแต่เริ่ม Pilot</small></div>
+          <div><h4 id="historyPeopleTitle">ผู้ใช้งานทั้งหมด</h4><small>รายการกะทัดรัด · รวมตามอีเมลตั้งแต่เริ่ม Pilot</small></div>
+          <div class="history-directory-tools"><span class="history-sort-badge">อีเมล A–Z</span><button id="historyAllUsers" class="history-all-users-button" type="button" aria-pressed="true" onclick="openUsageUserHistory('')">ดูทุกคน</button></div>
           <label class="history-people-search"><span>ค้นหาผู้ใช้งาน</span><input id="historyPeopleSearch" type="search" placeholder="ชื่อหรืออีเมล" oninput="filterUsageUserDirectory()"></label>
         </div>
         <div id="historyPeopleSummary" class="history-people-summary" aria-live="polite"><div class="mini">กำลังรวมข้อมูลผู้ใช้งาน…</div></div>
         <div id="historyPeopleGrid" class="history-people-grid" aria-live="polite"></div>
       </section>
       <section class="history-section history-filter-section" aria-labelledby="historyFilterTitle">
-        <div class="history-section-head"><div><h4 id="historyFilterTitle">เลือกช่วงเวลา</h4><small>เลือกวัน เวลา และผู้ใช้งานที่ต้องการดู</small></div></div>
+        <div class="history-section-head"><div><h4 id="historyFilterTitle">เลือกช่วงเวลา</h4><small>เลือกวันและเวลาที่ต้องการดู</small></div></div>
         <div id="historyToolbar" class="history-filter-panel" aria-label="ตัวกรองประวัติการใช้งาน">
           <div class="history-filter-group history-date-group">
             <button class="history-day-step" type="button" onclick="shiftHistoryRange(-1)" aria-label="เลื่อนช่วงวันย้อนหลัง"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-previous"/></svg></button>
@@ -1163,9 +1164,9 @@
             <label><span>เวลาเริ่ม</span><input id="historyTimeFrom" type="time" value="00:00"></label>
             <label><span>เวลาสิ้นสุด</span><input id="historyTimeTo" type="time" value="23:59"></label>
           </div>
-          <div class="history-filter-group history-admin-filter admin-only">
-            <label class="history-name-search"><span>ค้นหาชื่อหรืออีเมล</span><input id="historyNameFilter" type="search" placeholder="ทุกคน" onkeydown="if(event.key==='Enter')refreshHistory()"></label>
-            <label class="history-person-select"><span>เลือกผู้ใช้งาน</span><select id="historyUser" aria-label="เลือกผู้ใช้ เรียงจาก Session ล่าสุด" title="เรียงจาก Session ล่าสุด"></select></label>
+          <div class="history-filter-group history-admin-filter admin-only" aria-hidden="true">
+            <input id="historyNameFilter" type="hidden" value="">
+            <label class="history-person-select"><span>เลือกผู้ใช้งาน</span><select id="historyUser" tabindex="-1" aria-label="เลือกผู้ใช้ เรียงตามอีเมล A ถึง Z" title="เรียงตามอีเมล A–Z"></select></label>
           </div>
           <div class="history-filter-actions">
             <button class="btn ui-label-button" onclick="refreshHistory(this)"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-refresh"/></svg><span>ค้นหา</span></button>
@@ -1177,18 +1178,20 @@
         <div class="history-section-head"><div><h4 id="historySummaryTitle">สรุปช่วงที่เลือก</h4><small>แยก Sleep Score และ Recovery Score ตามรูปแบบการพัก</small></div></div>
         <div id="historySummary" class="history-summary" aria-live="polite"><div class="mini">กำลังสรุปข้อมูลวันนี้…</div></div>
       </section>
-      <section class="history-section history-list-section" aria-labelledby="historyListTitle">
-        <div class="history-section-head"><div><h4 id="historyListTitle">รายการการพัก</h4><small>เลือกรายการเพื่อดูผลและ Timeline</small></div></div>
-        <div id="sessionList" class="hist-list"><div class="mini">กำลังโหลดประวัติการใช้งาน…</div></div>
-      </section>
+      <div class="history-results-workspace">
+        <section class="history-section history-list-section" aria-labelledby="historyListTitle">
+          <div class="history-section-head"><div><h4 id="historyListTitle">รายการการพัก</h4><small>เลือกรายการเพื่อดูสรุปเชิงสุขภาพ</small></div></div>
+          <div id="sessionList" class="hist-list"><div class="mini">กำลังโหลดประวัติการใช้งาน…</div></div>
+        </section>
+        <section class="history-section history-detail-section" aria-labelledby="historyDetailTitle">
+          <div class="history-section-head"><div><h4 id="historyDetailTitle">ผลรายการที่เลือก</h4><small>สรุปเชิงสุขภาพก่อน · รายละเอียดเปิดดูเมื่อจำเป็น</small></div></div>
+          <div id="sessionDetail" aria-busy="false" tabindex="-1"><div class="history-empty"><b>เลือกรายการการพัก</b><span>ผลสรุปจะแสดงในส่วนนี้</span></div></div>
+        </section>
+      </div>
       <details class="history-section history-journey-panel">
         <summary><span><b>แนวโน้มการพักที่ผ่านมา</b><small>รวม Overnight Recovery และ Nap &amp; Refresh ของคนเดียวกัน</small></span></summary>
         <div id="historyUserJourney" class="history-user-journey" aria-live="polite"></div>
       </details>
-      <section class="history-section history-detail-section" aria-labelledby="historyDetailTitle">
-        <div class="history-section-head"><div><h4 id="historyDetailTitle">ผลรายการที่เลือก</h4><small>สรุปเชิงสุขภาพก่อน แล้วจึงเปิดดูรายละเอียดได้</small></div></div>
-        <div id="sessionDetail"><div class="history-empty"><b>เลือกรายการการพัก</b><span>ผลสรุปจะแสดงในส่วนนี้</span></div></div>
-      </section>
     </div>
   </div>
 </div>

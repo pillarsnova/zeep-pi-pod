@@ -7,6 +7,10 @@ from types import SimpleNamespace
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.testclient import TestClient
 
+from sessions.response_models import UsageSessionListResponse
+from sessions.score_summary import canonical_results, history_participants
+from sessions.usage_api import USAGE_LIST_EXAMPLE, create_usage_sessions_router
+from sessions.usage_service import UsageSessionService
 from sleep_system_policy import (
     PERSONAL_BASELINE_LEARNING_START_UTC,
     PERSONAL_BEHAVIOUR_BASELINE_VERSION,
@@ -14,10 +18,6 @@ from sleep_system_policy import (
     RECOVERY_SCORE_FORMULA_VERSION,
     SLEEP_SCORE_FORMULA_VERSION,
 )
-from sessions.response_models import UsageSessionListResponse
-from sessions.score_summary import canonical_results, history_participants
-from sessions.usage_api import USAGE_LIST_EXAMPLE, create_usage_sessions_router
-from sessions.usage_service import UsageSessionService
 
 
 def _session(session_id: str, email: str, mode: str) -> dict:
@@ -523,6 +523,10 @@ class UsageSessionApiTests(unittest.TestCase):
         self.assertEqual(response.json()["data"]["pagination"]["total"], 2)
 
     def test_admin_user_directory_groups_every_session_by_person(self) -> None:
+        self.profiles["0-first@example.test"] = {
+            "email": "0-FIRST@example.test",
+            "display_name": "ไม่มี Session แต่ต้องเรียงตามอีเมล",
+        }
         self.profiles["unused@example.test"] = {
             "email": "unused@example.test",
             "display_name": "ยังไม่เคยใช้",
@@ -537,12 +541,21 @@ class UsageSessionApiTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["kind"], "usage_user_directory")
         data = payload["data"]
-        self.assertEqual(data["summary"]["user_count"], 3)
+        self.assertEqual(data["summary"]["user_count"], 4)
         self.assertEqual(data["summary"]["users_with_sessions"], 2)
-        self.assertEqual(data["summary"]["users_without_sessions"], 1)
+        self.assertEqual(data["summary"]["users_without_sessions"], 2)
         self.assertEqual(data["summary"]["usage_count"], 2)
         self.assertEqual(data["summary"]["overnight_count"], 1)
         self.assertEqual(data["summary"]["nap_recovery_count"], 1)
+        self.assertEqual(
+            [item["user"]["email"] for item in data["users"]],
+            [
+                "0-first@example.test",
+                "a@example.test",
+                "b@example.test",
+                "unused@example.test",
+            ],
+        )
         first = next(
             user
             for user in data["users"]

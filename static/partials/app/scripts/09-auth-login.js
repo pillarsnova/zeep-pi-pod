@@ -31,6 +31,22 @@ function sortHistoryUsersNewestFirst(users){
     );
   });
 }
+function sortHistoryUsersByEmail(users){
+  // Sessions uses email as the stable identity. Local/legacy accounts follow
+  // email-backed accounts; Login keeps its separate active/newest ordering.
+  const key=user=>{
+    const account=historyUserKey(user);
+    const email=String(user?.email||(account.includes('@')?account:'')).trim().toLowerCase();
+    return {email,account,label:identityLabel(user,'').toLowerCase()};
+  };
+  return [...(users||[])].sort((a,b)=>{
+    const left=key(a),right=key(b);
+    if(Boolean(left.email)!==Boolean(right.email))return left.email?-1:1;
+    return (left.email||left.account).localeCompare(
+      right.email||right.account,'en',{sensitivity:'base'},
+    )||left.label.localeCompare(right.label,'th',{sensitivity:'base'});
+  });
+}
 async function loadUsers(){
   const chips=document.getElementById('userChips'),sel=document.getElementById('historyUser');
   if(currentPrincipal?.role==='user'){
@@ -62,6 +78,8 @@ async function loadUsers(){
         selectGender(u.gender);
       };
       chips.appendChild(c);
+    });
+    sortHistoryUsersByEmail(d.users).forEach(u=>{
       const availableSessions=Number(u.available_sessions??u.sessions??0);
       const sessionsWithoutSensor=Number(u.current_sessions_without_data??0);
       const usageSessions=Number(

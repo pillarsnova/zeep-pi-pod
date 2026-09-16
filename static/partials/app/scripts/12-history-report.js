@@ -23,6 +23,15 @@ function recoveryRestStateLabel(state){
   return 'กำลังประเมินการพัก';
 }
 
+function fmtDurCompact(seconds){
+  if(seconds==null||!Number.isFinite(Number(seconds)))return '—';
+  const total=Math.max(0,Math.round(Number(seconds)));
+  const minutes=Math.floor(total/60);
+  if(minutes>=60)return `${Math.floor(minutes/60)}ชม. ${minutes%60}น.`;
+  if(minutes>0)return `${minutes}น. ${total%60}วิ.`;
+  return `${total}วิ.`;
+}
+
 const REPORT_SLEEP_MODE_KEYS=new Set(['sleep','overnight']);
 const REPORT_RECOVERY_MODE_KEYS=new Set([
   'nap_recovery','general_rest','short_nap','cycle_nap','shift_rest','jet_lag',
@@ -149,9 +158,11 @@ function reportProfileMarkup(report,presentation){
     return `<div class="stage-legend-row" style="--stage-color:${item.color}"><i></i><span>${item.label}</span><strong>${percentage}%</strong><span>${fmtDur(item.duration_s)}</span></div>`;
   }).join('');
   const eligible=quality.duration_target?.eligible_rest_seconds;
-  const centreValue=presentation==='recovery'
-    ?fmtDur(eligible==null?sleep.recording_s:eligible)
-    :fmtDur(sleep.estimated_sleep_s);
+  const centreSeconds=presentation==='recovery'
+    ?eligible==null?sleep.recording_s:eligible
+    :sleep.estimated_sleep_s;
+  const centreValue=fmtDurCompact(centreSeconds);
+  const centreTitle=fmtDur(centreSeconds);
   const title=presentation==='recovery'?'รูปแบบการพักที่ตรวจพบ':adminView?'สัดส่วน Sleep Stage':'สัดส่วนการนอนที่ประเมินได้';
   const note=presentation==='recovery'
     ?'นับคุณค่าของการพักทั้งขณะตื่นและหลับ'
@@ -160,7 +171,8 @@ function reportProfileMarkup(report,presentation){
   const meaning=presentation==='recovery'
     ?'<div class="profile-meaning-note">การพักนิ่งมีคุณค่า แม้ยังไม่หลับ</div>'
     :'<div class="profile-meaning-note">แสดงเวลาที่ระบบประเมินได้ในแต่ละช่วงของการนอน · NREM คือ N1 + N2 + N3</div>';
-  return `<div class="stage-summary ${presentation==='recovery'?'recovery-profile-summary':''}"><div class="report-subhead"><span>${title}</span><small>${note}</small></div><div class="stage-summary-content"><div class="stage-donut" style="--stage-ring:conic-gradient(${segments.join(',')})"><span><b>${centreValue}</b><small>${centreLabel}</small></span></div><div class="stage-legend">${rows}${meaning}</div></div></div>`;
+  const chartLabel=`${title} · ${centreLabel} ${centreTitle}`;
+  return `<div class="stage-summary ${presentation==='recovery'?'recovery-profile-summary':''}"><div class="report-subhead"><span>${title}</span><small>${note}</small></div><div class="stage-summary-content"><div class="stage-donut" role="img" aria-label="${historyEscape(chartLabel)}" style="--stage-ring:conic-gradient(${segments.join(',')})"><span title="${historyEscape(centreTitle)}"><b>${centreValue}</b><small>${centreLabel}</small></span></div><div class="stage-legend">${rows}${meaning}</div></div></div>`;
 }
 
 function reportStageGuideMarkup(presentation){
@@ -485,8 +497,8 @@ function renderSessionOverview(report,hasRestoreSummary=false,presentationOverri
     ${footer?`<div class="report-context-note">${footer}</div>`:''}
   </section>`;
   return adminView
-    ?overview
-    :`<details class="report-details user-result-details"><summary>ดูรายละเอียดการพัก</summary>${overview}</details>`;
+    ?`<details class="report-details admin-overview-details session-overview-details"><summary>ดูรายละเอียดการพัก · Sleep State สัญญาณชีพ และสภาพแวดล้อม</summary>${overview}</details>`
+    :`<details class="report-details user-result-details session-overview-details"><summary>ดูรายละเอียดการพัก</summary>${overview}</details>`;
 }
 
 function renderReport(rec){

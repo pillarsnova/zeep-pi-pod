@@ -8,7 +8,37 @@ function usageUserModeLine(mode,label,scoreTitle){
   const latest=mode?.latest_score;
   const score=latest===null||latest===undefined
     ?'ยังไม่มีคะแนน':`${scoreTitle} ล่าสุด ${historyEscape(latest)}`;
-  return `<span><b>${historyEscape(label)} ${count} ครั้ง</b><small>${score}</small></span>`;
+  return `<span><b>${historyEscape(label)}</b><small>${count} ครั้ง · ${score}</small></span>`;
+}
+
+function usageUserDirectorySortKey(entry){
+  const user=entry?.user||{};
+  const canonical=String(user.canonical_identifier||'').trim().toLowerCase();
+  const email=String(user.email||(canonical.includes('@')?canonical:'')).trim().toLowerCase();
+  return {email,canonical,label:String(user.display_name||'').trim().toLowerCase()};
+}
+
+function sortUsageUserDirectory(users){
+  return [...(users||[])].sort((leftEntry,rightEntry)=>{
+    const left=usageUserDirectorySortKey(leftEntry);
+    const right=usageUserDirectorySortKey(rightEntry);
+    if(Boolean(left.email)!==Boolean(right.email))return left.email?-1:1;
+    return (left.email||left.canonical).localeCompare(
+      right.email||right.canonical,'en',{sensitivity:'base'},
+    )||left.label.localeCompare(right.label,'th',{sensitivity:'base'});
+  });
+}
+
+function syncUsageUserSelection(){
+  const selected=String(document.getElementById('historyUser')?.value||'');
+  document.querySelectorAll('#historyPeopleGrid .history-person-card').forEach(card=>{
+    const active=Boolean(selected&&card.dataset.account===selected);
+    card.classList.toggle('selected',active);
+    card.querySelector('.history-person-action')?.setAttribute('aria-pressed',String(active));
+  });
+  document.getElementById('historyAllUsers')?.setAttribute(
+    'aria-pressed',String(!selected),
+  );
 }
 
 function renderUsageUserDirectory(payload){
@@ -22,7 +52,9 @@ function renderUsageUserDirectory(payload){
     <div><span>การพักทั้งหมด</span><b>${summary.usage_count||0}</b><small>ครั้ง</small></div>
     <div><span>Overnight</span><b>${summary.overnight_count||0}</b><small>ครั้ง</small></div>
     <div><span>Nap & Refresh</span><b>${summary.nap_recovery_count||0}</b><small>ครั้ง</small></div>`;
-  const users=Array.isArray(usageUserDirectory.users)?usageUserDirectory.users:[];
+  const users=sortUsageUserDirectory(
+    Array.isArray(usageUserDirectory.users)?usageUserDirectory.users:[],
+  );
   if(!users.length){
     grid.innerHTML='<div class="history-people-empty"><b>ยังไม่มีผู้ใช้งาน</b><span>บัญชีจะแสดงที่นี่หลังเชื่อมต่อ Profile</span></div>';
     return;
@@ -37,15 +69,15 @@ function renderUsageUserDirectory(payload){
     const missing=Number(entry.without_sensor_data_count||0);
     const last=count?fmtDateTh(entry.last_used_at_utc):'ยังไม่เคยใช้งาน';
     const modes=entry.modes||{};
-    return `<article class="history-person-card" data-user-search="${historyEscape(`${email} ${displayName}`.toLowerCase())}" style="--person-order:${index}">
-      <div class="history-person-identity"><span class="history-person-avatar" aria-hidden="true">${historyEscape((displayName||email).trim().slice(0,1).toUpperCase()||'Z')}</span><div><b title="${historyEscape(email)}">${historyEscape(email)}</b>${displayName?`<small>${historyEscape(displayName)}</small>`:''}</div></div>
-      <div class="history-person-usage"><strong>${count}</strong><span>ครั้งที่ใช้งาน<small>ล่าสุด ${historyEscape(last)}</small></span></div>
+    return `<article class="history-person-card" data-account="${historyEscape(account)}" data-user-search="${historyEscape(`${email} ${displayName}`.toLowerCase())}" style="--person-order:${index}">
+      <div class="history-person-identity"><span class="history-person-avatar" aria-hidden="true">${historyEscape((displayName||email).trim().slice(0,1).toUpperCase()||'Z')}</span><div><b title="${historyEscape(email)}">${historyEscape(email)}</b>${displayName?`<small>${historyEscape(displayName)}</small>`:''}</div><span class="history-person-count"><b>${count}</b><small>ครั้ง</small></span></div>
+      <div class="history-person-meta"><span>ล่าสุด ${historyEscape(last)}</span>${missing?`<span class="attention">Sensor ไม่ครบ ${missing}</span>`:''}</div>
       <div class="history-person-modes">${usageUserModeLine(modes.sleep,'Overnight','Sleep Score')}${usageUserModeLine(modes.nap_recovery,'Nap & Refresh','Recovery Score')}</div>
-      ${missing?`<div class="history-person-note">ไม่มีข้อมูล Sensor ${missing} ครั้ง</div>`:''}
-      <button type="button" class="history-person-action" data-account="${historyEscape(account)}" ${count?'':'disabled'} onclick="openUsageUserHistory(this.dataset.account)">${count?'ดูประวัติของคนนี้':'ยังไม่มีประวัติ'}</button>
+      <button type="button" class="history-person-action" data-account="${historyEscape(account)}" aria-label="${historyEscape(count?`ดูผลของ ${email}`:`ยังไม่มีประวัติของ ${email}`)}" aria-pressed="false" ${count?'':'disabled'} onclick="openUsageUserHistory(this.dataset.account)">${count?'ดูผล':'ยังไม่มีประวัติ'}</button>
     </article>`;
   }).join('');
   filterUsageUserDirectory();
+  syncUsageUserSelection();
 }
 
 function filterUsageUserDirectory(){
@@ -78,14 +110,15 @@ async function refreshUsageUserDirectory(force=false){
 }
 
 function openUsageUserHistory(account){
-  if(!account)return;
   const select=document.getElementById('historyUser');
   if(!select)return;
-  if(![...select.options].some(option=>option.value===account)){
+  const selected=String(account||'');
+  if(selected&&![...select.options].some(option=>option.value===selected)){
     const option=document.createElement('option');option.value=account;option.textContent=account;
     select.appendChild(option);
   }
-  select.value=account;
+  select.value=selected;
+  syncUsageUserSelection();
   const query=document.getElementById('historyNameFilter');if(query)query.value='';
   const historyStart=usageUserDirectory?.history_start_utc;
   const start=historyStart?historyLocalDate(historyStart):'';
@@ -93,5 +126,5 @@ function openUsageUserHistory(account){
   document.getElementById('historyDateTo').value=historyLocalToday();
   document.getElementById('historyTimeFrom').value='00:00';
   document.getElementById('historyTimeTo').value='23:59';
-  refreshHistory().then(()=>document.querySelector('.history-list-section')?.scrollIntoView({behavior:'smooth',block:'start'}));
+  refreshHistory().then(()=>document.querySelector('.history-list-section')?.scrollIntoView({behavior:historyScrollBehavior(),block:'start'}));
 }

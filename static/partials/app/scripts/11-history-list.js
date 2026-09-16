@@ -77,6 +77,18 @@ function resultScoreTitle(q,presentation,adminView=false){
   return adminView?(q?.score_title||'คะแนน Session'):'ผลการพักครั้งนี้';
 }
 
+function wellnessScoreValue(value){
+  if(value===null||value===undefined||String(value).trim()==='')return null;
+  const score=Number(value);
+  return Number.isFinite(score)?Math.max(0,Math.min(100,score)):null;
+}
+
+function wellnessScoreDisplay(value){
+  const score=wellnessScoreValue(value);
+  if(score===null)return '—';
+  return Number.isInteger(score)?String(score):score.toFixed(1).replace(/\.0$/,'');
+}
+
 function userUnavailableScoreReason(q,presentation){
   const validation=String(
     q?.validation_status||q?.target_status||q?.rest_mode?.protocol_status?.status||'',
@@ -103,7 +115,7 @@ function sleepQualityCompact(q, ended, presentationOverride,safetyReviewOverride
   const safetyReview=safetyReviewOverride||reportSafetyReviewRequired(q);
   const level=safetyReview
     ?USER_PRODUCT_COPY.scoreLevels.safety_review:userScoreLevelLabel(q);
-  return `<span class="hist-quality quality-${sleepQualityTone(q,safetyReview)}"><strong>${q.score}</strong><span><b>${historyEscape(level)}</b><small>${title}</small></span></span>`;
+  return `<span class="hist-quality quality-${sleepQualityTone(q,safetyReview)}"><strong>${wellnessScoreDisplay(q.score)}</strong><span><b>${historyEscape(level)}</b><small>${title}</small></span></span>`;
 }
 
 let historyRequestSeq=0;
@@ -111,6 +123,11 @@ let historyJourneyRequestSeq=0;
 let historyDetailRequestSeq=0;
 const HISTORY_JOURNEY_CACHE_MS=60000;
 const historyJourneyCache=new Map();
+
+function historyScrollBehavior(){
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    ?'auto':'smooth';
+}
 
 async function refreshHistory(btn){
   ensureHistoryFilterDefaults();
@@ -127,7 +144,9 @@ async function refreshHistory(btn){
     list.innerHTML=`<div class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังโหลดประวัติการใช้งาน</b><span>${adminView?'กำลังอ่าน Session จากเครื่อง Pi':'กำลังเตรียมรายการย้อนหลังของคุณ'}</span></div></div>`;
     document.getElementById('historySummary').innerHTML='<div class="mini">กำลังสรุปช่วงเวลาที่เลือก…</div>';
     historyDetailRequestSeq+=1;
-    document.getElementById('sessionDetail').innerHTML='<div class="history-empty"><b>เลือกรายการการพัก</b><span>ผลสรุปจะแสดงในส่วนนี้</span></div>';
+    const historyDetail=document.getElementById('sessionDetail');
+    historyDetail.setAttribute('aria-busy','false');
+    historyDetail.innerHTML='<div class="history-empty"><b>เลือกรายการการพัก</b><span>ผลสรุปจะแสดงในส่วนนี้</span></div>';
     refreshUserJourney();
     const params=historyFilterParams();
     const path=currentPrincipal?.role==='admin'
@@ -432,14 +451,15 @@ function renderRestoreSummary(source,presentation,ended=true){
   const scopeLabel=adminView
     ?restorePlainText(scope)||(presentation==='recovery'?'Nap & Refresh':'Overnight Recovery')
     :presentation==='recovery'?'Nap & Refresh':presentation==='sleep'?'Overnight Recovery':'การพักครั้งนี้';
+  const scoreValue=scoreAvailable?wellnessScoreValue(quality.score):null;
   const scoreTone=scoreAvailable
     ?sleepQualityTone(quality,safetyReviewRequired):'unavailable';
   const safetyBanner=safetyReviewRequired
     ?'<div class="result-safety-review"><b>ควรให้ทีมตรวจสอบ</b><span>มีค่าสภาพแวดล้อมบางช่วงแตะเกณฑ์ความปลอดภัย คะแนนยังแสดงได้ แต่ควรตรวจรายละเอียดก่อนใช้งานครั้งถัดไป</span></div>'
     :'';
-  return `<section class="restore-summary-card result-summary-card mode-${presentation} quality-${scoreTone}" style="--quality-score:${scoreAvailable?Number(quality.score)||0:0}">
+  return `<section class="restore-summary-card result-summary-card mode-${presentation} quality-${scoreTone}" style="--quality-score:${scoreValue??0}">
     <div class="result-summary-primary">
-      <div class="sleep-quality-ring"><strong>${scoreAvailable?historyEscape(quality.score):'—'}</strong><small>/100</small></div>
+      <div class="sleep-quality-ring" aria-label="${historyEscape(scoreTitle)} ${scoreAvailable?wellnessScoreDisplay(quality.score):'ยังไม่มีคะแนน'}"><span class="sleep-quality-value"><strong>${scoreAvailable?wellnessScoreDisplay(quality.score):'—'}</strong><small>/100</small></span></div>
       <div class="result-summary-copy">
         <span class="sleep-quality-eyebrow">${historyEscape(scoreTitle)} · ZEEP WELLNESS</span>
         <h3>${historyEscape(statusLabel)}</h3>
@@ -566,7 +586,10 @@ function renderSessionList(d){
     const modeLabel=presentation==='recovery'
       ?'Nap & Refresh'
       :presentation==='sleep'?'Overnight Recovery':currentPrincipal?.role==='admin'?'รูปแบบยังไม่ยืนยัน':'ผลการพักครั้งนี้';
-    const row = document.createElement('button'); row.className = `hist-row mode-${presentation}`;
+    const row = document.createElement('button');
+    row.type='button';
+    row.className = `hist-row mode-${presentation}`;
+    row.setAttribute('aria-pressed','false');
     const identity=currentPrincipal?.role==='admin'
       ? `<span class="hist-person-label"><b>${historyEscape(identityLabel(sx))}</b><small>${historyEscape(sx.display_name||'')}</small></span>`:'';
     row.innerHTML =
@@ -583,24 +606,47 @@ function renderSessionList(d){
 
 async function loadDetail(user, sid, row){
   const requestSeq=++historyDetailRequestSeq;
-  document.querySelectorAll('.hist-row').forEach(x=>x.classList.remove('sel'));
-  row?.classList.add('sel');
+  document.querySelectorAll('.hist-row').forEach(x=>{
+    x.classList.remove('sel');x.setAttribute('aria-pressed','false');
+  });
+  row?.classList.add('sel');row?.setAttribute('aria-pressed','true');
   const adminView=currentPrincipal?.role==='admin';
-  document.getElementById('sessionDetail').innerHTML=`<div class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังเตรียมผลการพัก</b><span>${adminView?'กำลังอ่านผลและ Timeline ของ Session':'กำลังเรียบเรียงรายละเอียดการพักของคุณ'}</span></div></div>`;
+  const detail=document.getElementById('sessionDetail');
+  const showDetailError=message=>{
+    if(requestSeq!==historyDetailRequestSeq)return;
+    detail.setAttribute('aria-busy','false');
+    detail.innerHTML='<div class="history-empty" role="alert"><b>ยังโหลดผลการพักไม่ได้</b><span>กรุณาลองอีกครั้ง</span></div>';
+    toast(message,'error');
+  };
+  detail.setAttribute('aria-busy','true');
+  detail.innerHTML=`<div class="flat-message loading" role="status" aria-live="polite"><span class="flat-icon"></span><div><b>กำลังเตรียมผลการพัก</b><span>${adminView?'กำลังอ่านผลและ Timeline ของ Session':'กำลังเรียบเรียงรายละเอียดการพักของคุณ'}</span></div></div>`;
   const legacyPath=`/api/history/${encodeURIComponent(user)}/${encodeURIComponent(sid)}`;
   let r;
   // The local Pi report retains the confirmed Sleep State sequence. The new
   // raw-free v1 API remains the contract for ZEEP Backend/Mobile integration.
   try { r=await fetch(legacyPath,{cache:'no-store'}); }
-  catch { toast(adminView?'เชื่อมต่อ server ไม่ได้':'ยังเชื่อมต่อระบบไม่ได้ กรุณาลองอีกครั้ง', 'error'); return; }
-  if (!r.ok){ toast(adminView?`โหลดรายละเอียดไม่ได้ · HTTP ${r.status}`:'ยังโหลดรายละเอียดไม่ได้ กรุณาลองอีกครั้ง', 'error'); return; }
-  const data=await r.json();
-  if(requestSeq!==historyDetailRequestSeq)return;
-  renderReport(data);
+  catch {
+    showDetailError(adminView?'เชื่อมต่อ server ไม่ได้':'ยังเชื่อมต่อระบบไม่ได้ กรุณาลองอีกครั้ง');return;
+  }
+  if (!r.ok){
+    showDetailError(adminView?`โหลดรายละเอียดไม่ได้ · HTTP ${r.status}`:'ยังโหลดรายละเอียดไม่ได้ กรุณาลองอีกครั้ง');return;
+  }
+  try {
+    const data=await r.json();
+    if(requestSeq!==historyDetailRequestSeq)return;
+    renderReport(data);
+  }catch{
+    showDetailError(adminView?'รายงาน Session ไม่สมบูรณ์':'ยังเตรียมผลการพักไม่ได้');return;
+  }finally{
+    if(requestSeq===historyDetailRequestSeq)detail.setAttribute('aria-busy','false');
+  }
   // On a tablet the history list can fill most of the viewport. Bring the
   // completed report into view so the newly requested quality result is not
   // hidden below the fixed navigation bar.
-  requestAnimationFrame(()=>document.getElementById('sessionDetail').scrollIntoView({behavior:'smooth',block:'start'}));
+  requestAnimationFrame(()=>{
+    detail.focus({preventScroll:true});
+    detail.scrollIntoView({behavior:historyScrollBehavior(),block:'start'});
+  });
 }
 
 function statBlock(label, st, unit){

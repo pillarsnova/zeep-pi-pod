@@ -192,19 +192,24 @@ class UsageSessionService:
     def _ordered_directory_users(
         users: Mapping[str, dict[str, Any]],
     ) -> list[dict[str, Any]]:
-        ordered = sorted(
-            users.values(),
-            key=lambda item: str(
-                item["user"].get("display_name")
-                or item["user"].get("canonical_identifier")
-                or ""
-            ).casefold(),
-        )
-        ordered.sort(
-            key=lambda item: str(item.get("last_used_at_utc") or ""),
-            reverse=True,
-        )
-        return ordered
+        """Order the Admin directory by canonical email, A-Z.
+
+        Email is the stable identity for ZEEP usage history; display names can
+        change in the mobile application.  Legacy/local identifiers therefore
+        follow email-backed accounts and use their canonical identifier as a
+        deterministic fallback.
+        """
+
+        def directory_key(item: Mapping[str, Any]) -> tuple[int, str, str]:
+            user = item.get("user") or {}
+            email = str(user.get("email") or "").strip().casefold()
+            canonical = (
+                str(user.get("canonical_identifier") or email or "").strip().casefold()
+            )
+            display_name = str(user.get("display_name") or "").strip().casefold()
+            return (0 if email else 1, email or canonical, display_name)
+
+        return sorted(users.values(), key=directory_key)
 
     @staticmethod
     def _directory_summary(ordered: list[dict[str, Any]]) -> dict[str, int]:

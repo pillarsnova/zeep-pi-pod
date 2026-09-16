@@ -43,6 +43,8 @@ async function loadUsers(){
   if(currentPrincipal?.role!=='admin')return;
   try {
     const r = await fetch('/api/users'); const d = await r.json();
+    const ownerTitle=document.getElementById('historyOwnerTitle');
+    if(ownerTitle)ownerTitle.textContent='ภาพรวมผู้ใช้งานและประวัติการพัก';
     chips.innerHTML = '';
     const kept = sel.value; sel.innerHTML = '';
     const allUsers=document.createElement('option');
@@ -84,7 +86,10 @@ async function loadUsers(){
     // load the list automatically instead of leaving a false "no user" state.
     const preferredUser=kept;
     if(preferredUser&&[...sel.options].some(option=>option.value===preferredUser))sel.value=preferredUser;
-    if(document.body.dataset.view==='sessions')refreshHistory();
+    if(document.body.dataset.view==='sessions'){
+      refreshUsageUserDirectory();
+      refreshHistory();
+    }
   } catch {}
 }
 

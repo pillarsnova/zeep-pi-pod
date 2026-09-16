@@ -21,6 +21,7 @@ from zeep_pod.sessions.response_models import (
     UsageSessionListResponse,
     UsageSessionPresentationResponse,
     UsageSessionSummaryResponse,
+    UsageUserDirectoryResponse,
 )
 from zeep_pod.sessions.usage_service import UsageSessionService
 from zeep_pod.sessions.user_profile_api import add_user_profile_routes
@@ -209,6 +210,44 @@ def _build_list_endpoint(context: _UsageApiContext, principal_dependency: Any):
     return list_usage_sessions
 
 
+def _build_user_directory_endpoint(
+    context: _UsageApiContext,
+    admin_dependency: Any,
+):
+    def usage_user_directory(
+        response: Response,
+        principal: Any = admin_dependency,
+    ):
+        response.headers["Cache-Control"] = PRIVATE_NO_STORE
+        _require_usage_browser_principal(principal)
+        data = context.service().user_directory_for_admin(context.profiles())
+        return response_envelope(data, kind="usage_user_directory")
+
+    return usage_user_directory
+
+
+def _add_user_directory_route(
+    router: APIRouter,
+    context: _UsageApiContext,
+    admin: Any,
+) -> None:
+    router.add_api_route(
+        "/users",
+        _build_user_directory_endpoint(context, admin),
+        methods=["GET"],
+        response_model=UsageUserDirectoryResponse,
+        response_model_exclude_unset=True,
+        summary="List one aggregate report per ZEEP user",
+        description=(
+            "Administrator-only directory with current-history usage counts, "
+            "Overnight/Nap breakdown, latest mode-specific scores and the "
+            "last completed Session. Profiles with no completed Session are "
+            "included with zero counts."
+        ),
+        responses=ERROR_RESPONSES,
+    )
+
+
 def _build_detail_endpoint(
     context: _UsageApiContext,
     principal_dependency: Any,
@@ -384,6 +423,7 @@ def create_usage_sessions_router(
             **ERROR_RESPONSES,
         },
     )
+    _add_user_directory_route(router, context, admin)
     add_user_profile_routes(
         router,
         principal_dependency=principal,

@@ -15,6 +15,7 @@ from sleep_system_policy import (
     SLEEP_SCORE_FORMULA_VERSION,
 )
 from zeep_pod.sessions.response_models import UsageSessionListResponse
+from zeep_pod.sessions.score_summary import canonical_results, history_participants
 from zeep_pod.sessions.usage_api import USAGE_LIST_EXAMPLE, create_usage_sessions_router
 from zeep_pod.sessions.usage_service import UsageSessionService
 
@@ -339,6 +340,10 @@ class FakeHistory:
         ]
         return {
             "sessions": rows[offset : offset + limit],
+            "participants": history_participants(
+                rows,
+                canonical=canonical_results(rows),
+            ),
             "total": len(rows),
             "summary": {
                 "people_count": len({row["account_key"] for row in rows}),
@@ -516,6 +521,46 @@ class UsageSessionApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["data"]["pagination"]["total"], 2)
+
+    def test_admin_user_directory_groups_every_session_by_person(self) -> None:
+        self.profiles["unused@example.test"] = {
+            "email": "unused@example.test",
+            "display_name": "ยังไม่เคยใช้",
+        }
+
+        response = self.client.get(
+            "/api/v1/usage-sessions/users",
+            headers=self._headers("service", "admin"),
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["kind"], "usage_user_directory")
+        data = payload["data"]
+        self.assertEqual(data["summary"]["user_count"], 3)
+        self.assertEqual(data["summary"]["users_with_sessions"], 2)
+        self.assertEqual(data["summary"]["users_without_sessions"], 1)
+        self.assertEqual(data["summary"]["usage_count"], 2)
+        self.assertEqual(data["summary"]["overnight_count"], 1)
+        self.assertEqual(data["summary"]["nap_recovery_count"], 1)
+        first = next(
+            user
+            for user in data["users"]
+            if user["user"]["email"] == "a@example.test"
+        )
+        self.assertEqual(first["usage_count"], 1)
+        self.assertEqual(first["modes"]["sleep"]["session_count"], 1)
+        self.assertEqual(first["modes"]["sleep"]["latest_score"], 82)
+
+    def test_user_directory_is_admin_only(self) -> None:
+        anonymous = self.client.get("/api/v1/usage-sessions/users")
+        user = self.client.get(
+            "/api/v1/usage-sessions/users",
+            headers=self._headers("a@example.test"),
+        )
+
+        self.assertEqual(anonymous.status_code, 401)
+        self.assertEqual(user.status_code, 403)
 
     def test_user_gets_own_longitudinal_profile(self) -> None:
         response = self.client.get(

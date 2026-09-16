@@ -30,6 +30,10 @@ from zeep_pod.sessions.user_ai_response_models import (
     UserAiContext,
     UserAiContextResponse,
 )
+from zeep_pod.sessions.user_directory_response_models import (
+    UsageUserDirectory,
+    UsageUserDirectoryResponse,
+)
 from zeep_pod.sessions.user_profile_response_models import (
     UserLearningProfile,
     UserLearningProfileResponse,
@@ -52,6 +56,8 @@ __all__ = [
     "UsageSessionPresentationResponse",
     "UsageSessionSummary",
     "UsageSessionSummaryResponse",
+    "UsageUserDirectory",
+    "UsageUserDirectoryResponse",
     "UserAiContext",
     "UserAiContextResponse",
     "UserLearningProfile",

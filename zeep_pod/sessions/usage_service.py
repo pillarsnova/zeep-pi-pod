@@ -21,6 +21,7 @@ from zeep_pod.sessions.usage_publication import (
 from zeep_pod.sessions.user_learning_profile import build_user_learning_profile
 
 USAGE_SESSION_CONTRACT_VERSION = "zeep.usage-session.v1"
+USAGE_USER_DIRECTORY_CONTRACT_VERSION = "zeep.usage-user-directory.v1"
 
 
 def _session_item(
@@ -108,6 +109,141 @@ class UsageSessionService:
             offset=offset,
         )
         return self._list_contract(result, limit=limit, offset=offset)
+
+    def user_directory_for_admin(
+        self,
+        profiles: dict[str, dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Return one compact current-history row per Profile for Admin.
+
+        Session history remains the source of truth for usage counts. Profiles
+        with no completed Session are retained so the roster also makes cold
+        starts and unused accounts visible without exposing health answers.
+        """
+        result = self.history.admin_history(
+            profiles,
+            window=None,
+            account_key=None,
+            query=None,
+            limit=1,
+            offset=0,
+        )
+        users = {
+            str(participant.get("account_key") or "").strip().casefold(): (
+                self._user_directory_item(participant)
+            )
+            for participant in result.get("participants") or []
+            if participant.get("account_key")
+        }
+        for stored_key, stored_profile in profiles.items():
+            profile = dict(stored_profile or {})
+            key = str(
+                profile.get("account_key")
+                or profile.get("email")
+                or profile.get("zeep_email")
+                or stored_key
+                or ""
+            ).strip().casefold()
+            if not key or key in users:
+                continue
+            email = str(
+                profile.get("email")
+                or profile.get("zeep_email")
+                or (key if "@" in key else "")
+            ).strip().casefold() or None
+            users[key] = self._user_directory_item(
+                {
+                    "account_key": key,
+                    "email": email,
+                    "display_name": (
+                        profile.get("display_name")
+                        or profile.get("username")
+                        or email
+                        or key
+                    ),
+                }
+            )
+        ordered = sorted(
+            users.values(),
+            key=lambda item: str(
+                item["user"].get("display_name")
+                or item["user"].get("canonical_identifier")
+                or ""
+            ).casefold(),
+        )
+        ordered.sort(
+            key=lambda item: str(item.get("last_used_at_utc") or ""),
+            reverse=True,
+        )
+        users_with_sessions = sum(item["usage_count"] > 0 for item in ordered)
+        return {
+            "contract_version": USAGE_USER_DIRECTORY_CONTRACT_VERSION,
+            "users": ordered,
+            "summary": {
+                "user_count": len(ordered),
+                "users_with_sessions": users_with_sessions,
+                "users_without_sessions": len(ordered) - users_with_sessions,
+                "usage_count": sum(item["usage_count"] for item in ordered),
+                "overnight_count": sum(
+                    item["modes"]["sleep"]["session_count"] for item in ordered
+                ),
+                "nap_recovery_count": sum(
+                    item["modes"]["nap_recovery"]["session_count"]
+                    for item in ordered
+                ),
+                "unresolved_count": sum(
+                    item["modes"]["unknown"]["session_count"] for item in ordered
+                ),
+            },
+            "history_start_utc": result.get("history_start_utc"),
+        }
+
+    @staticmethod
+    def _user_directory_item(participant: Mapping[str, Any]) -> dict[str, Any]:
+        key = str(participant.get("account_key") or "").strip().casefold()
+        email = str(participant.get("email") or "").strip().casefold() or None
+        raw_modes = participant.get("modes")
+        modes = raw_modes if isinstance(raw_modes, Mapping) else {}
+
+        def mode_item(mode_key: str) -> dict[str, Any]:
+            source = modes.get(mode_key)
+            source = source if isinstance(source, Mapping) else {}
+            return {
+                "session_count": int(source.get("session_count") or 0),
+                "scored_count": int(source.get("scored_count") or 0),
+                "latest_score": source.get("latest_score"),
+                "latest_score_at_utc": source.get("latest_score_at_utc"),
+            }
+
+        return {
+            "user": {
+                "email": email,
+                "display_name": participant.get("display_name") or email or key,
+                "canonical_identifier": email or key or None,
+                "identity_type": "email" if email else "legacy_account_key",
+            },
+            "usage_count": int(
+                participant.get("usage_count")
+                or participant.get("session_count")
+                or 0
+            ),
+            "total_duration_s": max(
+                0.0,
+                float(participant.get("total_duration_s") or 0.0),
+            ),
+            "last_used_at_utc": participant.get("last_used_at_utc"),
+            "without_sensor_data_count": int(
+                participant.get("without_sensor_data_count") or 0
+            ),
+            "without_score_count": int(
+                participant.get("without_score_count") or 0
+            ),
+            "modes": {
+                "sleep": mode_item("sleep"),
+                "nap_recovery": mode_item("nap_recovery"),
+                "unknown": mode_item("unknown"),
+            },
+        }
 
     def summary_by_id(
         self,

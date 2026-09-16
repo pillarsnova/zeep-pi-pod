@@ -700,6 +700,7 @@ async function deleteUser(btn){
     toast(`ลบข้อมูลบนเครื่องของ ${d.username||user} แล้ว (${d.sessions_removed} sessions)`, 'ok', 4200);
     document.getElementById('sessionList').innerHTML = '<div class="mini">เลือกผู้ใช้แล้วกด "โหลดประวัติ"</div>';
     document.getElementById('sessionDetail').innerHTML = '';
+    usageUserDirectory=null;usageUserDirectorySavedAt=0;
     loadUsers();
   });
 }

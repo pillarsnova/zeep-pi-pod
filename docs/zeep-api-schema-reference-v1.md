@@ -43,6 +43,7 @@ Base path คือ `/api/v1/usage-sessions` และทุก endpoint ใช�
 | Method และ path | ใช้สำหรับ | `kind` ใน envelope |
 |---|---|---|
 | `GET /api/v1/usage-sessions` | รายการประวัติแบบแบ่งหน้า | `usage_session_list` |
+| `GET /api/v1/usage-sessions/users` | รายงานรวมหนึ่งแถวต่อผู้ใช้สำหรับ Admin | `usage_user_directory` |
 | `GET /api/v1/usage-sessions/longitudinal` | ภาพรวมสะสมของผู้ใช้ แยก Overnight/Nap | `user_learning_profile` |
 | `GET /api/v1/usage-sessions/longitudinal/ai-context` | Context แบบ allowlist สำหรับ advisory AI | `user_ai_context` |
 | `GET /api/v1/usage-sessions/{session_id}/summary` | สรุปหนึ่ง Session สำหรับหน้าแรก | `usage_session_summary` |
@@ -65,6 +66,11 @@ Session ID, exact Session timestamp, demographic value และคำตอบ�
 `session_id` เป็น path string ความยาว 1–160 ตัวอักษร และต้อง URL-encode
 เมื่อมีอักขระพิเศษ เป็น Immutable Pi external Session ID ไม่ใช่ username
 หรือ email ใน path
+
+`GET /users` ใช้ Cookie ผู้ดูแลเท่านั้น และรวมตาม `canonical_identifier`
+ซึ่งใช้อีเมลเป็นหลัก ชื่อที่เปลี่ยนได้เป็นเพียงข้อมูลแสดงผล จำนวนครั้งนับเฉพาะ
+Session ที่จบตั้งแต่ `history_start_utc`; Profile ที่ยังไม่เคยใช้ยังแสดงด้วยค่า 0
+เพื่อให้จำนวนบัญชีกับจำนวนผู้ใช้งานจริงไม่ถูกตีความปะปนกัน
 
 Response สำเร็จทุก endpoint ส่ง header:
 

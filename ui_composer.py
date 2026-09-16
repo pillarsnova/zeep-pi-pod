@@ -53,6 +53,10 @@ SCRIPT_PARTIALS = (
         "/* ---- จบ Session:",
     ),
     ("app/scripts/11-history-list.js", "function fmtDateTh("),
+    (
+        "app/scripts/11-usage-users.js",
+        "/* ---------- Admin person-level usage directory ---------- */",
+    ),
     ("app/scripts/12-history-report.js", "const REPORT_STAGE_META="),
     ("app/scripts/13-runtime-websocket.js", "/* ---------- audio visualizer:"),
 )

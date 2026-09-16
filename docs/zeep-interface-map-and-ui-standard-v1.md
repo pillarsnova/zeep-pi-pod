@@ -19,7 +19,7 @@
 | `/control` | ผู้ทดสอบ/ผู้ดูแล | ควบคุมอุปกรณ์ภายใน ZEEP | ประตู, แสง, แอร์, กลิ่น/ไอน้ำ, เตียง และเสียง พร้อม Sensor ที่เกี่ยวข้อง |
 | `/control-debug` | ผู้ดูแล | Commissioning และทดสอบ Hardware จริง | Controller, คำสั่ง, Request/Payload/ACK/Response และ Safety warning |
 | `/monitor` | ผู้ดูแล | ดูความปลอดภัย สุขภาพ Sensor ข้อมูลสด และ Personal Reference | Version/Provenance, Safety, Sensor integrity และ Live physiology |
-| `/sessions` | ผู้ทดสอบ/ผู้ดูแล | ดูประวัติการใช้งานและผลราย Session | ตัวกรอง, Sleep/Recovery Score, รายการพัก และรายงานที่เลือก |
+| `/sessions` | ผู้ทดสอบ/ผู้ดูแล | ดูประวัติการใช้งานและผลราย Session | User เห็นของตนเอง; Admin เห็นผู้ใช้ทั้งหมด จำนวนครั้ง แยกโหมด ตัวกรอง รายการพัก และรายงานที่เลือก |
 | `/admin` | ผู้ดูแล | Alias เข้าหน้า Control หลังยืนยันสิทธิ์ | Control deck เดียวกับผู้ใช้ พร้อมทางเข้า Debug |
 
 ### Surface ร่วม

@@ -1116,6 +1116,14 @@
         <span class="history-self-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-history"/></svg></span>
         <div><b id="historyOwnerTitle">ประวัติการใช้งานของฉัน</b><small>เลือก Overnight Recovery หรือ Nap & Refresh เพื่อดูผลย้อนหลัง</small></div>
       </div>
+      <section class="history-section history-people-section admin-only" aria-labelledby="historyPeopleTitle">
+        <div class="history-section-head history-people-head">
+          <div><h4 id="historyPeopleTitle">ผู้ใช้งานทั้งหมด</h4><small>รวมตามอีเมล · จำนวนครั้งตั้งแต่เริ่ม Pilot</small></div>
+          <label class="history-people-search"><span>ค้นหาผู้ใช้งาน</span><input id="historyPeopleSearch" type="search" placeholder="ชื่อหรืออีเมล" oninput="filterUsageUserDirectory()"></label>
+        </div>
+        <div id="historyPeopleSummary" class="history-people-summary" aria-live="polite"><div class="mini">กำลังรวมข้อมูลผู้ใช้งาน…</div></div>
+        <div id="historyPeopleGrid" class="history-people-grid" aria-live="polite"></div>
+      </section>
       <section class="history-section history-filter-section" aria-labelledby="historyFilterTitle">
         <div class="history-section-head"><div><h4 id="historyFilterTitle">เลือกช่วงเวลา</h4><small>เลือกวัน เวลา และผู้ใช้งานที่ต้องการดู</small></div></div>
         <div id="historyToolbar" class="history-filter-panel" aria-label="ตัวกรองประวัติการใช้งาน">
@@ -1183,6 +1191,7 @@
 /* ZEEP_PARTIAL:app/scripts/10-session-end-report.js */
 
 /* ZEEP_PARTIAL:app/scripts/11-history-list.js */
+/* ZEEP_PARTIAL:app/scripts/11-usage-users.js */
 
 /* ZEEP_PARTIAL:app/scripts/12-history-report.js */
 

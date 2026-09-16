@@ -24,6 +24,9 @@ Raw BCG, Sensor Timeline หรือคำตอบ Profile ผู้ใช้
 - `restore_summary` อธิบายคะแนนเดิม ไม่สร้างคะแนนที่สาม
 - User เห็นเฉพาะ Session ของอีเมลตนเองโดยไม่รับชื่อผู้ใช้ใน path
 - Admin ที่ Login แล้วเห็นหลายบัญชีและกรองด้วยอีเมลได้
+- รายงานรวมรายบุคคลสำหรับ Admin อยู่ที่
+  `GET /api/v1/usage-sessions/users` แสดงจำนวนครั้ง แยก Overnight/Nap
+  คะแนนล่าสุดของแต่ละโหมด และบัญชีที่ยังไม่เคยมี Session
 - ภาพรวมสะสมรายบัญชีอยู่ที่ `GET /api/v1/usage-sessions/longitudinal`
   และแยก Overnight/Nap ตลอดสาย
 - Context สำหรับ advisory AI อยู่ที่

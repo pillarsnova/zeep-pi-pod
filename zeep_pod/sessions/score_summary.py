@@ -143,12 +143,48 @@ def history_participants(
                 "email": session.get("email"),
                 "display_name": session.get("display_name"),
                 "session_count": 0,
+                "usage_count": 0,
+                "total_duration_s": 0.0,
+                "last_used_at_utc": None,
+                "without_sensor_data_count": 0,
+                "without_score_count": 0,
+                "modes": {
+                    "sleep": _empty_participant_mode(),
+                    "nap_recovery": _empty_participant_mode(),
+                    "unknown": _empty_participant_mode(),
+                },
                 "scores": [],
             },
         )
         participant["session_count"] += 1
+        participant["usage_count"] += 1
+        duration = session.get("duration_s")
+        if isinstance(duration, int | float) and not isinstance(duration, bool):
+            participant["total_duration_s"] += max(0.0, float(duration))
+        ended_at = session.get("ended_at_utc")
+        if ended_at and (
+            participant["last_used_at_utc"] is None
+            or str(ended_at) > str(participant["last_used_at_utc"])
+        ):
+            participant["last_used_at_utc"] = ended_at
+        if int(session.get("sample_count") or 0) <= 0:
+            participant["without_sensor_data_count"] += 1
+
+        mode = _mapping(result.get("mode"))
+        mode_key = str(mode.get("key") or "unknown")
+        if mode_key not in participant["modes"]:
+            mode_key = "unknown"
+        mode_summary = participant["modes"][mode_key]
+        mode_summary["session_count"] += 1
         score = _mapping(result.get("score"))
         available = score.get("available") is True
+        if available:
+            mode_summary["scored_count"] += 1
+            if mode_summary["latest_score"] is None:
+                mode_summary["latest_score"] = score.get("value")
+                mode_summary["latest_score_at_utc"] = ended_at
+        else:
+            participant["without_score_count"] += 1
         participant["scores"].append(
             {
                 "session_id": session.get("session_id"),
@@ -161,6 +197,16 @@ def history_participants(
             }
         )
     return list(grouped.values())
+
+
+def _empty_participant_mode() -> dict[str, Any]:
+    """Return one independent mode counter for a person-level report."""
+    return {
+        "session_count": 0,
+        "scored_count": 0,
+        "latest_score": None,
+        "latest_score_at_utc": None,
+    }
 
 
 def email_first_identity(session: Mapping[str, Any]) -> dict[str, Any]:

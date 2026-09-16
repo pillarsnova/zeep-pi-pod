@@ -7,12 +7,12 @@ metadata is never inferred from UI implementation details.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Callable
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Response
-
 
 API_VERSION = "1.0"
 API_SCHEMA = "zeep.api.response"
@@ -24,7 +24,7 @@ def response_envelope(data: Any, *, kind: str) -> dict[str, Any]:
         "schema": API_SCHEMA,
         "api_version": API_VERSION,
         "kind": kind,
-        "generated_at": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+        "generated_at": datetime.now(UTC).isoformat(timespec="milliseconds"),
         "request_id": str(uuid4()),
         "data": data,
     }
@@ -45,6 +45,8 @@ def create_api_v1_router(
     maintenance_contract_snapshot: Callable[[], dict[str, Any]],
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1", tags=["ZEEP API v1"])
+    pod_operator = Depends(require_pod_operator)
+    admin = Depends(require_admin)
 
     @router.get("")
     def index():
@@ -58,6 +60,7 @@ def create_api_v1_router(
                 "maintenance": "/api/v1/admin/maintenance",
                 "adaptive_learning_live": "/api/v1/admin/adaptive/live",
                 "usage_sessions": "/api/v1/usage-sessions",
+                "usage_users": "/api/v1/usage-sessions/users",
                 "user_ai_context": (
                     "/api/v1/usage-sessions/longitudinal/ai-context"
                 ),
@@ -75,25 +78,25 @@ def create_api_v1_router(
         return _response(public_status(), kind="pod_health")
 
     @router.get("/state")
-    def state(principal: Any = Depends(require_pod_operator)):
+    def state(principal: Any = pod_operator):
         return _response(snapshot_for(principal), kind="pod_state")
 
     @router.get("/admin/contracts/sensors")
-    def sensor_contracts(_: Any = Depends(require_admin)):
+    def sensor_contracts(_: Any = admin):
         return _response(sensor_contract_snapshot(), kind="sensor_contracts")
 
     @router.get("/admin/contracts/sleep")
-    def sleep_contract(_: Any = Depends(require_admin)):
+    def sleep_contract(_: Any = admin):
         return _response(sleep_policy_snapshot(), kind="sleep_policy")
 
     @router.get("/admin/maintenance")
-    def maintenance(_: Any = Depends(require_admin)):
+    def maintenance(_: Any = admin):
         return _response(maintenance_contract_snapshot(), kind="maintenance_contract")
 
     @router.get("/admin/adaptive/live")
     def adaptive_live(
         response: Response,
-        principal: Any = Depends(require_admin),
+        principal: Any = admin,
     ):
         response.headers["Cache-Control"] = "private, no-store"
         data = snapshot_for(principal).get("adaptive_learning") or {}

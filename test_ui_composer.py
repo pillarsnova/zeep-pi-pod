@@ -956,6 +956,21 @@ class UiComposerTests(unittest.TestCase):
         self.assertNotIn('id="historyParticipants"', template)
         self.assertIn("HISTORY_JOURNEY_CACHE_MS", template)
 
+    def test_admin_history_has_person_level_usage_directory(self):
+        template = ui_composer.render()
+        sessions_css = (ui_composer.STATIC / "styles/sessions.css").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('id="historyPeopleSummary"', template)
+        self.assertIn('id="historyPeopleGrid"', template)
+        self.assertIn('id="historyPeopleSearch"', template)
+        self.assertIn("/api/v1/usage-sessions/users", template)
+        self.assertIn("function openUsageUserHistory(account)", template)
+        self.assertIn("ครั้งที่ใช้งาน", template)
+        self.assertIn("history-person-card", sessions_css)
+        self.assertIn("grid-template-columns: repeat(3", sessions_css)
+
 
 if __name__ == "__main__":
     unittest.main()

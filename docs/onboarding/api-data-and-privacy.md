@@ -48,6 +48,7 @@ Base path คือ `/api/v1/usage-sessions` และอ่านเฉพา�
 | Endpoint | ข้อมูลที่ได้ | สิทธิ์ |
 |---|---|---|
 | `GET /api/v1/usage-sessions` | รายการแบบแบ่งหน้า | User: ของตนเอง; Admin: กรองบัญชีได้ |
+| `GET /api/v1/usage-sessions/users` | รายงานรวมรายบุคคล จำนวนครั้งและโหมดที่ใช้ | Admin เท่านั้น |
 | `GET /longitudinal` | ภาพรวมสะสมแยก Overnight/Nap | User: ของตนเอง; Admin: เลือกบัญชีด้วย `X-Zeep-Account-Key` |
 | `GET /longitudinal/ai-context` | positive allowlist สำหรับ advisory AI | สิทธิ์เดียวกัน; ยังห้าม external AI egress ใน v1 |
 | `GET /{session_id}/summary` | mode, score, Restore Summary, quality และ version | เจ้าของ Session หรือ Admin |

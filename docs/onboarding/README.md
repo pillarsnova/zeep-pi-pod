@@ -28,7 +28,8 @@
 
 สำหรับทีม Sensor, Firmware, Data/ML, Monitor หรือ Product ที่จะพัฒนาเสียง ให้อ่าน
 [หูอัจฉริยะ · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md) เพิ่ม เอกสารนี้
-เป็น **ROADMAP/SHADOW DESIGN** ไม่ใช่ความสามารถ LIVE ของ v1
+มี **P0.5 ADMIN SHADOW SHELL** สำหรับ level-only/capability registry ส่วน classifier
+ยังไม่ใช่ความสามารถ LIVE ของ v1
 
 หากต้องตอบคำถามส่งมอบ v1 ให้เริ่มจาก
 [v1 System Handover and Freeze Readiness](../zeep-v1-system-handover-and-freeze-readiness.md)
@@ -91,7 +92,7 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 | API สำหรับ App | [ZEEP API v1](../zeep-api-v1.md), [Schema Reference](../zeep-api-schema-reference-v1.md), Pydantic models และ `/openapi.json` ของ release ที่ deploy |
 | Sensor field/range/provenance | [Sensor Interface Contract](../zeep-sensor-interface-contract-v1.2.md) และ [`sensor_contracts.py`](../../sensor_contracts.py) |
 | Tech stack, database และเครื่องมือ | [Technology Stack, Data และเครื่องมือ](technology-stack-and-tools.md) เป็น orientation; runtime ยึด requirements/config/service จริง |
-| แผนจำแนกเสียง/DSP | [หูอัจฉริยะ · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md) มีอำนาจเฉพาะขอบเขต ROADMAP/SHADOW ไม่ใช่ runtime contract |
+| แผนจำแนกเสียง/DSP | [หูอัจฉริยะ · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md) และ [Validation Protocol](../../research/evidence-library/ACOUSTIC_INTELLIGENCE_VALIDATION.md); P0.5 contract เป็น runtime ส่วน classifier ยังเป็น ROADMAP |
 | Test/release gate | [TESTING.md](../../TESTING.md) |
 | Pull, Sync, Deploy, Backup | [Pi 5 Operations Runbook](../pi5-operations-runbook.md) |
 | คำที่แสดงต่อผู้ใช้ | [Product Language Guideline](../zeep-product-language-guideline-v1.md) |
@@ -108,7 +109,7 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 | Pi / Backend | [Software Architecture](../pi5-software-architecture.md), [API v1](../zeep-api-v1.md) | [`app.py`](../../app.py), [`api_v1.py`](../../api_v1.py), `zeep_pod/` |
 | Mobile / Web integration | [API Schema Reference](../zeep-api-schema-reference-v1.md) | [`zeep_pod/sessions/usage_api.py`](../../zeep_pod/sessions/usage_api.py), response models |
 | Hardware / Firmware | [Hardware และ Hub map](hardware-hub-map.md), [Sensor Interface Contract](../zeep-sensor-interface-contract-v1.2.md) | `sensor_*`, `control_protocol.py`, `zeep_pod/hardware/` |
-| Acoustics / Data / Monitor | [หูอัจฉริยะ · DSP Plan](smart-ear-dsp-plan.md), [API/Data/Privacy](api-data-and-privacy.md) | Current: `sensor_runtime.py`, `zeep_pod/sessions/sensor_frame_sampler.py`; Planned: `zeep_pod/acoustics/` |
+| Acoustics / Data / Monitor | [หูอัจฉริยะ · DSP Plan](smart-ear-dsp-plan.md), [API/Data/Privacy](api-data-and-privacy.md) | Current: `sensor_runtime.py`, `zeep_pod/sessions/sensor_frame_sampler.py`, `zeep_pod/acoustics/`; Planned: feature parser/classifier/event tracker |
 | QA / Data | [TESTING.md](../../TESTING.md), [Sleep History Promotion Policy](../sleep-history-promotion-policy-v2.md) | `test_*.py`, [`maintenance_registry.py`](../../maintenance_registry.py) |
 | Operations / Safety | [Operations Runbook](../pi5-operations-runbook.md), [TESTING.md](../../TESTING.md) | [`start_work.sh`](../../start_work.sh), service units, `zeep_pod/operations/` |
 
@@ -140,7 +141,7 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 | Restore Summary | คำอธิบายคะแนนหลัก ไม่ใช่คะแนนที่สาม |
 | OFF BED | Occupancy exception แยกจาก Wake และไม่เข้า Sleep Stage ratio |
 | Shadow | คำแนะนำ/การประเมินที่ไม่มีสิทธิ์สั่ง Hardware |
-| Acoustic Intelligence | การอนุมานลักษณะ/บริบทเสียงจาก DSP; ปัจจุบันเป็น ROADMAP และไม่ใช่การฟังเนื้อหาคำพูด |
+| Acoustic Intelligence | P0.5 แสดงระดับเสียงและทะเบียน Candidate ให้ Admin; การอนุมานจาก DSP ยังเป็น ROADMAP และไม่ฟัง/ถอดเนื้อหาคำพูด |
 | Email-first identity | ใช้ email ที่ยืนยันได้ก่อน; ข้อมูลเก่าอาจยังใช้ normalized legacy account key โดยมี alias ที่ตรวจสอบแล้ว |
 
 ## พร้อมรับงานชิ้นแรกเมื่อ

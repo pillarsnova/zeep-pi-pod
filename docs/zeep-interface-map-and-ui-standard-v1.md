@@ -63,15 +63,16 @@ User และ Admin ใช้ Control deck เดียวกัน Admin เ�
 3. Live physiology และคำอธิบายเฉพาะข้อสังเกต
 4. Personal Reference/Adaptive recommendation
 5. สภาพแวดล้อม
-6. Advanced Diagnostics เมื่อผู้ดูแลเปิดดู
+6. Smart Ear · Level Only และ Candidate ที่กำลังพิสูจน์
+7. Advanced Diagnostics เมื่อผู้ดูแลเปิดดู
 
 Live strip เป็นแหล่งค่าปัจจุบันหลัก ส่วนคำอธิบายและ Reference ต้องไม่ทวนค่าชุดเดิม
 โดยไม่มีบริบทเพิ่ม
 
 ตำแหน่ง “หูอัจฉริยะ” ที่เสนอใน
 [Acoustic Intelligence DSP Plan](onboarding/smart-ear-dsp-plan.md) เป็น
-**ROADMAP/SHADOW**: สรุปอยู่หมวดสภาพแวดล้อมและ feature diagnostics อยู่ Advanced
-ยังไม่ใช่ surface LIVE ใน Interface map นี้
+**P0.5 ADMIN SHADOW**: summary อยู่หมวดสภาพแวดล้อมและ proof/feature readiness อยู่
+Advanced เป็น surface LIVE แบบ level-only ส่วน classifier/event/user result ยังไม่ LIVE
 
 ### Sessions
 

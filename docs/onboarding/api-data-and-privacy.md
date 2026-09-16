@@ -40,6 +40,8 @@ ingest, report share, snapshot sync หรือ tunnel ต้องระบุ
 | `GET /api/v1/admin/contracts/sleep` | Admin | policy/version snapshot |
 | `GET /api/v1/admin/maintenance` | Admin | maintenance contract |
 | `GET /api/v1/admin/adaptive/live` | Admin | Shadow observability; `automatic_actuation=false` |
+| `GET /api/v1/admin/contracts/acoustics` | Admin | Smart Ear capability registry, candidate labels และ validation gates |
+| `GET /api/v1/admin/acoustics/live` | Admin | Level-only shadow projection; classifier เป็น `not_evaluated` |
 
 ### Usage Session API — เส้นทางใหม่สำหรับ App
 
@@ -140,16 +142,18 @@ Sensor frame ทุก 10 วินาที โดย persist ลง Timeline �
 privacy-first boundary ดังนี้:
 
 - ไม่ส่งหรือเก็บ PCM ต่อเนื่องเป็นค่าเริ่มต้น; ESP32 ส่งเฉพาะ versioned features
-- Shadow result, confidence และ feature diagnostics เป็น Admin-only positive allowlist
+- Candidate registry, level-only shadow และ feature diagnostics เป็น Admin-only positive allowlist
 - User/App ยังเห็นเพียงระดับเสียงหรือข้อความสรุปที่ Product/Privacy อนุมัติ
-- ห้ามจำแนกเนื้อหาคำพูด ตัวบุคคล กรน ไอ หรือภาวะสุขภาพในรุ่นแรก
+- P0.5 แสดง `speech_like`, `snore_like`, `cough_like` ได้เฉพาะเป็น Research
+  Candidate ที่ `not_evaluated`; ห้ามถอดคำ ระบุตัวบุคคล หรือแสดงเป็นผลสุขภาพ
 - การเก็บตัวอย่างเสียงเพื่อสร้าง dataset ต้องเป็น protocol แยก มี consent,
   coded identity, encryption, retention, access log และ erasure owner
 - ก่อน persist acoustic features ต้องรวมข้อมูลนั้นใน backup/snapshot/retention/
   account-erasure contract และทดสอบ public redaction
 
-Smart Ear ยังเป็น `ROADMAP/SHADOW` และไม่อยู่ใน API v1 ปัจจุบัน ห้าม client
-พึ่งพา endpoint หรือ field ตัวอย่างในเอกสารแผนจนมี approved contract release
+Smart Ear P0.5 อยู่ใน API v1 แบบ Admin-only level-only แล้ว แต่ classifier,
+event storage และ user-facing summary ยังเป็น `ROADMAP/SHADOW` Client ต้องตรวจ
+`contract_version`, `classification_state` และห้ามเปลี่ยน candidate เป็นผลตรวจ
 
 ## Data ที่ออกจาก Pod
 

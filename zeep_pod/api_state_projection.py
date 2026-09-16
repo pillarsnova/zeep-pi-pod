@@ -163,6 +163,7 @@ def project_consumer_snapshot(
     """Remove infrastructure, raw waveform and Admin audit fields."""
     result.pop("events_tail", None)
     result.pop("adaptive_learning", None)
+    result.pop("acoustic_intelligence", None)
     system = result.get("system") or {}
     result["system"] = {key: system.get(key) for key in CONSUMER_SYSTEM_FIELDS}
     sanitize_consumer_sound(result.get("sensor") or {})

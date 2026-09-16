@@ -712,6 +712,31 @@
       </div>
       <div class="admin-atmosphere-note" id="adminAtmosphereBasis">เกณฑ์นี้เป็น ZEEP engineering operating bands สำหรับควบคุมสภาพแวดล้อมและตรวจระบบ ไม่ใช่การวินิจฉัยทางการแพทย์ · Sensor ที่ไม่ Live จะไม่ถูกตีความเป็นค่าปกติ</div>
     </section>
+    <section class="card acoustic-shadow-card" id="acousticIntelligenceCard" data-pages="monitor" data-admin-panel aria-labelledby="acousticIntelligenceTitle">
+      <div class="acoustic-card-head">
+        <div class="acoustic-card-title"><span class="acoustic-orb" aria-hidden="true">◌</span><div><em>SMART EAR</em><h3 id="acousticIntelligenceTitle">ความเป็นไปได้ของรูปแบบเสียง</h3><p>แยกสิ่งที่วัดได้จริง ออกจากความสามารถที่กำลังพิสูจน์</p></div></div>
+        <span class="acoustic-status-badge" id="acousticStatusBadge">LEVEL ONLY · SHADOW</span>
+      </div>
+      <div class="acoustic-current-grid" aria-live="polite">
+        <article><small>ยืนยันได้ตอนนี้</small><b id="acousticLevel">-- dBA</b><span id="acousticLevelMeta">รอ sound_dba จาก ESP32</span></article>
+        <article><small>การจำแนกเสียง</small><b id="acousticClassification">ยังไม่ประเมิน</b><span id="acousticClassificationMeta">dBA ค่าเดียวใช้บอกแหล่งเสียงไม่ได้</span></article>
+        <article><small>ขั้นพิสูจน์ปัจจุบัน</small><b id="acousticProofPhase">P0 · Contract</b><span id="acousticProofMeta">ยืนยัน Firmware และเส้นทางข้อมูล</span></article>
+      </div>
+      <div class="acoustic-candidate-groups" id="acousticCandidateGroups"><div class="acoustic-empty">กำลังโหลดทะเบียนความสามารถ</div></div>
+      <div class="acoustic-validation-strip" id="acousticValidationSteps"></div>
+      <div class="acoustic-guardrail" id="acousticGuardrail">ไม่บันทึกเสียงพูด · ไม่วินิจฉัย · ไม่เปลี่ยน Sleep State, คะแนน หรือการควบคุม</div>
+    </section>
+    <section class="card acoustic-dsp-inspector" id="acousticDspInspector" data-pages="monitor" data-admin-panel aria-labelledby="acousticDspInspectorTitle">
+      <div class="acoustic-inspector-head">
+        <div><em>ACOUSTIC DSP INSPECTOR</em><h3 id="acousticDspInspectorTitle">หลักฐานและแผนพิสูจน์</h3><p>ส่วนนี้แสดงความพร้อมของข้อมูล ไม่ใช่ผลตรวจผู้ใช้งาน</p></div>
+        <span id="acousticContractVersion">contract --</span>
+      </div>
+      <div class="acoustic-inspector-grid">
+        <section><h4>Pipeline &amp; Release Gates</h4><div class="acoustic-pipeline" id="acousticPipelineRows"></div></section>
+        <section><h4>Feature ที่ยังขาด</h4><div class="acoustic-feature-list" id="acousticMissingFeatures"></div><div class="acoustic-provenance" id="acousticProvenance"></div></section>
+      </div>
+      <div class="acoustic-inspector-note">`snore_like`, `speech_like` และ label อื่นเป็น Research Candidate จนกว่าจะผ่าน Controlled Dataset, class-specific metrics, Privacy และ Safety gates</div>
+    </section>
     <section class="card environment-card" id="environmentCard" data-pages="dashboard">
       <div class="environment-head">
         <div><div class="section-title">สภาพแวดล้อมภายใน ZEEP · Live sensors</div><div class="mini">แสดงเฉพาะค่าจริงจาก Sensor พร้อมตรวจ freshness, สถานะอุปกรณ์ และช่วงค่าที่เป็นไปได้</div></div>
@@ -1093,7 +1118,7 @@
       <div class="mini" id="sensorErr" style="display:none;color:var(--bad)"></div>
       <div class="section-title" style="margin-top:16px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Event Log</div>
       <div id="eventLog" class="event-list"><div class="event-row"><span>--:--</span><span>ยังไม่มีเหตุการณ์</span></div></div>
-      <div class="mini">log เต็มอยู่ที่ logs/events.jsonl · ดูผ่าน API: /api/logs · ค่าเสียงเป็น Field Trial estimate จาก dBFS ของไมค์ ESP32 — ไม่ใช่ค่าจากเครื่องวัด Class 1/2</div>
+      <div class="mini">log เต็มอยู่ที่ logs/events.jsonl · ดูผ่าน API: /api/logs · ค่าเสียงรับจาก field sound_dba ของ ESP32 โดยตรง และยังไม่ใช่ certified LAeq(A) หรือผลจากเครื่องวัด Class 1/2</div>
     </div>
 
     <div class="card raw-monitor" id="rawMonitorCard" data-pages="monitor">

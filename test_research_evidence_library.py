@@ -191,6 +191,33 @@ class ResearchEvidenceLibraryTests(unittest.TestCase):
         for expected in (protocol["id"], protocol["owner_role"], "G1", "G3", "Pending"):
             self.assertIn(expected, plan)
 
+    def test_acoustic_shadow_protocol_is_registered_and_not_released(self):
+        register = json.loads(
+            (LIBRARY / "protocol-register.json").read_text(encoding="utf-8")
+        )
+        protocol = next(
+            item
+            for item in register["protocols"]
+            if item["id"] == "ZEEP-ACOUSTIC-SHADOW-001"
+        )
+        self.assertEqual(protocol["status"], "pending-approval")
+        self.assertEqual(set(protocol["required_gates"]), {"G1", "G3"})
+        self.assertTrue(all(gate["status"] == "pending" for gate in protocol["gates"]))
+        plan = (LIBRARY / protocol["document"]).read_text(encoding="utf-8")
+        for expected in (
+            "snore_like",
+            "speech_like",
+            "not_evaluated",
+            "precision",
+            "false alerts/hour",
+            "G1",
+            "G3",
+        ):
+            self.assertIn(expected, plan)
+        self.assertIn("ACOUSTIC_INTELLIGENCE_VALIDATION.md", (
+            LIBRARY / "README.md"
+        ).read_text(encoding="utf-8"))
+
     def test_voc_control_plan_is_primary_and_source_agnostic(self):
         readme = (LIBRARY / "README.md").read_text(encoding="utf-8")
         plan = (LIBRARY / "VOC_CONTROL_VALIDATION.md").read_text(encoding="utf-8")

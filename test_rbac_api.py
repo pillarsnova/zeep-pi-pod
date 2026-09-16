@@ -543,10 +543,18 @@ class RbacApiTests(unittest.TestCase):
             anonymous.get("/api/v1/admin/contracts/sensors").status_code, 401
         )
         self.assertEqual(anonymous.get("/api/v1/admin/adaptive/live").status_code, 401)
+        self.assertEqual(
+            anonymous.get("/api/v1/admin/contracts/acoustics").status_code,
+            401,
+        )
+        self.assertEqual(
+            anonymous.get("/api/v1/admin/acoustics/live").status_code,
+            401,
+        )
         self.assertEqual(anonymous.get("/api/bcg/trend").status_code, 401)
 
         user = TestClient(pod_app.app)
-        token, _ = pod_app.auth_sessions.create(
+        token, user_principal = pod_app.auth_sessions.create(
             subject="zeep:trend-user",
             username="trend-user",
             display_name="Trend User",
@@ -558,6 +566,18 @@ class RbacApiTests(unittest.TestCase):
         user.cookies.set(pod_app.COOKIE_NAME, token)
         try:
             self.assertEqual(user.get("/api/bcg/trend").status_code, 403)
+            self.assertEqual(
+                user.get("/api/v1/admin/contracts/acoustics").status_code,
+                403,
+            )
+            self.assertEqual(
+                user.get("/api/v1/admin/acoustics/live").status_code,
+                403,
+            )
+            self.assertNotIn(
+                "acoustic_intelligence",
+                pod_app.snapshot_for(user_principal),
+            )
         finally:
             pod_app.auth_sessions.revoke(token)
 
@@ -584,6 +604,31 @@ class RbacApiTests(unittest.TestCase):
         self.assertFalse(
             adaptive.json()["data"]["control_policy"]["automatic_actuation"]
         )
+        acoustic_contract = admin.get("/api/v1/admin/contracts/acoustics")
+        self.assertEqual(acoustic_contract.status_code, 200)
+        self.assertEqual(
+            acoustic_contract.headers.get("cache-control"),
+            "private, no-store",
+        )
+        self.assertEqual(
+            acoustic_contract.json()["data"]["mode"],
+            "admin_shadow_level_only",
+        )
+        acoustic_live = admin.get("/api/v1/admin/acoustics/live")
+        self.assertEqual(acoustic_live.status_code, 200)
+        self.assertEqual(
+            acoustic_live.headers.get("cache-control"),
+            "private, no-store",
+        )
+        self.assertEqual(
+            acoustic_live.json()["data"]["classification_state"],
+            "not_evaluated",
+        )
+        self.assertFalse(
+            acoustic_live.json()["data"]["automatic_actuation"],
+        )
+        admin_state = admin.get("/api/v1/state")
+        self.assertIn("acoustic_intelligence", admin_state.json()["data"])
         trend = admin.get("/api/bcg/trend")
         self.assertEqual(trend.status_code, 200)
         self.assertEqual(trend.headers.get("cache-control"), "private, no-store")

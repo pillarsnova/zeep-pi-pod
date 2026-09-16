@@ -104,7 +104,8 @@ Control Hub 1 ยืนยันเพียงว่า ESP32 เรียก�
   large step สำหรับ Admin observability เท่านั้น ไม่ใช่ source classifier.
 - แผนจำแนกเสียงอยู่ที่
   [หูอัจฉริยะ · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md) และมีสถานะ
-  **ROADMAP/SHADOW**; ต้องไม่กระทบ Sleep State, Score หรือ Control ในระยะแรก.
+  **P0.5 ADMIN SHADOW** สำหรับ level/capability registry ส่วน DSP classifier ยังเป็น
+  **ROADMAP**; ทั้งสองส่วนต้องไม่กระทบ Sleep State, Score หรือ Control.
 
 ### Failure behavior
 

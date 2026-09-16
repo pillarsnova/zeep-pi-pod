@@ -387,8 +387,9 @@ Firmware ที่ประกาศ `ARCHIVED / DO NOT FLASH` ไม่อย�
 
 ### Defer ไป v2
 
-- Acoustic Intelligence/DSP classifier, API และ UI; v1 มีเพียงระดับเสียงกับ
-  packet-level aggregation ความสามารถ Smart Ear ต้องผ่าน P0–P4 ใน
+- Acoustic Intelligence DSP classifier, event persistence และ user-facing result;
+  v1 P0.5 มีเพียงระดับเสียง, packet-level aggregation, Admin capability contract/UI
+  ที่แสดง `not_evaluated` ความสามารถจำแนกต้องผ่าน P1–P4 ใน
   [DSP Plan](onboarding/smart-ear-dsp-plan.md) และไม่อยู่ใน v1 Code Freeze scope
 - Personal Baseline เปลี่ยน Sleep State โดยตรง
 - Closed-loop automatic control จาก Sleep State

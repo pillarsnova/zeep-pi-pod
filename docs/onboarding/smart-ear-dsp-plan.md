@@ -1,6 +1,6 @@
 # ZEEP หูอัจฉริยะ — Acoustic Intelligence DSP Plan
 
-สถานะ: **ROADMAP · SHADOW DESIGN · NOT LIVE**
+สถานะ: **P0.5 ADMIN SHADOW SHELL LIVE · CLASSIFIER NOT LIVE**
 
 ขอบเขต: จำแนกลักษณะและบริบทของเสียงเพื่อช่วยทีมดูแล Pod
 
@@ -26,6 +26,10 @@ confidence, provenance และทางเลือก `unknown`
 Packet Inspector ยังคงทำหน้าที่ตรวจค่าดิบและ Sensor contract ส่วน Smart Ear
 ตีความ feature ที่ผ่าน contract แล้ว จึงไม่ควรรวมสองหน้าที่ไว้ในการ์ดเดียวกัน
 
+รุ่น P0.5 เพิ่มเฉพาะ Admin capability registry, level-only projection, API contract
+และแผนพิสูจน์ บนหน้าจอทุก candidate แสดงว่า `กำลังพิสูจน์` และผลจำแนกเป็น
+`not_evaluated` เสมอจนมี feature telemetry และ classifier ที่ผ่าน Gate
+
 ## 1. ปัจจุบันระบบรู้อะไร
 
 ### LIVE · Telemetry ที่ Runtime รับและตรวจได้
@@ -50,9 +54,10 @@ Packet Inspector ยังคงทำหน้าที่ตรวจค่า
 
 ### สิ่งที่ยังไม่มี
 
-ไม่มี PCM/spectrum บน Pi, FFT/MFCC, acoustic event classifier, confidence/abstain,
-event-bout tracker หรือ Smart Ear API/UI เฉพาะ ดังนั้น scalar dBA เพียงค่าเดียวไม่อาจ
-แยก compressor, airflow, door, music หรือ external noise ได้อย่างน่าเชื่อถือ
+ไม่มี PCM/spectrum บน Pi, FFT/MFCC, acoustic event classifier, confidence/abstain
+หรือ event-bout tracker รุ่น P0.5 มี Smart Ear API/UI แบบ level-only แล้ว แต่ scalar
+dBA เพียงค่าเดียวยังไม่อาจแยก compressor, airflow, door, music หรือ external noise
+ได้อย่างน่าเชื่อถือ
 
 BCG vendor status `5` ที่ UI เรียกว่า `Snoring flag` เป็น flag จากอุปกรณ์ BCG
 คนละแหล่งกับ microphone และไม่ใช่ Smart Ear classifier หรือการวินิจฉัยการกรน
@@ -70,7 +75,8 @@ BCG vendor status `5` ที่ UI เรียกว่า `Snoring flag` เ�
 ### ไม่ทำในรุ่นแรก
 
 - ไม่ฟัง/ถอด/เก็บเนื้อหาคำพูด และไม่ระบุตัวบุคคลด้วยเสียง
-- ไม่จำแนกไอ กรน หรือ apnea และไม่สรุปโรคจากเสียง
+- ไม่แสดงไอ กรน หรือเสียงพูดเป็นผลตรวจ; แสดงได้เฉพาะ research candidate ที่ยัง
+  `not_evaluated` และห้ามสร้าง label `apnea`
 - ไม่เปลี่ยน Sleep State, Sleep Score หรือ Recovery Score
 - ไม่สั่งแอร์ เพลง พัดลม ประตู หรืออุปกรณ์ใดอัตโนมัติ
 - ไม่นำ archived firmware มา Flash หรือถือเป็น Production source of truth
@@ -106,6 +112,19 @@ BCG vendor status `5` ที่ UI เรียกว่า `Snoring flag` เ�
 
 ห้ามเพิ่ม `speech`, `snore`, `cough` หรือชื่อภาวะสุขภาพใน Production taxonomy
 โดยไม่มี purpose-specific consent, validation protocol และ Privacy/Safety approval
+
+### Purpose-gated human-sound research
+
+| Key | ป้าย Admin ใน P0.5 | สถานะ |
+|---|---|---|
+| `speech_like` | คล้ายเสียงพูด · ไม่ถอดคำ | Research Candidate · กำลังพิสูจน์ |
+| `snore_like` | คล้ายรูปแบบเสียงกรน · ไม่ใช่การวินิจฉัย | Research Candidate · กำลังพิสูจน์ |
+| `cough_like` | คล้ายเสียงไอ · ไม่ใช่การประเมินโรค | Research Candidate · กำลังพิสูจน์ |
+| `breathing_pattern_like` | คล้ายรูปแบบการหายใจ · เพื่อวิจัยเท่านั้น | Research Candidate · กำลังพิสูจน์ |
+
+ทะเบียนนี้แจ้งความเป็นไปได้ให้ทีมเห็น ไม่ใช่การอนุมัติให้ classifier ส่งผล ต้องยึด
+[ZEEP-ACOUSTIC-SHADOW-001](../../research/evidence-library/ACOUSTIC_INTELLIGENCE_VALIDATION.md)
+และผ่าน Gate ราย class ก่อนเลื่อนสถานะ
 
 ## 4. Architecture ที่เสนอ
 
@@ -250,19 +269,21 @@ allowlist ของ scalar/array ตัวเลขที่มีขนาด�
 binary/string blob, base64 กับ unknown field พร้อม regression ว่า PCM ไม่เข้า
 API, log หรือ database
 
-## 6. API และ Storage ที่เสนอ
+## 6. API และ Storage
 
 ### Admin transport และ API
 
-เพื่อไม่ให้ REST กับ WebSocket สร้าง live projection คนละชุด ให้ใช้ **Admin
-WebSocket projection ที่มีอยู่เป็น canonical live transport** ส่วน REST ใช้สำหรับ
-ข้อมูลย้อนหลังและ contract เท่านั้น:
+P0.5 ใช้ **Admin WebSocket projection ที่มีอยู่เป็น canonical live transport**
+และเพิ่ม REST แบบ read-only สำหรับตรวจ contract/สถานะเดียวกัน:
 
-- `GET /api/v1/admin/acoustics/events?minutes=10`
 - `GET /api/v1/admin/contracts/acoustics`
+- `GET /api/v1/admin/acoustics/live`
 
 ทั้งสองทางต้องอ่าน projection service เดียวกัน ใช้ positive allowlist และ
 `Cache-Control: private, no-store` สำหรับ HTTP response
+
+ยังไม่มี events endpoint หรือ acoustic persistence ใน P0.5 เพราะยังไม่มี approved
+feature/event retention contract ห้าม client ตีความ candidate registry เป็น event
 
 ตัวอย่าง classification response:
 
@@ -456,8 +477,9 @@ Automatic actuation ต้องมี safety proposal และ validation แ�
 - [ ] ยืนยันว่า Sleep State/Score/Control ไม่อ่าน classifier output
 - [ ] มี rollback ที่ปิด Smart Ear ได้โดยไม่ปิด Sensor Hub 1 หรือ Session
 
-จนกว่ารายการนี้ครบ ให้ถือ Smart Ear เป็น **ROADMAP** และใช้ Monitor ปัจจุบันดู
-`sound_dba`/freshness/level aggregation เท่านั้น
+จนกว่ารายการนี้ครบ ให้ถือ **การจำแนกเสียง** เป็น ROADMAP ส่วน P0.5 Monitor/API
+ดูได้เฉพาะ `sound_dba`, freshness, level aggregation และ Candidate Registry ที่มี
+สถานะ `not_evaluated/กำลังพิสูจน์`
 
 ## 12. เอกสารและทะเบียนที่เกี่ยวข้อง
 
@@ -467,3 +489,4 @@ Automatic actuation ต้องมี safety proposal และ validation แ�
 - ตำแหน่งหน้าและ UI standard: [Interface Map & UI Standard](../zeep-interface-map-and-ui-standard-v1.md)
 - Audio output ซึ่งเป็นคนละ boundary: [Brainwave Sound Lab](../brainwave-sound-lab-v1.md)
 - Protocol governance: [Evidence Protocol Register](../../research/evidence-library/protocol-register.json)
+- Proof protocol: [Acoustic Intelligence Validation](../../research/evidence-library/ACOUSTIC_INTELLIGENCE_VALIDATION.md)

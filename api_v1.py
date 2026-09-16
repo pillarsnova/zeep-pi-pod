@@ -13,6 +13,7 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Response
+from zeep_pod.acoustics import acoustic_contract_snapshot
 
 API_VERSION = "1.0"
 API_SCHEMA = "zeep.api.response"
@@ -59,6 +60,8 @@ def create_api_v1_router(
                 "sleep_policy": "/api/v1/admin/contracts/sleep",
                 "maintenance": "/api/v1/admin/maintenance",
                 "adaptive_learning_live": "/api/v1/admin/adaptive/live",
+                "acoustic_contract": "/api/v1/admin/contracts/acoustics",
+                "acoustic_live": "/api/v1/admin/acoustics/live",
                 "usage_sessions": "/api/v1/usage-sessions",
                 "usage_users": "/api/v1/usage-sessions/users",
                 "user_ai_context": (
@@ -89,6 +92,14 @@ def create_api_v1_router(
     def sleep_contract(_: Any = admin):
         return _response(sleep_policy_snapshot(), kind="sleep_policy")
 
+    @router.get("/admin/contracts/acoustics")
+    def acoustic_contract(response: Response, _: Any = admin):
+        response.headers["Cache-Control"] = "private, no-store"
+        return _response(
+            acoustic_contract_snapshot(),
+            kind="acoustic_intelligence_contract",
+        )
+
     @router.get("/admin/maintenance")
     def maintenance(_: Any = admin):
         return _response(maintenance_contract_snapshot(), kind="maintenance_contract")
@@ -101,5 +112,14 @@ def create_api_v1_router(
         response.headers["Cache-Control"] = "private, no-store"
         data = snapshot_for(principal).get("adaptive_learning") or {}
         return _response(data, kind="adaptive_learning_live")
+
+    @router.get("/admin/acoustics/live")
+    def acoustic_live(
+        response: Response,
+        principal: Any = admin,
+    ):
+        response.headers["Cache-Control"] = "private, no-store"
+        data = snapshot_for(principal).get("acoustic_intelligence") or {}
+        return _response(data, kind="acoustic_intelligence_live")
 
     return router

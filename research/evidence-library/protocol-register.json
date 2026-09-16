@@ -1,7 +1,7 @@
 {
   "$schema": "protocol-register.schema.json",
   "schema_version": "1.0.0",
-  "checked_on": "2026-09-05",
+  "checked_on": "2026-09-17",
   "authority": {
     "authoritative": true,
     "scope": "Validation protocol ownership, approval gates and sign-off state",
@@ -30,6 +30,36 @@
         {
           "id": "G3",
           "name": "Research, data-quality, privacy and claims readiness",
+          "approver_role": "ZEEP Research Governance Lead",
+          "status": "pending",
+          "signed_by": null,
+          "signed_at": null,
+          "evidence_reference": null
+        }
+      ]
+    },
+    {
+      "id": "ZEEP-ACOUSTIC-SHADOW-001",
+      "title": "ZEEP Acoustic Intelligence Shadow Validation Plan",
+      "version": "1.0.0",
+      "document": "ACOUSTIC_INTELLIGENCE_VALIDATION.md",
+      "status": "pending-approval",
+      "owner_role": "ZEEP Acoustic Validation Lead",
+      "required_gates": ["G1", "G3"],
+      "release_rule": "Candidate acoustic labels may appear only as Admin planned capabilities until G1 and G3 plus class-specific validation metrics are approved; they must not affect Sleep State, scores or control.",
+      "gates": [
+        {
+          "id": "G1",
+          "name": "Acoustic hardware, firmware and fail-soft readiness",
+          "approver_role": "ZEEP Safety Lead",
+          "status": "pending",
+          "signed_by": null,
+          "signed_at": null,
+          "evidence_reference": null
+        },
+        {
+          "id": "G3",
+          "name": "Dataset, privacy, claims and model-validation readiness",
           "approver_role": "ZEEP Research Governance Lead",
           "status": "pending",
           "signed_by": null,

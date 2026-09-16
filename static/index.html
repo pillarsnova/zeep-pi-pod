@@ -1837,6 +1837,31 @@
       </div>
       <div class="admin-atmosphere-note" id="adminAtmosphereBasis">เกณฑ์นี้เป็น ZEEP engineering operating bands สำหรับควบคุมสภาพแวดล้อมและตรวจระบบ ไม่ใช่การวินิจฉัยทางการแพทย์ · Sensor ที่ไม่ Live จะไม่ถูกตีความเป็นค่าปกติ</div>
     </section>
+    <section class="card acoustic-shadow-card" id="acousticIntelligenceCard" data-pages="monitor" data-admin-panel aria-labelledby="acousticIntelligenceTitle">
+      <div class="acoustic-card-head">
+        <div class="acoustic-card-title"><span class="acoustic-orb" aria-hidden="true">◌</span><div><em>SMART EAR</em><h3 id="acousticIntelligenceTitle">ความเป็นไปได้ของรูปแบบเสียง</h3><p>แยกสิ่งที่วัดได้จริง ออกจากความสามารถที่กำลังพิสูจน์</p></div></div>
+        <span class="acoustic-status-badge" id="acousticStatusBadge">LEVEL ONLY · SHADOW</span>
+      </div>
+      <div class="acoustic-current-grid" aria-live="polite">
+        <article><small>ยืนยันได้ตอนนี้</small><b id="acousticLevel">-- dBA</b><span id="acousticLevelMeta">รอ sound_dba จาก ESP32</span></article>
+        <article><small>การจำแนกเสียง</small><b id="acousticClassification">ยังไม่ประเมิน</b><span id="acousticClassificationMeta">dBA ค่าเดียวใช้บอกแหล่งเสียงไม่ได้</span></article>
+        <article><small>ขั้นพิสูจน์ปัจจุบัน</small><b id="acousticProofPhase">P0 · Contract</b><span id="acousticProofMeta">ยืนยัน Firmware และเส้นทางข้อมูล</span></article>
+      </div>
+      <div class="acoustic-candidate-groups" id="acousticCandidateGroups"><div class="acoustic-empty">กำลังโหลดทะเบียนความสามารถ</div></div>
+      <div class="acoustic-validation-strip" id="acousticValidationSteps"></div>
+      <div class="acoustic-guardrail" id="acousticGuardrail">ไม่บันทึกเสียงพูด · ไม่วินิจฉัย · ไม่เปลี่ยน Sleep State, คะแนน หรือการควบคุม</div>
+    </section>
+    <section class="card acoustic-dsp-inspector" id="acousticDspInspector" data-pages="monitor" data-admin-panel aria-labelledby="acousticDspInspectorTitle">
+      <div class="acoustic-inspector-head">
+        <div><em>ACOUSTIC DSP INSPECTOR</em><h3 id="acousticDspInspectorTitle">หลักฐานและแผนพิสูจน์</h3><p>ส่วนนี้แสดงความพร้อมของข้อมูล ไม่ใช่ผลตรวจผู้ใช้งาน</p></div>
+        <span id="acousticContractVersion">contract --</span>
+      </div>
+      <div class="acoustic-inspector-grid">
+        <section><h4>Pipeline &amp; Release Gates</h4><div class="acoustic-pipeline" id="acousticPipelineRows"></div></section>
+        <section><h4>Feature ที่ยังขาด</h4><div class="acoustic-feature-list" id="acousticMissingFeatures"></div><div class="acoustic-provenance" id="acousticProvenance"></div></section>
+      </div>
+      <div class="acoustic-inspector-note">`snore_like`, `speech_like` และ label อื่นเป็น Research Candidate จนกว่าจะผ่าน Controlled Dataset, class-specific metrics, Privacy และ Safety gates</div>
+    </section>
     <section class="card environment-card" id="environmentCard" data-pages="dashboard">
       <div class="environment-head">
         <div><div class="section-title">สภาพแวดล้อมภายใน ZEEP · Live sensors</div><div class="mini">แสดงเฉพาะค่าจริงจาก Sensor พร้อมตรวจ freshness, สถานะอุปกรณ์ และช่วงค่าที่เป็นไปได้</div></div>
@@ -2218,7 +2243,7 @@
       <div class="mini" id="sensorErr" style="display:none;color:var(--bad)"></div>
       <div class="section-title" style="margin-top:16px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Event Log</div>
       <div id="eventLog" class="event-list"><div class="event-row"><span>--:--</span><span>ยังไม่มีเหตุการณ์</span></div></div>
-      <div class="mini">log เต็มอยู่ที่ logs/events.jsonl · ดูผ่าน API: /api/logs · ค่าเสียงเป็น Field Trial estimate จาก dBFS ของไมค์ ESP32 — ไม่ใช่ค่าจากเครื่องวัด Class 1/2</div>
+      <div class="mini">log เต็มอยู่ที่ logs/events.jsonl · ดูผ่าน API: /api/logs · ค่าเสียงรับจาก field sound_dba ของ ESP32 โดยตรง และยังไม่ใช่ certified LAeq(A) หรือผลจากเครื่องวัด Class 1/2</div>
     </div>
 
     <div class="card raw-monitor" id="rawMonitorCard" data-pages="monitor">
@@ -5719,6 +5744,50 @@ function renderAdaptiveLearning(data={}){
   renderAdaptiveFeatures(data);renderAdaptiveDecision(data);renderAdaptiveDevices(data);renderAdaptiveVersions(data);
 }
 
+function acousticPhaseStatus(status='planned'){
+  return ({in_progress:'กำลังทำ',planned:'วางแผน',approved:'ผ่านแล้ว',blocked:'ติดเงื่อนไข'})[status]||status;
+}
+
+function acousticFeatureLabel(key=''){
+  return ({feature_coverage:'Coverage',clip_ratio:'Clipping',crest_factor:'Crest factor',transient_count:'Transient',spectral_bands:'Spectral bands',spectral_centroid:'Centroid',spectral_flatness:'Flatness',periodicity:'Periodicity',modulation_index:'Modulation'})[key]||key.replaceAll('_',' ');
+}
+
+function renderAcousticIntelligence(data={}){
+  const root=document.getElementById('acousticIntelligenceCard');if(!root)return;
+  const level=data.level||{},aggregation=data.aggregation||{},validation=data.validation||{};
+  const value=level.sound_dba==null?Number.NaN:Number(level.sound_dba);
+  const packetAverage=aggregation.packet_energy_average_dba==null?Number.NaN:Number(aggregation.packet_energy_average_dba);
+  const valid=Number.isFinite(value)&&level.status==='valid';
+  root.classList.toggle('level-unavailable',!valid);
+  document.getElementById('acousticStatusBadge').textContent='LEVEL ONLY · SHADOW';
+  document.getElementById('acousticLevel').textContent=valid?`${value.toFixed(1)} dBA`:'-- dBA';
+  document.getElementById('acousticLevelMeta').textContent=valid
+    ?`ESP32 direct${Number.isFinite(packetAverage)?` · เฉลี่ย packet ${packetAverage.toFixed(1)} dBA`:''} · ${aggregation.sample_count||0} จุด`
+    :`ยังไม่มีระดับเสียงที่ใช้ได้ · ${level.status||data.status||'unavailable'}`;
+  document.getElementById('acousticClassification').textContent='ยังไม่ประเมินประเภทเสียง';
+  document.getElementById('acousticClassificationMeta').textContent='ต้องมี DSP feature ก่อน · ไม่เดาจาก dBA ค่าเดียว';
+
+  const phases=Array.isArray(validation.phases)?validation.phases:[];
+  const active=phases.find(item=>item.status==='in_progress')||phases[0]||{};
+  document.getElementById('acousticProofPhase').textContent=active.phase?`${active.phase} · ${acousticPhaseStatus(active.status)}`:'รอ Validation Plan';
+  document.getElementById('acousticProofMeta').textContent=active.title||'ยังไม่มีข้อมูลแผนพิสูจน์';
+
+  const groups=Array.isArray(data.candidate_label_groups)?data.candidate_label_groups:[];
+  const candidateRoot=document.getElementById('acousticCandidateGroups');
+  candidateRoot.innerHTML=groups.length?groups.map(group=>`<section><h4>${escapeMarkup(group.display_name||group.key)}</h4><div>${(group.labels||[]).map(label=>`<span title="สถานะ: ${escapeMarkup(label.proof_status||'planned')}">${escapeMarkup(label.display_name||label.key)}<small>กำลังพิสูจน์</small></span>`).join('')}</div></section>`).join(''):'<div class="acoustic-empty">ยังไม่มี Candidate Registry</div>';
+
+  document.getElementById('acousticValidationSteps').innerHTML=phases.slice(0,4).map(item=>`<span class="${escapeMarkup(item.status||'planned')}"><b>${escapeMarkup(item.phase)}</b>${escapeMarkup(item.title)}<small>${escapeMarkup(acousticPhaseStatus(item.status))}</small></span>`).join('');
+  document.getElementById('acousticGuardrail').textContent='ไม่ส่งหรือเก็บ Raw audio · ไม่ถอดคำ/ระบุตัวบุคคล · ไม่เปลี่ยน Sleep State, Sleep Score, Recovery Score หรือ Control';
+
+  const pipeline=document.getElementById('acousticPipelineRows');
+  pipeline.innerHTML=phases.map(item=>`<article class="${escapeMarkup(item.status||'planned')}"><b>${escapeMarkup(item.phase)}</b><div><strong>${escapeMarkup(item.title)}</strong><span>${escapeMarkup(item.exit_gate||'รอเกณฑ์ผ่าน')}</span></div><em>${escapeMarkup(acousticPhaseStatus(item.status))}</em></article>`).join('')||'<div class="acoustic-empty">ยังไม่มี Pipeline</div>';
+  const missing=Array.isArray(data.evidence?.missing)?data.evidence.missing:[];
+  document.getElementById('acousticMissingFeatures').innerHTML=missing.map(item=>`<span>${escapeMarkup(acousticFeatureLabel(item))}</span>`).join('')||'<span>รอ Feature Contract</span>';
+  const provenance=data.provenance||{};
+  document.getElementById('acousticProvenance').innerHTML=`<div><span>Sound source</span><b>${escapeMarkup(provenance.sound_source||'--')}</b></div><div><span>Firmware</span><b>${escapeMarkup(provenance.firmware_version||'ยังไม่ยืนยัน')}</b></div><div><span>Feature schema</span><b>${escapeMarkup(provenance.feature_schema_version||'ยังไม่มี')}</b></div><div><span>Classifier</span><b>${escapeMarkup(provenance.classifier_version||'ยังไม่มี')}</b></div><div><span>Protocol</span><b>${escapeMarkup(validation.protocol_id||'--')}</b></div><div><span>BCG Snoring flag</span><b>หลักฐานแยก · ไม่ใช่ไมค์</b></div>`;
+  document.getElementById('acousticContractVersion').textContent=data.contract_version||'contract --';
+}
+
 function renderCalibrationInspector(data,{force=false}={}){
   calibrationInspectorState=data;
   const root=document.getElementById('calibrationInspector');
@@ -8423,6 +8492,7 @@ function render(s, source='ws'){
   renderSystemHealth(sys);
   renderSafety(s.safety || {});
   renderAdaptiveLearning(s.adaptive_learning||{});
+  renderAcousticIntelligence(s.acoustic_intelligence||{});
   if(document.body.dataset.view==='monitor')evaluateMonitorAlerts(e,h2,environment,b,sys);
 
   // ---- per-person session: overlay, user pill, logout button ----

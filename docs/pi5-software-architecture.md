@@ -205,8 +205,9 @@ Sensor cadence, public JSON key หรือคำสั่ง Hardware
 6. ลด `app.py` ให้เหลือ configuration, dependency wiring, lifespan และ router wiring
 
 Acoustic Intelligence ที่เสนอใน
-[DSP Plan](onboarding/smart-ear-dsp-plan.md) เป็น ROADMAP-only และยังไม่ใช่ module
-ปัจจุบัน ห้ามสร้าง `zeep_pod/acoustics/` จน P0 firmware/contract/privacy ผ่าน
+[DSP Plan](onboarding/smart-ear-dsp-plan.md) มี `zeep_pod/acoustics/` เฉพาะ P0.5
+contract และ Admin level-only projection แล้ว ส่วน feature parser, classifier,
+event tracker และ persistence ยังเป็น ROADMAP และห้ามเพิ่มก่อนผ่าน Gate ที่กำหนด
 
 แต่ละขั้นต้องเป็น behavior-preserving commit ขนาดเล็กที่ย้อนกลับได้ ห้ามรวมการจูน
 Health threshold, เปลี่ยน Schema หรือ Flash Firmware ไว้ใน Refactor commit เดียวกัน

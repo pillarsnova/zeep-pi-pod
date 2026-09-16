@@ -54,6 +54,7 @@ function render(s, source='ws'){
   renderSystemHealth(sys);
   renderSafety(s.safety || {});
   renderAdaptiveLearning(s.adaptive_learning||{});
+  renderAcousticIntelligence(s.acoustic_intelligence||{});
   if(document.body.dataset.view==='monitor')evaluateMonitorAlerts(e,h2,environment,b,sys);
 
   // ---- per-person session: overlay, user pill, logout button ----

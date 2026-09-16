@@ -1,8 +1,8 @@
 # ZEEP Research Evidence Library
 
-เวอร์ชันทะเบียน: **1.3.0**
+เวอร์ชันทะเบียน: **1.4.0**
 
-ตรวจแหล่งข้อมูลล่าสุด: **5 กันยายน 2026**
+ตรวจทะเบียนล่าสุด: **17 กันยายน 2026**
 
 ขอบเขต: Sleep Wellness, สุขภาพที่เกี่ยวข้องกับการนอน, คุณภาพอากาศภายในอาคาร, VOC/ควันบุหรี่ และข้อจำกัดของเซนเซอร์
 
@@ -25,6 +25,7 @@
 |---|---|---|
 | [กรอบคะแนนสองรูปแบบและแผนที่หลักฐาน](TWO_MODE_SCORE_EVIDENCE.md) | Product, Sleep, Pilot, Engineering | อธิบายสัญญา `Overnight Recovery → Sleep Score` และ `Nap & Refresh → Recovery Score` พร้อมสูตรจริง release gate และข้อห้ามในการตีความ |
 | [แผนพิสูจน์การควบคุม VOC ของ ZEEP](VOC_CONTROL_VALIDATION.md) | Product, Pilot, Engineering | เอกสารหลักสำหรับพิสูจน์ว่า ventilation + Carbon Filter ลดภาระ VOC ได้หรือไม่ โดยไม่พยายามระบุตัวผู้สูบบุหรี่ |
+| [แผนพิสูจน์ Acoustic Intelligence](ACOUSTIC_INTELLIGENCE_VALIDATION.md) | Firmware, Data/ML, Product, Privacy, Safety | แยก dBA ที่วัดได้จริงออกจาก candidate labels เช่น `snore_like`/`speech_like` พร้อม dataset, metric และ G1+G3 ก่อนถือเป็นความสามารถจริง |
 | [ทะเบียนแหล่งข้อมูลฉบับอ่านง่าย](SOURCE_REGISTER.md) | ทุกทีม | สรุปว่าเอกสารอ้างอิงแต่ละฉบับใช้รองรับเรื่องใดและห้ามตีความเกินอะไร |
 | [กรณีสารตกค้างที่มากับผู้ใช้งาน](SMOKING_VOC_CASE.md) | Research, Pilot | หลักฐานและวิธีควบคุมตัวแปรของกรณี thirdhand smoke; เป็นกรณีตัวอย่าง ไม่ใช่เป้าหมายการตรวจจับบุคคล |
 | [ทะเบียนสำหรับระบบ](source-register.json) | Engineering, Audit | Metadata, URL, สถานะการเข้าถึง และ checksum ที่เครื่องอ่านได้ |
@@ -55,6 +56,7 @@ research/evidence-library/
 ├── SOURCE_REGISTER.md     สรุปว่าเอกสารแต่ละฉบับใช้รองรับเรื่องใด
 ├── TWO_MODE_SCORE_EVIDENCE.md กรอบ Sleep Score/Recovery Score และ evidence map
 ├── VOC_CONTROL_VALIDATION.md แผนพิสูจน์ประสิทธิภาพการควบคุม VOC ของ ZEEP
+├── ACOUSTIC_INTELLIGENCE_VALIDATION.md แผนพิสูจน์ label เสียงแบบ Admin Shadow
 ├── SMOKING_VOC_CASE.md    กรณีศึกษา VOC ที่มากับผู้ใช้งานและ thirdhand smoke
 └── update_research_library.py
 ```

@@ -1,8 +1,6 @@
-"""ZEEP Pod process composition root for Raspberry Pi 5.
+"""ZEEP Pod Raspberry Pi 5 composition root.
 
-This module wires FastAPI, lifecycle threads and hardware adapters together.
-Pure sensor/calibration/recommendation rules live in dedicated modules so they
-can be reviewed and tested without starting GPIO, serial or MQTT resources.
+Domain rules remain in reviewable modules without hardware import side effects.
 """
 
 import asyncio
@@ -78,6 +76,7 @@ from control_protocol import (
 )
 from database import DatabaseManager
 from api_v1 import create_api_v1_router
+from zeep_pod.acoustics import build_acoustic_monitor_snapshot
 from zeep_pod.adaptive_learning import build_adaptive_learning_snapshot
 from zeep_pod.api_state_projection import (
     LiveDeviceProjectionPolicy,
@@ -3799,6 +3798,7 @@ def snapshot_for(principal: Principal) -> Dict[str, Any]:
             behaviour=sleep.get("personal_behaviour"),
             recent_samples=recent_samples,
         )
+        result["acoustic_intelligence"] = build_acoustic_monitor_snapshot(result)
         result["auth"] = {
             "principal": principal.public_dict(),
             "session_store": auth_sessions.health(),

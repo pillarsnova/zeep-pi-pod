@@ -348,6 +348,50 @@ function renderAdaptiveLearning(data={}){
   renderAdaptiveFeatures(data);renderAdaptiveDecision(data);renderAdaptiveDevices(data);renderAdaptiveVersions(data);
 }
 
+function acousticPhaseStatus(status='planned'){
+  return ({in_progress:'กำลังทำ',planned:'วางแผน',approved:'ผ่านแล้ว',blocked:'ติดเงื่อนไข'})[status]||status;
+}
+
+function acousticFeatureLabel(key=''){
+  return ({feature_coverage:'Coverage',clip_ratio:'Clipping',crest_factor:'Crest factor',transient_count:'Transient',spectral_bands:'Spectral bands',spectral_centroid:'Centroid',spectral_flatness:'Flatness',periodicity:'Periodicity',modulation_index:'Modulation'})[key]||key.replaceAll('_',' ');
+}
+
+function renderAcousticIntelligence(data={}){
+  const root=document.getElementById('acousticIntelligenceCard');if(!root)return;
+  const level=data.level||{},aggregation=data.aggregation||{},validation=data.validation||{};
+  const value=level.sound_dba==null?Number.NaN:Number(level.sound_dba);
+  const packetAverage=aggregation.packet_energy_average_dba==null?Number.NaN:Number(aggregation.packet_energy_average_dba);
+  const valid=Number.isFinite(value)&&level.status==='valid';
+  root.classList.toggle('level-unavailable',!valid);
+  document.getElementById('acousticStatusBadge').textContent='LEVEL ONLY · SHADOW';
+  document.getElementById('acousticLevel').textContent=valid?`${value.toFixed(1)} dBA`:'-- dBA';
+  document.getElementById('acousticLevelMeta').textContent=valid
+    ?`ESP32 direct${Number.isFinite(packetAverage)?` · เฉลี่ย packet ${packetAverage.toFixed(1)} dBA`:''} · ${aggregation.sample_count||0} จุด`
+    :`ยังไม่มีระดับเสียงที่ใช้ได้ · ${level.status||data.status||'unavailable'}`;
+  document.getElementById('acousticClassification').textContent='ยังไม่ประเมินประเภทเสียง';
+  document.getElementById('acousticClassificationMeta').textContent='ต้องมี DSP feature ก่อน · ไม่เดาจาก dBA ค่าเดียว';
+
+  const phases=Array.isArray(validation.phases)?validation.phases:[];
+  const active=phases.find(item=>item.status==='in_progress')||phases[0]||{};
+  document.getElementById('acousticProofPhase').textContent=active.phase?`${active.phase} · ${acousticPhaseStatus(active.status)}`:'รอ Validation Plan';
+  document.getElementById('acousticProofMeta').textContent=active.title||'ยังไม่มีข้อมูลแผนพิสูจน์';
+
+  const groups=Array.isArray(data.candidate_label_groups)?data.candidate_label_groups:[];
+  const candidateRoot=document.getElementById('acousticCandidateGroups');
+  candidateRoot.innerHTML=groups.length?groups.map(group=>`<section><h4>${escapeMarkup(group.display_name||group.key)}</h4><div>${(group.labels||[]).map(label=>`<span title="สถานะ: ${escapeMarkup(label.proof_status||'planned')}">${escapeMarkup(label.display_name||label.key)}<small>กำลังพิสูจน์</small></span>`).join('')}</div></section>`).join(''):'<div class="acoustic-empty">ยังไม่มี Candidate Registry</div>';
+
+  document.getElementById('acousticValidationSteps').innerHTML=phases.slice(0,4).map(item=>`<span class="${escapeMarkup(item.status||'planned')}"><b>${escapeMarkup(item.phase)}</b>${escapeMarkup(item.title)}<small>${escapeMarkup(acousticPhaseStatus(item.status))}</small></span>`).join('');
+  document.getElementById('acousticGuardrail').textContent='ไม่ส่งหรือเก็บ Raw audio · ไม่ถอดคำ/ระบุตัวบุคคล · ไม่เปลี่ยน Sleep State, Sleep Score, Recovery Score หรือ Control';
+
+  const pipeline=document.getElementById('acousticPipelineRows');
+  pipeline.innerHTML=phases.map(item=>`<article class="${escapeMarkup(item.status||'planned')}"><b>${escapeMarkup(item.phase)}</b><div><strong>${escapeMarkup(item.title)}</strong><span>${escapeMarkup(item.exit_gate||'รอเกณฑ์ผ่าน')}</span></div><em>${escapeMarkup(acousticPhaseStatus(item.status))}</em></article>`).join('')||'<div class="acoustic-empty">ยังไม่มี Pipeline</div>';
+  const missing=Array.isArray(data.evidence?.missing)?data.evidence.missing:[];
+  document.getElementById('acousticMissingFeatures').innerHTML=missing.map(item=>`<span>${escapeMarkup(acousticFeatureLabel(item))}</span>`).join('')||'<span>รอ Feature Contract</span>';
+  const provenance=data.provenance||{};
+  document.getElementById('acousticProvenance').innerHTML=`<div><span>Sound source</span><b>${escapeMarkup(provenance.sound_source||'--')}</b></div><div><span>Firmware</span><b>${escapeMarkup(provenance.firmware_version||'ยังไม่ยืนยัน')}</b></div><div><span>Feature schema</span><b>${escapeMarkup(provenance.feature_schema_version||'ยังไม่มี')}</b></div><div><span>Classifier</span><b>${escapeMarkup(provenance.classifier_version||'ยังไม่มี')}</b></div><div><span>Protocol</span><b>${escapeMarkup(validation.protocol_id||'--')}</b></div><div><span>BCG Snoring flag</span><b>หลักฐานแยก · ไม่ใช่ไมค์</b></div>`;
+  document.getElementById('acousticContractVersion').textContent=data.contract_version||'contract --';
+}
+
 function renderCalibrationInspector(data,{force=false}={}){
   calibrationInspectorState=data;
   const root=document.getElementById('calibrationInspector');

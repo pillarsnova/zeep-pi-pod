@@ -279,8 +279,9 @@ Firmware ที่ประกาศ `ARCHIVED / DO NOT FLASH` ไม่อย�
 
 วิธีรันและลดความซับซ้อน:
 
-1. ระหว่างพัฒนาให้รัน focused suite ตาม domain ที่แก้
-2. ก่อน push/deploy รัน Application release gate เต็ม
+1. ระหว่างพัฒนาและก่อน push ให้รัน focused suite ตาม domain ที่แก้
+2. ให้ CI รัน Application release gate เต็มหนึ่งครั้งต่อ Git SHA; เมื่อผ่านแล้ว
+   ไม่ต้องรันซ้ำบน Mac/Pi เว้นแต่งานข้ามระบบ ผลไม่แน่นอน หรือ CI ใช้งานไม่ได้
 3. ก่อน Code Freeze รัน Full Product Gate ของ Pi application รวม evidence/UI และ
    Production smoke; replacement Firmware ที่ยกเลิกแล้วไม่อยู่ใน gate นี้
 4. รวม fixture/helper ได้ แต่ลบ test ได้เมื่อ feature/route/data format ถูก retire และ

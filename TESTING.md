@@ -2,14 +2,38 @@
 
 รันจาก root ของ repository โดย activate environment ก่อน (`source
 pi5/.venv/bin/activate` บน Mac workspace หรือ `source .venv/bin/activate`
-บน Pi) ชุดเร็วใช้ตรวจระหว่างแก้ module ส่วนชุดเต็มเป็น release gate ก่อน
-push/deploy
+บน Pi) ค่าเริ่มต้นคือทดสอบเฉพาะส่วนที่เปลี่ยน ไม่รัน Full suite ซ้ำบน Mac, CI และ
+Pi โดยไม่มีเหตุผล
 
 จำนวน Test เปลี่ยนตาม Revision จึงต้องรายงานจากผลรันจริงพร้อม Git SHA ทุกครั้ง
 และห้ามใช้จำนวน Test เพียงอย่างเดียวประกาศว่า Full Product Gate ผ่าน เพราะการประกอบ
 UI, Evidence registry, Ruff และ Production smoke เป็นคนละ Gate
 
-## Fast focused suites
+## คำสั่งที่ใช้เป็นค่าเริ่มต้น
+
+```bash
+# ตรวจไฟล์ที่ต่างจาก origin/develop แล้วเลือกเฉพาะ domain ที่เกี่ยวข้อง
+python quality_gate.py changed
+
+# เลือกเองได้หนึ่งหรือหลาย domain
+python quality_gate.py sensor
+python quality_gate.py ui control
+
+# ดูแผนโดยยังไม่รัน
+python quality_gate.py changed --dry-run
+
+# ใช้เมื่อไม่มั่นใจ งานข้ามระบบ หรือก่อน Freeze
+python quality_gate.py full
+```
+
+Domain ที่รองรับ: `core`, `ui`, `sensor`, `control`, `sleep`, `score`, `session`,
+`auth`, `history`, `data`, `sync` และ `evidence` การแก้ไฟล์ Test/Infrastructure
+จะยกระดับตามความเสี่ยงโดยอัตโนมัติ
+
+## Focused suites
+
+ใช้ `quality_gate.py` เป็นทางหลัก รายการด้านล่างเป็นคำสั่งอ้างอิงเมื่อต้องการ
+ควบคุม Test module ด้วยตนเอง
 
 ```bash
 # Hardware และขอบเขต module
@@ -53,34 +77,50 @@ python -m unittest -q \
   test_pod_snapshot_export_limits.py
 ```
 
-## Application release gate
+## นโยบายก่อน Push และ Deploy
 
-Pi application suite เก็บไฟล์ `test_*.py` ที่ root และต้องผ่านโดยไม่มี
-failure/error ก่อน push หรือ deploy ส่วน JSON Schema test ต้องมี `jsonschema` จาก
-`requirements-dev.txt`; Skip ต้องมีเหตุผลและ Owner และ Freeze candidate ต้องบันทึก
-จำนวน Passed/Failed/Error/Skipped ตามผลจริง
+### งานปกติ
+
+1. รัน `python quality_gate.py changed`
+2. Push แล้วให้ GitHub CI รัน Full Application suite หนึ่งครั้ง
+3. หาก CI ผ่านบน Git SHA เดียวกัน ไม่ต้องรัน Full suite ซ้ำบน Mac หรือ Pi
+4. ก่อน Restart Pi รันเฉพาะ Production smoke ของ domain ที่เปลี่ยน
+
+### กรณีที่ต้องรัน Full
+
+- แก้หลาย domain หรือแก้ contract กลางแล้วผลกระทบไม่ชัด
+- เปลี่ยน test infrastructure, dependency, CI หรือ fixture กลาง
+- Focused test ให้ผลแปลก, flaky หรือมีข้อสงสัย
+- CI ใช้งานไม่ได้แต่ต้อง Deploy โดยตรง
+- Release candidate, Code Freeze, migration ข้อมูล หรือก่อนลบ legacy behavior
+- Product Owner/Reviewer ขอ Full Gate
+
+การแก้เอกสารทั่วไปเพียงอย่างเดียวใช้ `git diff --check`; Evidence library ใช้
+profile `evidence` และไม่ต้องรัน Sleep/Sensor suite
+
+## Application Full Gate
+
+Pi application suite เก็บไฟล์ `test_*.py` ที่ root ชุดเต็มใช้ตามเงื่อนไขด้านบน
+และยังเป็น CI gate ของทุก Python push ส่วน JSON Schema test ต้องมี `jsonschema`
+จาก `requirements-dev.txt`; Skip ต้องมีเหตุผลและ Owner และ Freeze candidate ต้อง
+บันทึกจำนวน Passed/Failed/Error/Skipped ตามผลจริง
 
 ```bash
-python -m unittest discover -q
-python ui_composer.py check
-ruff check zeep_pod
-ruff format --check zeep_pod
-python -m py_compile app.py *.py
-git diff --check
+python quality_gate.py full
 ```
 
 ## Production Pi smoke gate
 
-หลัง Mac ผ่าน Application release gate แล้ว ให้ Pi รัน smoke tests ก่อน restart:
+หลัง Focused gate หรือ CI ผ่านแล้ว ให้ Pi รัน smoke tests ก่อน restart:
 
 ```bash
 python -m unittest -q \
   test_modular_architecture.py test_sensor_services.py test_control_protocol.py
 ```
 
-ชุดนี้ตรวจขอบเขต module, Sensor services และ Control protocol เท่านั้น จำนวนจริง
-เพิ่มได้ตาม regression ใหม่และต้องรายงานจากผลรัน ไม่ใช่ Full Product Gate หากแก้
-Sleep, Session, Auth หรือ API ต้องเพิ่ม focused suite ของส่วนนั้นก่อน restart
+ชุดนี้ตรวจขอบเขต module, Sensor services และ Control protocol เท่านั้น ไม่ต้องรัน
+Full suite ซ้ำบน Pi หาก CI ของ Git SHA เดียวกันผ่านแล้ว หากแก้ Sleep, Session,
+Auth หรือ API ให้เพิ่ม focused profile ของส่วนนั้นก่อน restart
 
 ## v1 Code Freeze / Full Product Gate
 

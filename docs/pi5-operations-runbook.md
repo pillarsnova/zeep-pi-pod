@@ -113,12 +113,13 @@ sudo python3 approve_workstation.py \
 git status --short
 git branch --show-current
 source pi5/.venv/bin/activate
-python -m unittest discover -p 'test_*.py'
-python ui_composer.py check
+python quality_gate.py changed
 git diff --check
 ```
 
-รายละเอียดชุดทดสอบแบบเร็วและแบบเต็มอยู่ใน [`TESTING.md`](../TESTING.md)
+หาก CI ของ Git SHA เดียวกันผ่านแล้ว ไม่ต้องรัน Full suite ซ้ำบน Pi รายละเอียด
+เงื่อนไขที่ต้องใช้ `python quality_gate.py full` อยู่ใน
+[`TESTING.md`](../TESTING.md)
 
 ## Deploy ไป Pi
 

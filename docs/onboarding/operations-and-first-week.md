@@ -48,9 +48,10 @@ marker เองหรือคัดลอกจากเครื่องอ�
 
 ## เลือก test ตามสิ่งที่แก้
 
-เริ่มด้วย focused suite ของ domain แล้วจึงรัน full gate ก่อน push/deploy อย่าใช้
-จำนวน test คงที่เป็นเกณฑ์ เพราะ suite เปลี่ยนได้ ให้บันทึก Git SHA, environment,
-passed/failed/error/skipped และ hardware ที่ได้หรือไม่ได้ทดสอบ
+ใช้ `python quality_gate.py changed` เป็นค่าเริ่มต้นและให้ CI รัน Full Gate หนึ่งครั้ง
+ต่อ Git SHA ไม่ต้องรันชุดเต็มซ้ำก่อนทุก push/deploy ยกเว้นงานข้ามระบบ ผลไม่แน่นอน
+หรือ Code Freeze ให้บันทึก Git SHA, environment, passed/failed/error/skipped และ
+hardware ที่ได้หรือไม่ได้ทดสอบ
 
 รายการคำสั่งและชุดทดสอบปัจจุบันอยู่ที่ [TESTING.md](../../TESTING.md) เท่านั้น
 หลักที่ต้องรักษาคือ:

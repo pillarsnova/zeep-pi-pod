@@ -736,12 +736,15 @@ Evidence probability และ confirmed state ถูกแยกเพื่อ
 รันจาก `/home/pod1/pi5` บน Pi:
 
 ```bash
-.venv/bin/python -m unittest discover -p 'test_*.py'
+.venv/bin/python quality_gate.py sleep score session
 .venv/bin/python -m py_compile app.py sleep_system_policy.py \
   sleep_session_report.py reclassify_sleep_history.py rescore_session_reports.py
 sqlite3 data/sessions.db 'PRAGMA integrity_check;'
 systemctl is-active zeep-pod.service
 ```
+
+Full Application Gate ใช้ผล CI ของ Git SHA เดียวกัน หาก CI ใช้งานไม่ได้ ผล focused
+ผิดปกติ หรืองานกระทบหลาย domain จึงใช้ `.venv/bin/python quality_gate.py full`
 
 ตรวจเพิ่มเติมหลัง deploy:
 

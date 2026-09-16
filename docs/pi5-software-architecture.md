@@ -147,11 +147,12 @@ Dashboard, Session และ Safety ต้องอ่านค่าจาก *
 
 ```bash
 git pull --ff-only origin develop
-python -m unittest discover -p 'test_*.py'
-python ui_composer.py check
-python -m py_compile app.py *.py
+python quality_gate.py changed
 git diff --check
 ```
+
+ใช้ `python quality_gate.py full` เฉพาะงานข้ามระบบ ผลไม่แน่นอน Release candidate
+หรือเมื่อ CI ของ Git SHA ที่จะ Deploy ไม่พร้อมใช้งาน
 
 ก่อน restart production ให้บันทึกสถานะ service และ Active Session หลัง restart ต้อง
 ตรวจ `systemctl`, `/api/public/status`, Sensor/Hub/BCG connectivity, Safety faults

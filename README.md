@@ -109,9 +109,9 @@ Dashboard, Session, Safety และ Report ต้องอ่าน canonical S
 
 ## ตรวจงานก่อนส่ง Review
 
-เริ่มด้วย focused suite ของส่วนที่แก้ แล้วรัน Full Application/Product Gate ตาม
-[TESTING.md](TESTING.md) ก่อน push หรือ deploy อย่าใช้จำนวน test คงที่เป็นเกณฑ์
-สำเร็จ ให้บันทึก Git SHA, ผลจริง, skip และ Hardware/Production smoke ที่ยังไม่ได้ทำ
+ใช้ `python quality_gate.py changed` เพื่อรันเฉพาะส่วนที่แก้ตาม
+[TESTING.md](TESTING.md) แล้วให้ CI ทำ Full Gate หนึ่งครั้งต่อ Git SHA ไม่ต้องรัน
+ชุดเต็มซ้ำบน Mac และ Pi ยกเว้นงานข้ามระบบ ผลไม่แน่นอน หรือ Code Freeze
 
 แก้ UI ที่ `static/index.template.html` หรือ `static/partials/` แล้วตรวจด้วย:
 

@@ -334,7 +334,7 @@ function renderPersonalRestBaseline(sleep={},session={}){
   if(!available){
     title.textContent='กำลังเรียนรู้ช่วงเวลาของคุณ';
     evidence.textContent='ครั้งถัดไป ZEEP จะเริ่มเปรียบเทียบกับข้อมูลครั้งนี้';
-    status.textContent='ครั้งแรก';
+    status.textContent='ข้อมูลครั้งที่ 1';
     time.textContent='กำลังเรียนรู้';
     duration.textContent='บันทึกเฉพาะรูปแบบการพักครั้งนี้';
     score.textContent='พักอย่างเป็นธรรมชาติได้เลย';

@@ -133,6 +133,13 @@ class UiComposerTests(unittest.TestCase):
         self.assertNotIn('id="dashPersonalRestEnvironment"', template)
         self.assertIn("คุณยืนยันก่อนปรับอุปกรณ์", template)
         self.assertIn(".dash-personal-rest-baseline", css)
+        section_start = template.index('id="dashPersonalRestBaseline"')
+        section_end = template.index("</section>", section_start)
+        baseline_section = template[section_start:section_end]
+        self.assertIn('href="#ui-icon-diagnostics"', baseline_section)
+        self.assertNotIn("<circle", baseline_section)
+        self.assertNotIn("radial-gradient(circle at 92% 12%", css)
+        self.assertIn("ข้อมูลครั้งที่ 1", template)
         self.assertNotIn("ปรับอุปกรณ์ให้อัตโนมัติ", template)
 
     def test_sound_ui_uses_direct_canonical_esp32_value(self):

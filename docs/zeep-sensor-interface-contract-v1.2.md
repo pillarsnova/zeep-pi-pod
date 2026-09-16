@@ -53,13 +53,12 @@ Pi จะรับเฉพาะ `event=environment` ที่ระบุ `hub
 SHT3x-DIS หรือ OPT3001 หาย และในทางกลับกัน
 
 `temperature_c` และ `humidity_rh` ใน Packet เป็นค่าต้นทางจาก SHT3x-DIS
-Pi เก็บไว้ใน `raw_values` ก่อนสร้าง canonical environment แล้วจึงใช้ค่าชดเชยจาก
-[`calibration.json`](../calibration.json) ปัจจุบันคือ `+0.2°C` และ `−7.0`
-percentage points ตามลำดับ โดยทั้งคู่เป็น
-`provisional_one_point_field_calibration`; ห้ามเขียนค่าชดเชยกลับไปทับ Raw และต้อง
-ตรวจซ้ำหลายจุดก่อนยกระดับสถานะ Calibration ค่านี้เป็น versioned default;
-deployment อาจกำหนด `HUMIDITY_RH_BIAS` เพื่อ override เฉพาะ Pod ได้ โดย env มี
-precedence และต้องบันทึก effective value/provenance ใน Admin QA ก่อนเปิดใช้งาน
+Pi เก็บไว้ใน `raw_values` ก่อนสร้าง canonical environment นโยบายปัจจุบันใน
+[`calibration.json`](../calibration.json) คือ direct passthrough: อุณหภูมิและ
+ความชื้นใช้ Bias `0.0` จึงแสดงค่าจาก SHT3x-DIS โดยตรง การเทียบหนึ่งจุดเมื่อ
+4 กันยายน 2569 เก็บเป็นประวัติ QA เท่านั้นและไม่ถูกนำมาใช้ ห้ามเขียนค่าใดกลับไป
+ทับ Raw; deployment อาจกำหนด `HUMIDITY_RH_BIAS` เฉพาะ Pod ได้ต่อเมื่อมีการ
+สอบเทียบใหม่ที่อนุมัติและบันทึก provenance โดย env มี precedence
 
 ช่วง Rollback เท่านั้น Pi ยังรับ flat packet ที่ไม่มี `event` เมื่อพบ field ของ
 Hub 1 ใน allowlist ชัดเจน เช่น `temperature_c`, `humidity_rh` หรือ `lux` ส่วน

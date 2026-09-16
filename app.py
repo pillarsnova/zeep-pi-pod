@@ -669,9 +669,9 @@ def _load_calibration() -> Dict[str, Any]:
 
 CALIBRATION = _load_calibration()
 
-# SHT3x-DIS display values use the approved additive adjustment in
-# calibration.json.  The raw Hub 1 payload remains unchanged for audit and
-# future meter-based recalibration.
+# SHT3x-DIS display values follow the versioned policy in calibration.json.
+# The active policy is direct passthrough (zero additive bias); raw Hub 1 data
+# remains unchanged for audit and any future controlled recalibration.
 _ENV_HUMIDITY_BIAS = os.getenv("HUMIDITY_RH_BIAS")
 if _ENV_HUMIDITY_BIAS is not None:
     HUMIDITY_RH_BIAS = float(_ENV_HUMIDITY_BIAS)

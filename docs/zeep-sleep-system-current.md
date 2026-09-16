@@ -673,16 +673,11 @@ health record เดิม การแก้ derived record จริงยั�
 
 ## 7. Sensor calibration ที่เกี่ยวกับรายงาน
 
-- Temperature ใน canonical environment snapshot และหน้าแสดงผลใช้
-  `displayed °C = raw SHT3x-DIS °C + 0.2 °C`
-- Humidity ใน canonical environment snapshot และหน้าแสดงผลใช้
-  `displayed %RH = raw SHT3x-DIS %RH - 7.0 percentage points`
-- ค่าชดเชยอุณหภูมิ/ความชื้นข้างต้นมีสถานะ
-  `provisional_one_point_field_calibration` ตาม `calibration.json`: เป็นการเทียบ
-  ร่วมตำแหน่งเพียงหนึ่งจุดเมื่อ 4 กันยายน 2569
-  (Dashboard 18.2°C/65.0%RH เทียบกับ reference 18.4°C/61.0%RH
-  โดยค่าความชื้นที่แสดงเดิมรวมค่าชดเชย -3 จุดเปอร์เซ็นต์แล้ว)
-  จึงต้องตรวจซ้ำด้วย synchronized multi-point readings หลังอุปกรณ์นิ่ง
+- Temperature และ Humidity ใน canonical environment snapshot และหน้าแสดงผล
+  ใช้ค่า SHT3x-DIS โดยตรง: `displayed = raw` และ Bias ทั้งคู่เป็น `0.0`
+- การเทียบร่วมตำแหน่งหนึ่งจุดเมื่อ 4 กันยายน 2569 ถูกยกเลิกจาก Runtime แล้ว
+  และเก็บไว้เป็น QA history ใน `calibration.json` เท่านั้น หากจะใช้ Bias ใหม่
+  ต้องสอบเทียบแบบ synchronized หลายจุดหลังอุปกรณ์นิ่งและอนุมัติ version ใหม่
 - Raw Hub diagnostics ยังเก็บค่าต้นทางโดยไม่แก้ไข และรายงานต้องเก็บ
   calibration provenance เพื่อให้ย้อนตรวจได้; ห้ามเขียนทับ Raw
 - Sound รับ `sound_dba` จาก ESP32 โดยตรงตาม Sensor Contract v1.2 โดย Pi ไม่ทำ

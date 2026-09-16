@@ -60,10 +60,12 @@ class CalibrationServiceTests(unittest.TestCase):
         self.assertEqual(apply_additive_bias("unknown", 12.3, biases=biases), 12.3)
         self.assertIsNone(apply_additive_bias("humidity_rh", None, biases=biases))
 
-    def test_approved_sht3x_field_biases_match_reference_pair(self) -> None:
+    def test_sht3x_uses_direct_passthrough_after_bias_clear(self) -> None:
         document = load_calibration(Path(__file__).with_name("calibration.json"))
-        self.assertEqual(document["temperature_c_bias"], 0.2)
-        self.assertEqual(document["humidity_rh_bias"], -7.0)
+        self.assertEqual(document["temperature_c_bias"], 0.0)
+        self.assertEqual(document["humidity_rh_bias"], 0.0)
+        self.assertEqual(document["temperature_status"], "direct_passthrough")
+        self.assertEqual(document["humidity_status"], "direct_passthrough")
         self.assertEqual(
             document["sound_processing"]["status"],
             "active_direct_passthrough",
@@ -89,11 +91,11 @@ class CalibrationServiceTests(unittest.TestCase):
         )
         self.assertEqual(
             apply_additive_bias("temperature_c", 18.2, biases=biases),
-            18.4,
+            18.2,
         )
         self.assertEqual(
             apply_additive_bias("humidity_rh", 68.0, biases=biases),
-            61.0,
+            68.0,
         )
 
     def test_sound_inspector_reports_direct_pipeline_without_calibration_gate(

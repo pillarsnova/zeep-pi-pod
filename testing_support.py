@@ -30,6 +30,7 @@ def configure_app_test_environment() -> Path:
     os.environ["EVENT_LOG_PATH"] = str(root / "logs" / "events.jsonl")
     os.environ["EVENT_LOG_FILE_ENABLED"] = "0"
     os.environ["EVENT_LOG_STDOUT_ENABLED"] = "0"
+    os.environ["ZEEP_GPIO_ENABLED"] = "0"
     os.environ["POD_ID"] = "test-pod-01"
     os.environ["AIRCON_POWER_ON_DEFAULT_TEMP_C"] = "18"
     os.environ["CONTROLHUB1_MIN_IR_GAP_SECONDS"] = "0"

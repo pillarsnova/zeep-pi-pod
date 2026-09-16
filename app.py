@@ -1089,9 +1089,6 @@ state: Dict[str, Any] = {
 
 
 gpio = GPIOManager(GPIO_PINS, state, state_lock)
-with state_lock:
-    state["system"]["gpio_available"] = gpio.ready
-    state["system"]["gpio_error"] = gpio.error
 
 
 player = AudioPlayer(
@@ -5500,10 +5497,14 @@ def _restore_interrupted_session() -> Optional[str]:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    database.initialize()
+    auth_sessions.initialize()
+    occupancy_store.initialize()
+    baselines.initialize()
+    gpio.initialize()
     log_event("system", "start", gpio=gpio.ready, player=player.backend)
     with state_lock:
         state["system"]["occupancy"] = occupancy_client.health()
-    database.initialize()
     try:
         result = migrate_jsonl(database, SESSIONS_PATH)
         if result["status"] == "migrated":
@@ -5537,8 +5538,7 @@ async def lifespan(_: FastAPI):
     try:
         _restore_latest_sensor_frame()
     except Exception as exc:
-        # A damaged optional display cache must never block the Pod service.
-        # Hardware readers still replace it at the first canonical live frame.
+        # A damaged display cache must not block startup; live readers replace it.
         log_event("sensor_frame", "restart_restore_failed", error=str(exc))
     try:
         # Nights recorded while the account backend was unreachable.

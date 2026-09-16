@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import time
-from threading import Lock
+from threading import Lock, RLock
 from typing import Any
 
 from fastapi import HTTPException
@@ -32,13 +32,37 @@ class GPIOManager:
         self._pins = dict(pins)
         self._state = state
         self._state_lock = state_lock
+        self._lifecycle_lock = RLock()
         self.devices: dict[str, Any] = {}
         self.factory: Any = None
         self.error: str | None = None
+
+    def initialize(self) -> bool:
+        """Acquire GPIO resources explicitly during application startup.
+
+        Constructing the manager is intentionally side-effect free so offline
+        tools can import the FastAPI composition root without touching GPIO.
+        Production keeps GPIO enabled by default; ``ZEEP_GPIO_ENABLED=0`` is
+        the explicit opt-out for replay tools and tests.
+        """
+        with self._lifecycle_lock:
+            ready = self._initialize_hardware()
+            self._publish_status(ready)
+            return ready
+
+    def _initialize_hardware(self) -> bool:
+        """Acquire configured outputs without exposing partial readiness."""
+        if not _gpio_enabled():
+            self.close()
+            self.error = "GPIO ถูกปิดด้วย ZEEP_GPIO_ENABLED=0"
+            return False
+        if self.ready:
+            self.error = None
+            return True
         if not GPIO_AVAILABLE:
             self.error = "GPIO เชื่อมต่อไม่ได้ (ไม่พบ gpiozero/lgpio ในเครื่องนี้)"
             print(f"[GPIO] {self.error}")
-            return
+            return False
 
         attempts = max(1, int(os.getenv("GPIO_INIT_ATTEMPTS", "10")))
         delay = max(
@@ -57,7 +81,7 @@ class GPIOManager:
                     )
                 self.error = None
                 print(f"[GPIO] connected: chip=0, outputs={len(self.devices)}")
-                return
+                return True
             except Exception as exc:
                 self.close()
                 self.error = f"GPIO เชื่อมต่อไม่ได้: {exc}"
@@ -67,27 +91,38 @@ class GPIOManager:
                     time.sleep(delay)
                     continue
                 print(f"[GPIO] {self.error}")
-                return
+                return False
+        return False
+
+    def _publish_status(self, ready: bool) -> None:
+        """Publish one synchronized status snapshot for API and Safety."""
+        with self._state_lock:
+            system = self._state.setdefault("system", {})
+            system["gpio_available"] = ready
+            system["gpio_error"] = self.error
 
     def close(self) -> None:
         """Release output devices and the lgpio factory."""
-        for device in self.devices.values():
-            try:
-                device.close()
-            except Exception:
-                pass
-        self.devices = {}
-        if self.factory is not None:
-            try:
-                self.factory.close()
-            except Exception:
-                pass
-        self.factory = None
+        with self._lifecycle_lock:
+            for device in self.devices.values():
+                try:
+                    device.close()
+                except Exception:
+                    pass
+            self.devices = {}
+            if self.factory is not None:
+                try:
+                    self.factory.close()
+                except Exception:
+                    pass
+            self.factory = None
+            self._publish_status(False)
 
     @property
     def ready(self) -> bool:
         """Return whether every configured output is available."""
-        return len(self.devices) == len(self._pins)
+        with self._lifecycle_lock:
+            return len(self.devices) == len(self._pins)
 
     def require_ready(self) -> None:
         """Reject a control request unless all outputs initialized."""
@@ -99,27 +134,36 @@ class GPIOManager:
 
     def set(self, name: str, on: bool) -> None:
         """Set one configured output and update the shared state."""
-        if name not in self._pins:
-            raise KeyError(name)
-        if not self.ready:
-            raise RuntimeError(self.error or "GPIO เชื่อมต่อไม่ได้")
-        device = self.devices[name]
-        if on:
-            device.on()
-        else:
-            device.off()
-        with self._state_lock:
-            self._state["gpio"][name] = bool(on)
+        with self._lifecycle_lock:
+            if name not in self._pins:
+                raise KeyError(name)
+            if not self.ready:
+                raise RuntimeError(self.error or "GPIO เชื่อมต่อไม่ได้")
+            device = self.devices[name]
+            if on:
+                device.on()
+            else:
+                device.off()
+            with self._state_lock:
+                self._state["gpio"][name] = bool(on)
 
     def all_off(self) -> None:
         """Best-effort shutdown of every configured output."""
-        for name in self._pins:
-            try:
-                self.set(name, False)
-            except Exception:
-                pass
+        with self._lifecycle_lock:
+            for name in self._pins:
+                try:
+                    self.set(name, False)
+                except Exception:
+                    pass
 
     def shutdown(self) -> None:
         """Turn outputs off and release all GPIO resources."""
-        self.all_off()
-        self.close()
+        with self._lifecycle_lock:
+            self.all_off()
+            self.close()
+
+
+def _gpio_enabled() -> bool:
+    """Return the process-level GPIO opt-in, enabled by default."""
+    value = os.getenv("ZEEP_GPIO_ENABLED", "1").strip().lower()
+    return value not in {"0", "false", "no", "off"}

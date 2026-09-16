@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 import statistics
-import threading
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
@@ -54,6 +53,7 @@ from zeep_pod.identity.account_aliases import (
     normalize_account_key,
     verified_legacy_account_keys,
 )
+from zeep_pod.sessions.baseline_cache import BaselineCacheLifecycle
 from zeep_pod.sessions.personal_behaviour import (
     aggregate_behaviour_by_mode,
     empty_best_rest_window,
@@ -146,7 +146,7 @@ def _normalized_baseline_records(value: Any) -> dict[str, Any]:
     return normalized
 
 
-class BaselineStore:
+class BaselineStore(BaselineCacheLifecycle):
     """เก็บ/คำนวณ baseline ต่อ account key ลง data/baselines.json.
 
     ZEEP accounts use normalized email; local fallback retains its local
@@ -155,18 +155,11 @@ class BaselineStore:
 
     def __init__(self, database, data_dir: Path):
         self.database = database
-        self.path = Path(data_dir) / "baselines.json"
+        super().__init__(
+            Path(data_dir) / "baselines.json",
+            _normalized_baseline_records,
+        )
         self.profiles_path = Path(data_dir) / "profiles.json"
-        self.lock = threading.Lock()
-        self.data: dict[str, Any] = {}
-        try:
-            with self.path.open("r", encoding="utf-8") as f:
-                loaded = json.load(f)
-            self.data = _normalized_baseline_records(loaded)
-        except FileNotFoundError:
-            pass
-        except Exception as exc:
-            print(f"[BASELINE] ignoring invalid baselines.json: {exc}")
 
     def _profiles_snapshot(self) -> dict[str, Any]:
         """Read one atomic Profile snapshot; malformed data yields no aliases."""

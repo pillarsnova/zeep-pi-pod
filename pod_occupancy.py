@@ -75,34 +75,50 @@ class OccupancyStore:
         self.path = data_dir / "occupancy.db"
         self.ttl_seconds = max(15, ttl_seconds)
         self._lock = threading.RLock()
-        self._initialize()
+        self._initialized = False
 
     def _connect(self) -> sqlite3.Connection:
+        self.initialize()
+        return self._open_connection()
+
+    def _open_connection(self) -> sqlite3.Connection:
+        """Open SQLite without recursively triggering schema initialization."""
         connection = sqlite3.connect(self.path, timeout=10, isolation_level=None)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA busy_timeout=10000")
         return connection
 
-    def _initialize(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with closing(self._connect()) as connection:
-            connection.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS occupancy_leases (
-                    lease_id TEXT PRIMARY KEY,
-                    subject TEXT NOT NULL UNIQUE,
-                    pod_id TEXT NOT NULL UNIQUE,
-                    pod_session_id TEXT NOT NULL,
-                    username TEXT NOT NULL,
-                    acquired_at REAL NOT NULL,
-                    updated_at REAL NOT NULL,
-                    expires_at REAL NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS idx_occupancy_expiry
-                    ON occupancy_leases(expires_at);
-                """
-            )
+    def initialize(self) -> None:
+        """Create the lease registry explicitly and at most once per process."""
+        with self._lock:
+            if self._initialized:
+                return
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with closing(self._open_connection()) as connection:
+                connection.executescript(
+                    """
+                    CREATE TABLE IF NOT EXISTS occupancy_leases (
+                        lease_id TEXT PRIMARY KEY,
+                        subject TEXT NOT NULL UNIQUE,
+                        pod_id TEXT NOT NULL UNIQUE,
+                        pod_session_id TEXT NOT NULL,
+                        username TEXT NOT NULL,
+                        acquired_at REAL NOT NULL,
+                        updated_at REAL NOT NULL,
+                        expires_at REAL NOT NULL
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_occupancy_expiry
+                        ON occupancy_leases(expires_at);
+                    """
+                )
+            self._initialized = True
+
+    @property
+    def initialized(self) -> bool:
+        """Report whether the schema has been prepared in this process."""
+        with self._lock:
+            return self._initialized
 
     @staticmethod
     def _row(row: sqlite3.Row) -> OccupancyLease:

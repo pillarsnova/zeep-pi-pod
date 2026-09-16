@@ -92,21 +92,41 @@ class AuthSessionManager:
         self.local_admin_accounts_file = Path(os.getenv(
             "LOCAL_ADMIN_ACCOUNTS_FILE", str(data_dir / "local_admins.json")
         )).expanduser()
-        self._local_admin_accounts = self._load_local_admin_accounts()
+        self._local_admin_accounts: dict[str, tuple[str, str]] = {}
         self._lock = threading.RLock()
         self._offline_tickets: dict[str, tuple[str, float]] = {}
-        self._initialize()
+        self._initialized = False
 
     def _connect(self) -> sqlite3.Connection:
+        self.initialize()
+        return self._connect_unchecked()
+
+    def _connect_unchecked(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path, timeout=10)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA busy_timeout=10000")
         return connection
 
-    def _initialize(self) -> None:
+    def initialize(self) -> None:
+        """Load configuration and create storage once at runtime startup.
+
+        Construction stays side-effect free so importing the web application
+        cannot read account files or create SQLite storage.  The app lifespan
+        calls this method explicitly; public operations retain a guarded lazy
+        fallback for callers that do not run an ASGI lifespan (notably tests).
+        """
+        with self._lock:
+            if self._initialized:
+                return
+            local_admin_accounts = self._load_local_admin_accounts()
+            self._initialize_database()
+            self._local_admin_accounts = local_admin_accounts
+            self._initialized = True
+
+    def _initialize_database(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with closing(self._connect()) as connection, connection:
+        with closing(self._connect_unchecked()) as connection, connection:
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS auth_sessions (
@@ -145,6 +165,12 @@ class AuthSessionManager:
                 "CREATE INDEX IF NOT EXISTS idx_auth_account_key "
                 "ON auth_sessions(account_key, expires_at)"
             )
+
+    @property
+    def initialized(self) -> bool:
+        """Report whether account configuration and schema are ready."""
+        with self._lock:
+            return self._initialized
 
     def create(
         self,
@@ -370,6 +396,7 @@ class AuthSessionManager:
 
     @property
     def local_admin_enabled(self) -> bool:
+        self.initialize()
         return bool(self._local_admin_accounts)
 
     def _load_local_admin_accounts(self) -> dict[str, tuple[str, str]]:
@@ -423,6 +450,7 @@ class AuthSessionManager:
 
     def authenticate_local_admin(self, username: str, password: str) -> Optional[str]:
         """Return the configured username after constant-work password checks."""
+        self.initialize()
         candidate = username.strip().casefold()
         matched: Optional[str] = None
         # Verify every configured hash. Besides keeping the code simple for a

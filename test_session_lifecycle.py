@@ -41,8 +41,10 @@ class SessionCheckpointStoreTests(unittest.TestCase):
                 "session_id": "session-1",
                 "username": "person@example.test",
                 "username_key": "person@example.test",
+                "display_name": "Person",
                 "identity_subject": "zeep:person-1",
                 "pod_id": "pod-1",
+                "wellness_context": {"caffeine": "none"},
                 "rest_mode": "overnight",
                 "target_duration_s": 25_200,
                 "private_field": "must-not-be-persisted",
@@ -75,6 +77,11 @@ class SessionCheckpointStoreTests(unittest.TestCase):
         self.assertEqual(payload["sleep_context"]["awake_hr_reference"], 74.0)
         self.assertEqual(len(payload["sleep_context"]["awake_vital_pairs"]), 6)
         self.assertEqual(payload["record"]["target_duration_s"], 25_200)
+        self.assertEqual(payload["record"]["display_name"], "Person")
+        self.assertEqual(
+            payload["record"]["wellness_context"],
+            {"caffeine": "none"},
+        )
         self.assertIs(payload["sleep_context"]["off_bed_latched"], True)
         self.assertEqual(
             payload["safety_context"],

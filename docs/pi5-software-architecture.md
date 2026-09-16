@@ -30,6 +30,7 @@ app, ต่อ lifecycle, ประกอบ dependency และเรียก
 | Sensor transports | `hardware/sensorhub1.py`, `sensorhub2.py` | USB/MQTT readers ที่รับ state และ callback จาก composition root |
 | BCG transport | `hardware/bcg.py`, `sensors/bcg.py` | LSM-800-T framing/reconnect, byte parser และ live-state publication; `app.bcg_reader()` เป็น compatibility facade |
 | Sensor-frame sampling | `sessions/sensor_frame_sampler.py` | รวม BCG + canonical environment ตาม cadence 10 วินาที; ไม่ตัดสิน Sleep Stage |
+| Live Session projection | `sessions/live_projection.py` | Contract และ pure builders ของสถานะ Session 20 fields; Login, Restart และ Finalize ใช้ shape เดียวกัน |
 | Live API projection | `api/state_projection.py` | ประกอบ freshness/stale/fallback ของ Hub, BCG และ Control จาก detached snapshot โดยไม่แก้ live reader state |
 | Control transports | `hardware/controlhub1.py`, `controlhub2.py` | MQTT command/ACK ของแอร์และเตียง แยกจาก HTTP routes |
 | Control intent persistence | `hardware/aircon_reference.py` | Repository เก็บค่าอ้างอิงพัดลม 1–5 แบบ atomic; constructor ไม่เปิดไฟล์และ initialize ใน lifespan |
@@ -181,12 +182,25 @@ Onboarding ใช้เอกสารนี้เป็น Roadmap ทางเ
 | R5 | เสร็จแล้ว | API package, response envelope และ thin compatibility facades |
 | R6 | เสร็จแล้ว | Sensor package แยก contract/catalog/constants/BCG/calibration/environment/normalization/sound และ shared value library |
 | R7a | เสร็จแล้ว | Aircon fan-reference ใช้ Repository + explicit lifespan initialization; import `app.py` ไม่อ่านหรือเขียนไฟล์ reference |
+| R7b | เสร็จแล้ว | Live Session ใช้ typed Contract + pure projection module + app Adapter/Facade; Restart รักษา Wellness context และ Logout ล้าง Personal context ครบ |
 
-`app.py` คงอยู่ที่ไม่เกิน 8,004 บรรทัด และเป็น composition root ต่อไป ส่วน API,
+`app.py` คงอยู่ที่ไม่เกิน 7,995 บรรทัด และเป็น composition root ต่อไป ส่วน API,
 Sensor contract/calibration/normalization/environment/sound และ value helpers อยู่ใน
 package ตามโดเมนแล้ว ไฟล์ชื่อเดิมที่ root เหลือเป็น facade บางเพื่อรักษา script/test
-เดิม การย้ายนี้ไม่เปลี่ยน Sleep/Score formula, Sensor cadence, public JSON key หรือ
-คำสั่ง Hardware
+เดิม การย้ายนี้ไม่เปลี่ยน Sleep/Score formula, Sensor cadence, ชื่อ public JSON key
+หรือคำสั่ง Hardware แต่ทำให้ Live Session shape ครบ 20 fields ในทุก phase
+
+Live Session boundary ใช้รูปแบบเดียวกันตลอดระบบ:
+
+- **Contract** — `LiveSessionProjection`, `VitalGateProjection` และ
+  `SessionPublicIdentity` กำหนดข้อมูลที่อนุญาต
+- **Module/Library** — pure builders สร้าง active/inactive state โดยไม่อ่าน Database,
+  Profile, Clock หรือ Hardware
+- **Adapter** — composition root แปลง Profile, Checkpoint และ Personal Baseline เป็น
+  input ของ builder
+- **Facade** — `_replace_session_projection_locked()` และ
+  `_patch_session_projection_locked()` เป็นทางเขียน live state เพียงจุดเดียว โดยรักษา
+  object identity และลำดับ lock เดิม
 
 ### 6.2 Working candidate ที่ยังไม่ใช่ Release fact
 
@@ -203,8 +217,9 @@ package ตามโดเมนแล้ว ไฟล์ชื่อเดิ�
 
 1. ปิด import side effects ของ Music/Audio discovery พร้อม lifecycle rollback และ
    thread registry ที่ deterministic
-2. แยก Session lifecycle: waiting-bed, vital gate, start, resume, finalize และ
-   checkpoint orchestration โดยรักษา Restart continuity
+2. แยก Session lifecycle orchestration ที่เหลือ: waiting-bed, start, resume และ
+   finalize ออกจาก composition root โดยใช้ Live Session contract ที่แยกแล้วและรักษา
+   Restart continuity
 3. ทำ Sleep estimator facade ให้รับ typed input แล้ว delegate ไปยัง feature,
    scorer และ policy เดิม พร้อม golden replay; ห้ามเปลี่ยน threshold ใน change นี้
 4. รวม report pipeline ที่ซ้ำระหว่าง Live, Replay, Rescore และ Trim ให้ใช้ contract เดียว

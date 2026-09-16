@@ -24,7 +24,7 @@ DOMAIN_PACKAGE_NAMES = (
 DOMAIN_PACKAGES = tuple(ROOT / name for name in DOMAIN_PACKAGE_NAMES)
 MAX_PACKAGE_FILE_LINES = 500
 MAX_FUNCTION_LINES = 90
-MAX_APP_LINES = 8_004
+MAX_APP_LINES = 7_995
 MAX_SNAPSHOT_FUNCTION_LINES = 118
 MAX_BCG_READER_FACADE_LINES = 31
 MAX_SENSOR_FRAME_SAMPLER_FACADE_LINES = 27
@@ -93,6 +93,35 @@ LEGACY_FUNCTION_LINE_CAPS = {
 }
 
 
+def _is_state_session_subscript(node: ast.AST) -> bool:
+    return bool(
+        isinstance(node, ast.Subscript)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "state"
+        and isinstance(node.slice, ast.Constant)
+        and node.slice.value == "session"
+    )
+
+
+def _targets_session_state(node: ast.AST) -> bool:
+    if _is_state_session_subscript(node):
+        return True
+    if isinstance(node, ast.Subscript):
+        return _targets_session_state(node.value)
+    if isinstance(node, (ast.Tuple, ast.List)):
+        return any(_targets_session_state(item) for item in node.elts)
+    return False
+
+
+def _is_session_mutator_call(node: ast.Call) -> bool:
+    function = node.func
+    return bool(
+        isinstance(function, ast.Attribute)
+        and function.attr in {"clear", "pop", "setdefault", "update"}
+        and _is_state_session_subscript(function.value)
+    )
+
+
 class ModularArchitectureTests(unittest.TestCase):
     """Keep new domain modules small and independent from ``app.py``."""
 
@@ -157,6 +186,40 @@ class ModularArchitectureTests(unittest.TestCase):
     def test_composition_root_cannot_grow(self) -> None:
         app_lines = len((ROOT / "app.py").read_text(encoding="utf-8").splitlines())
         self.assertLessEqual(app_lines, MAX_APP_LINES)
+
+    def test_live_session_state_writes_use_the_app_facade(self) -> None:
+        tree = ast.parse((ROOT / "app.py").read_text(encoding="utf-8"))
+        allowed = {
+            "_patch_session_projection_locked",
+            "_replace_session_projection_locked",
+        }
+        offenders: list[str] = []
+        functions = (
+            node
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        )
+        for function in functions:
+            for node in ast.walk(function):
+                if isinstance(node, ast.Call) and _is_session_mutator_call(node):
+                    if function.name not in allowed:
+                        offenders.append(f"{function.name}:{node.lineno}")
+                if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+                    targets = (
+                        node.targets
+                        if isinstance(node, ast.Assign)
+                        else [node.target]
+                    )
+                    if any(_targets_session_state(target) for target in targets):
+                        if function.name not in allowed:
+                            offenders.append(f"{function.name}:{node.lineno}")
+                    if (
+                        isinstance(node, ast.Assign)
+                        and _is_state_session_subscript(node.value)
+                        and function.name != "_replace_session_projection_locked"
+                    ):
+                        offenders.append(f"{function.name}:{node.lineno}:alias")
+        self.assertEqual(offenders, [])
 
     def test_root_compatibility_facades_remain_thin(self) -> None:
         oversized = {

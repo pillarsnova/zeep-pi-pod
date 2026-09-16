@@ -719,8 +719,16 @@ class RbacApiTests(unittest.TestCase):
                 json={"identifier": "restart-waiting", "password": "valid"},
             )
             self.assertEqual(login.status_code, 200, login.text)
-            session_id = login.json()["session"]["session_id"]
-            health = login.json()["session"]["health_reference"]
+            login_session = login.json()["session"]
+            session_id = login_session["session_id"]
+            health = login_session["health_reference"]
+            expected_session_keys = set(
+                pod_app.inactive_session_projection(
+                    required_packets=pod_app.SESSION_VITAL_START_PACKETS,
+                    reason="test",
+                )
+            )
+            self.assertEqual(set(login_session), expected_session_keys)
             self.assertEqual(health["gender"], "female")
             self.assertEqual(health["height_cm"], 165.4)
             self.assertEqual(health["weight_kg"], 56.2)
@@ -770,11 +778,31 @@ class RbacApiTests(unittest.TestCase):
             self.assertEqual(
                 restored["record"]["health_reference"]["blood_group"], "O+"
             )
+            with pod_app.state_lock:
+                restored_public = dict(pod_app.state["session"])
+            self.assertEqual(set(restored_public), expected_session_keys)
+            self.assertEqual(
+                restored_public["display_name"],
+                login_session["display_name"],
+            )
+            self.assertEqual(
+                restored_public["wellness_context_available"],
+                login_session["wellness_context_available"],
+            )
+            self.assertEqual(
+                restored_public["personal_rest_baseline"],
+                login_session["personal_rest_baseline"],
+            )
             me = user.get("/api/auth/me")
             self.assertEqual(me.status_code, 200, me.text)
             self.assertTrue(me.json()["pod"]["owns_active_session"])
             closed = pod_app._finalize_active_session("restart_waiting_test_cleanup")
             self.assertFalse(closed["recording_started"])
+            with pod_app.state_lock:
+                idle_public = dict(pod_app.state["session"])
+            self.assertEqual(set(idle_public), expected_session_keys)
+            self.assertFalse(idle_public["wellness_context_available"])
+            self.assertIsNone(idle_public["personal_rest_baseline"])
             self.assertEqual(
                 pod_app.database.read_sessions(
                     "SELECT session_id FROM sessions WHERE session_id=?", (session_id,)
@@ -965,6 +993,11 @@ class RbacApiTests(unittest.TestCase):
                     }
                 )
             pod_app._begin_recording(active)
+            expected_baseline = login.json()["session"]["personal_rest_baseline"]
+            with pod_app.session_lock:
+                active["record"]["wellness_context"] = {"caffeine": "none"}
+                active["record"]["display_name"] = "Restart Recording"
+            pod_app._save_active_session_checkpoint(active)
             self.assertEqual(
                 pod_app._load_active_session_checkpoint()["phase"], "recording"
             )
@@ -1007,9 +1040,24 @@ class RbacApiTests(unittest.TestCase):
                 restored = pod_app._active_session
             self.assertEqual(restored["phase"], "recording")
             self.assertEqual(restored["record"]["rest_mode"], "sleep")
+            self.assertEqual(
+                restored["record"]["wellness_context"],
+                {"caffeine": "none"},
+            )
+            self.assertEqual(
+                restored["record"]["display_name"],
+                "Restart Recording",
+            )
             with pod_app.state_lock:
                 self.assertTrue(pod_app.state["safety"]["armed"])
                 self.assertTrue(pod_app.state["safety"]["latched"])
+                self.assertTrue(
+                    pod_app.state["session"]["wellness_context_available"]
+                )
+                self.assertEqual(
+                    pod_app.state["session"]["personal_rest_baseline"],
+                    expected_baseline,
+                )
 
             # Disarm is intentionally process-local; the durable checkpoint
             # remains armed so a restart cannot reduce protection.
@@ -1060,6 +1108,22 @@ class RbacApiTests(unittest.TestCase):
             me = user.get("/api/auth/me")
             self.assertEqual(me.status_code, 200, me.text)
             self.assertTrue(me.json()["pod"]["owns_active_session"])
+            finalized = pod_app._finalize_active_session(
+                "restart_recording_test_cleanup"
+            )
+            self.assertEqual(
+                finalized["wellness_context"],
+                {"caffeine": "none"},
+            )
+            summary_rows = pod_app.database.read_sessions(
+                "SELECT value FROM events WHERE session_id=? AND type='final_summary'",
+                (session_id,),
+            )
+            self.assertEqual(len(summary_rows), 1)
+            self.assertEqual(
+                json.loads(summary_rows[0]["value"])["wellness_context"],
+                {"caffeine": "none"},
+            )
         finally:
             if pod_app._active_session is not None:
                 pod_app._finalize_active_session("restart_recording_test_cleanup")

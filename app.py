@@ -7,14 +7,15 @@ import asyncio
 import json
 import math
 import os
+import secrets
 import shutil
 import socket
 import subprocess
 import threading
 import time
 import uuid
-import secrets
 from collections import Counter, deque
+from collections.abc import Mapping
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from functools import partial
@@ -134,6 +135,13 @@ from sessions.lifecycle import (
     bed_is_occupied,
     evaluate_vital_start_gate,
     service_resume_event,
+)
+from sessions.live_projection import (
+    LiveSessionProjection,
+    SessionPublicIdentity,
+    active_session_projection,
+    inactive_session_projection,
+    recording_vital_gate,
 )
 from sessions.sleep_context import (
     checkpoint_sleep_context,
@@ -968,39 +976,12 @@ state: Dict[str, Any] = {
             "max_temperature_c": SAFETY_MAX_TEMP_C,
         },
     },
-    "session": {
-        "active": False,
-        "username": None,
-        "account_key": None,
-        "email": None,
-        # ชื่อที่โชว์บนหน้าจอ (displayName ของบัญชี ZEEP) เปลี่ยนได้โดยไม่ทำให้
-        # Profile/Baseline/History แตกเป็นผู้ใช้คนใหม่ เพราะข้อมูลผูกกับ email.
-        "display_name": None,
-        "auth_source": None,  # "zeep" = login ด้วยบัญชีจริง · "local" = โหมดออฟไลน์
-        "gender": None,
-        "age": None,
-        "age_group": None,
-        # Optional Profile facts used only as wellness-reference context. They
-        # are never treated as a diagnosis or a direct Sleep Stage input.
-        "health_reference": None,
-        "rest_mode": None,
-        "target_duration_s": None,
-        "session_id": None,
-        "started_at": None,
-        "samples": 0,
-        # Start gate: Login remains active, but no DB Session/timeline exists
-        # until both bed duration and fresh HR+RR confirmation pass.
-        "recording": False,
-        "bed_wait_s": 0,
-        "vital_gate": {
-            "ready": False,
-            "heart_rate_valid": False,
-            "respiration_rate_valid": False,
-            "confirmed_packets": 0,
-            "required_packets": SESSION_VITAL_START_PACKETS,
-            "reason": "waiting_for_bcg",
-        },
-    },
+    # Start gate: Login remains active, but no DB Session/timeline exists until
+    # both bed duration and fresh HR+RR confirmation pass.
+    "session": inactive_session_projection(
+        required_packets=SESSION_VITAL_START_PACKETS,
+        reason="waiting_for_bcg",
+    ),
     "system": {
         "started_at": time.time(),
         "gpio_available": False,  # set for real after GPIOManager init — no mock
@@ -1046,6 +1027,20 @@ state: Dict[str, Any] = {
         },
     },
 }
+
+
+def _replace_session_projection_locked(
+    projection: LiveSessionProjection,
+) -> None:
+    """Publish one complete Session projection while the caller holds the lock."""
+    current = state["session"]
+    current.clear()
+    current.update(projection)
+
+
+def _patch_session_projection_locked(patch: Mapping[str, Any]) -> None:
+    """Publish a phase delta while the caller holds ``state_lock``."""
+    state["session"].update(patch)
 
 
 aircon_fan_reference_store = AirconFanReferenceStore(
@@ -4343,12 +4338,12 @@ def _begin_recording(active: Dict[str, Any]):
             if _active_session is not active:
                 raise RuntimeError("active Session changed during start")
             active["phase"] = "recording"
-            state["session"].update(
+            _patch_session_projection_locked(
                 {
                     "recording": True,
                     "started_at": time.time(),
                     "bed_wait_s": 0,
-                    "vital_gate": {**vital_gate, "ready": True, "reason": "recording"},
+                    "vital_gate": recording_vital_gate(vital_gate),
                 }
             )
     _save_active_session_checkpoint(active)
@@ -4396,7 +4391,9 @@ def session_sampler():
                     # never let this race terminate the Session sampler.
                     vital_gate = session_vital_gate_now(active)
                     with state_lock:
-                        state["session"]["vital_gate"] = vital_gate
+                        _patch_session_projection_locked(
+                            {"vital_gate": vital_gate}
+                        )
                     log_event(
                         "session",
                         "vital_start_gate_changed",
@@ -4405,7 +4402,7 @@ def session_sampler():
                     )
             else:
                 with state_lock:
-                    state["session"].update(
+                    _patch_session_projection_locked(
                         {
                             "bed_wait_s": round(min(wait_s, BED_START_SECONDS), 1),
                             "vital_gate": vital_gate,
@@ -4435,7 +4432,7 @@ def session_sampler():
                 session_id = active["record"]["session_id"]
         if count is not None:
             with state_lock:
-                state["session"]["samples"] = count
+                _patch_session_projection_locked({"samples": count})
             # Persist the timeline row (DB writer thread owns the actual write)
             database.enqueue(
                 "sessions",
@@ -4731,34 +4728,11 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
                     error=str(getattr(exc, "detail", exc)),
                 )
         with state_lock:
-            state["session"].update(
-                {
-                    "active": False,
-                    "username": None,
-                    "account_key": None,
-                    "email": None,
-                    "display_name": None,
-                    "auth_source": None,
-                    "gender": None,
-                    "age": None,
-                    "age_group": None,
-                    "health_reference": None,
-                    "rest_mode": None,
-                    "target_duration_s": None,
-                    "session_id": None,
-                    "started_at": None,
-                    "samples": 0,
-                    "recording": False,
-                    "bed_wait_s": 0,
-                    "vital_gate": {
-                        "ready": False,
-                        "heart_rate_valid": False,
-                        "respiration_rate_valid": False,
-                        "confirmed_packets": 0,
-                        "required_packets": SESSION_VITAL_START_PACKETS,
-                        "reason": "no_session",
-                    },
-                }
+            _replace_session_projection_locked(
+                inactive_session_projection(
+                    required_packets=SESSION_VITAL_START_PACKETS,
+                    reason="no_session",
+                )
             )
         _reset_live_sleep_inference(None)
         report_shares.discard(record.get("identity_subject"))
@@ -5057,34 +5031,11 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
             profile["last_session_utc"] = availability.get("last_data_session_utc") or record["ended_at_utc"]
             _save_profiles(profiles)
     with state_lock:
-        state["session"].update(
-            {
-                "active": False,
-                "username": None,
-                "account_key": None,
-                "email": None,
-                "display_name": None,
-                "auth_source": None,
-                "gender": None,
-                "age": None,
-                "age_group": None,
-                "health_reference": None,
-                "rest_mode": None,
-                "target_duration_s": None,
-                "session_id": None,
-                "started_at": None,
-                "samples": 0,
-                "recording": False,
-                "bed_wait_s": 0,
-                "vital_gate": {
-                    "ready": False,
-                    "heart_rate_valid": False,
-                    "respiration_rate_valid": False,
-                    "confirmed_packets": 0,
-                    "required_packets": SESSION_VITAL_START_PACKETS,
-                    "reason": "no_session",
-                },
-            }
+        _replace_session_projection_locked(
+            inactive_session_projection(
+                required_packets=SESSION_VITAL_START_PACKETS,
+                reason="no_session",
+            )
         )
     _reset_live_sleep_inference(None)
     return record
@@ -5106,6 +5057,21 @@ def _restore_waiting_session(checkpoint: Dict[str, Any]) -> Optional[str]:
         health_reference = _health_reference_from_profile(profile)
     restored_mode = record.get("rest_mode") or "auto"
     restored_target = resolve_rest_target(restored_mode, record.get("target_duration_s"))
+    display_name = (
+        record.get("display_name")
+        or profile.get("display_name")
+        or record["username"]
+    )
+    wellness_context = record.get("wellness_context")
+    rest_baseline = rest_window(
+        baselines,
+        record["username_key"],
+        restored_mode,
+        restored_target.get("seconds"),
+    )
+    auth_source = record.get("auth_source") or (
+        "zeep" if record.get("zeep_public_id") else "local"
+    )
     identity_subject = record["identity_subject"]
     restored_lease: Optional[OccupancyLease] = None
     occupancy_error: Optional[str] = None
@@ -5126,6 +5092,7 @@ def _restore_waiting_session(checkpoint: Dict[str, Any]) -> Optional[str]:
             "age": age,
             "age_group": age_group,
             "health_reference": health_reference,
+            "display_name": display_name,
             "rest_mode": restored_mode,
             "target_duration_s": restored_target.get("seconds"),
             "sample_interval_s": _sample_interval_seconds(record.get("sample_interval_s"), SESSION_SAMPLE_SECONDS),
@@ -5168,27 +5135,29 @@ def _restore_waiting_session(checkpoint: Dict[str, Any]) -> Optional[str]:
         armed_epoch = time.time()
     vital_gate = session_vital_gate_now(restored)
     with state_lock:
-        state["session"].update(
-            {
-                "active": True,
-                "username": record["username"],
-                "account_key": record["username_key"],
-                "email": profile.get("email") or profile.get("zeep_email"),
-                "gender": record.get("gender"),
-                "display_name": profile.get("display_name") or record["username"],
-                "auth_source": record.get("auth_source") or ("zeep" if record.get("zeep_public_id") else "local"),
-                "age": age,
-                "age_group": age_group,
-                "health_reference": health_reference,
-                "session_id": session_id,
-                "rest_mode": restored_mode,
-                "target_duration_s": restored_target.get("seconds"),
-                "started_at": armed_epoch,
-                "samples": 0,
-                "recording": False,
-                "bed_wait_s": 0,
-                "vital_gate": vital_gate,
-            }
+        _replace_session_projection_locked(
+            active_session_projection(
+                SessionPublicIdentity(
+                    username=record["username"],
+                    account_key=record["username_key"],
+                    email=profile.get("email") or profile.get("zeep_email"),
+                    display_name=display_name,
+                    auth_source=auth_source,
+                    gender=record.get("gender"),
+                    age=age,
+                    age_group=age_group,
+                    health_reference=health_reference,
+                ),
+                session_id=session_id,
+                rest_mode=restored_mode,
+                target_duration_s=restored_target.get("seconds"),
+                started_at=armed_epoch,
+                samples=0,
+                recording=False,
+                vital_gate=vital_gate,
+                wellness_context_available=bool(wellness_context),
+                personal_rest_baseline=rest_baseline,
+            )
         )
     log_event(
         "session",
@@ -5346,6 +5315,21 @@ def _restore_interrupted_session() -> Optional[str]:
     if persisted_target is None:
         persisted_target = row.get("target_duration_s")
     restored_target = resolve_rest_target(restored_mode, persisted_target)
+    display_name = (
+        checkpoint_record.get("display_name")
+        or profile.get("display_name")
+        or row["user"]
+    )
+    wellness_context = checkpoint_record.get("wellness_context")
+    auth_source = checkpoint_record.get("auth_source") or (
+        "zeep" if row.get("zeep_public_id") else "local"
+    )
+    rest_baseline = rest_window(
+        baselines,
+        row["username_key"],
+        restored_mode,
+        restored_target.get("seconds"),
+    )
     restored_lease: Optional[OccupancyLease] = None
     occupancy_error: Optional[str] = None
     try:
@@ -5370,12 +5354,14 @@ def _restore_interrupted_session() -> Optional[str]:
             "age": age,
             "age_group": age_group,
             "health_reference": health_reference,
+            "display_name": display_name,
+            "wellness_context": wellness_context,
             "armed_at_utc": checkpoint_record.get("armed_at_utc") or row["created_at"],
             # Old/open rows may predate explicit intent storage. Keep ``auto``
             # unresolved; elapsed time and model output cannot invent intent.
             "rest_mode": restored_mode,
             "target_duration_s": restored_target.get("seconds"),
-            "auth_source": checkpoint_record.get("auth_source") or ("zeep" if row.get("zeep_public_id") else "local"),
+            "auth_source": auth_source,
             "started_at_utc": row["start_time"],
             "started_monotonic": time.monotonic() - elapsed_s,
             # New samples use the active 10-second contract. Historical rows
@@ -5408,33 +5394,33 @@ def _restore_interrupted_session() -> Optional[str]:
         ).get(row["username_key"], {})
         with profile_lock:
             profiles = _load_profiles()
-            profile = profiles.get(row["username_key"])
-            if profile is not None:
-                profile["sessions"] = int(availability.get("lifetime_sessions") or 0)
-                profile["last_session_utc"] = availability.get("last_data_session_utc")
+            legacy_profile = profiles.get(row["username_key"])
+            if legacy_profile is not None:
+                legacy_profile["sessions"] = int(availability.get("lifetime_sessions") or 0)
+                legacy_profile["last_session_utc"] = availability.get("last_data_session_utc")
                 _save_profiles(profiles)
     bcg_storage.start_session(session_id)
     with state_lock:
-        state["session"].update(
-            {
-                "active": True,
-                "username": row["user"],
-                "account_key": row["username_key"],
-                "email": profile.get("email") or profile.get("zeep_email"),
-                "gender": row.get("gender"),
-                "display_name": profile.get("display_name") or row["user"],
-                "auth_source": checkpoint_record.get("auth_source") or ("zeep" if row.get("zeep_public_id") else "local"),
-                "age": age,
-                "age_group": age_group,
-                "health_reference": health_reference,
-                "session_id": session_id,
-                "rest_mode": restored_mode,
-                "target_duration_s": restored_target.get("seconds"),
-                "started_at": started_dt.timestamp(),
-                "samples": len(samples),
-                "recording": True,
-                "bed_wait_s": 0,
-                "vital_gate": {
+        _replace_session_projection_locked(
+            active_session_projection(
+                SessionPublicIdentity(
+                    username=row["user"],
+                    account_key=row["username_key"],
+                    email=profile.get("email") or profile.get("zeep_email"),
+                    display_name=display_name,
+                    auth_source=auth_source,
+                    gender=row.get("gender"),
+                    age=age,
+                    age_group=age_group,
+                    health_reference=health_reference,
+                ),
+                session_id=session_id,
+                rest_mode=restored_mode,
+                target_duration_s=restored_target.get("seconds"),
+                started_at=started_dt.timestamp(),
+                samples=len(samples),
+                recording=True,
+                vital_gate={
                     "ready": True,
                     "heart_rate_valid": None,
                     "respiration_rate_valid": None,
@@ -5442,7 +5428,9 @@ def _restore_interrupted_session() -> Optional[str]:
                     "required_packets": SESSION_VITAL_START_PACKETS,
                     "reason": "recording_resumed",
                 },
-            }
+                wellness_context_available=bool(wellness_context),
+                personal_rest_baseline=rest_baseline,
+            )
         )
     database.enqueue("sessions", "event", service_resume_event(session_id, migration_at_utc))
     log_event(
@@ -6676,6 +6664,7 @@ def _start_pod_session(
         profiles[key] = profile
         _save_profiles(profiles)
 
+    display_name = (auth or {}).get("display_name") or username
     rest_baseline = rest_window(baselines, key, rest_mode, target["seconds"])
     session_id = f"s-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:6]}"
     # This is the cross-pod atomic gate.  With a remote coordinator configured,
@@ -6710,6 +6699,7 @@ def _start_pod_session(
             "session_id": session_id,
             "username": username,
             "username_key": key,
+            "display_name": display_name,
             "gender": profile["gender"],
             "age": profile.get("age"),
             "age_group": profile.get("age_group") or _age_group(profile.get("age")),
@@ -6777,29 +6767,30 @@ def _start_pod_session(
     )
     vital_gate = session_vital_gate_now(new_session)
     with state_lock:
-        state["session"].update(
-            {
-                "active": True,
-                "username": username,
-                "account_key": key,
-                "email": email,
-                "gender": profile["gender"],
-                "display_name": (auth or {}).get("display_name") or username,
-                "auth_source": new_session["record"]["auth_source"],
-                "age": profile.get("age"),
-                "age_group": profile.get("age_group") or _age_group(profile.get("age")),
-                "health_reference": session_health_reference,
-                "wellness_context_available": bool(session_wellness_context),
-                "rest_mode": rest_mode,
-                "target_duration_s": target["seconds"],
-                "personal_rest_baseline": rest_baseline,
-                "session_id": session_id,
-                "started_at": time.time(),
-                "samples": 0,
-                "recording": False,
-                "bed_wait_s": 0,
-                "vital_gate": vital_gate,
-            }
+        _replace_session_projection_locked(
+            active_session_projection(
+                SessionPublicIdentity(
+                    username=username,
+                    account_key=key,
+                    email=email,
+                    display_name=display_name,
+                    auth_source=new_session["record"]["auth_source"],
+                    gender=profile["gender"],
+                    age=profile.get("age"),
+                    age_group=profile.get("age_group")
+                    or _age_group(profile.get("age")),
+                    health_reference=session_health_reference,
+                ),
+                session_id=session_id,
+                rest_mode=rest_mode,
+                target_duration_s=target["seconds"],
+                started_at=time.time(),
+                samples=0,
+                recording=False,
+                vital_gate=vital_gate,
+                wellness_context_available=bool(session_wellness_context),
+                personal_rest_baseline=rest_baseline,
+            )
         )
     return {
         "ok": True,
@@ -7375,7 +7366,7 @@ def admin_update_active_session_profile(
 
     browser_sessions = auth_sessions.update_user_display_name(account_key, display_name)
     with state_lock:
-        state["session"].update(
+        _patch_session_projection_locked(
             {
                 "display_name": display_name,
                 "gender": gender,

@@ -48,10 +48,11 @@ marker เองหรือคัดลอกจากเครื่องอ�
 
 ## เลือก test ตามสิ่งที่แก้
 
-ใช้ `python quality_gate.py changed` เป็นค่าเริ่มต้นและให้ CI รัน Full Gate หนึ่งครั้ง
-ต่อ Git SHA ไม่ต้องรันชุดเต็มซ้ำก่อนทุก push/deploy ยกเว้นงานข้ามระบบ ผลไม่แน่นอน
-หรือ Code Freeze ให้บันทึก Git SHA, environment, passed/failed/error/skipped และ
-hardware ที่ได้หรือไม่ได้ทดสอบ
+ใช้ `python quality_gate.py changed` เป็นค่าเริ่มต้น แล้วตรวจ CI gate ที่เกี่ยวข้อง
+กับไฟล์บน Git SHA เดียวกัน Python change ต้องผ่าน Full Application suite ส่วน
+UI/docs/evidence ใช้ gate เฉพาะของตนตาม TESTING ไม่ต้องรันชุดเต็มซ้ำก่อนทุก
+push/deploy ยกเว้นงานข้ามระบบ ผลไม่แน่นอน หรือ Code Freeze ให้บันทึก Git SHA,
+environment, passed/failed/error/skipped และ hardware ที่ได้หรือไม่ได้ทดสอบ
 
 รายการคำสั่งและชุดทดสอบปัจจุบันอยู่ที่ [TESTING.md](../../TESTING.md) เท่านั้น
 หลักที่ต้องรักษาคือ:
@@ -120,6 +121,7 @@ caller ย้ายครบ และไม่เปลี่ยน threshold/s
 ### Day 1 — Product, safety และ data boundary
 
 - [ ] อ่าน [Onboarding index](README.md) และ [Product/lifecycle](product-and-lifecycle.md)
+- [ ] อ่าน [Technology Stack, Data และเครื่องมือ](technology-stack-and-tools.md)
 - [ ] อธิบายความต่าง Sleep Score / Recovery Score / Restore Summary ได้
 - [ ] อธิบาย `waiting_bed`, Recording, OFF BED และ restart continuity ได้
 - [ ] อ่าน [API/Data/Privacy](api-data-and-privacy.md) และรู้ว่าอะไรออกจาก Pod ได้
@@ -128,6 +130,7 @@ caller ย้ายครบ และไม่เปลี่ยน threshold/s
 ### Day 2 — Architecture และ Hardware trace
 
 - [ ] อ่าน [Hardware และ Hub map](hardware-hub-map.md)
+- [ ] หากรับผิดชอบเสียง/Monitor ให้อ่าน [หูอัจฉริยะ · DSP Plan](smart-ear-dsp-plan.md) และอธิบาย Current/Shadow boundary ได้
 - [ ] trace อย่างน้อยหนึ่ง flow: transport → canonical state → API/UI/report
 - [ ] trace หนึ่ง control: browser → RBAC/CSRF → protocol → adapter → ACK/audit
 - [ ] หา pure policy, side-effect adapter และ composition wiring ของ domain ตนเอง

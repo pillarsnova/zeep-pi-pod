@@ -82,8 +82,10 @@ python -m unittest -q \
 ### งานปกติ
 
 1. รัน `python quality_gate.py changed`
-2. Push แล้วให้ GitHub CI รัน Full Application suite หนึ่งครั้ง
-3. หาก CI ผ่านบน Git SHA เดียวกัน ไม่ต้องรัน Full suite ซ้ำบน Mac หรือ Pi
+2. Push แล้วตรวจ workflow ที่ path ของ change นั้น trigger; Python change ต้องให้
+   GitHub CI รัน Full Application suite หนึ่งครั้ง ส่วน UI/docs ใช้ gate ที่ระบุด้านล่าง
+3. หาก CI/gate ที่เกี่ยวข้องผ่านบน Git SHA เดียวกัน ไม่ต้องรัน Full suite ซ้ำบน Mac
+   หรือ Pi
 4. ก่อน Restart Pi รันเฉพาะ Production smoke ของ domain ที่เปลี่ยน
 
 ### กรณีที่ต้องรัน Full
@@ -95,8 +97,11 @@ python -m unittest -q \
 - Release candidate, Code Freeze, migration ข้อมูล หรือก่อนลบ legacy behavior
 - Product Owner/Reviewer ขอ Full Gate
 
-การแก้เอกสารทั่วไปเพียงอย่างเดียวใช้ `git diff --check`; Evidence library ใช้
-profile `evidence` และไม่ต้องรัน Sleep/Sensor suite
+การแก้เอกสารทั่วไปเพียงอย่างเดียวใช้ `git diff --check` และ
+`python3 -m unittest -q test_documentation_alignment.py`; หากแก้ข้อความผลิตภัณฑ์
+ให้เพิ่ม `test_product_language.py` ส่วน Evidence library ใช้ profile `evidence`
+และไม่ต้องรัน Sleep/Sensor suite ปัจจุบัน `quality_gate.py changed` ยังไม่เลือก
+docs-only profile จึงต้องรันคำสั่งเอกสารนี้ตรง ๆ จนกว่าจะเพิ่ม automated gate
 
 ## Application Full Gate
 

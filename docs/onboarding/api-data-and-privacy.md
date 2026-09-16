@@ -130,6 +130,27 @@ canonical identifier เมื่อมีข้อมูล แต่ยัง�
 - Public/App projection ใช้ positive allowlist: field ใหม่ไม่ออกเองจนผ่าน review
 - `clinical_validated=false` ต้องถูกบังคับใน public v1 แม้ข้อมูลเก่าระบุอย่างอื่น
 
+### Acoustic Intelligence / เสียง
+
+Current runtime ไม่มี Raw audio/PCM store และไม่มีการจำแนกคำพูดหรือแหล่งเสียง
+ระบบเก็บเพียงระดับ `sound_dba` ที่ผ่าน contract และ derived level aggregation ตาม
+Sensor frame ทุก 10 วินาที โดย persist ลง Timeline เฉพาะขณะ Recording
+
+แผน [หูอัจฉริยะ · Acoustic Intelligence DSP](smart-ear-dsp-plan.md) ต้องใช้
+privacy-first boundary ดังนี้:
+
+- ไม่ส่งหรือเก็บ PCM ต่อเนื่องเป็นค่าเริ่มต้น; ESP32 ส่งเฉพาะ versioned features
+- Shadow result, confidence และ feature diagnostics เป็น Admin-only positive allowlist
+- User/App ยังเห็นเพียงระดับเสียงหรือข้อความสรุปที่ Product/Privacy อนุมัติ
+- ห้ามจำแนกเนื้อหาคำพูด ตัวบุคคล กรน ไอ หรือภาวะสุขภาพในรุ่นแรก
+- การเก็บตัวอย่างเสียงเพื่อสร้าง dataset ต้องเป็น protocol แยก มี consent,
+  coded identity, encryption, retention, access log และ erasure owner
+- ก่อน persist acoustic features ต้องรวมข้อมูลนั้นใน backup/snapshot/retention/
+  account-erasure contract และทดสอบ public redaction
+
+Smart Ear ยังเป็น `ROADMAP/SHADOW` และไม่อยู่ใน API v1 ปัจจุบัน ห้าม client
+พึ่งพา endpoint หรือ field ตัวอย่างในเอกสารแผนจนมี approved contract release
+
 ## Data ที่ออกจาก Pod
 
 | Flow | เปิดเมื่อ | ขอบเขตข้อมูล | ข้อควบคุม |

@@ -1,8 +1,8 @@
 # ZEEP v1 — Hardware และ Hub Map
 
 สถานะ: **Current implementation map · Internal Pilot / freeze candidate**
-ตรวจจาก branch `develop`, pushed baseline
-`71d6a7e` เมื่อ 16 กันยายน 2026
+ตรวจจาก source ใน branch `develop` เมื่อ 17 กันยายน 2026; Git SHA ที่ deploy จริง
+ต้องตรวจจาก health/version response และ closure record ของ release นั้น
 ขอบเขต: Pi 5 runtime, Sensor Hub 1/2, BCG, Control Hub 1/2, Audio และ GPIO
 
 การสกัด BCG reader, 10-second Sensor-frame sampler และ live-device projection
@@ -90,8 +90,21 @@ Control Hub 1 ยืนยันเพียงว่า ESP32 เรียก�
 - `SensorHub1StateStore` เขียน latest raw-normalized payload ที่ legacy key
   `state["sensor"]["esp32"]`. ชื่อนี้คือ compatibility debt; อย่า rename เป็น
   `sensorhub1` โดยตรงเพราะ API/UI/tests ยังอ่าน key เดิม.
-- ทุก valid sound packetถูกเพิ่มใน `sound_level_history` แบบ bounded in-memory และ
+- ทุก valid sound packet ถูกเพิ่มใน `sound_level_history` แบบ bounded in-memory และ
   ถูกสรุป energy-average ใน Sensor frame; ไม่มี raw Hub 1 stream database แยก.
+
+### ขอบเขตเสียงปัจจุบัน
+
+- ค่าเฉลี่ยใน Sensor frame เป็นการรวมเชิงพลังงานของ valid packet-level
+  `sound_dba` observations ไม่ใช่ DSP บน PCM และยังไม่ควรอ้างว่าเป็น certified
+  LAeq(A) จน Production firmware contract ยืนยัน weighting, window และ calibration.
+- Pi ยังไม่ได้รับ PCM, band energy หรือ spectral/temporal features จึงยังจำแนกไม่ได้
+  ว่าเสียงมาจากแอร์ พัดลม ประตู เพลง หรือแหล่งภายนอก.
+- `state.system.sound_analysis` มี sample count, average, min/max/span และธง
+  large step สำหรับ Admin observability เท่านั้น ไม่ใช่ source classifier.
+- แผนจำแนกเสียงอยู่ที่
+  [หูอัจฉริยะ · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md) และมีสถานะ
+  **ROADMAP/SHADOW**; ต้องไม่กระทบ Sleep State, Score หรือ Control ในระยะแรก.
 
 ### Failure behavior
 

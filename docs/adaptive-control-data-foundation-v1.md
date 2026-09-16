@@ -35,8 +35,10 @@ Environment ใน contract นี้มี **7 measurement metrics** ได้�
 
 ค่า Live และ Baseline ถูกแสดงคู่กันเป็น `ใกล้`, `สูงกว่า` หรือ `ต่ำกว่า
 ค่าประจำตัว` เท่านั้น คำเหล่านี้ไม่เท่ากับปกติ/ผิดปกติทางการแพทย์
-ค่าเฉลี่ยเสียงใน rolling window ใช้ Energy-domain Leq ไม่ใช้ค่าเฉลี่ยเลขคณิต
-และ Shadow recommendation จะอ่านค่าได้ต่อเมื่อ Sensor ของ metric นั้นเป็น Live
+ค่าเฉลี่ยเสียงใน rolling window เป็นค่าเฉลี่ยเชิงพลังงานของ valid `sound_dba`
+observations ไม่ใช่ค่าเฉลี่ยเลขคณิต และยังไม่อ้างว่าเป็น certified LAeq(A)
+จนกว่า firmware contract จะยืนยัน weighting/window/calibration ส่วน Shadow
+recommendation จะอ่านค่าได้ต่อเมื่อ Sensor ของ metric นั้นเป็น Live
 
 ## 3. Baseline ที่ใช้เปรียบเทียบ
 

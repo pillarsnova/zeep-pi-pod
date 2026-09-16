@@ -54,17 +54,17 @@
 
 ## Test ก่อนส่ง Review
 
-เริ่มด้วย focused suite ของ domain แล้วรันทั้งหมด:
+เริ่มด้วย risk-based gate และให้ [TESTING.md](TESTING.md) เป็นเจ้าของ trigger ของ
+Focused, CI และ Full gate:
 
 ```bash
-python -m unittest discover -q
-python ui_composer.py check
-ruff check zeep_pod
-ruff format --check zeep_pod
-python -m py_compile app.py *.py
-python research/evidence-library/update_research_library.py check
+python quality_gate.py changed
 git diff --check
 ```
+
+ใช้ `python quality_gate.py full` เมื่อแก้ข้ามระบบ ผลไม่แน่นอน เปลี่ยน migration/
+test infrastructure, CI ของ Git SHA นั้นใช้ไม่ได้ หรือก่อน Release/Code Freeze
+งาน UI และ Evidence ต้องรัน gate เฉพาะที่ TESTING ระบุ ไม่รันทุกชุดซ้ำโดยไม่มีเหตุผล
 
 Test ต้องใช้ temporary/synthetic data ผ่าน `testing_support.py` ห้ามอ่าน เขียน
 หรือล้าง Production data รายละเอียดกลุ่มทดสอบอยู่ใน [TESTING.md](TESTING.md)
@@ -76,7 +76,8 @@ Test ต้องใช้ temporary/synthetic data ผ่าน `testing_suppor
 - [ ] ไม่มี secret, credential, PII, database, backup หรือ Raw export ใน Git
 - [ ] Public API/state key และ backward compatibility มี test
 - [ ] Formula/threshold/version เปลี่ยนเฉพาะใน change ที่ได้รับอนุมัติ
-- [ ] Focused และ Full gates ผ่าน พร้อมรายงานจำนวน test/skip จริง
+- [ ] Focused gate และ CI/Full gate ที่เข้าเงื่อนไขใน `TESTING.md` ผ่าน พร้อมรายงาน
+      จำนวน test/skip จริง
 - [ ] ระบุ Hardware smoke, migration, restart และ rollback ที่ยังต้องทำ
 - [ ] อัปเดตเอกสาร source of truth ใน release เดียวกัน
 

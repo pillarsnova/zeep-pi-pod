@@ -9,7 +9,8 @@
 1. ตรวจว่าไม่มีผู้ใช้งานและไม่มี Session กำลังบันทึกก่อน restart เสมอ
 2. ใช้ Git จาก Mac ด้วยบัญชี `PillarsMan` และดึง Pi จาก `origin/develop` เท่านั้น
 3. ห้ามแก้ Raw BCG หรือ Timeline เพื่อให้ผล Derived ดูดีขึ้น
-4. ต้องผ่าน focused tests ตามส่วนที่แก้และ full regression ก่อน push
+4. ต้องผ่าน risk-based focused tests ตามส่วนที่แก้ และ CI/Full gate ตาม trigger ใน
+   `TESTING.md`; รัน Full local เมื่อข้ามระบบ ผลไม่แน่นอน migration หรือก่อน Freeze
 5. ใช้ `git pull --ff-only origin develop` เพื่อไม่สร้าง merge โดยไม่ตั้งใจ
 6. ทุก workstation ต้องเป็นเครื่องทีมที่อนุมัติแล้วและเปิด disk encryption ก่อน Sync
 

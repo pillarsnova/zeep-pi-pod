@@ -25,7 +25,7 @@ app, ต่อ lifecycle, ประกอบ dependency และเรียก
 | Device protocol | `control_protocol.py` | validate/normalize คำสั่ง Aircon และ Bed |
 | Hardware contracts | `sensor_contracts.py` | sensor model, alias, physical range, frame/telemetry contract |
 | Calibration | `sensor_calibration.py` | calibration spec, validation และ atomic JSON persistence |
-| Sensor runtime | `sensor_runtime.py` | normalize Hub 1, compose Hub 1/2, stale/hold และ Sound Leq |
+| Sensor runtime | `sensor_runtime.py` | normalize Hub 1, compose Hub 1/2, stale/hold และ packet-level sound aggregation |
 | Sensor transports | `zeep_pod/hardware/sensorhub1.py`, `sensorhub2.py` | USB/MQTT readers ที่รับ state และ callback จาก composition root |
 | BCG transport | `zeep_pod/hardware/bcg.py` | LSM-800-T framing/reconnect และ live-state publication; `app.bcg_reader()` เป็น compatibility facade |
 | Sensor-frame sampling | `zeep_pod/sessions/sensor_frame_sampler.py` | รวม BCG + canonical environment ตาม cadence 10 วินาที; ไม่ตัดสิน Sleep Stage |
@@ -165,7 +165,8 @@ Onboarding ใช้เอกสารนี้เป็น Roadmap ทางเ
 
 ### 6.1 สิ่งที่อยู่บน `origin/develop`
 
-ฐานอ้างอิงล่าสุดที่ตรวจระหว่างจัดเอกสารคือ commit `71d6a7e`:
+สถานะในตารางนี้ตรวจจาก source ใน `origin/develop`; Git SHA ที่ deploy จริงให้ตรวจ
+จาก health/version response และ closure record ของ release นั้น:
 
 | ระยะ | สถานะ | Boundary ที่แยกแล้ว |
 |---|---|---|
@@ -202,6 +203,10 @@ Sensor cadence, public JSON key หรือคำสั่ง Hardware
 4. รวม report pipeline ที่ซ้ำระหว่าง Live, Replay, Rescore และ Trim ให้ใช้ contract เดียว
 5. แบ่ง FastAPI router ตาม auth, control, session และ admin/monitor
 6. ลด `app.py` ให้เหลือ configuration, dependency wiring, lifespan และ router wiring
+
+Acoustic Intelligence ที่เสนอใน
+[DSP Plan](onboarding/smart-ear-dsp-plan.md) เป็น ROADMAP-only และยังไม่ใช่ module
+ปัจจุบัน ห้ามสร้าง `zeep_pod/acoustics/` จน P0 firmware/contract/privacy ผ่าน
 
 แต่ละขั้นต้องเป็น behavior-preserving commit ขนาดเล็กที่ย้อนกลับได้ ห้ามรวมการจูน
 Health threshold, เปลี่ยน Schema หรือ Flash Firmware ไว้ใน Refactor commit เดียวกัน

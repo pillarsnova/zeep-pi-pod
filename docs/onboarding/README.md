@@ -4,7 +4,7 @@
 
 ขอบเขต: Pi 5 runtime, Web UI, Sensor/Control Hubs, Session results และงานปฏิบัติการ
 
-ปรับปรุงล่าสุด: 16 กันยายน 2026
+ปรับปรุงล่าสุด: 17 กันยายน 2026
 
 > ชุด Onboarding นี้เป็น **ประตูหลักสำหรับค้นหาเอกสาร v1** แล้วจึงตามลิงก์ไปยัง
 > contract/runtime source ที่มีอำนาจของแต่ละ domain; ไม่ได้แทนหลักฐานอนุมัติ release
@@ -13,16 +13,22 @@
 
 ## เริ่มอ่านจากตรงไหน
 
-อ่านตามลำดับนี้ในวันแรก:
+อ่านเอกสารหลักตามลำดับนี้ในวันแรก:
 
 1. [Product และ Session lifecycle](product-and-lifecycle.md) — ZEEP ทำอะไร,
    สองโหมดต่างกันอย่างไร และข้อมูลเดินจาก Login ไปถึงผลลัพธ์อย่างไร
-2. [Hardware และ Hub map](hardware-hub-map.md) — อุปกรณ์, transport, owner และ
+2. [Technology Stack, Data และเครื่องมือ](technology-stack-and-tools.md) —
+   Runtime, Frontend, Database, Protocol, QA และ Operations ที่ใช้งานจริง
+3. [Hardware และ Hub map](hardware-hub-map.md) — อุปกรณ์, transport, owner และ
    fail-safe boundary ของแต่ละ Hub
-3. [API, Data และ Privacy](api-data-and-privacy.md) — ใครอ่านอะไรได้,
+4. [API, Data และ Privacy](api-data-and-privacy.md) — ใครอ่านอะไรได้,
    ข้อมูลใดอยู่บน Pod/ออกจาก Pod และขอบเขตการลบข้อมูล
-4. [Operations และ First-week checklist](operations-and-first-week.md) —
+5. [Operations และ First-week checklist](operations-and-first-week.md) —
    เตรียมเครื่อง, เลือก test, deploy อย่างปลอดภัย และเป้าหมายสัปดาห์แรก
+
+สำหรับทีม Sensor, Firmware, Data/ML, Monitor หรือ Product ที่จะพัฒนาเสียง ให้อ่าน
+[หูอัจฉริยะ · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md) เพิ่ม เอกสารนี้
+เป็น **ROADMAP/SHADOW DESIGN** ไม่ใช่ความสามารถ LIVE ของ v1
 
 หากต้องตอบคำถามส่งมอบ v1 ให้เริ่มจาก
 [v1 System Handover and Freeze Readiness](../zeep-v1-system-handover-and-freeze-readiness.md)
@@ -38,6 +44,21 @@
 
 คำว่า “ผ่าน test” ไม่เท่ากับ “พร้อม Production” การอนุมัติต้องรวมเครื่องจริง,
 อุปกรณ์จริง, privacy/retention, operator procedure และ owner sign-off ด้วย
+
+## Tech Stack ฉบับย่อ
+
+| ชั้น | ปัจจุบันใช้ |
+|---|---|
+| Pi runtime | Raspberry Pi 5, Linux, `systemd`, Python 3.11+; CI/Ruff target 3.11 |
+| Backend/API | FastAPI, Uvicorn, Pydantic models, REST/WebSocket, `httpx` |
+| Frontend | Vanilla HTML/CSS/JavaScript; template/partials ประกอบด้วย `ui_composer.py` |
+| Storage | SQLite WAL (`sessions.db`, `bcg.db`, `auth.db`, `occupancy.db`) + JSON/JSONL/outbox |
+| Device I/O | USB Serial JSONL/Binary, MQTT, BCM GPIO และ MPV IPC |
+| QA/Ops | `unittest`, risk-based `quality_gate.py`, Ruff, JSON Schema, GitHub Actions, Git/Tailscale/SSH |
+
+ไม่มี Node frontend runtime, ORM, Redis, PostgreSQL หรือ Raw audio database บน Pod
+รายละเอียดและเส้นทาง debug อยู่ที่
+[Technology Stack, Data และเครื่องมือ](technology-stack-and-tools.md)
 
 ### คำสถานะสำหรับเอกสารและการเผยแพร่
 
@@ -56,7 +77,7 @@
 สื่อ Pilot ที่เปิดต่อสาธารณะต้องใช้ coded ID หรือมี consent ที่ครอบคลุมชื่อ ภาพ เสียง
 และวิดีโออย่างชัดเจน `noindex` ไม่ใช่ access control และไม่แทนการอนุญาตเผยแพร่
 
-## Source of truth
+## แผนที่ Source of truth
 
 Onboarding สรุปเส้นทาง ไม่ทำสำเนารายละเอียดที่เปลี่ยนบ่อย ให้ใช้แหล่งต่อไปนี้:
 
@@ -69,6 +90,8 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 | Sleep State, score และ policy version | [Sleep System Current](../zeep-sleep-system-current.md) และ [`sleep_system_policy.py`](../../sleep_system_policy.py) |
 | API สำหรับ App | [ZEEP API v1](../zeep-api-v1.md), [Schema Reference](../zeep-api-schema-reference-v1.md), Pydantic models และ `/openapi.json` ของ release ที่ deploy |
 | Sensor field/range/provenance | [Sensor Interface Contract](../zeep-sensor-interface-contract-v1.2.md) และ [`sensor_contracts.py`](../../sensor_contracts.py) |
+| Tech stack, database และเครื่องมือ | [Technology Stack, Data และเครื่องมือ](technology-stack-and-tools.md) เป็น orientation; runtime ยึด requirements/config/service จริง |
+| แผนจำแนกเสียง/DSP | [หูอัจฉริยะ · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md) มีอำนาจเฉพาะขอบเขต ROADMAP/SHADOW ไม่ใช่ runtime contract |
 | Test/release gate | [TESTING.md](../../TESTING.md) |
 | Pull, Sync, Deploy, Backup | [Pi 5 Operations Runbook](../pi5-operations-runbook.md) |
 | คำที่แสดงต่อผู้ใช้ | [Product Language Guideline](../zeep-product-language-guideline-v1.md) |
@@ -85,6 +108,7 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 | Pi / Backend | [Software Architecture](../pi5-software-architecture.md), [API v1](../zeep-api-v1.md) | [`app.py`](../../app.py), [`api_v1.py`](../../api_v1.py), `zeep_pod/` |
 | Mobile / Web integration | [API Schema Reference](../zeep-api-schema-reference-v1.md) | [`zeep_pod/sessions/usage_api.py`](../../zeep_pod/sessions/usage_api.py), response models |
 | Hardware / Firmware | [Hardware และ Hub map](hardware-hub-map.md), [Sensor Interface Contract](../zeep-sensor-interface-contract-v1.2.md) | `sensor_*`, `control_protocol.py`, `zeep_pod/hardware/` |
+| Acoustics / Data / Monitor | [หูอัจฉริยะ · DSP Plan](smart-ear-dsp-plan.md), [API/Data/Privacy](api-data-and-privacy.md) | Current: `sensor_runtime.py`, `zeep_pod/sessions/sensor_frame_sampler.py`; Planned: `zeep_pod/acoustics/` |
 | QA / Data | [TESTING.md](../../TESTING.md), [Sleep History Promotion Policy](../sleep-history-promotion-policy-v2.md) | `test_*.py`, [`maintenance_registry.py`](../../maintenance_registry.py) |
 | Operations / Safety | [Operations Runbook](../pi5-operations-runbook.md), [TESTING.md](../../TESTING.md) | [`start_work.sh`](../../start_work.sh), service units, `zeep_pod/operations/` |
 
@@ -116,13 +140,15 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 | Restore Summary | คำอธิบายคะแนนหลัก ไม่ใช่คะแนนที่สาม |
 | OFF BED | Occupancy exception แยกจาก Wake และไม่เข้า Sleep Stage ratio |
 | Shadow | คำแนะนำ/การประเมินที่ไม่มีสิทธิ์สั่ง Hardware |
+| Acoustic Intelligence | การอนุมานลักษณะ/บริบทเสียงจาก DSP; ปัจจุบันเป็น ROADMAP และไม่ใช่การฟังเนื้อหาคำพูด |
 | Email-first identity | ใช้ email ที่ยืนยันได้ก่อน; ข้อมูลเก่าอาจยังใช้ normalized legacy account key โดยมี alias ที่ตรวจสอบแล้ว |
 
 ## พร้อมรับงานชิ้นแรกเมื่อ
 
-- [ ] อ่าน 4 หน้านี้และ canonical docs ของ domain ที่จะรับผิดชอบ
+- [ ] อ่านเอกสารหลัก 5 หน้าและ canonical docs ของ domain ที่จะรับผิดชอบ
 - [ ] ใช้ workstation ที่ทีมอนุมัติและเปิด FileVault หรือ LUKS/dm-crypt
 - [ ] เข้าใจว่า Local/Mock pass ไม่ใช่ Hardware/Production smoke pass
+- [ ] แยกความสามารถ `LIVE` ออกจาก `SHADOW/ROADMAP` ได้ โดยเฉพาะ Adaptive และ Acoustic Intelligence
 - [ ] รัน focused suite ของ domain ได้โดยไม่อ่าน/เขียน Production data
 - [ ] ระบุ owner, invariant, privacy impact และ deployment impact ของงานได้
 - [ ] รู้ว่าจะหยุดและส่งต่อให้ Product, Safety, Privacy หรือ Hardware owner เมื่อใด

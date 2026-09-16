@@ -11,6 +11,11 @@ Software version: `zeep-speaker-sound-lab-v1.0`
 เข้า/ออก และเสียงหลายช่วง ส่วนการเล่นแบบ Web Audio จาก Tablet และการโหลด
 CDN ภายนอกไม่ถูกนำมาใช้ในระบบจริง
 
+ระบบนี้เป็น **เสียงออกลำโพง (audio generation/output)** คนละ boundary กับ
+[หูอัจฉริยะ · Acoustic Intelligence DSP](onboarding/smart-ear-dsp-plan.md) ซึ่งเป็น
+แผนวิเคราะห์เสียงจากไมโครโฟน ห้ามใช้ preset/playback state เป็นข้อยืนยันว่า
+classifier ตรวจพบแหล่งเสียงจริง
+
 ต้นแบบใช้ binaural beat ที่แยกความถี่ซ้าย/ขวา แต่ลำโพงในพื้นที่ปิดมี acoustic
 cross-talk และไม่รับประกันว่าหูแต่ละข้างจะได้รับคนละ channel ระบบรุ่นนี้จึงใช้
 **speaker-compatible amplitude modulation (AM)** แทน และไม่อ้างว่าเสียงจะ

@@ -2,7 +2,7 @@
 
 สถานะ: **Current**  
 เจ้าของ: Pi 5 application team  
-อัปเดตล่าสุด: 16 กันยายน 2026
+อัปเดตล่าสุด: 17 กันยายน 2026
 
 เอกสารนี้เป็นแผนที่หน้าจอและเกณฑ์ตรวจ UX/UI ของ Pi 5 สำหรับผู้ใช้ ผู้ดูแล
 และทีมทดสอบอุปกรณ์ โดยไม่เปลี่ยนสิทธิ์หรือ Logic ของ Session
@@ -68,6 +68,11 @@ User และ Admin ใช้ Control deck เดียวกัน Admin เ�
 Live strip เป็นแหล่งค่าปัจจุบันหลัก ส่วนคำอธิบายและ Reference ต้องไม่ทวนค่าชุดเดิม
 โดยไม่มีบริบทเพิ่ม
 
+ตำแหน่ง “หูอัจฉริยะ” ที่เสนอใน
+[Acoustic Intelligence DSP Plan](onboarding/smart-ear-dsp-plan.md) เป็น
+**ROADMAP/SHADOW**: สรุปอยู่หมวดสภาพแวดล้อมและ feature diagnostics อยู่ Advanced
+ยังไม่ใช่ surface LIVE ใน Interface map นี้
+
 ### Sessions
 
 1. เลือกช่วงเวลา/ผู้ใช้งานตามสิทธิ์
@@ -90,8 +95,8 @@ Live strip เป็นแหล่งค่าปัจจุบันหลั
 - Navigation ต้องแสดงหน้าปัจจุบันทั้งภาพ (`active`) และ accessibility
   (`aria-current="page"` หรือ `location` สำหรับหน้าลูกอย่าง Control Debug)
 - รองรับ pinch zoom และ keyboard submit/focus; placeholder ไม่ใช้แทน label
-- จอมือถือ Control ใช้หนึ่งคอลัมน์, Tablet สองคอลัมน์ และ Desktop landscape
-  สามคอลัมน์ เพื่อคงขนาดปุ่มและชื่อการ์ด
+- จอมือถือ Control ใช้หนึ่งคอลัมน์ ส่วน Tablet และ Desktop landscape ใช้สอง
+  คอลัมน์ × สามแถว เพื่อให้การ์ดทั้งหกมีพื้นที่กดและอ่านข้อความเท่ากัน
 - เมื่อ `prefers-reduced-motion` ทำงาน Animation ต้องไม่ขัดการอ่านหรือควบคุม
 
 ## 4. Viewport ที่ใช้ตรวจ
@@ -99,7 +104,7 @@ Live strip เป็นแหล่งค่าปัจจุบันหลั
 | Viewport | ตัวแทนการใช้งาน | เกณฑ์ |
 |---|---|---|
 | 1440 × 900 | Notebook/Desktop Monitor | ไม่มี horizontal overflow; ข้อมูลสดและ Safety เห็นง่าย |
-| 1280 × 720 | Touch landscape/fullscreen | Control 3 × 2; ปุ่มหลักไม่ถูกบีบ |
+| 1280 × 720 | Touch landscape/fullscreen | Control 2 คอลัมน์ × 3 แถว; ปุ่มหลักไม่ถูกบีบ |
 | 800 × 1280 | Redmi Pad 2 portrait | Control 2 คอลัมน์; menu และ input แตะได้ |
 | 390 × 844 | Mobile fallback | Control 1 คอลัมน์; ไม่มีข้อความ/ปุ่มซ้อนกัน |
 
@@ -115,7 +120,7 @@ Live strip เป็นแหล่งค่าปัจจุบันหลั
 แก้ไขแล้ว:
 
 - เพิ่ม final consistency stylesheet เพื่อลดผลกระทบจาก legacy override
-- Control มือถือกลับเป็นหนึ่งคอลัมน์ และ Desktop landscape เป็นสามคอลัมน์
+- Control มือถือเป็นหนึ่งคอลัมน์ และ Tablet/Desktop เป็นสองคอลัมน์ × สามแถว
 - ลำดับ DOM/Tab ของ Control ตรงกับลำดับที่มองเห็น
 - Dashboard แสดงข้อมูลสดก่อน Personal Baseline/Profile
 - Control Debug และ Advanced Monitor เพิ่มขนาดข้อความ/ปุ่มที่เล็กเกินไป
@@ -124,7 +129,8 @@ Live strip เป็นแหล่งค่าปัจจุบันหลั
 - Icon ระบบ, Safety และ Debug ใช้ภาษาภาพเดียวกันมากขึ้น
 - Navigation ประกาศ `aria-current` และ Control Debug รองรับ Focus/fullscreen
 - Session End ใช้ Card language เดียวกับระบบ และวาง QR ก่อนรายละเอียดบนจอแคบ
-- Regression/Safety test ผ่าน `1,103` รายการ และ UI bundle ตรงกับ source partial
+- Regression/Safety test ให้รายงานจากผลจริงพร้อม Git SHA; UI bundle ต้องตรงกับ
+  source partial ตาม `ui_composer.py check`
 
 งานลดหนี้โครงสร้างหลัง v1 ที่ต้องทำแบบแยก Release:
 

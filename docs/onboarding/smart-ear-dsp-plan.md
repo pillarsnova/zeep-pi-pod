@@ -1,0 +1,469 @@
+# ZEEP หูอัจฉริยะ — Acoustic Intelligence DSP Plan
+
+สถานะ: **ROADMAP · SHADOW DESIGN · NOT LIVE**
+
+ขอบเขต: จำแนกลักษณะและบริบทของเสียงเพื่อช่วยทีมดูแล Pod
+
+ข้อบังคับ: `clinical_validated=false` · `automatic_actuation=false` ·
+ไม่กระทบ Sleep State, Sleep Score หรือ Recovery Score ในระยะแรก
+
+ปรับปรุงล่าสุด: 17 กันยายน 2026
+
+## คำตัดสินด้านผลิตภัณฑ์และ UX
+
+ตำแหน่งหลักที่เหมาะสมคือ **หน้า Monitor สำหรับ Admin** ไม่ใช่หน้า Control และยัง
+ไม่ควรแสดงผลจำแนกละเอียดบน User Dashboard เพราะผลเป็นการอนุมานที่ต้องมี
+confidence, provenance และทางเลือก `unknown`
+
+แยกการแสดงผลเป็นสองระดับ:
+
+1. **Monitor · สภาพแวดล้อม** — การ์ด “หูอัจฉริยะ · Sound Intelligence” แสดง
+   ระดับเสียง แนวโน้ม ลักษณะเสียงที่เป็นไปได้ ความมั่นใจ และเหตุการณ์ล่าสุด
+2. **Monitor · Advanced Diagnostics** — “Acoustic DSP Inspector” แสดง coverage,
+   band/temporal features, classifier/firmware version, invalid reason และ
+   device context สำหรับทีมวิศวกรรม
+
+Packet Inspector ยังคงทำหน้าที่ตรวจค่าดิบและ Sensor contract ส่วน Smart Ear
+ตีความ feature ที่ผ่าน contract แล้ว จึงไม่ควรรวมสองหน้าที่ไว้ในการ์ดเดียวกัน
+
+## 1. ปัจจุบันระบบรู้อะไร
+
+### LIVE · Telemetry ที่ Runtime รับและตรวจได้
+
+- Sensor Hub 1 ส่ง `sound_dba` จาก SPH0645LM4H-B มาให้ Pi โดยตรง
+- Pi ตรวจ finite/range/freshness และไม่ทำ `abs`, bias หรือ recalibration ซ้ำ
+- ระบบสรุป valid dBA observations ในแต่ละ Sensor frame ด้วยค่าเฉลี่ยเชิงพลังงาน,
+  min, max, span, sample count และธงการเปลี่ยนระดับมาก
+- Timeline บันทึกระดับเสียงตาม cadence ของ Session; ฝั่ง Pi/runtime ใน repository
+  ปัจจุบันไม่มีฐาน Raw audio/PCM
+- Sleep model ใช้เสียงเป็นเพียง bounded corroboration เมื่อ BCG/movement สนับสนุน
+  ไม่สร้าง Sleep State จากเสียงเพียงอย่างเดียว
+
+### UNKNOWN · ยังสรุปไม่ได้
+
+- แหล่งกำเนิดจริงของเสียงจาก microphone เดียว
+- ตำแหน่ง ทิศทาง ผู้พูด หรือเนื้อหาคำพูด
+- Production firmware ใช้ weighting/time constant/window ใด จนกว่าจะมี source,
+  version และ contract ที่ตรวจได้
+- ค่าปัจจุบันเป็น certified LAeq(A) หรือผ่านมาตรฐานเครื่องวัด Class 1/2 หรือไม่
+- ACK ของแอร์/พัดลมหมายความว่าอุปกรณ์กายภาพกำลังสร้างเสียงจริงหรือไม่
+
+### สิ่งที่ยังไม่มี
+
+ไม่มี PCM/spectrum บน Pi, FFT/MFCC, acoustic event classifier, confidence/abstain,
+event-bout tracker หรือ Smart Ear API/UI เฉพาะ ดังนั้น scalar dBA เพียงค่าเดียวไม่อาจ
+แยก compressor, airflow, door, music หรือ external noise ได้อย่างน่าเชื่อถือ
+
+BCG vendor status `5` ที่ UI เรียกว่า `Snoring flag` เป็น flag จากอุปกรณ์ BCG
+คนละแหล่งกับ microphone และไม่ใช่ Smart Ear classifier หรือการวินิจฉัยการกรน
+
+## 2. เป้าหมายและสิ่งที่ไม่ทำ
+
+### เป้าหมาย
+
+- ช่วยทีมตอบว่าเสียง “คงที่ เปลี่ยนฉับพลัน เป็นโทน หรือเป็นช่วง ๆ” อย่างไร
+- เสนอ likely source เพื่อค้นปัญหาแอร์ พัดลม ระบบระบาย ประตู หรือเสียงของ ZEEP
+- เชื่อม timeline เสียงกับ device intent, BCG/movement และ feedback โดยใช้คำว่า
+  “สัมพันธ์กัน” ไม่กล่าวว่าเป็นสาเหตุโดยอัตโนมัติ
+- สร้างข้อมูล versioned สำหรับพัฒนาความเงียบและประสบการณ์พักผ่อนในแต่ละ Pod
+
+### ไม่ทำในรุ่นแรก
+
+- ไม่ฟัง/ถอด/เก็บเนื้อหาคำพูด และไม่ระบุตัวบุคคลด้วยเสียง
+- ไม่จำแนกไอ กรน หรือ apnea และไม่สรุปโรคจากเสียง
+- ไม่เปลี่ยน Sleep State, Sleep Score หรือ Recovery Score
+- ไม่สั่งแอร์ เพลง พัดลม ประตู หรืออุปกรณ์ใดอัตโนมัติ
+- ไม่นำ archived firmware มา Flash หรือถือเป็น Production source of truth
+
+## 3. Taxonomy รุ่นแรก
+
+แยก **ลักษณะสัญญาณ** ออกจาก **แหล่งที่เป็นไปได้** เพื่อไม่ให้ classifier ฟันธง
+เกินหลักฐาน
+
+### Acoustic shape
+
+| Key | ความหมายที่แสดงต่อ Admin |
+|---|---|
+| `quiet_steady` | เงียบและระดับคงที่ |
+| `steady` | เสียงต่อเนื่องค่อนข้างคงที่ |
+| `tonal` | มีโทนเด่นหรือเสียงหึ่งต่อเนื่อง |
+| `impulsive` | มีเสียงกระชาก/กระแทกสั้น |
+| `intermittent` | เสียงเกิดและหยุดเป็นช่วง |
+| `modulated` | ระดับหรือย่านความถี่เปลี่ยนเป็นจังหวะ |
+| `unknown` | หลักฐานไม่พอหรืออยู่นอกชุดที่เรียนรู้ |
+
+### Likely source
+
+| Key | ป้ายที่เสนอ | ขอบเขตคำอธิบาย |
+|---|---|---|
+| `airflow_like` | คล้ายเสียงลม/พัดลม | ต้องมี spectral/temporal evidence; command state เป็นบริบทเท่านั้น |
+| `compressor_transition_like` | คล้ายช่วงคอมเพรสเซอร์เปลี่ยนสถานะ | ใช้ device timing ประกอบ แต่ไม่ถือ ACK เป็น ground truth |
+| `ventilation_or_purifier_like` | คล้ายระบบระบาย/กรองอากาศ | ต้องแยกจาก airflow อื่นด้วย controlled test |
+| `zeep_audio_likely` | มีแนวโน้มเป็นเสียงที่ ZEEP เล่น | เทียบ playback state/feature โดยไม่บันทึกเนื้อหาเสียง |
+| `door_or_mechanical_like` | คล้ายประตูหรือแรงกระแทกเชิงกล | ใช้ command/event timing และ transient shape |
+| `other_or_unresolved` | แหล่งอื่นหรือยังแยกไม่ได้ | microphone เดียวไม่ใช้ตัดสินว่าเสียงมาจากภายนอก |
+| `unknown` | ยังระบุแหล่งไม่ได้ | เป็นผลลัพธ์ปกติ ไม่ใช่ error |
+
+ห้ามเพิ่ม `speech`, `snore`, `cough` หรือชื่อภาวะสุขภาพใน Production taxonomy
+โดยไม่มี purpose-specific consent, validation protocol และ Privacy/Safety approval
+
+## 4. Architecture ที่เสนอ
+
+```text
+SPH0645 PCM (ESP32 only)
+   │
+   ├─> level path ─> verified weighting/window/calibration ─> sound_dba
+   │
+   └─> privacy-first DSP features
+          RMS/peak/crest · band energy · spectral shape
+          periodicity/modulation · transient count · coverage/clipping
+             │ versioned USB telemetry; no continuous PCM
+             ▼
+Pi acoustics contract validator
+   ▼
+Interpretable classifier + unknown rejection
+   ▼
+Temporal event tracker / smoothing
+   ├─> Admin live projection
+   ├─> derived event aggregate (approved retention only)
+   └─> correlation with device intent + BCG/movement [SHADOW]
+```
+
+ระดับเสียงที่ต้องเทียบ meter กับ feature สำหรับ classifier ต้องแยก path กัน
+A-weighted signal เหมาะกับระดับที่มนุษย์รับรู้ แต่การจำแนก source อาจต้องใช้
+spectral features ที่ไม่ถูก weighting จนสูญข้อมูล
+
+### Module boundary ที่เสนอ
+
+```text
+zeep_pod/acoustics/
+  contracts.py          validate schema/version/range/quality
+  feature_projection.py map firmware telemetry to typed features
+  classifier.py         interpretable rules/model + abstain
+  event_tracker.py      smoothing, bout start/end, restart continuity
+  privacy.py            redaction/retention/public boundary
+  monitor_projection.py Admin-only response
+```
+
+ห้ามเพิ่ม logic เหล่านี้ลง `app.py`; composition root ทำเพียง wiring/lifecycle
+
+## 5. Telemetry contract ที่ต้องอนุมัติก่อนเขียน classifier
+
+### Routing decision
+
+Current reader รับ `event=environment`, schema `zeep.sensor.telemetry` version
+`1.0` และ allowlist SPH0645 เฉพาะ `sound_dba`/`sound_dbfs` การใส่ feature object
+เพิ่มใน nested schema โดยไม่เปลี่ยน contract จะถูกตัดทิ้ง ขณะที่ legacy flat bridge
+ยัง permissive กว่าและอาจเก็บ unknown key ไว้ใน normalized payload P0 ต้องปิด
+boundary นี้สำหรับ acoustic fields และห้ามอาศัย behavior legacy เป็น contract
+
+แผนนี้เลือก **event/router แยก** เป็นค่าเริ่มต้น:
+
+- ESP32 ส่ง `event=acoustic_features` ด้วย schema/version ของตนเองบน USB JSONL
+- reader route ไป acoustic validator/state โดยไม่ทับ canonical environment state
+- packet เดิม `event=environment` ยังคง backward compatible และเป็นเจ้าของ dBA
+- หากข้อจำกัด firmware บังคับให้ใช้ nested object ต้อง bump Sensor telemetry schema,
+  ใช้ strict validator และ migration plan; ห้ามขยาย allowlist แบบรับ field ไม่จำกัด
+
+Clock contract ต้องอาศัย `boot_id`, `sequence` และ monotonic timestamp จาก ESP32
+จากนั้น Pi ประทับ `received_at_utc` และเก็บ clock mapping/drift policy การให้ ESP32
+ส่ง UTC เองโดยไม่มี synchronization ไม่เพียงพอสำหรับ correlate กับ BCG/device event
+
+ตัวอย่างเพื่อออกแบบ schema ไม่ใช่ API ที่ LIVE และ **ทุกค่าตัวเลขเป็น
+non-normative example** จน Production firmware source และ feature specification
+ได้รับอนุมัติ ค่า `sample_rate_hz=16000` ด้านล่างไม่ได้กำหนดให้ Production ต้องใช้
+16 kHz:
+
+```json
+{
+  "event": "acoustic_features",
+  "schema": "zeep.acoustic.telemetry",
+  "schema_version": "1.0",
+  "firmware_version": "required",
+  "dsp_version": "required",
+  "boot_id": "boot-example",
+  "sequence": 1842,
+  "captured_monotonic_ms": 912300,
+  "window_ms": 10000,
+  "subwindow_ms": 1000,
+  "internal_frame_ms": 32,
+  "sample_rate_hz": 16000,
+  "coverage_pct": 99.2,
+  "expected_sample_count": 160000,
+  "valid_sample_count": 158720,
+  "clip_ratio": 0.0,
+  "overrun_count": 0,
+  "level": {
+    "sound_dba": 43.2,
+    "maximum_dba": 49.8,
+    "maximum_method": "pending-contract"
+  },
+  "temporal": {
+    "crest_factor_db": 3.1,
+    "transient_count": 1,
+    "modulation_index": 0.12
+  },
+  "spectral": {
+    "fft_size": 512,
+    "fft_window": "hann",
+    "fft_hop_samples": 256,
+    "bands_db": [
+      {"low_hz": 80, "high_hz": 250, "value_db": -24.1},
+      {"low_hz": 250, "high_hz": 1000, "value_db": -31.4},
+      {"low_hz": 1000, "high_hz": 4000, "value_db": -38.0},
+      {"low_hz": 4000, "high_hz": 8000, "value_db": -45.2}
+    ],
+    "centroid_hz": 418.0,
+    "flatness": 0.18,
+    "periodicity": 0.72
+  },
+  "privacy": {
+    "raw_audio_transmitted": false,
+    "raw_audio_retained": false
+  }
+}
+```
+
+JSON ด้านบนคือ **ESP32 wire packet** จึงไม่มี UTC หลัง validator รับ packet แล้ว
+Pi จึงเพิ่ม `received_at_utc` และ `clock_mapping_version` ใน normalized record โดย
+ไม่เขียนกลับไปอ้างว่าเป็นเวลาที่ ESP32 วัดโดยตรง
+
+ใช้ชื่อ `laeq_dba` ได้ต่อเมื่อ contract ยืนยัน A-weighting, integration window,
+time behavior และ calibration provenance ชัดเจน ก่อนหน้านั้นให้ใช้ชื่อกลาง เช่น
+`sound_dba` และอธิบาย method ตามจริง
+
+ชื่อ current compatibility fields `leq_dba`, `sound_leq_dba` และ method
+`energy_average_leq` เป็นหนี้ด้าน naming ของ packet-level energy aggregation
+ไม่ใช่หลักฐาน metrology P0 ต้องเลือก rename/version หรือประกาศ alias ชัดก่อนเพิ่ม
+DSP contract เพื่อไม่ให้ทีม Data/ML ตีความเป็น certified LAeq(A)
+
+ทุก packet ต้องมี version, timestamp, coverage, clipping/quality และ fail-soft:
+feature เสียต้องตัดเฉพาะ acoustic intelligence ไม่ทำให้ temperature/humidity/lux,
+Session หรือ Safety pipeline หยุด
+
+Feature schema ต้องนิยามหน่วย, reference, band edges, filter/FFT window/hop,
+anti-alias/downsample method, denominator ของ coverage และสูตร periodicity/flatness/
+modulation ให้ทำซ้ำได้ ไม่ให้ชื่อ field เดียวมีความหมายเปลี่ยนตาม firmware
+
+Privacy flag ใน packet เป็น provenance ไม่ใช่การบังคับ parser ต้องใช้ positive
+allowlist ของ scalar/array ตัวเลขที่มีขนาดจำกัด, จำกัด packet size และ reject
+binary/string blob, base64 กับ unknown field พร้อม regression ว่า PCM ไม่เข้า
+API, log หรือ database
+
+## 6. API และ Storage ที่เสนอ
+
+### Admin transport และ API
+
+เพื่อไม่ให้ REST กับ WebSocket สร้าง live projection คนละชุด ให้ใช้ **Admin
+WebSocket projection ที่มีอยู่เป็น canonical live transport** ส่วน REST ใช้สำหรับ
+ข้อมูลย้อนหลังและ contract เท่านั้น:
+
+- `GET /api/v1/admin/acoustics/events?minutes=10`
+- `GET /api/v1/admin/contracts/acoustics`
+
+ทั้งสองทางต้องอ่าน projection service เดียวกัน ใช้ positive allowlist และ
+`Cache-Control: private, no-store` สำหรับ HTTP response
+
+ตัวอย่าง classification response:
+
+```json
+{
+  "version": "zeep-acoustic-intelligence-v1",
+  "status": "shadow",
+  "observed_at": "2026-09-17T10:00:00Z",
+  "mixed_or_unresolved": true,
+  "shapes": [
+    {"label": "steady", "classifier_score": 0.86},
+    {"label": "tonal", "classifier_score": 0.71}
+  ],
+  "likely_sources": [
+    {"label": "compressor_transition_like", "classifier_score": 0.78},
+    {"label": "airflow_like", "classifier_score": 0.64}
+  ],
+  "confidence_band": "medium",
+  "reason_codes": ["low_band_tonal", "device_transition_nearby"],
+  "evidence": {
+    "signal_quality": "usable",
+    "bcg_or_movement_corroborated": false,
+    "device_context_is_ground_truth": false
+  },
+  "provenance": {
+    "feature_schema_version": "1.0",
+    "classifier_version": "shadow-1",
+    "firmware_version": "required"
+  },
+  "privacy": {
+    "raw_audio_retained": false
+  },
+  "clinical_validated": false,
+  "automatic_actuation": false
+}
+```
+
+### Storage decision
+
+เหตุการณ์ที่ผูกกับ Recorded Session อาจเก็บ derived transition/summary ใน `events`
+พร้อม version และ provenance เพราะตารางนี้บังคับ `session_id` ส่วนเหตุการณ์ตอน Pod
+ว่าง/commissioning ต้องอยู่ operational audit หรือ store แยกที่มี retention ชัดเจน
+ห้ามสร้าง Session ปลอมเพื่อรองรับข้อมูลเสียง
+
+หากงาน R&D ต้องใช้ feature cadence 10 วินาทีเพื่อทำซ้ำ confusion matrix จึงค่อย
+เสนอ `acoustics.db` แยก โดยต้องกำหนด schema, ground-truth link, backup, snapshot,
+retention, account erasure และ migration ก่อนเริ่ม P3; การเก็บเฉพาะ summary จะไม่พอ
+สำหรับ reproduce หรือฝึก classifier
+
+Raw PCM ต้องไม่ถูกส่งหรือเก็บเป็นค่าเริ่มต้น การเก็บตัวอย่างเสียงเพื่อสร้าง dataset
+เป็นโครงการวิจัยแยก ต้องมี consent, coded identity, encrypted storage, retention,
+access log และ erasure owner โดยไม่ปะปนกับ Production Session store
+
+Derived acoustic feature ที่ผูกเวลา/Session ยังเป็นข้อมูลส่วนบุคคลที่ link กลับได้
+Shadow Pilot จึงต้องมี user notice/lawful-basis review ด้วย ไม่ใช่รอเฉพาะเมื่อเก็บ
+Raw PCM ส่วน operator annotation ใช้ controlled vocabulary และ audit trail แทน
+free text เพื่อลด PII และ label drift
+
+## 7. รูปแบบหน้า Monitor
+
+### Section 01 · Sensor integrity
+
+คงการ์ด SPH0645 เดิมและเพิ่มเฉพาะข้อมูลความพร้อมของ pipeline:
+
+- microphone validity/freshness
+- firmware/DSP schema version
+- feature coverage และ clipping
+- สถานะ `LIVE / STALE / INVALID / LEVEL-ONLY`
+
+### Section 03 · Sound Intelligence (SHADOW)
+
+```text
+┌ หูอัจฉริยะ · SOUND INTELLIGENCE                 SHADOW ┐
+│ 43.2 dBA       เสียงต่อเนื่องค่อนข้างคงที่              │
+│ มีแนวโน้ม: เสียงลม/พัดลม · ความมั่นใจระดับกลาง          │
+│ ─── trend 10 นาที + event markers ──────────────────    │
+│ ล่าสุด 02:14 · เสียงกระชากสั้น · ไม่พบ Movement ร่วม     │
+│ วิเคราะห์รูปแบบสัญญาณ · ไม่บันทึกเสียงพูด               │
+└─────────────────────────────────────────────────────────┘
+```
+
+ใช้ภาษาว่า “คล้าย”, “มีแนวโน้ม” และแสดง `unknown` อย่างสงบ ไม่ใช้สีแดงเมื่อ
+classifier ไม่มั่นใจ สีเตือนด้านความปลอดภัยต้องมาจากระดับเสียง/ระบบ Safety ที่มี
+contract แยกเท่านั้น
+
+ค่า `classifier_score` ไม่ใช่ probability ห้ามแสดงเป็นเปอร์เซ็นต์จนผ่านการสอบเทียบ
+ความน่าจะเป็นและรายงาน reliability/ECE/Brier แล้ว คะแนนของหลาย label เป็นอิสระ
+ต่อกันและไม่ต้องรวมเป็น 1 ช่วงแรก UI ใช้ `low/medium/high`
+
+### Section 04 · Acoustic DSP Inspector
+
+- feature/band timeline และ transient markers
+- window coverage, dropped/invalid/clipping count
+- top alternatives และ reason codes
+- firmware/feature/classifier version
+- nearby device intent/ACK และ BCG/movement correlation
+- แสดง operator annotation ที่มาจาก Commissioning audit แบบ read-only
+
+### Control Debug · Acoustic Commissioning
+
+การใส่ ground-truth label เป็น write action จึงอยู่ที่ `/control-debug` หรือ dedicated
+commissioning surface ไม่อยู่ใน Monitor ต้องใช้ Admin RBAC, CSRF, controlled
+vocabulary, timestamp/actor audit และปิดใช้งานระหว่าง Session ของผู้ทดสอบ
+
+### หน้าอื่น
+
+| หน้า | ระยะเริ่มต้น | หลังผ่าน validation |
+|---|---|---|
+| Dashboard | คง dBA และสถานะ Sensor | แสดงได้เพียง “สภาพเสียงนิ่ง/มีเสียงเปลี่ยน” |
+| Control | คง dBA, audio และ device control | ไม่เพิ่ม DSP diagnostics |
+| Sessions | ไม่ใช้ผล classifier | แสดง aggregate เช่น “พบเสียงเปลี่ยน 3 ช่วง” พร้อม confidence/correlation |
+| App/Public API | ไม่ส่ง classifier | เปิดเฉพาะ allowlisted summary หลัง Product/Privacy approval |
+
+## 8. Validation plan
+
+### Controlled dataset
+
+ทดสอบแยกและผสมอย่างน้อย:
+
+- ทุกอุปกรณ์ปิด / ambient หลายช่วงเวลา
+- แอร์ fan 1–5, compressor start/run/stop และ setpoint ต่างกัน
+- พัดลมระบาย, เครื่องกรอง/ดูดกลิ่น และ aroma/steam ตามสภาพใช้งานจริง
+- เพลงหลาย track ที่ 20/40/60% และช่วงเริ่ม/หยุด
+- ประตู เตียง การกระแทกเบา และเสียงภายนอกที่ควบคุมได้
+- หลายรอบ หลาย Pod และตำแหน่งเครื่องนอนที่ต่างกัน
+
+ใช้ timestamp ที่ sync, CEM DT-8852 สำหรับระดับเสียง, device event log และ operator
+ground-truth แยกจาก classifier output ห้ามใช้ command ACK เพียงอย่างเดียวเป็น label
+
+CEM DT-8852 ตรวจ path ระดับเสียงเท่านั้น ไม่ได้ยืนยัน band, tonality หรือ source
+ความถูกต้องของ DSP feature ต้องมี golden PCM/synthetic vectors ที่ทราบ frequency,
+amplitude, impulse และ modulation โดยไม่ใช้ข้อมูลผู้ใช้จริง
+
+### Metric ที่ต้องรายงาน
+
+- coverage/packet loss, latency และ CPU/RAM
+- precision, recall และ F1 **ราย class**; ไม่ใช้ accuracy รวมเพียงค่าเดียว
+- false alert ต่อชั่วโมงในช่วง quiet/stable
+- unknown/rejection rate และ performance เมื่อเจอ source นอกชุดฝึก
+- event onset/end timing error และผลหลัง restart/packet gap
+- ความต่างระหว่าง Pod/ตำแหน่ง/อุณหภูมิ/ระดับอุปกรณ์
+- privacy, retention, erasure และ public-redaction tests
+- แยก train/validation/test ตาม Pod, run, date และ participant; ไม่สุ่ม 10-second
+  window จาก Session เดียวกันข้ามชุด และต้อง hold out unseen Pod/source/mixed case
+- macro-F1/PR, rejection calibration และ reliability เมื่อจะใช้ confidence เป็นตัวเลข
+
+เกณฑ์เริ่มต้นที่เสนอคือ valid-feature coverage อย่างน้อย 95%, ไม่มี Raw PCM หลุด
+ออกจาก boundary และทุกผลมี confidence band/unknown/provenance ส่วน latency แยกเป็น
+feature publication หลัง window ปิด, provisional inference และ confirmed bout หลัง
+smoothing เพราะ event tracker อาจใช้ 2–3 windows เกณฑ์ precision/recall/latency
+ราย class ต้องกำหนดจากความเสี่ยงและจำนวนตัวอย่างก่อนเริ่ม Pilot ห้ามปรับหลังเห็นผล
+เพื่อให้ผ่าน
+
+## 9. ลำดับพัฒนาและ Gate
+
+| Phase | ผลส่งมอบ | Gate ก่อนขยับ |
+|---|---|---|
+| **P0 · Contract** | หา Production firmware source/version, แยก level/feature path, อนุมัติ routing/clock/taxonomy/schema/privacy/RACI และแก้ข้อความ UI เดิมที่ยังเรียกเสียงว่า estimate จาก dBFS | Firmware + Pi + Product + Privacy ลงนาม; no-score/no-actuation test |
+| **P1 · Feature telemetry** | ESP32 ส่ง feature แบบ versioned; Pi validate และแสดง quality | Golden vectors, meter comparison, fail-soft, restart/packet-loss tests |
+| **P2 · Controlled labeling** | Dataset จากสถานะอุปกรณ์ที่รู้จริงและหลายรอบ | Pre-register protocol/owner ใน Evidence library, dataset register, label audit และ per-class metric plan |
+| **P3 · Shadow classifier** | Admin-only inference + unknown rejection; ไม่ persist เกิน policy | Confusion matrix, false-alert/unknown/latency report |
+| **P4 · Pilot Monitor** | Live card, DSP Inspector และ operator feedback | Privacy/UI review, hardware smoke, no regression ต่อ Session/Safety |
+| **P5 · Session aggregate** | Derived event summary สำหรับ Admin | Correlation review; ยืนยันว่าไม่เปลี่ยน State/Score |
+| **P6 · User summary** | ข้อความสั้นที่ผ่าน Product/Privacy | Evidence เพียงพอ, copy review, positive allowlist |
+
+Adaptive recommendation เป็นแผนหลัง P6 และยังคงให้มนุษย์ยืนยันก่อนปรับอุปกรณ์
+Automatic actuation ต้องมี safety proposal และ validation แยก ไม่ได้อนุมัติด้วยแผนนี้
+
+## 10. RACI
+
+| งาน | Responsible | Accountable/Approver |
+|---|---|---|
+| Production firmware และ DSP feature | Firmware/Hardware | Hardware owner |
+| Contract, validation, API/storage | Pi team | Pi lead |
+| Taxonomy และข้อความ | Product/UX | Product owner |
+| Dataset/classifier/evaluation | Data/ML | Model owner |
+| Consent, retention, erasure | Privacy/Data governance | Data controller |
+| No-actuation/fail-safe | Safety + QA | Safety owner |
+| Deploy, smoke, rollback | Operations | Release owner |
+
+## 11. Definition of ready ก่อนเริ่มเขียนโค้ด
+
+- [ ] ได้ Production Sensor Hub 1 firmware source, version และ checksum ที่ตรวจได้
+- [ ] ระบุ sample rate, bit alignment, weighting, window และ calibration ของ level path
+- [ ] อนุมัติ event routing, clock mapping/drift และ strict packet-size/field allowlist
+- [ ] อนุมัติ feature schema/taxonomy/unknown behavior และ test vectors
+- [ ] อนุมัติ no-raw-audio default, consent, retention, access และ erasure boundary
+- [ ] ระบุ test matrix, metric, sample count และ acceptance ก่อนเก็บผล
+- [ ] ยืนยัน Admin WebSocket เป็น live transport, REST เป็น event/contract transport,
+      projection service เดียว และ public positive allowlist
+- [ ] ยืนยันว่า Sleep State/Score/Control ไม่อ่าน classifier output
+- [ ] มี rollback ที่ปิด Smart Ear ได้โดยไม่ปิด Sensor Hub 1 หรือ Session
+
+จนกว่ารายการนี้ครบ ให้ถือ Smart Ear เป็น **ROADMAP** และใช้ Monitor ปัจจุบันดู
+`sound_dba`/freshness/level aggregation เท่านั้น
+
+## 12. เอกสารและทะเบียนที่เกี่ยวข้อง
+
+- Current hardware path: [Hardware และ Hub map](hardware-hub-map.md)
+- Current Sensor contract: [Sensor Interface Contract v1.2](../zeep-sensor-interface-contract-v1.2.md)
+- API/Privacy boundary: [API, Data และ Privacy](api-data-and-privacy.md)
+- ตำแหน่งหน้าและ UI standard: [Interface Map & UI Standard](../zeep-interface-map-and-ui-standard-v1.md)
+- Audio output ซึ่งเป็นคนละ boundary: [Brainwave Sound Lab](../brainwave-sound-lab-v1.md)
+- Protocol governance: [Evidence Protocol Register](../../research/evidence-library/protocol-register.json)

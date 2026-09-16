@@ -353,6 +353,9 @@ Firmware ที่ประกาศ `ARCHIVED / DO NOT FLASH` ไม่อย�
   ความเสี่ยงว่าคะแนนอาจ optimistic เมื่อ BCG/HR/RR ขาดนาน หรือกำหนด cap เพิ่ม
 - ยืนยันว่า v1 Pi runtime ยังไม่มี smoke/CO input หรือ alarm output; อุปกรณ์
   standalone (ถ้ามี) ต้องมี Owner และ functional test แยกก่อนอ้างในคู่มือผู้ใช้
+- ถอนหรือให้ Security owner ลงนามรับความเสี่ยง legacy browser compatibility ที่รับ
+  `?token=` แล้วเก็บใน localStorage; credential ใน URL ขัดกับ boundary ปัจจุบันและ
+  ต้องมี migration/deprecation evidence ก่อน Final Freeze
 - ตรวจ legacy Tablet history เทียบ canonical Usage API ก่อนประกาศเส้นทาง migration
 
 ### P1 — บันทึกเป็นหนี้เทคนิคได้หากไม่เปลี่ยน behavior
@@ -384,6 +387,9 @@ Firmware ที่ประกาศ `ARCHIVED / DO NOT FLASH` ไม่อย�
 
 ### Defer ไป v2
 
+- Acoustic Intelligence/DSP classifier, API และ UI; v1 มีเพียงระดับเสียงกับ
+  packet-level aggregation ความสามารถ Smart Ear ต้องผ่าน P0–P4 ใน
+  [DSP Plan](onboarding/smart-ear-dsp-plan.md) และไม่อยู่ใน v1 Code Freeze scope
 - Personal Baseline เปลี่ยน Sleep State โดยตรง
 - Closed-loop automatic control จาก Sleep State
 - Whole-day readiness, training load และ wearable integration

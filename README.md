@@ -60,8 +60,10 @@ Tailscale หรือ reverse proxy ที่ใช้ HTTPS, access policy แ
 |---|---|
 | เริ่มงานและเลือกเส้นทางตามบทบาท | [Team Onboarding](docs/onboarding/README.md) |
 | Product, Mode และ Session lifecycle | [Product and Lifecycle](docs/onboarding/product-and-lifecycle.md) |
+| Tech stack, database และเครื่องมือ | [Technology Stack, Data และเครื่องมือ](docs/onboarding/technology-stack-and-tools.md) |
 | Hardware, transport และ failure boundary | [Hardware and Hub Map](docs/onboarding/hardware-hub-map.md) |
 | API, Data และ Privacy | [API, Data and Privacy](docs/onboarding/api-data-and-privacy.md) |
+| แผนจำแนกเสียง DSP | [หูอัจฉริยะ · Acoustic Intelligence DSP Plan](docs/onboarding/smart-ear-dsp-plan.md) — ROADMAP/SHADOW |
 | Pull, test, deploy, backup และ recovery | [Operations and First Week](docs/onboarding/operations-and-first-week.md) |
 | Sleep State, score และ version ปัจจุบัน | [Sleep System Current](docs/zeep-sleep-system-current.md) และ [`sleep_system_policy.py`](sleep_system_policy.py) |
 | API field/enum | [API Schema Reference](docs/zeep-api-schema-reference-v1.md), Pydantic models และ `/openapi.json` ของ release ที่ deploy |

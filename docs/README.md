@@ -4,7 +4,7 @@
 
 เจ้าของ: Pi 5 application team
 
-อัปเดตล่าสุด: 16 กันยายน 2026
+อัปเดตล่าสุด: 17 กันยายน 2026
 
 เริ่มจาก [ZEEP v1 Team Onboarding](onboarding/README.md) ซึ่งเป็นหน้าหลักสำหรับ
 สมาชิกทีมทุกบทบาท เอกสารนี้เป็นทะเบียนเอกสารที่ยังใช้งาน ไม่ใช่การประกาศว่า
@@ -30,6 +30,7 @@
 | เรื่อง | เอกสารที่มีอำนาจ | ใช้สำหรับ |
 |---|---|---|
 | เริ่มงานสมาชิกใหม่ | [ZEEP v1 Team Onboarding](onboarding/README.md) | จุดเริ่มหลัก: เส้นทางอ่านตามบทบาท, Lifecycle, Hardware, API/Data/Privacy และ First-week checklist |
+| Tech stack และเครื่องมือ | [Technology Stack, Data และเครื่องมือ](onboarding/technology-stack-and-tools.md) | Orientation ของ Runtime, Frontend, Database, Protocol, QA และ Operations; package/config จริงยังเป็น source of truth |
 | ส่งมอบและ Code Freeze | [v1 System Handover and Freeze Readiness](zeep-v1-system-handover-and-freeze-readiness.md) | Lifecycle ครบวงจร, invariant, test gate และรายการลงนามก่อน Freeze |
 | ภาพรวมระบบ | [Pi 5 Software Architecture](pi5-software-architecture.md) | ขอบเขต module, dependency และลำดับ refactor |
 | ปฏิบัติการเครื่อง | [Pi 5 Operations Runbook](pi5-operations-runbook.md) | Pull, verified Pod sync, test, deploy, backup, restart และ recovery |
@@ -47,6 +48,7 @@
 | Respiratory wellness | [Respiratory Wellness v1.1](zeep-respiratory-wellness-v1.md) | การสรุป HR/RR เชิง Wellness |
 | Product language | [Product Language Guideline v1](zeep-product-language-guideline-v1.md) | คำสั้น กระชับ เป็นมิตร และไม่วินิจฉัย |
 | Interface map และ UI | [Interface Map & UI Standard v1](zeep-interface-map-and-ui-standard-v1.md) | หน้าที่ทุกหน้า ลำดับข้อมูล Touch/Type/Icon และ viewport QA |
+| Acoustic Intelligence | [หูอัจฉริยะ · DSP Plan](onboarding/smart-ear-dsp-plan.md) | มีอำนาจเฉพาะขอบเขต **ROADMAP/SHADOW**, privacy, Monitor placement และ validation gate; ยังไม่ใช่ v1 runtime contract |
 | Pilot สองโหมด | [Pilot Two-Mode Protocol](zeep-pilot-two-mode-protocol.md) | Overnight Recovery และ Nap & Refresh |
 | Evidence library | [Research Evidence Library](../research/evidence-library/README.md) | แหล่งอ้างอิง, checksum และ verification |
 

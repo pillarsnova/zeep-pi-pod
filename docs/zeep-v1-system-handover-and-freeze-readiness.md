@@ -14,7 +14,8 @@
 ZEEP v1 เป็นระบบประเมินการพักและการนอนเชิง Wellness แบบไม่ต้องสวมอุปกรณ์
 โดยใช้ BCG, Bed Status, HR/RR และ Movement เป็นหลักฐานด้านการพัก/การนอน
 ส่วนอุณหภูมิ ความชื้น แสง เสียง CO₂, PM2.5 และ VOC ใช้อธิบายสภาพแวดล้อม
-และปรับความเชื่อมั่น ไม่ใช้สร้าง Sleep State โดยตรง
+และเป็น Environment support สูงสุด 10 คะแนนในทั้ง Sleep Score และ Recovery Score
+แต่ไม่ใช้สร้างหรือเปลี่ยน Sleep State
 
 ระบบเปิดให้ผู้ใช้เลือกเพียงสองรูปแบบ:
 
@@ -129,7 +130,7 @@ Session ศูนย์นาที รายงาน หรือ Baseline ป
    ไม่เลื่อนไปข้างหน้าหนึ่งหรือสอง Sensor rows
 3. ตรวจ Continuity Accounting: ทุก on-bed interval ต้องมี attribution และ
    OFF BED ต้องแยกออก
-4. สรุป Sensor, HR/RR, Sleep/Rest metrics และสร้าง score ตาม Mode
+4. สรุป Sensor, HR/RR, Sleep/Recovery metrics และสร้าง score ตาม Mode
 5. commit finalization ลง DB แบบ atomic ก่อนลบ restart checkpoint
 6. อัปเดตประวัติ/Baseline ด้วยข้อมูลก่อนหน้าและ Session ที่เข้าเกณฑ์ โดยไม่ให้
    current result รั่วกลับไปเปลี่ยนการตัดสินของตัวเอง
@@ -266,37 +267,17 @@ policy version, regression และผล replay ที่ Product Owner ตร
 ก่อนลบ legacy endpoint ต้องย้าย client, เทียบ response parity และประกาศ migration
 version; ห้ามลบเพียงเพื่อลดจำนวนโค้ด
 
-## 7. Regression audit: 964 Tests จำเป็นหรือไม่
+## 7. กลยุทธ์ Regression และการลดชุดทดสอบ
 
-คำตอบคือ **จำเป็นต้องรักษา coverage แต่ไม่จำเป็นต้องรันทั้งชุดในทุกการแก้หนึ่งบรรทัด**
+จำนวน Test เปลี่ยนตาม Revision จึงไม่ใช้เลขตายตัวเป็น Source of truth หรือ KPI
+สิ่งที่ต้องรักษาคือ Coverage ของพฤติกรรมสำคัญและผล Release gate ที่ผูกกับ Git SHA
+ใน Closure record
 
-- Baseline เดิม 964 tests รันประมาณ 11–14 วินาที จึงไม่ได้เป็นต้นเหตุของเวลาตรวจนาน
-- Audit ไม่พบ test body ที่ซ้ำตรงกันและยังไม่มีชุดใดปลอดภัยพอให้ลบ
-- ชุดนี้ครอบคลุม Auth/Privacy, Hardware/Control, Sleep/Baseline/Replay,
-  Score/Report, Session/API, Storage และ UI/Evidence
-- UI composer, Ruff และ Evidence check เป็นคนละ gate และไม่รวมอยู่ในเลข 964
-- Replacement Firmware ใต้ `firmware/sensorhub1-esp32s3/` ถูกยกเลิกและระบุ
-  `ARCHIVED / DO NOT FLASH`; ไม่ใช่ v1 runtime หรือ Product Gate
-- หลังเพิ่ม regression สำหรับช่องโหว่ที่พบ จำนวนจริงจะมากกว่า 964; จำนวนไม่ใช่ KPI
-  เป้าหมายคือพฤติกรรมสำคัญมีหลักฐานและ suite ยังเร็วพอ
+ชุดทดสอบต้องครอบคลุม Auth/Privacy, Hardware/Control, Sleep/Baseline/Replay,
+Score/Report, Session/API, Storage, UI และ Evidence governance ส่วน Replacement
+Firmware ที่ประกาศ `ARCHIVED / DO NOT FLASH` ไม่อยู่ใน v1 Product Gate
 
-ภาพรวม 964 tests ณ baseline ที่ audit:
-
-| กลุ่มพฤติกรรม | จำนวน |
-|---|---:|
-| Identity, Access และ Privacy | 132 |
-| Hardware, Sensor, Control และ Audio | 96 |
-| Sleep State, Baseline และ Replay | 276 |
-| Score, Report และ Wellness language | 188 |
-| Session, History, API และ User learning | 195 |
-| Storage, Maintenance และ Architecture | 32 |
-| UI และ Evidence governance | 45 |
-
-หลัง patch รอบนี้ Application suite มี **983 tests, skip 0**; Closure record
-ด้านล่างบันทึกผล rerun ล่าสุดหลัง patch ทุกชิ้น จำนวนที่เพิ่มคือ
-regression ของพฤติกรรมใหม่/ช่องโหว่ที่พบ ไม่ใช่การคัดลอก test เดิม
-
-วิธีลดเวลาและความซับซ้อนที่ถูกต้อง:
+วิธีรันและลดความซับซ้อน:
 
 1. ระหว่างพัฒนาให้รัน focused suite ตาม domain ที่แก้
 2. ก่อน push/deploy รัน Application release gate เต็ม
@@ -305,7 +286,8 @@ regression ของพฤติกรรมใหม่/ช่องโหว�
 4. รวม fixture/helper ได้ แต่ลบ test ได้เมื่อ feature/route/data format ถูก retire และ
    มี regression ที่ครอบ behavior ทดแทนแล้ว
 5. แยก test inventory ตาม ownership แทนการลด assertion
-6. กำจัด skip โดยติดตั้ง dev dependency ครบ; เป้าหมาย v1 คือ `skipped=0`
+6. Skip ต้องมีเหตุผลและ Owner; Freeze candidate ต้องบันทึกจำนวน Passed/Failed/
+   Error/Skipped ตามผลจริง ห้ามคัดลอกตัวเลขจากรอบก่อน
 
 สิ่งที่ลดได้หลัง Freeze โดยทำเป็น migration แยก คือ legacy Tablet history route
 หลัง App ใช้ Usage API ครบ, `recalibrate_sound_history.py` หลังยืนยันว่าไม่มีข้อมูล
@@ -374,8 +356,9 @@ regression ของพฤติกรรมใหม่/ช่องโหว�
 
 ### P1 — บันทึกเป็นหนี้เทคนิคได้หากไม่เปลี่ยน behavior
 
-- `app.py` ยังใหญ่และควรทยอยแยก Session lifecycle, BCG reader และ route wiring
-  ด้วย characterization tests; ห้ามรวม refactor กับการเปลี่ยนสูตร
+- BCG reader, 10-second Sensor sampler และ live projection แยกแล้วบน
+  `origin/develop`; `app.py` ยังใหญ่และควรทยอยแยก Session lifecycle กับ route wiring
+  ด้วย characterization tests โดยห้ามรวม Refactor กับการเปลี่ยนสูตร
 - Personal Baseline จำกัด expensive detail reads ต่อ cohort แล้ว แต่ metadata query
   ยังอ่านทุก Session ในครั้งเดียว ควรย้ายเป็น indexed/window query เมื่อปริมาณข้อมูลจริง
   โตจนมีหลักฐานว่า query นี้เป็นคอขวด
@@ -391,6 +374,9 @@ regression ของพฤติกรรมใหม่/ช่องโหว�
 - fallback JavaScript สำหรับข้อมูลจาก Pi รุ่นเก่าใช้ Sleep environment bands กับ Nap;
   Live Pi ปัจจุบันส่ง mode-aware evaluation ถูกต้องแล้ว แต่ควรถอด fallback นี้หลังยืนยัน
   fleet compatibility
+- `cleanup_short_sessions.py` เป็น one-time migration รุ่นเก่าที่ใช้เกณฑ์ต่ำกว่า 2
+  ชั่วโมงซึ่งไม่เข้ากับ Nap ปัจจุบัน ห้ามใช้ใน workflow ใหม่ และต้องยืนยัน marker/
+  operation history ครบทุก Pod ก่อนถอดจาก registry และลบ source/test อย่างถาวร
 - อัปเดต Pydantic v1 validators และ Starlette/httpx compatibility ในรุ่นหลัง Freeze
 - ทำ clock/cadence observability ให้ Sensor frame และ Session sample อธิบาย skew ได้
 - เก็บ external refresh token แบบปลอดภัยหากต้องให้ revoke/share ต่อเนื่องข้าม restart
@@ -423,9 +409,9 @@ git diff --check
 |---|---|
 | Candidate Git SHA | รอกรอกหลัง merge/push |
 | Policy/version snapshot | ตรวจจาก `GET /api/admin/sleep/policy` |
-| Application tests | 1,027 passed, failure=0, error=0, skip=0 · 12.449 วินาที |
+| Application tests | รันที่ Candidate SHA แล้วกรอก Passed/Failed/Error/Skipped ตามผลจริง |
 | Archived replacement Firmware | ไม่อยู่ใน v1 gate · ห้าม Flash |
-| Evidence/UI/style | Registry 30 records + protocol ผ่าน; UI, Ruff, compile และ diff ผ่าน |
+| Evidence/UI/style | รอรันและบันทึกผลที่ Candidate SHA เดียวกับ Application tests |
 | Production smoke | รอช่วงไม่มีผู้ใช้งาน |
 | Replay/reference Sessions | ตรวจเฉพาะ reviewed manifest; ห้ามแก้ Raw |
 | Product Owner approval | รออนุมัติ Final Code Freeze |
@@ -434,9 +420,10 @@ git diff --check
 
 ## 12. เอกสารและ Source of Truth
 
+- [Team Onboarding — จุดเริ่มหลัก](onboarding/README.md)
 - [Pi 5 Software Architecture](pi5-software-architecture.md)
 - [Sleep System Current](zeep-sleep-system-current.md)
-- [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.0.md)
+- [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.8.md)
 - [Session Result Presentation v1](zeep-session-result-presentation-v1.md)
 - [Product Language Guideline v1](zeep-product-language-guideline-v1.md)
 - [User Learning Profile v1](zeep-user-learning-profile-v1.md)

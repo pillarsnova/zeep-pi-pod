@@ -44,7 +44,7 @@ Recovery Score** ทั้งสองคะแนนตอบคนละคำ
 | จำเป็นต้องหลับ | ไม่จำเป็น | เป็นเป้าหมายของโหมด; หาก Timeline ที่มีหลักฐานยืนยันว่าไม่พบช่วงหลับจะได้ Sleep Score 0 แต่ไม่เปลี่ยนเป็น Nap |
 | N3 / REM | ไม่บังคับและไม่หักเพราะไม่มี | ใช้ใน architecture score ตาม policy |
 | ถ้าไม่หลับ | ยังเป็น Recovery Score เมื่อ Session ครบ 10 นาที; หลักฐานที่ขาดใช้ neutral และลด confidence | แสดงว่าไม่พบการหลับและให้ Sleep Score 0 เมื่อครบ 5 ชั่วโมง; confidence สะท้อนความครบของหลักฐาน และไม่เปลี่ยนเป็น Nap อัตโนมัติ |
-| ผลจาก Sensor | เวลา, HR/RR stability/settling, Bed Status, continuity, environment, coverage; Sleep State เมื่อมีหลักฐานครบ | TST proxy, latency proxy, continuity, W/N1/N2/N3/REM, cycle proxy, environment, coverage |
+| ผลจาก Sensor | เวลา, HR/RR stability/settling, Bed Status, continuity, environment และ coverage; ผู้ใช้เห็น `พักขณะตื่น / เคลิ้ม / ช่วงหลับที่ประเมินได้` ส่วน W/N1/N2/N3/REM เก็บให้ Admin QA | TST proxy, latency proxy, continuity, W/N1/N2/N3/REM, cycle proxy, environment, coverage |
 | ผลจากแบบประเมิน | ความสดชื่น/ง่วง/ผ่อนคลายหลังพัก | ความสดชื่นและประสบการณ์หลังตื่น |
 
 ### Nap & Refresh ที่ไม่หลับ
@@ -84,7 +84,9 @@ Mode/Session lifecycle เท่านั้น ไม่ใช่ hard maximum 
 ### Nap & Refresh ที่พบการหลับ
 
 ยังคงใช้ `Recovery Score` เดียวกัน ไม่เปลี่ยนเป็น Sleep Score และไม่ให้โบนัสบังคับ
-จาก N3/REM สถานะที่ตรวจพบแสดงเป็นบริบทประกอบได้เมื่อหลักฐานครบ การงีบสั้นอาจมีประโยชน์
+จาก N3/REM หน้าผู้ใช้แสดง `rest_profile` สามกลุ่ม (`พักขณะตื่น`, `เคลิ้ม`,
+`ช่วงหลับที่ประเมินได้`) เป็นบริบทที่ไม่วินิจฉัย ส่วน W/N1/N2/N3/REM และ
+confidence ราย epoch อยู่ในมุมมอง Admin QA เท่านั้น การงีบสั้นอาจมีประโยชน์
 โดยไม่มี slow-wave sleep และการงีบราว 30 นาทีอาจเกิด sleep inertia ได้ จึงควร
 เก็บแบบประเมินหลังใช้และเว้นช่วงก่อนทำกิจกรรมที่ต้องใช้ความตื่นตัวสูง
 

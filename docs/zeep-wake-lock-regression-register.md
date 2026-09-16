@@ -32,8 +32,9 @@ deterministic test.
    Audit.
 2. Current replay must not create a post-onset Wake bout of at least 10 minutes
    through loss of onset context.
-3. A genuine Wake/Bed Exit with movement or autonomic rise must remain Wake and
-   must not be flagged as lock-in.
+3. Genuine on-bed Wake with corroborated movement/autonomic rise must remain
+   Wake and must not be flagged as lock-in; confirmed Bed Exit must remain the
+   separate `OFF BED` occupancy result.
 4. Quiet wakefulness with a valid onset context must not be automatically
    relabelled.
 5. Audit findings are Admin QA flags only. They never rewrite Sleep State,

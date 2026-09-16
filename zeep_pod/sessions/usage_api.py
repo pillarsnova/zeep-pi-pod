@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 
 from api_v1 import response_envelope
+from sleep_system_policy import PERSONAL_BASELINE_LEARNING_START_UTC
 from zeep_pod.sessions.history_service import (
     SessionHistoryService,
     resolve_history_window,
@@ -52,7 +53,7 @@ USAGE_LIST_EXAMPLE = {
             "has_more": False,
         },
         "range": None,
-        "history_start_utc": "2026-09-01T00:00:00+00:00",
+        "history_start_utc": PERSONAL_BASELINE_LEARNING_START_UTC,
     },
 }
 

@@ -13,8 +13,9 @@ source ทุกครั้ง ไม่คัดลอกจากหน้า
 
 ZEEP v1 เป็นระบบประเมินการพักและการนอนเชิง Wellness แบบไม่ต้องสวมอุปกรณ์
 โดยใช้ BCG, Bed Status, HR/RR และ Movement เป็นหลักฐานหลัก ส่วนอุณหภูมิ,
-ความชื้น, แสง, เสียง, CO2, PM2.5 และ VOC เป็นบริบท/ความมั่นใจและไม่สร้าง
-Sleep State โดยตรง
+ความชื้น, แสง, เสียง, CO2, PM2.5 และ VOC เป็นบริบทการพักและให้คะแนน
+`environment_support` แบบมีขอบเขต **สูงสุด 10 คะแนน** ในทั้ง Sleep Score และ
+Recovery Score แต่ไม่สร้างหรือเปลี่ยน Sleep State โดยตรง
 
 สิ่งที่ v1 **ไม่ได้เป็น**:
 
@@ -67,8 +68,10 @@ flowchart LR
 ### 1. Identity และ Profile
 
 - Password และ QR จบที่ account/profile/session policy เดียวกัน
-- canonical account key คือ email ที่ normalize เป็นตัวพิมพ์เล็ก; `publicId`
-  เป็น authorization subject และ display name ไม่สร้างประวัติคนใหม่
+- ระบบประวัติเป็น **email-first**: ใช้ email ที่ยืนยันได้และ normalize เป็นตัวพิมพ์เล็ก
+  เมื่อมีข้อมูล; record เก่าอาจยังใช้ normalized legacy account key และเชื่อมผ่าน alias
+  ที่ตรวจสอบแล้ว ส่วน `publicId` เป็น authorization subject และ display name ไม่สร้าง
+  ประวัติคนใหม่
 - Verified Profile ขั้นต่ำใช้เพศ, วันเกิด/ช่วงอายุ, ส่วนสูงและน้ำหนัก; blood group
   เป็นข้อมูลสำรวจและไม่มีผลต่อ score/State
 - Admin Login แยกจาก User Login และไม่ทำให้ Admin ครอบครอง Pod
@@ -159,7 +162,8 @@ hardware behavior ใน commit เดียวกัน
 3. ทุก on-bed Recording interval มี State; OFF BED แยกต่างหาก
 4. Live, replay และ report ใช้ scorer/policy/version ชุดเดียวกัน
 5. Overnight มี Sleep Score; Nap มี Recovery Score; elapsed time ไม่สลับ mode
-6. Environment ไม่สร้าง Stage และ Sleep State/Shadow ไม่สั่งอุปกรณ์
+6. Environment ให้คะแนนสนับสนุนได้สูงสุด 10 คะแนนในแต่ละสูตรแต่ไม่สร้าง Stage;
+   Sleep State/Shadow ไม่สั่งอุปกรณ์
 7. Restart ไม่ logout, finalize หรือแทน State เดิมด้วย WAIT
 8. User เห็นข้อมูลตนเอง; Admin/raw routes ต้องผ่าน backend RBAC/CSRF
 9. Finalization เป็น atomic และ continuity accounting ต้องครบก่อนเผยแพร่
@@ -175,7 +179,7 @@ hardware behavior ใน commit เดียวกัน
 | Signal gap continuity | carry State เดิมแบบ low confidence; เข้า score แต่ไม่เข้า baseline | Product/Safety owner ต้องยอมรับ optimistic-risk เมื่อสัญญาณขาดนาน หรืออนุมัติ cap ใหม่พร้อม regression |
 | Fire/gas alarm | v1 software ไม่มี smoke/CO input หรือ alarm output | ห้ามอ้างว่ามี; standalone device ต้องมี owner และ functional test แยก |
 | Tablet history | Legacy route ยังทำงาน | เทียบ parity กับ canonical Usage API, migrate client และประกาศ deprecation |
-| Code structure | Hardware adapters/outbox แยกแล้ว; package boundary มี guard | แยก BCG reader, Session lifecycle/checkpoint/sampler และ route wiring ทีละ behavior-preserving change |
+| Code structure | BCG reader, 10-second sampler, live projection, Hardware adapters และ outbox แยกแล้ว; package boundary มี guard | แยก Session lifecycle/checkpoint และ route wiring ต่อทีละ behavior-preserving change |
 | v2 concepts | Shadow recommendation และ Personal Baseline ใช้เป็น context | Closed-loop control, baseline-driven State, whole-day readiness, wearable/clinical claims ยังอยู่นอก v1 |
 
 รายการ P0/P1 ล่าสุดและช่องสำหรับ Git SHA/tag/owner approval อยู่ใน

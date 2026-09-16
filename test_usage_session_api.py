@@ -8,6 +8,7 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.testclient import TestClient
 
 from sleep_system_policy import (
+    PERSONAL_BASELINE_LEARNING_START_UTC,
     PERSONAL_BEHAVIOUR_BASELINE_VERSION,
     PERSONAL_REST_WINDOW_BASELINE_VERSION,
     RECOVERY_SCORE_FORMULA_VERSION,
@@ -579,9 +580,7 @@ class UsageSessionApiTests(unittest.TestCase):
                                 "environment_reference_available": True,
                                 "environment": {"temp_median": 23.0},
                                 "source_session_id": "must-not-leak",
-                                "source_started_at_utc": (
-                                    "2026-09-10T18:00:00+00:00"
-                                ),
+                                "source_started_at_utc": ("2026-09-10T18:00:00+00:00"),
                             },
                         }
                     }
@@ -1704,6 +1703,10 @@ class UsageSessionApiTests(unittest.TestCase):
 
         self.assertEqual(parsed.kind, "usage_session_list")
         self.assertEqual(parsed.data.summary.session_count, 2)
+        self.assertEqual(
+            parsed.data.history_start_utc.isoformat(),
+            PERSONAL_BASELINE_LEARNING_START_UTC,
+        )
 
         document = self._openapi()
         published_example = document["paths"]["/api/v1/usage-sessions"]["get"][

@@ -5,14 +5,9 @@ pi5/.venv/bin/activate` บน Mac workspace หรือ `source .venv/bin/acti
 บน Pi) ชุดเร็วใช้ตรวจระหว่างแก้ module ส่วนชุดเต็มเป็น release gate ก่อน
 push/deploy
 
-ตัวเลข `1,027 tests` เป็น pushed baseline ของ commit `d2c7af7` และหมายถึง **Pi
-application suite ที่ root repository เท่านั้น** จำนวนจริงอาจเพิ่มเมื่อมี
-regression ใหม่ และต้องรายงานจากผลรันแต่ละครั้ง ตัวเลขนี้ไม่รวมการประกอบ UI,
-Evidence registry check หรือ Ruff จึงห้ามใช้เพียงอย่างเดียวเพื่อประกาศว่า Full
-Product Gate ผ่าน
-
-Working candidate วันที่ 16 กันยายน 2026 เพิ่ม regression 33 เคส และรันล่าสุด
-ผ่าน `1,060 tests`; ตัวเลขนี้เป็นหลักฐานของ candidate ไม่ใช่ Production smoke
+จำนวน Test เปลี่ยนตาม Revision จึงต้องรายงานจากผลรันจริงพร้อม Git SHA ทุกครั้ง
+และห้ามใช้จำนวน Test เพียงอย่างเดียวประกาศว่า Full Product Gate ผ่าน เพราะการประกอบ
+UI, Evidence registry, Ruff และ Production smoke เป็นคนละ Gate
 
 ## Fast focused suites
 
@@ -22,6 +17,7 @@ python -m unittest -q \
   test_modular_architecture.py test_sensor_contract.py \
   test_sensor_services.py test_api_state_projection.py \
   test_bcg_reader.py test_sensor_frame_sampler.py \
+  test_gpio_lifecycle.py test_occupancy_lifecycle.py \
   test_control_protocol.py test_audio_api.py \
   test_session_lifecycle.py test_session_finalization_commit.py
 
@@ -29,11 +25,15 @@ python -m unittest -q \
 python -m unittest -q \
   test_sleep_signal_features.py test_sleep_system_consistency.py \
   test_sleep_baseline_policy.py test_personal_baseline_policy.py \
+  test_personal_baseline_lifecycle.py \
+  test_historical_replay_runtime.py test_historical_replay_storage.py \
+  test_reclassify_sleep_history.py \
   test_sleep_session_report.py test_recovery_policy_guardrails.py
 
 # API, สิทธิ์ และ Privacy
 python -m unittest -q \
   test_rbac_api.py test_access_and_occupancy.py \
+  test_auth_session_lifecycle.py \
   test_usage_session_api.py test_user_ai_context.py
 ```
 
@@ -55,10 +55,10 @@ python -m unittest -q \
 
 ## Application release gate
 
-Pi application suite เก็บไฟล์ `test_*.py` ที่ root โดย pushed baseline มี 1,027 tests
-ที่ commit `d2c7af7` และต้องผ่านโดยไม่มี failure/error ก่อน push หรือ deploy ส่วน
-JSON Schema test ต้องมี `jsonschema` จาก `requirements-dev.txt`; เป้าหมาย Code
-Freeze คือ `skipped=0`
+Pi application suite เก็บไฟล์ `test_*.py` ที่ root และต้องผ่านโดยไม่มี
+failure/error ก่อน push หรือ deploy ส่วน JSON Schema test ต้องมี `jsonschema` จาก
+`requirements-dev.txt`; Skip ต้องมีเหตุผลและ Owner และ Freeze candidate ต้องบันทึก
+จำนวน Passed/Failed/Error/Skipped ตามผลจริง
 
 ```bash
 python -m unittest discover -q
@@ -127,4 +127,4 @@ format นั้นถูก retire ทั้งชุด หรือมี beh
 5. Tests ต้องผ่านโดยใช้ temp data; ห้ามอ่าน/ล้าง production DB
 6. Evidence JSON Schema, Markdown↔JSON consistency, HTTPS/path containment และ checksum quarantine ต้องผ่าน CI
 7. Archived Firmware tests ไม่ใช่หลักฐานว่า Production Firmware ผ่าน
-8. Code Freeze ต้องไม่มี skipped test ใน environment ที่ติดตั้ง dev dependenciesครบ
+8. Code Freeze ต้องอธิบายทุก skipped test ใน environment ที่ติดตั้ง dev dependencies ครบ

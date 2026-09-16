@@ -6,7 +6,8 @@
 
 ปรับปรุงล่าสุด: 16 กันยายน 2026
 
-> ชุดนี้เป็นแผนที่สำหรับเริ่มงาน ไม่ได้แทนเอกสารสัญญาหลักหรือการอนุมัติ
+> ชุด Onboarding นี้เป็น **ประตูหลักสำหรับค้นหาเอกสาร v1** แล้วจึงตามลิงก์ไปยัง
+> contract/runtime source ที่มีอำนาจของแต่ละ domain; ไม่ได้แทนหลักฐานอนุมัติ release
 > Production ปัจจุบัน v1 ยังเป็น **freeze candidate** และยังต้องปิดรายการ P0/
 > ลงนามใน closure record ก่อนประกาศ Final Code Freeze
 
@@ -22,8 +23,6 @@
    ข้อมูลใดอยู่บน Pod/ออกจาก Pod และขอบเขตการลบข้อมูล
 4. [Operations และ First-week checklist](operations-and-first-week.md) —
    เตรียมเครื่อง, เลือก test, deploy อย่างปลอดภัย และเป้าหมายสัปดาห์แรก
-5. [Refactor Roadmap v1](refactor-roadmap-v1.md) — ลำดับแยก composition root
-   ตาม function/feature โดยคง behavior, compatibility และ release gate
 
 หากต้องตอบคำถามส่งมอบ v1 ให้เริ่มจาก
 [v1 System Handover and Freeze Readiness](../zeep-v1-system-handover-and-freeze-readiness.md)
@@ -39,6 +38,23 @@
 
 คำว่า “ผ่าน test” ไม่เท่ากับ “พร้อม Production” การอนุมัติต้องรวมเครื่องจริง,
 อุปกรณ์จริง, privacy/retention, operator procedure และ owner sign-off ด้วย
+
+### คำสถานะสำหรับเอกสารและการเผยแพร่
+
+ใช้คำชุดเดียวกันทั้งเอกสาร Dashboard และสื่อ Pilot เพื่อไม่ให้แผนอนาคตถูกอ่านเป็น
+ความสามารถปัจจุบัน:
+
+| สถานะ | ใช้เมื่อ |
+|---|---|
+| **LIVE** | ทำงานจริงใน release/Pod ที่ระบุและมีหลักฐานตาม contract |
+| **SHADOW** | คำนวณหรือแนะนำได้ แต่ไม่มีสิทธิ์สั่งอุปกรณ์อัตโนมัติ |
+| **PILOT EVIDENCE** | ข้อค้นพบจากผู้ทดสอบ; ต้องระบุจำนวนตัวอย่างและข้อจำกัด |
+| **SIMULATION** | ผลจากข้อมูลจำลอง ไม่ใช่การยืนยันบน Pod หรือกับมนุษย์ |
+| **ROADMAP** | แนวคิดหรือความสามารถที่ยังไม่อยู่ใน v1 |
+| **ARCHIVED** | เก็บเพื่อ audit/อ้างอิงเท่านั้น ห้ามนำไป deploy หรืออ้างว่าใช้งานอยู่ |
+
+สื่อ Pilot ที่เปิดต่อสาธารณะต้องใช้ coded ID หรือมี consent ที่ครอบคลุมชื่อ ภาพ เสียง
+และวิดีโออย่างชัดเจน `noindex` ไม่ใช่ access control และไม่แทนการอนุญาตเผยแพร่
 
 ## Source of truth
 
@@ -66,11 +82,11 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 | บทบาท | อ่านเพิ่ม | จุดเริ่มในโค้ด |
 |---|---|---|
 | Product / UX | [Two-Mode Protocol](../zeep-pilot-two-mode-protocol.md), [Session Result Presentation](../zeep-session-result-presentation-v1.md) | [`zeep_pod/product_language.py`](../../zeep_pod/product_language.py), `static/partials/` |
-| Pi / Backend | [Software Architecture](../pi5-software-architecture.md), [Refactor Roadmap](refactor-roadmap-v1.md), [API v1](../zeep-api-v1.md) | [`app.py`](../../app.py), [`api_v1.py`](../../api_v1.py), `zeep_pod/` |
+| Pi / Backend | [Software Architecture](../pi5-software-architecture.md), [API v1](../zeep-api-v1.md) | [`app.py`](../../app.py), [`api_v1.py`](../../api_v1.py), `zeep_pod/` |
 | Mobile / Web integration | [API Schema Reference](../zeep-api-schema-reference-v1.md) | [`zeep_pod/sessions/usage_api.py`](../../zeep_pod/sessions/usage_api.py), response models |
 | Hardware / Firmware | [Hardware และ Hub map](hardware-hub-map.md), [Sensor Interface Contract](../zeep-sensor-interface-contract-v1.2.md) | `sensor_*`, `control_protocol.py`, `zeep_pod/hardware/` |
 | QA / Data | [TESTING.md](../../TESTING.md), [Sleep History Promotion Policy](../sleep-history-promotion-policy-v2.md) | `test_*.py`, [`maintenance_registry.py`](../../maintenance_registry.py) |
-| Operations / Safety | [Operations Runbook](../pi5-operations-runbook.md), [Remote Access](../../REMOTE-ACCESS.md) | [`start_work.sh`](../../start_work.sh), service units, `zeep_pod/operations/` |
+| Operations / Safety | [Operations Runbook](../pi5-operations-runbook.md), [TESTING.md](../../TESTING.md) | [`start_work.sh`](../../start_work.sh), service units, `zeep_pod/operations/` |
 
 ## กฎหยุดงานทันที
 
@@ -100,6 +116,7 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 | Restore Summary | คำอธิบายคะแนนหลัก ไม่ใช่คะแนนที่สาม |
 | OFF BED | Occupancy exception แยกจาก Wake และไม่เข้า Sleep Stage ratio |
 | Shadow | คำแนะนำ/การประเมินที่ไม่มีสิทธิ์สั่ง Hardware |
+| Email-first identity | ใช้ email ที่ยืนยันได้ก่อน; ข้อมูลเก่าอาจยังใช้ normalized legacy account key โดยมี alias ที่ตรวจสอบแล้ว |
 
 ## พร้อมรับงานชิ้นแรกเมื่อ
 

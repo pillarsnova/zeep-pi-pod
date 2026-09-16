@@ -6,20 +6,35 @@
 
 อัปเดตล่าสุด: 16 กันยายน 2026
 
-เอกสารในตารางนี้เป็นชุดที่ทีมใช้พัฒนา ตรวจสอบ และส่งมอบระบบปัจจุบัน
-เอกสารทดลองหรือรายงาน dry-run ที่ถูกแทนที่แล้วไม่เก็บปะปนใน working tree;
-ประวัติเดิมยังตรวจสอบได้จาก Git เมื่อจำเป็น
+เริ่มจาก [ZEEP v1 Team Onboarding](onboarding/README.md) ซึ่งเป็นหน้าหลักสำหรับ
+สมาชิกทีมทุกบทบาท เอกสารนี้เป็นทะเบียนเอกสารที่ยังใช้งาน ไม่ใช่การประกาศว่า
+ทุกไฟล์มีอำนาจเท่ากัน เอกสารทดลองหรือ dry-run ที่ถูกแทนที่แล้วต้องอยู่ใต้
+`docs/archive/`, Evidence library หรือ Git history พร้อมป้าย `ARCHIVED` ชัดเจน
+และห้ามปะปนกับ Runtime contract
+
+## ลำดับอำนาจเมื่อข้อมูลขัดกัน
+
+1. Executable policy และ runtime contract: `sleep_system_policy.py`, Pydantic/
+   OpenAPI, `sensor_contracts.py`, `calibration.json` และ effective Pod config
+2. เอกสาร Current ของ domain: Sleep System, Sensor/API contract, Architecture และ
+   Operations Runbook
+3. Onboarding: แผนที่และคำอธิบายที่คนอ่านง่าย โดยต้องไม่คัดลอกค่าที่เปลี่ยนบ่อย
+4. Handover/Closure: หลักฐานของ Git SHA และ release ที่ตรวจ ณ เวลาหนึ่ง
+5. Pilot, Case study, Research และ Archive: หลักฐานประกอบ ไม่เปลี่ยน Runtime เอง
+
+ถ้าข้อมูลสองชั้นไม่ตรงกัน ให้หยุดการเผยแพร่ผลและแก้ contract/narrative ใน release
+เดียวกัน ห้ามเลือกข้อความที่ดูเหมาะกว่าเอง
 
 ## เอกสารหลัก
 
 | เรื่อง | เอกสารที่มีอำนาจ | ใช้สำหรับ |
 |---|---|---|
-| เริ่มงานสมาชิกใหม่ | [ZEEP v1 Team Onboarding](onboarding/README.md) | เส้นทางอ่านตามบทบาท, Lifecycle, Hardware map, API/Data/Privacy และ First-week checklist |
+| เริ่มงานสมาชิกใหม่ | [ZEEP v1 Team Onboarding](onboarding/README.md) | จุดเริ่มหลัก: เส้นทางอ่านตามบทบาท, Lifecycle, Hardware, API/Data/Privacy และ First-week checklist |
 | ส่งมอบและ Code Freeze | [v1 System Handover and Freeze Readiness](zeep-v1-system-handover-and-freeze-readiness.md) | Lifecycle ครบวงจร, invariant, test gate และรายการลงนามก่อน Freeze |
 | ภาพรวมระบบ | [Pi 5 Software Architecture](pi5-software-architecture.md) | ขอบเขต module, dependency และลำดับ refactor |
 | ปฏิบัติการเครื่อง | [Pi 5 Operations Runbook](pi5-operations-runbook.md) | Pull, verified Pod sync, test, deploy, backup, restart และ recovery |
 | Sleep State และคะแนน | [Sleep System Current](zeep-sleep-system-current.md) | Runtime, replay, Sleep Score และ Recovery Score |
-| หลักฐาน Baseline | [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.0.md) | Feature, gate, transition และขอบเขตการกล่าวอ้าง |
+| หลักฐาน Baseline | [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.8.md) | Feature, gate, transition และขอบเขตการกล่าวอ้าง |
 | Historical promotion | [Sleep History Promotion Policy v2](sleep-history-promotion-policy-v2.md) | Guard และ audit เมื่อเขียน derived result ย้อนหลัง |
 | ผลลัพธ์ผู้ใช้ | [Session Result Presentation v1](zeep-session-result-presentation-v1.md) | ภาษากับลำดับข้อมูลบนหน้าผลลัพธ์ |
 | Restore Summary | [Restore Summary v1](zeep-restore-summary-v1.md) | คำอธิบายคะแนนโดยไม่สร้างคะแนนที่สาม |
@@ -40,5 +55,10 @@
 - [Case Study CS-01](zeep-case-study-cs-01-two-overnight-sessions.md)
 - [Brainwave Sound Lab](brainwave-sound-lab-v1.md)
 
-ไฟล์ใน `docs/archive/` เป็นข้อมูลประกอบ audit เท่านั้น ไม่ใช่ runtime contract
-และต้องไม่ถูกนำไปตั้ง threshold หรืออธิบายพฤติกรรมปัจจุบันโดยตรง
+[Documentation Archive](archive/README.md) เป็นข้อมูลประกอบ Audit เท่านั้น ไม่ใช่
+Runtime contract และต้องไม่ถูกนำไปตั้ง Threshold หรืออธิบายพฤติกรรมปัจจุบันโดยตรง
+
+Source HTML ของ `monitor.pillarsnova.com/zeep-project/` ไม่ได้อยู่ใน repository นี้
+จึงไม่ใช่เอกสาร Runtime ที่แก้จาก repo นี้ได้ ก่อนเผยแพร่ Monitor ต้องตรวจสถานะ
+`LIVE / SHADOW / PILOT EVIDENCE / SIMULATION / ROADMAP / ARCHIVED`, Git SHA,
+version และ privacy/consent ตาม checklist ใน Onboarding

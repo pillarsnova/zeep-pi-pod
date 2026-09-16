@@ -27,6 +27,12 @@ Recovery Score, Sleep State, Safety Logic หรือคำสั่งอุ�
 | Shadow recommendation | หลักฐาน, blocker และสิ่งที่เสนอ | เทียบจาก canonical frame เดียวกัน |
 | Provenance | estimator, evidence, baseline, transition, Smart Response และ frame sequence | ทุก payload |
 
+Environment ใน contract นี้มี **7 measurement metrics** ได้แก่ อุณหภูมิ,
+ความชื้น, CO₂, PM2.5, VOC Index, Lux และ dBA ส่วน HR/RR เป็น Physiology
+คนละกลุ่ม และ Sleep/Bed State เป็น derived state ไม่ถูกนับเป็น Environment Sensor
+ขณะที่ `environment_live`/`environment_total` ใน `data_quality` นับ **อุปกรณ์
+กายภาพ 6 ตัว** (SHT3x หนึ่งตัวให้ทั้งอุณหภูมิและความชื้น) จึงไม่ใช่จำนวน metric
+
 ค่า Live และ Baseline ถูกแสดงคู่กันเป็น `ใกล้`, `สูงกว่า` หรือ `ต่ำกว่า
 ค่าประจำตัว` เท่านั้น คำเหล่านี้ไม่เท่ากับปกติ/ผิดปกติทางการแพทย์
 ค่าเฉลี่ยเสียงใน rolling window ใช้ Energy-domain Leq ไม่ใช้ค่าเฉลี่ยเลขคณิต

@@ -1,9 +1,11 @@
 # ZEEP Historical Derived-Result Promotion Policy v2
 
-> **สถานะ:** Review candidate · ต้องได้รับคำยืนยันจาก Product Owner ก่อน Apply
+> **สถานะ:** Active current policy · Product Owner อนุมัติ cohort/reviewed artifact ก่อน Apply
 >
-> **ขอบเขต:** ZEEP Wellness estimate หลังวันที่ 1 ก.ย. 2569 สำหรับ Session ที่จบแล้ว
-> และยาวกว่า 25 นาที · ไม่ใช่ AASM/PSG diagnosis
+> **ขอบเขต:** ZEEP Wellness estimate สำหรับ completed Session ที่อยู่ใน reviewed cohort
+> manifest; วันเริ่ม, วันสิ้นสุด, Rest Mode และ minimum duration ถูกตรึงใน artifact
+> ที่ Product Owner ตรวจแล้ว โดยไม่มีค่าระยะเวลาตายตัวในนโยบาย Promotion · ไม่ใช่
+> AASM/PSG diagnosis
 >
 > **หลักสำคัญ:** Raw BCG และ Timeline เป็นข้อมูลต้นฉบับ ห้ามแก้ไขจากกระบวนการนี้
 
@@ -57,9 +59,10 @@ attribution ออกจาก Evidence coverage และไม่เดาห�
   N1 `25%`, N2 `25%`, N3 `15%` และ REM `20%`
 - เมื่อคิดกับ physiological fit ที่มีเพดาน `0.90` ผลต่อ evidence budget สูงสุดคือ
   W `27`, N1 `22.5`, N2 `22.5`, N3 `13.5` และ REM `18` จุดจาก 100
-- รุ่น v1.26 ผสาน distribution ดังกล่าวกับ gated stage evidence อีกชั้นที่น้ำหนัก
-  `20%`; เมื่อ Fit สูงสุดจริงตรงกับ State ที่ยืนยันก่อนหน้าและ State นั้นยังผ่าน
-  gate ใช้น้ำหนัก `35%` เพื่อเพิ่ม continuity โดยไม่บังคับ State
+- รุ่นปัจจุบันตาม [Current Sleep System](zeep-sleep-system-current.md) ผสาน distribution
+  ดังกล่าวกับ gated stage evidence ที่น้ำหนัก `20%`; เมื่อ Fit สูงสุดจริงตรงกับ State
+  ที่ยืนยันก่อนหน้าและ State นั้นยังผ่าน gate ใช้น้ำหนัก `35%` เพื่อเพิ่ม continuity
+  โดยไม่บังคับ State; ห้ามใช้ชื่อรุ่นเก่าเป็น normative reference
 - Baseline Fit ช่วยจัดอันดับเฉพาะ State ที่ physiology gate เปิดแล้ว ไม่สามารถยืนยัน
   N2/N3/REM, ข้าม transition หรือเปลี่ยน confirmed `OFF BED` ได้; continuity carry
   มาจาก State ก่อนหน้า ไม่ได้เกิดจาก Fit
@@ -79,7 +82,7 @@ attribution ออกจาก Evidence coverage และไม่เดาห�
 
 ## 4. Review Warning — ไม่ขวางการเขียน State
 
-- คะแนน Wellness ยังไม่ผ่าน release coverage
+- Coverage ของหลักฐานต่ำกว่าเกณฑ์ความมั่นใจของ Admin QA
 - ไม่มี Epoch ที่มี physiological evidence ครบ
 - ไม่มี direct-confirmed Evidence โดย State ทั้ง Session มาจาก low-confidence carry
 - N1/N2/N3/REM ของ Overnight ต่างจากกรอบตรวจทาน
@@ -108,7 +111,8 @@ Issue code ใหม่ที่ยังไม่ได้จำแนกจะ
 ## 6. State Promotion และ Score Release เป็นคนละเรื่อง
 
 Derived Sleep State ที่มีหลักฐานสามารถเขียนได้แม้คะแนนยังไม่พร้อมเผยแพร่ คะแนนมี
-release gate ของตนเองตาม Rest Mode และ coverage:
+minimum-duration release gate ตาม Rest Mode ของตนเอง; coverage ใช้บอก QA/confidence
+และไม่ปิดกั้นการเผยแพร่เมื่อผ่านเวลาขั้นต่ำ:
 
 - `Overnight Recovery` ใช้ `Sleep Score`
 - `Nap & Refresh` ใช้ `Recovery Score`; ไม่บังคับว่าต้องหลับ
@@ -125,7 +129,7 @@ release gate ของตนเองตาม Rest Mode และ coverage:
 
 ## 7. Workflow ที่บังคับใช้
 
-1. ดึง code version ที่จะใช้และสร้าง read-only replay artifact
+1. ระบุ code/policy version ที่จะใช้และสร้าง read-only replay artifact
 2. สร้าง summary/details พร้อม input hash, source hash และ allowlist
 3. ใช้ `compare_sleep_history_replay.py` สร้างค่าเดิม–ค่าใหม่
 4. Product Owner ตรวจ Stage, Score, warnings, blockers และยืนยันราย Session/cohort

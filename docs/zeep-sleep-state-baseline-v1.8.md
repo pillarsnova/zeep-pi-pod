@@ -3,7 +3,7 @@
 > **Purpose:** นิยาม input, baseline, transition policy, data quality และแผน PSG validation ของตัวประมาณสถานะการนอนใน Pod  
 > **Positioning:** Sleep Wellness · EEG-free exploratory telemetry · ไม่ใช่ผล PSG/การวินิจฉัย/ตัวสั่งอุปกรณ์  
 > **Status:** Baseline/evidence reference · complete occupied-epoch continuity amendment active · paired-PSG G2 validation open
-> **Version:** `zeep-sleep-state-baseline-v1.8-sep1-cutover` · **Estimator:** `bcg-audio-bed-5state-v1.29-complete-occupied-epochs` · **Transition:** `zeep-semimarkov-30s-v1.18-scoreable-continuity` · **Updated:** 2026-09-13
+> **Version:** `zeep-sleep-state-baseline-v1.8-sep1-cutover` · **Estimator:** `bcg-audio-bed-5state-v1.29-complete-occupied-epochs` · **Transition:** `zeep-semimarkov-30s-v1.18-scoreable-continuity` · **Updated:** 2026-09-16
 > **Related:** [Current Sleep System](zeep-sleep-system-current.md) · [Historical Promotion Policy](sleep-history-promotion-policy-v2.md) · [Evidence Library](../research/evidence-library/README.md)
 
 > **Normative precedence:** เอกสารนี้อธิบาย Baseline และหลักฐานทางสรีรวิทยา
@@ -15,12 +15,19 @@
 
 ## TL;DR
 
-- ทุก session/cycle เริ่ม `Wake → N1 → N2`; จาก N2 ไป N3 หรือ REM และจาก N3 ไป REM ได้เมื่อหลักฐาน REM ต่อเนื่อง
-- N2/N3/REM ที่จะตื่นแบบสัญญาณไม่ชัดต้องย้อนผ่าน N2/N1; bed-exit ไป Wake ได้หลังผ่าน debounce 3 รอบ 10 วินาที ส่วน Raw packet burst เป็นข้อมูล Debug ไม่ใช่ตัว confirm โดยลำพัง
+- ทุก session/cycle เริ่ม `Wake → N1`; เส้นทางปกติไป N2 ก่อน N3/REM แต่เปิด
+  `N1 → REM` แบบ rare/guarded เมื่อ REM physiology gate ผ่านและหลักฐานชนะ
+  2 epochs/60 วินาที; `N3 → REM` ก็เกิดได้เมื่อผ่าน dwell/guard เดียวกัน
+- N2/N3 ที่จะตื่นแบบหลักฐานไม่ชัดต้องย้อนผ่าน N2/N1; `REM → Wake` เกิดได้
+  โดยตรงเมื่อหลักฐาน Wake ชนะและยืนยันครบ 2 epochs/60 วินาที ส่วน Bed Exit ที่
+  ผ่าน debounce เป็น `OFF BED` แยกจาก Wake และ Raw packet burst เป็นข้อมูล Debug
+  ไม่ใช่ตัว confirm โดยลำพัง
 - HR/RR trend, respiratory regularity จาก Raw BCG, Bed Status และ movement เป็นหลัก
 - ก่อนเริ่ม Recording ใช้ `WAIT`; ระหว่าง Recording ถ้ายังไม่ยืนยัน `OFF BED` ระบบกำหนด W เป็น State แรกและคง State ก่อนหน้าเมื่อ HR/RR/BCG ขาด ไม่สด ก้ำกึ่ง หรือ service restart โดยช่วง carry ยังเข้าคะแนนแบบ low-confidence แต่ไม่ใช้เรียนรู้ Personal Baseline
 - SPH0645 สนับสนุน Wake ได้เฉพาะเสียงรบกวนที่ time-aligned กับ BCG amplitude shift หรือ bed motion; เสียงดังอย่างเดียวไม่มีผลต่อ state
-- Sensor สิ่งแวดล้อม 7 ปัจจัยอธิบาย disturbance และปรับ confidence เท่านั้น ไม่มี direct stage weight
+- Sensor สิ่งแวดล้อม 7 ปัจจัยไม่มี direct stage weight และไม่สร้าง Sleep State;
+  มันใช้อธิบาย disturbance/confidence และเป็นองค์ประกอบสนับสนุนแบบจำกัด
+  10 คะแนนในทั้ง Sleep Score และ Recovery Score ที่ชั้น Report
 - Sensor frame ทุก 10 วินาที, Evidence epoch ทุก 30 วินาทีจาก rolling 60 วินาที และยืนยัน State 60/120 วินาทีตาม target; แนวโน้ม onset ใช้ context ได้ถึง 270 วินาที
 - 5 นาทีแรกสร้าง Session-relative Awake reference; N1 เริ่มได้เมื่อเตียงนิ่ง ไม่มี vital rise และ HR/RR แสดงการลดลงหรือคงอยู่ที่ plateau ที่ต่ำกว่าช่วงตั้งต้นอย่างสอดคล้องกัน เวลาเพียงอย่างเดียวสร้าง N1 ไม่ได้
 - พฤติกรรมย้อนหลังใช้เฉพาะ Session ก่อนหน้า ตั้งแต่ 1 ก.ย. 2569 แยกตามบัญชีและโหมด อย่างน้อย 3 Session และเป็น context/คำแนะนำเท่านั้น (`direct_stage_influence=false`); ห้ามข้อมูล Session ปัจจุบันหรืออนาคตย้อนมากำหนด State
@@ -64,6 +71,7 @@ stateDiagram-v2
     N1 --> Wake
     N1 --> N1
     N1 --> N2
+    N1 --> REM: rare/guarded REM evidence 2 epochs / 60 s
     N2 --> Wake: strong wake override
     N2 --> N1
     N2 --> N2
@@ -76,8 +84,11 @@ stateDiagram-v2
     REM --> N2
     REM --> REM
     N3 --> Wake: strong wake override
-    REM --> Wake: strong wake override
+    REM --> Wake: confirmed Wake evidence 2 epochs / 60 s
 ```
+
+`OFF BED` ไม่วางเป็นโหนด Sleep State ในกราฟนี้ เพราะเป็นผลด้าน Occupancy ที่หยุด
+การจำแนกเมื่อ Bed Exit ผ่าน debounce ไม่ใช่การเปลี่ยน Stage เป็น Wake
 
 กติกาที่ระบบบังคับ:
 
@@ -85,8 +96,12 @@ stateDiagram-v2
 2. หลัง `Wake` ไปได้เฉพาะ `Wake` หรือ `N1`
 3. หลัง N1 ไปได้ Wake/N1/N2 และ REM แบบ rare/guarded; หลัง N2 ไป N1/N2/N3/REM ตามปกติ ส่วน Wake โดยตรงต้องมี strong-Wake proxy
 4. `N3 → REM` อนุญาตโดยตรงเมื่อ N3 ผ่าน minimum dwell 60 วินาทีและ candidate REM ชนะต่อเนื่อง 2 evidence epochs (60 วินาที); ไม่บังคับแทรก N2
-5. N2/N3/REM ที่จะ Wake แบบสัญญาณไม่ชัดต้องย้อน N1/N2 ก่อน
-6. bed-exit เป็น strong-Wake override หลังผ่าน event guard 3 รอบ; movement บนเตียงต้องต่อเนื่องและมี HR/RR rise + BCG shift ใน window เดียวกันจึงใช้ override ได้
+5. N2/N3 ที่จะ Wake แบบหลักฐานไม่ชัดต้องย้อนผ่าน N1/N2 ก่อน; `REM → Wake`
+   เป็น transition ปกติของกราฟเมื่อหลักฐาน Wake ชนะและยืนยันครบ 60 วินาที
+6. Confirmed Bed Exit หลัง event guard 3 รอบให้ผล `OFF BED · ไม่มีผู้ใช้งานบนเตียง`
+   ซึ่งเป็น operational interval ไม่ใช่ Wake/Sleep Stage ส่วน movement ขณะยังอยู่
+   บนเตียงต้องต่อเนื่องและมี HR/RR rise + BCG shift ใน window เดียวกันจึงใช้
+   strong-Wake override กับ N2/N3 ได้
 7. candidate W/N1/N3/REM ต้องชนะต่อเนื่อง 2 evidence epochs (60 วินาที) ส่วน N2 ต้อง 4 epochs (120 วินาที) และผ่าน minimum engineering dwell ของ state ปัจจุบันก่อน commit
 8. เมื่อ commit `Wake` ถือว่าเริ่ม cycle ใหม่และ gate ของ N1 ถูก reset
 
@@ -172,9 +187,9 @@ physiology = 0.55×HR_proximity + 0.35×RR_proximity
 
 ### 4.1 Primary physiological evidence
 
-| กลุ่ม | ตัวแปร | บทบาทใน v1.0 |
+| กลุ่ม | ตัวแปร | บทบาทใน v1.8 |
 |---|---|---|
-| BCG/เตียง | อยู่บนเตียง, ลุกจากเตียง, movement ratio, burst count, longest run | Bed exit/Wake support และ data validity; brief movement เป็น sleep-compatible |
+| BCG/เตียง | อยู่บนเตียง, ลุกจากเตียง, movement ratio, burst count, longest run | Bed exit ใช้ยืนยัน OFF BED; movement บนเตียงใช้สนับสนุน Wake เมื่อมี physiology/BCG corroboration; brief movement เป็น sleep-compatible |
 | หัวใจ | mean HR, HR trend, HR-summary CV, personal HR baseline | เทียบช่วงและความนิ่ง; HR-summary CV ไม่ใช่ IBI-HRV และมีน้ำหนัก REM ต่ำ |
 | การหายใจ | mean RR, RR-CV, Raw-BCG respiratory autocorrelation/spectral entropy | RRV และความสม่ำเสมอเป็นหลักฐานเสริม; mean RR ไม่ใช้เป็นตัวชี้เดี่ยว |
 | Raw BCG | respiratory regularity, fast-amplitude CV, amplitude-shift ratio | แยก waveform ที่นิ่ง/ไม่เสถียรและลด false stage; ไม่ตีความเป็น K-complex/spindle |
@@ -195,7 +210,9 @@ false Wake ดังนี้:
 - เสียงดังหรือ acoustic step เพียงอย่างเดียวไม่มีผลต่อ W/N1/N2/N3/REM
 - เพิ่ม Wake support ได้สูงสุด 0.35 เฉพาะเมื่อ acoustic event เกิดใน rolling
   window เดียวกับ BCG amplitude shift หรือ bed motion
-- `Moving` และ `Get out of bed` เป็น direct Wake-compatible evidence
+- `Moving` สนับสนุน Wake ได้เมื่อเป็นการเคลื่อนไหวต่อเนื่องและมี HR/RR rise กับ
+  BCG shift ในช่วงเดียวกัน; `Get out of bed` เป็น occupancy evidence ที่ต้องผ่าน
+  debounce แล้วให้ผล `OFF BED` ไม่ใช่ direct Wake evidence
 - `Weak breathing` และ `Snoring` เป็น respiratory context/quality flag เท่านั้น
   ไม่ใช่ stage evidence, apnea diagnosis หรือ cortical arousal
 - คำนวณเสียงจาก SPH0645 samples ใน bucket 10 วินาทีเดียวกัน ห้ามใช้ค่า held
@@ -206,7 +223,9 @@ false Wake ดังนี้:
 
 ### 4.3 Pod environmental context
 
-ZEEP ใช้เซ็นเซอร์ที่พร้อมจริงทั้ง 7 ปัจจัยเป็น **context และ confidence เท่านั้น**:
+ZEEP ใช้เซ็นเซอร์ที่พร้อมจริงทั้ง 7 ปัจจัยเป็น **context และ confidence เท่านั้นสำหรับการจำแนก
+Sleep State**; อีกชั้นหนึ่งใน Session Report นำ environment support ไปคิดแบบจำกัด
+ได้สูงสุด 10 คะแนนทั้ง Sleep Score และ Recovery Score:
 
 | ปัจจัย | ZEEP target band v1.0 | ถ้าออกนอกเป้าหมาย |
 |---|---:|---|
@@ -234,8 +253,9 @@ coverage    = live factors / 7 × 100
 direct_stage_influence = false
 ```
 
-น้ำหนักเท่ากันใช้สำหรับ environment support/debug เท่านั้น ไม่มีการแปลง disruption
-เป็น Wake/N1/N2/N3/REM score ถ้า environmental coverage ต่ำกว่า 50% ระบบลด
+น้ำหนักเท่ากันใช้สำหรับ environment support/debug และส่วนสนับสนุนของคะแนนที่ชั้น
+Report เท่านั้น ไม่มีการแปลง disruption เป็น Wake/N1/N2/N3/REM score
+ถ้า environmental coverage ต่ำกว่า 50% ระบบลด
 confidence แต่ต้องไม่สร้างค่า sensor ขึ้นมาแทน หาก disruption สูง ระบบ cap
 confidence จาก high เป็น medium โดยไม่เปลี่ยน probability winner
 
@@ -289,15 +309,17 @@ confidence จาก high เป็น medium โดยไม่เปลี่�
 1. chronological transition matrix ต้องมี `Wake→N3=0` และ prohibited transition
    อื่นเป็นศูนย์; `N3→REM` เป็น transition ที่อนุญาตและต้องรายงานจำนวนแยก
 2. ทุก `N2/N3→Wake` ต้องมี same-window proxy อย่างน้อยหนึ่งชนิด: BCG amplitude
-   shift, physiology-corroborated sustained movement หรือ bed exit; รายงาน amplitude alignment แยกต่างหาก
+   shift หรือ physiology-corroborated sustained on-bed movement; Bed Exit ต้องออก
+   ทาง occupancy pipeline เป็น `OFF BED` และรายงาน amplitude alignment แยกต่างหาก
 3. `N2↔REM` และ `N3↔REM` แบบ ping-pong ที่ค้างเพียง 1–2 รอบต้องเป็นศูนย์
 4. mean HR/RR ที่ invalid ต้องไม่หลุดเข้า state machine
 5. หาก structural gate ข้อใดไม่ผ่าน คำสั่ง `--apply` ต้องหยุดก่อน backup/write
 
 BCG amplitude shift เป็น non-EEG proxy เท่านั้น ไม่ใช่ cortical arousal ตาม AASM;
-bed-exit ที่ผ่าน event guard เป็นหลักฐาน Wake ได้โดยตรง ส่วน on-bed movement ต้องต่อเนื่องและมี
-HR/RR rise + BCG shift ที่ time-aligned; การพลิกตัวหรือขยับผ้าห่มสั้น ๆ ไม่ใช่
-Wake โดยลำพัง การยืนยัน cortical arousal จริงยังต้องใช้ EEG/PSG
+bed-exit ที่ผ่าน event guard ให้ผล `OFF BED` ใน occupancy timeline ไม่สร้าง Wake;
+ส่วน on-bed movement ต้องต่อเนื่องและมี HR/RR rise + BCG shift ที่ time-aligned
+จึงสนับสนุน Wake ได้ การพลิกตัวหรือขยับผ้าห่มสั้น ๆ ไม่ใช่ Wake โดยลำพัง
+การยืนยัน cortical arousal จริงยังต้องใช้ EEG/PSG
 
 ## 7. แผน validation ที่ต้องผ่านก่อนยกระดับ claim
 

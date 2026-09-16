@@ -1,7 +1,7 @@
 # ZEEP Adaptive Coach v1.0 — Recommendation-first Plan
 
 สถานะ: **แผนเสนออนุมัติ · ยังไม่เปิดการสั่งอุปกรณ์อัตโนมัติ**  
-วันที่ทบทวน: 15 กันยายน 2026  
+วันที่ทบทวน: 16 กันยายน 2026
 ขอบเขต: Pi5, Admin Monitor, User Control และ API สำหรับ ZEEP App
 
 ## 1. ข้อสรุปสำหรับทีม
@@ -31,10 +31,16 @@ Sleep Score หรือ Recovery Score ด้วยการไล่บัง�
 - Baseline จาก Session ที่จบแล้ว แยกตาม Mode
 - Admin endpoint `GET /api/v1/admin/adaptive/live`
 - Smart Response แบบ pure/read-only
+- Nap Personal Behaviour Baseline แยก `nap_30` และ `nap_90` ใน
+  key/schema และ implementation แล้ว พร้อมใช้เป็นคนละ cohort
 - Device API ส่วนใหญ่ตรวจ Safety latch แต่ยังไม่ได้บังคับ `READY/ARMED`,
   ownership และ confirmation TTL ผ่าน Gateway กลางครบทุกเส้นทาง; endpoint
   ปรับ volume ยังเป็นข้อยกเว้นที่ต้องปิดก่อน G2
 - Sleep State ถูกกำหนดเป็น wellness telemetry ไม่ใช่ actuator input
+
+ทุก Adaptive payload ใน G0/G1 ต้องคง `automatic_actuation=false`,
+`recommendation_only=true` และไม่มี command endpoint ระบบจึงเป็น Shadow/Advisory
+เท่านั้น แม้จะแสดง Candidate recommendation ได้แล้ว
 
 รุ่นปัจจุบันจึงถือว่าอยู่ที่ **G0 · Observe** และมีฐานเริ่ม G1 ได้แล้ว แต่ยังขาด
 Decision store, user feedback, command/outcome correlation, Gateway กลาง และ
@@ -488,14 +494,13 @@ physical feedback ที่เชื่อถือได้และผ่า�
    TTL, one-time token และ allowlist ตอน accept; ปิดเส้นทาง volume ที่ bypass
 4. เพิ่ม deterministic recommendation engine และ state/persistence/arbitration
    ตาม §§5–6 แทนการใช้ fixed Smart Response band เป็น Adaptive decision
-5. แยก Nap target 30/90 นาทีใน key/schema ก่อนสร้าง Baseline รายช่วงเวลา
-6. ตัด Aroma/Steam ออกจาก G2 จน consent, sensitivity, formulation/water,
+5. ตัด Aroma/Steam ออกจาก G2 จน consent, sensitivity, formulation/water,
    dose cap, cooldown, lockout และ audit พร้อม
-7. แก้ข้อความ Aroma/Steam ใน UI จาก 1 วินาทีให้ตรง Backend 5 วินาที
-8. เปลี่ยนคำแนะนำ “หรี่ไฟ” เป็น “ปิดไฟ” จน Hardware รองรับ dimming
-9. แยก blocker ตาม domain; Sensor เสียงหายต้องไม่ปิดคำแนะนำอุณหภูมิ และ
+6. แก้ข้อความ Aroma/Steam ใน UI จาก 1 วินาทีให้ตรง Backend 5 วินาที
+7. เปลี่ยนคำแนะนำ “หรี่ไฟ” เป็น “ปิดไฟ” จน Hardware รองรับ dimming
+8. แยก blocker ตาม domain; Sensor เสียงหายต้องไม่ปิดคำแนะนำอุณหภูมิ และ
    Sensor PM2.5 หายต้องไม่ปิดคำแนะนำเพลง
-10. เพิ่มตัวกรอง coverage, Safety incident, completion และ resolved Mode ใน
+9. เพิ่มตัวกรอง coverage, Safety incident, completion และ resolved Mode ใน
     behavior/device-response baseline extractor ก่อนเปิด G1 learning
 
 ### P1

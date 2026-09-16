@@ -98,11 +98,13 @@ Backend-to-backend read ยังไม่เปิดใน v1 การออ�
 | ชั้นข้อมูล | ตัวอย่าง/ตำแหน่ง | ผู้มีสิทธิ์/การใช้งาน |
 |---|---|---|
 | Identity/Profile | `data/profiles.json`, canonical account aliases | User ตามบัญชี; Admin ตาม role; ใช้ profile/baseline context |
-| Browser auth/capability | `data/auth.db`, offline tickets, QR/report-share ticket | Server-side เท่านั้น; token/secret ไม่คืนใน result API |
+| Browser auth | `data/auth.db` | SQLite แบบถาวรข้าม process restart; เก็บ hash ของ cookie token ฝั่ง server และไม่คืน credential ใน result API |
+| Short-lived capability | offline, QR, profile-completion และ report-share tickets | อยู่ใน memory, อายุสั้น/ใช้ครั้งเดียวตาม contract และหายเมื่อ process restart; ไม่ใช่ข้อมูลใน `auth.db` |
+| Pod occupancy lease | `data/occupancy.db` | SQLite lease มี TTL สำหรับกันบัญชี/Pod ซ้ำ; แยกจาก Browser auth และ Recorded Session |
 | Session/Timeline/Event | `data/sessions.db` | User ได้เฉพาะ allowlisted finalized projection; Admin ตรวจเชิงปฏิบัติการได้ |
 | Raw BCG | `data/bcg.db` | Admin/research boundary; ไม่ออก Usage API |
 | Personal baseline | `data/baselines.json` และ persisted profile data | ใช้เฉพาะ account/mode/target/formula cohort ที่ตรง |
-| Runtime continuity | `data/active_session_checkpoint.json`, occupancy state | คืน Session หลัง restart; ไม่อยู่ใน workstation snapshot |
+| Runtime continuity | `data/active_session_checkpoint.json` | คืน Recorded Session หลัง restart; แยกจาก `occupancy.db` และไม่อยู่ใน workstation snapshot |
 | Pending egress | `data/ingest_outbox/` | server-side durable retry; payload แบบ allowlist |
 | Device calibration | `calibration.json`/deployment calibration | provenance ของอุปกรณ์; ห้ามใช้ rewrite Raw |
 | Audit/operations | event log, version, request ID, maintenance audit | จำกัดสิทธิ์และ retention; redact PII/health detail ใน support log |
@@ -110,6 +112,12 @@ Backend-to-backend read ยังไม่เปิดใน v1 การออ�
 `data/`, `private-data/`, backup และ credential เป็นข้อมูลนอก Git ห้าม commit,
 แนบ issue หรือส่งผ่านช่องทางแชตทั่วไป Test ต้องย้าย data/log/backup/music ไป
 temporary directory ผ่าน [`testing_support.py`](../../testing_support.py)
+
+### Identity boundary
+
+Usage history เป็น **email-first ไม่ใช่ email-only**: ใช้ email ที่ยืนยันได้เป็น
+canonical identifier เมื่อมีข้อมูล แต่ยังรองรับ normalized legacy account key ของ
+ประวัติเก่าผ่าน alias ที่ตรวจสอบแล้ว ห้ามรวมบัญชีจาก display name หรือข้อความที่ดูคล้ายกัน
 
 ### Raw กับ Derived
 
@@ -134,6 +142,16 @@ temporary directory ผ่าน [`testing_support.py`](../../testing_support.py
 
 Account ingest ไม่ควรส่ง email เพิ่มเมื่อมี immutable `userPublicId` แล้ว การเพิ่ม field
 ใหม่ต้องผ่าน schema, data-minimisation และปลายทาง retention review ร่วมกัน
+
+### สื่อ Pilot ที่เผยแพร่
+
+- ใช้ coded ID เป็นค่าเริ่มต้นและตัด email/ข้อมูลสุขภาพที่ไม่จำเป็น
+- การเผยแพร่ชื่อ ภาพ เสียง หรือวิดีโอต้องมี consent ที่ระบุวัตถุประสงค์ ช่องทาง
+  ระยะเวลา และวิธีถอนความยินยอม
+- `noindex`/`nofollow` ลดการค้นพบจาก search engine แต่ไม่ใช่ authentication หรือ
+  access control; URL ที่เปิดได้ยังถือเป็นการเปิดเผยต่อสาธารณะ
+- สรุปแบบ **PILOT EVIDENCE** ต้องบอกจำนวนผู้ตอบ ตัวหาร ผู้ใช้ซ้ำ และข้อจำกัด;
+  ห้ามเปลี่ยนผลสัมภาษณ์หรือ simulation ให้เป็นคำอ้างเชิงประสิทธิผลด้านสุขภาพ
 
 ## Retention และ account erasure
 

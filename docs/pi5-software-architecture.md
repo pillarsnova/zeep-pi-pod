@@ -18,10 +18,10 @@ app, ต่อ lifecycle, ประกอบ dependency และเรียก
 | Layer | Source of truth | หน้าที่ |
 |---|---|---|
 | HTTP contracts | `api_models.py`, `api_v1.py` | รูปแบบ request/response และ versioned envelope |
-| Authentication | `access_control.py`, `admin_accounts.py` | Browser session, RBAC, CSRF และ Admin identity |
+| Authentication | `access_control.py`, `admin_accounts.py` | Browser session, RBAC, CSRF และ Admin identity; Production เตรียม schema/config ใน lifespan และ direct caller มี guarded lazy fallback |
 | ZEEP account binding | `zeep_pod/identity/zeep_account.py` | ผูก `{tokens, user}` จาก Password/QR login เข้ากับตัวตนในตู้ |
 | QR login | `qr_login.py` | Pi ทำ handshake แทนแท็บเล็ต และถือ `pollSecret` ไว้เอง |
-| Occupancy | `pod_occupancy.py` | หนึ่งผู้ใช้ต่อหนึ่งตู้และป้องกัน login ซ้ำหลายตู้ |
+| Occupancy | `pod_occupancy.py` | หนึ่งผู้ใช้ต่อหนึ่งตู้และป้องกัน login ซ้ำหลายตู้; lease store initialize แบบ explicit/idempotent |
 | Device protocol | `control_protocol.py` | validate/normalize คำสั่ง Aircon และ Bed |
 | Hardware contracts | `sensor_contracts.py` | sensor model, alias, physical range, frame/telemetry contract |
 | Calibration | `sensor_calibration.py` | calibration spec, validation และ atomic JSON persistence |
@@ -37,12 +37,13 @@ app, ต่อ lifecycle, ประกอบ dependency และเรียก
 | Sleep evidence | `sleep_signal_features.py` | Movement, Bed Exit, Arousal, HR/RR และ waveform features |
 | Sleep scoring | `sleep_stage_scoring.py` | หลักฐานและ probability ของ W/N1/N2/N3/REM |
 | Sleep policy | `sleep_system_policy.py` | version, gate, confirmation, transition และ environment context |
-| Personal baseline | `personal.py` | Adaptive baseline รายบุคคลแบบ versioned |
+| Personal baseline | `personal.py`, `zeep_pod/sessions/baseline_cache.py` | Adaptive baseline รายบุคคลแบบ versioned; derived cache โหลดใน lifespan |
+| Historical replay | `zeep_pod/sessions/historical_replay_runtime.py`, `historical_replay_storage.py`, `historical_replay_audit.py`, `reclassify_sleep_history.py` | ใช้ policy/version เดียวกับ Live, อ่าน SQLite แบบ read-only และ audit โดยไม่ import FastAPI composition root |
 | User learning profile | `zeep_pod/sessions/user_learning_profile.py` | รวมประวัติรายบัญชี แยก Observed/Trend/AI readiness และแยก Overnight/Nap |
 | Personal behavior cohorts | `zeep_pod/sessions/personal_behaviour.py`, `user_baseline_context.py`, `user_score_history.py` | แยกสูตรและเป้าหมาย Overnight/Nap 30/Nap 90 ก่อนเทียบ Baseline หรือ trend |
 | Advisory AI projection | `zeep_pod/sessions/user_ai_context.py`, `user_profile_api.py` | Positive allowlist ที่ตัด direct identifiers; ยังคงเป็น Personal Wellness Data และไม่สั่งอุปกรณ์ |
 | Identity erasure | `zeep_pod/identity/account_erasure.py`, `account_erasure_api.py` | ลบ local active store ของ canonical account/aliases, Session, BCG, Baseline, checkpoint และ capability ที่ค้าง |
-| Final report | `sleep_session_report.py` | Mode-aware Sleep/Rest score และรายงานหลังจบ Session |
+| Final report | `sleep_session_report.py` | Mode-aware Sleep Score/Recovery Score และรายงานหลังจบ Session |
 | Account ingest outbox | `zeep_pod/sessions/ingest_payload.py`, `ingest_outbox.py` | สร้าง payload แบบ allowlist, เขียนคิว atomic และ retry โดยไม่ทำให้ Session finalization ล้ม |
 | Atomic Session finalization | `zeep_pod/sessions/finalization_commit.py` | commit ผลที่สร้างแล้วลง DB, กู้ live Session เมื่อ persistence ล้ม และลบ checkpoint หลัง durable flush เท่านั้น |
 | Storage | `database.py`, `bcg_storage.py`, `backup.py` | SQLite writer, raw BCG และ Daily backup |
@@ -97,6 +98,9 @@ Dashboard, Session และ Safety ต้องอ่านค่าจาก *
 - `app.py` import domain/hardware modules ได้ แต่ module ภายใต้ `zeep_pod/`
   ห้าม import `app.py`
 - Pure helper ห้ามเปิดไฟล์, Serial, MQTT, GPIO หรือ database ตอน import
+- Resource ที่ย้ายแล้ว ได้แก่ Database, Auth, Occupancy, Personal Baseline และ GPIO
+  ใช้ constructor ที่ไม่เปิด I/O แล้ว initialize ใน Production lifespan ตามลำดับ
+  Database → Auth → Occupancy → Baseline → GPIO; Music/Aircon/Audio ยังเป็นงานถัดไป
 - Module ใหม่ภายใต้ `zeep_pod/` ไม่เกิน 500 บรรทัด
 - Function/method ใหม่ไม่เกิน 90 บรรทัด
 - Public boundary และ safety decision ต้องมี type hints และ docstring
@@ -153,24 +157,54 @@ git diff --check
 ตรวจ `systemctl`, `/api/public/status`, Sensor/Hub/BCG connectivity, Safety faults
 และ event `SESSION resumed_after_restart` หากมี Session ค้างอยู่
 
-## 6. งานแยกต่อไปแบบลดความเสี่ยง
+## 6. สถานะ Refactor และลำดับถัดไป
 
-ลำดับ refactor ถัดไปควรเป็น:
+Onboarding ใช้เอกสารนี้เป็น Roadmap ทางเทคนิคเพียงฉบับเดียว เพื่อลดเอกสารซ้ำและ
+ไม่ให้สถานะ Release กับ Working candidate ปะปนกัน
 
-1. **เสร็จแล้ว:** แยก GPIO, Audio player/API, Sensor Hub 1/2, Control Hub 1/2,
-   BCG reader, Account ingest outbox และ live device/API projection เป็น
-   adapters/services
-2. **เสร็จแล้ว:** แยก 10-second Sensor frame sampler เป็น service ที่ inject
-   clock/state ports ได้
-3. **เริ่มแล้ว:** แยก atomic finalization commit; ขั้นต่อไปแยก Session
-   lifecycle/checkpoint orchestration ตาม use case
-4. แบ่ง FastAPI routes ตาม domain: auth, control, session, admin/monitor
-5. ลด `app.py` ให้เหลือ construction, dependency wiring และ process lifecycle
+### 6.1 สิ่งที่อยู่บน `origin/develop`
 
-แต่ละขั้นต้องเป็น behavior-preserving commit ขนาดเล็กและผ่าน regression ก่อนเริ่ม
-ขั้นถัดไป ห้ามรวมการเปลี่ยนสูตรสุขภาพหรือ hardware behavior ไว้ใน refactor commit
+ฐานอ้างอิงล่าสุดที่ตรวจระหว่างจัดเอกสารคือ commit `71d6a7e`:
 
-แผนละเอียดและ Definition of Done อยู่ที่
-[ZEEP v1 Refactor Roadmap](onboarding/refactor-roadmap-v1.md) ส่วน transport,
-ownership และ failure behavior ของอุปกรณ์อยู่ที่
+| ระยะ | สถานะ | Boundary ที่แยกแล้ว |
+|---|---|---|
+| R0 | เสร็จแล้ว | Characterization และ architecture ratchet |
+| R1 | เสร็จแล้ว | Live state projection |
+| R2 | เสร็จแล้ว | BCG framing, reconnect และ publication |
+| R3 | เสร็จแล้ว | Canonical Sensor frame ทุก 10 วินาที |
+| R4a | เสร็จแล้ว | Atomic finalization commit และ recovery order |
+
+รอบนี้ลด `app.py` จาก 8,270 เหลือ 8,025 บรรทัด, ลด `snapshot()` จาก 169
+เหลือ 118 บรรทัด และย้าย BCG reader, Sensor sampler กับ finalization ไปยัง module
+ที่ทดสอบแยกได้ โดยยังคง facade เดิมไว้ชั่วคราว ไม่เปลี่ยน Sleep/Score formula,
+Sensor cadence, public JSON key หรือคำสั่ง Hardware
+
+### 6.2 Working candidate ที่ยังไม่ใช่ Release fact
+
+- Constructor ของ Database, Auth, Occupancy, Personal Baseline และ GPIO ไม่ควรเปิด
+  I/O ตอน import; Production initialize ตามลำดับ
+  Database → Auth → Occupancy → Baseline → GPIO
+- Historical replay อ่าน SQLite แบบ read-only ผ่าน storage boundary และไม่ import
+  FastAPI composition root
+- Guarded lazy initialization มีไว้เพื่อ compatibility ของ direct caller/test เดิม;
+  Production ใช้ explicit lifespan initialization
+- Candidate ต้องผ่าน Review และ Release gate ก่อนจึงเขียนสถานะเป็น “เสร็จแล้ว”
+
+### 6.3 ลำดับถัดไป
+
+1. ปิด import side effects ของ Music, Aircon reference และ Audio discovery พร้อม
+   lifecycle rollback/thread registry ที่ deterministic
+2. แยก Session lifecycle: waiting-bed, vital gate, start, resume, finalize และ
+   checkpoint orchestration โดยรักษา Restart continuity
+3. ทำ Sleep estimator facade ให้รับ typed input แล้ว delegate ไปยัง feature,
+   scorer และ policy เดิม พร้อม golden replay; ห้ามเปลี่ยน threshold ใน change นี้
+4. รวม report pipeline ที่ซ้ำระหว่าง Live, Replay, Rescore และ Trim ให้ใช้ contract เดียว
+5. แบ่ง FastAPI router ตาม auth, control, session และ admin/monitor
+6. ลด `app.py` ให้เหลือ configuration, dependency wiring, lifespan และ router wiring
+
+แต่ละขั้นต้องเป็น behavior-preserving commit ขนาดเล็กที่ย้อนกลับได้ ห้ามรวมการจูน
+Health threshold, เปลี่ยน Schema หรือ Flash Firmware ไว้ใน Refactor commit เดียวกัน
+และต้องผ่าน focused test ก่อน Full release gate ตาม [TESTING.md](../TESTING.md)
+
+Transport, ownership และ failure behavior ของอุปกรณ์อยู่ที่
 [Hardware and Hub Map](onboarding/hardware-hub-map.md)

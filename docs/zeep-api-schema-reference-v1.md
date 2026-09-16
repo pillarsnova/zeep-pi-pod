@@ -4,7 +4,7 @@
 
 **สถานะ:** Integration contract v1 (read-only, raw-free)
 
-**ปรับปรุงล่าสุด:** 2026-09-15
+**ปรับปรุงล่าสุด:** 2026-09-16
 **ฐานข้อมูล:** ผล Session ที่ Finalize แล้วเท่านั้น
 
 เอกสารนี้เป็นคู่มืออ้างอิงสำหรับทีม Backend, Mobile, Web และ QA ของ
@@ -166,7 +166,7 @@ Session เพื่อให้เป็น payload ที่ตรวจสอ
       "has_more": false
     },
     "range": null,
-    "history_start_utc": "2026-09-01T00:00:00+00:00"
+    "history_start_utc": "2026-08-31T17:00:00+00:00"
   }
 }
 ```
@@ -289,7 +289,7 @@ purpose-specific inference consent จึงห้ามใช้กับ AI in
     "has_more": false
   },
   "range": null,
-  "history_start_utc": "2026-09-01T00:00:00+00:00"
+  "history_start_utc": "2026-08-31T17:00:00+00:00"
 }
 ```
 
@@ -301,7 +301,7 @@ purpose-specific inference consent จึงห้ามใช้กับ AI in
 | `summary` | `UsageHistorySummary` | ไม่ได้ | aggregate จำนวนคน/Session/คะแนนแต่ละประเภท/Session ที่ยังสรุปคะแนนไม่ได้ และค่าเฉลี่ยแยกประเภท; ค่าเฉลี่ยเป็น `null` เมื่อพบคะแนนต่าง formula version หรือไม่มี provenance; `awaiting_score_count` คงเป็น alias เดิมของ `without_score_count` ชั่วคราว |
 | `pagination` | `Pagination` | ไม่ได้ | ข้อมูลแบ่งหน้า |
 | `range` | `UsageHistoryRange` | nullable | ช่วงเวลาที่ service resolve: `start_utc`, `end_utc`, `start_local`, `end_local`, `timezone`, `day_assignment=session_end_local_date`; field อื่นไม่อนุญาต |
-| `history_start_utc` | `string` (RFC 3339) | ไม่ได้ | จุดเริ่มประวัติที่ค้นได้ |
+| `history_start_utc` | `string` (RFC 3339) | ไม่ได้ | จุดเริ่มประวัติที่ค้นได้; Pilot cutover `1 ก.ย. 2569 00:00 Asia/Bangkok` เท่ากับ `2026-08-31T17:00:00+00:00` |
 
 ### 5.1 Pagination
 
@@ -370,7 +370,7 @@ Admin จะมีหลายรายการ
 | `requested` | `enum<string>` | ไม่ได้ | mode canonical ที่ request/session ระบุ: `sleep`, `nap_recovery` หรือ `unknown`; ต้องตรงกับ `key` |
 | `resolved` | `string` | nullable | mode ที่ quality policy ยืนยัน; อาจไม่มี |
 | `sleep_required` | `boolean` | ไม่ได้ | Overnight=true; Nap=false |
-| `target` | `Target` | nullable | เป้าหมาย duration; Overnight อาจไม่มี |
+| `target` | `Target` | nullable | สูตรปัจจุบันต้องมี `overnight_7h`, `nap_30` หรือ `nap_90`; `null` ได้เฉพาะโหมด unresolved/ข้อมูล legacy ที่ยังยืนยันไม่ได้ |
 | `review_required` | `boolean` | ไม่ได้ | true เมื่อ mode unresolved, metadata conflict หรือเวลา Session ต้องตรวจเทียบ Protocol |
 | `protocol_review_required` | `boolean` | ไม่ได้ | true เมื่อเวลา/Target ของ Session ต้องให้ Admin ตรวจ โดยไม่ปิดคะแนนเมื่อผ่านเวลาขั้นต่ำของโหมด |
 | `validation_status` | `enum<string>` | ไม่ได้ | `mode_confirmed`, `mode_unresolved`, `mode_metadata_conflict` |
@@ -400,12 +400,16 @@ Admin จะมีหลายรายการ
 | `formula_version` | `string` | nullable | สูตรที่ปล่อยจริง; legacy บางรายการอาจไม่มี; ไม่ใช่ shadow formula |
 | `quality_model_version` | `string` | nullable | version ของ quality model |
 | `validation_status` | `string` | nullable | เช่น `preliminary_wellness_estimate` หรือ conflict status |
-| `clinical_validated` | `boolean` | ไม่ได้ | ปัจจุบันโดยทั่วไป false; ไม่ใช่ใบรับรองทางการแพทย์ |
+| `clinical_validated` | `literal<false>` | ไม่ได้ | Public API v1 บังคับ `false` เสมอ แม้ข้อมูลเก่าหรือต้นทางภายในจะระบุค่าอื่น |
 | `reason` | `string` | nullable | เหตุผลที่ unavailable/ข้อจำกัด |
 | `review_required` | `boolean` | ไม่ได้ | ต้องตรวจ metadata/release หรือไม่ |
 
 Invariant สำคัญ: `available=false` ⇒ `value=null`, UI ต้องไม่ fallback ไปใช้
 `engineering_shadow_score`, `score_unrounded` หรือค่าเดิมจาก report
+
+Invariant ด้านขอบเขตผลิตภัณฑ์: `clinical_validated=false` เสมอใน Public API v1
+เพราะผลทั้งหมดเป็นการประเมินเชิง Wellness ไม่ใช่การวินิจฉัยทางการแพทย์
+adapter ต้องลดค่าจากข้อมูลเก่าที่เป็น `true` ให้เป็น `false` ก่อนเผยแพร่
 
 นโยบาย v10.12/v8.10 ใช้เวลา Session ขั้นต่ำเป็น score-release gate เพียงข้อเดียว
 หลังยืนยันโหมด: Overnight Recovery ≥5 ชั่วโมง และ Nap & Refresh ≥10 นาที
@@ -431,9 +435,9 @@ hard maximum และไม่ปิดคะแนน
 | `coverage` | `object` | ไม่ได้ | ค่า coverage ที่เปิดเผยได้; key ย่อยอาจ nullable |
 | `confidence` | `object` | ไม่ได้ | score confidence; อาจว่าง `{}` |
 | `confidence_distribution` | `object` | nullable | distribution สำหรับ QA |
-| `coverage_contributes_points` | `boolean` | ไม่ได้ | coverage ถูกคิดในสูตรหรือไม่ |
-| `coverage_points` | `number` | nullable | คะแนนส่วน coverage ที่ release |
-| `coverage_max_points` | `number` | nullable | คะแนนเต็มส่วน coverage |
+| `coverage_contributes_points` | `boolean` | ไม่ได้ | สูตรปัจจุบันเป็น `false`; ผลเก่าบางสูตรอาจเป็น `true` และต้องอ่านคู่ `formula_version` |
+| `coverage_points` | `number` | nullable | สูตรปัจจุบันเป็น `0`; ผลเก่าอาจคงคะแนนเดิมเพื่อ Audit |
+| `coverage_max_points` | `number` | nullable | สูตรปัจจุบันเป็น `0`; ผลเก่าอาจคงเพดานเดิมเพื่อ Audit |
 | `coverage_can_hide_score` | `boolean` | ไม่ได้ | ปัจจุบัน false; ห้ามใช้ hidden veto |
 
 `coverage`, `confidence` และ `confidence_distribution` ใช้ positive allowlist;
@@ -448,6 +452,12 @@ field อื่นจากข้อมูลต้นทางจะไม่�
 
 Client ต้องรองรับ subkey ที่อนุมัติแต่ไม่มีข้อมูลในบาง Session โดยไม่เดาค่าแทน
 และห้ามใช้ field นอก allowlist เป็นเงื่อนไขความปลอดภัย
+
+สำหรับสูตรปัจจุบัน `coverage.score_component=false`, `coverage.points=0` และ
+`coverage.max_points=0` ทั้ง Sleep Score และ Recovery Score ค่า Coverage ใช้สื่อ
+ความมั่นใจและ QA เท่านั้น ไม่เพิ่ม ลด ซ่อน หรือปล่อยคะแนน แต่ API ยังอ่านผล Legacy
+ตามสูตรที่บันทึกไว้โดยเปิดเผย `formula_version`; Client ห้ามนำค่าจากคนละสูตรมาเทียบ
+โดยไม่แยก Version
 
 ### 7.5 Versions และ provenance
 
@@ -865,8 +875,41 @@ engineering shadow score
       "requested": "sleep",
       "resolved": "sleep",
       "sleep_required": true,
-      "target": null,
+      "target": {
+        "key": "overnight_7h",
+        "label": "Overnight Recovery · 7 ชั่วโมง",
+        "seconds": 25200,
+        "minutes": 420,
+        "recommended_range_minutes": [420, 540],
+        "completion_pct": 100,
+        "protocol_status": {
+          "available": true,
+          "canonical_mode": "sleep",
+          "observed_seconds": 25200,
+          "minimum_seconds": 18000,
+          "recommended_range_seconds": [25200, 32400],
+          "within_operational_window": true,
+          "within_recommended_range": true,
+          "status": "recommended",
+          "review_required": false,
+          "score_releasable": true,
+          "minimum_score_seconds": 18000,
+          "target": {
+            "available": true,
+            "valid": true,
+            "group": "sleep",
+            "key": "overnight_7h",
+            "label": "Overnight Recovery · 7 ชั่วโมง",
+            "seconds": 25200,
+            "minutes": 420,
+            "source": "persisted",
+            "review_required": false,
+            "supported_seconds": [25200]
+          }
+        }
+      },
       "review_required": false,
+      "protocol_review_required": false,
       "validation_status": "mode_confirmed",
       "conflicts": []
     },
@@ -944,7 +987,11 @@ engineering shadow score
         },
         "affects_source_score": false,
         "population_prior_is_cold_start_only": true,
-        "must_not_mix_sleep_and_nap_sessions": true
+        "must_not_mix_sleep_and_nap_sessions": true,
+        "baseline_policy_version": "zeep-personal-behaviour-baseline-v1.3-bounded-partitioned-finite-circular-time",
+        "score_formula_version": "zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10",
+        "target_specific": true,
+        "target_key": "overnight_7h"
       },
       "trend": {
         "available": true,
@@ -955,7 +1002,11 @@ engineering shadow score
           "30": {"session_count": 16, "average": 74.9, "latest": 76}
         },
         "mode_specific": true,
-        "whole_day_readiness_trend": false
+        "whole_day_readiness_trend": false,
+        "baseline_policy_version": "zeep-personal-behaviour-baseline-v1.3-bounded-partitioned-finite-circular-time",
+        "score_formula_version": "zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10",
+        "target_specific": true,
+        "target_key": "overnight_7h"
       },
       "recommendation": {
         "primary": "รักษารูปแบบที่ได้ผลและติดตามแนวโน้มจากหลายคืน",
@@ -1000,16 +1051,22 @@ engineering shadow score
     "data_quality": {
       "level": "high",
       "label": "ข้อมูลครบ",
-      "coverage": {"recording_pct": 100, "bcg_pct": 95},
+      "coverage": {
+        "recording_pct": 100,
+        "bcg_pct": 95,
+        "points": 0,
+        "max_points": 0,
+        "score_component": false
+      },
       "confidence": {
         "level": "high",
         "session_coverage_pct": 96.2,
         "paired_hr_rr_coverage_pct": 94
       },
       "confidence_distribution": null,
-      "coverage_contributes_points": true,
-      "coverage_points": 5,
-      "coverage_max_points": 5,
+      "coverage_contributes_points": false,
+      "coverage_points": 0,
+      "coverage_max_points": 0,
       "coverage_can_hide_score": false
     },
     "versions": {
@@ -1057,7 +1114,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
     "ended_at_utc": "2026-09-11T09:30:00+00:00",
     "duration_s": 1800,
     "end_reason": "target_reached",
-    "sample_count": 1800,
+    "sample_count": 180,
     "mode": {
       "key": "nap_recovery",
       "label": "Nap & Refresh",
@@ -1065,7 +1122,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       "resolved": "nap_recovery",
       "sleep_required": false,
       "target": {
-        "key": "short_rest",
+        "key": "nap_30",
         "label": "30 นาที",
         "seconds": 1800,
         "minutes": 30,
@@ -1152,7 +1209,11 @@ Nap ไม่บังคับให้หลับและไม่ควร�
         },
         "affects_source_score": false,
         "population_prior_is_cold_start_only": true,
-        "must_not_mix_sleep_and_nap_sessions": true
+        "must_not_mix_sleep_and_nap_sessions": true,
+        "baseline_policy_version": "zeep-personal-behaviour-baseline-v1.3-bounded-partitioned-finite-circular-time",
+        "score_formula_version": "zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10",
+        "target_specific": true,
+        "target_key": "nap_30"
       },
       "trend": {
         "available": true,
@@ -1161,7 +1222,11 @@ Nap ไม่บังคับให้หลับและไม่ควร�
           "7": {"session_count": 7, "average": 72.4, "latest": 74}
         },
         "mode_specific": true,
-        "whole_day_readiness_trend": false
+        "whole_day_readiness_trend": false,
+        "baseline_policy_version": "zeep-personal-behaviour-baseline-v1.3-bounded-partitioned-finite-circular-time",
+        "score_formula_version": "zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10",
+        "target_specific": true,
+        "target_key": "nap_30"
       },
       "recommendation": {
         "primary": "รักษารูปแบบการพักที่ได้ผลและบันทึกความรู้สึกหลังพัก",
@@ -1207,7 +1272,13 @@ Nap ไม่บังคับให้หลับและไม่ควร�
     "data_quality": {
       "level": "medium",
       "label": "ข้อมูลเพียงพอ",
-      "coverage": {"recording_pct": 91.5, "bcg_pct": 88.2},
+      "coverage": {
+        "recording_pct": 91.5,
+        "bcg_pct": 88.2,
+        "points": 0,
+        "max_points": 0,
+        "score_component": false
+      },
       "confidence": {
         "level": "medium",
         "label": "ข้อมูลเพียงพอ",
@@ -1216,8 +1287,8 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       },
       "confidence_distribution": null,
       "coverage_contributes_points": false,
-      "coverage_points": null,
-      "coverage_max_points": null,
+      "coverage_points": 0,
+      "coverage_max_points": 0,
       "coverage_can_hide_score": false
     },
     "versions": {
@@ -1274,6 +1345,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       "sleep_required": false,
       "target": null,
       "review_required": true,
+      "protocol_review_required": false,
       "validation_status": "mode_unresolved",
       "conflicts": []
     },
@@ -1342,9 +1414,21 @@ Nap ไม่บังคับให้หลับและไม่ควร�
         },
         "affects_source_score": false,
         "population_prior_is_cold_start_only": true,
-        "must_not_mix_sleep_and_nap_sessions": true
+        "must_not_mix_sleep_and_nap_sessions": true,
+        "baseline_policy_version": null,
+        "score_formula_version": null,
+        "target_specific": false,
+        "target_key": null
       },
-      "trend": {"available": false, "reason": "คะแนนหลักยังไม่พร้อม", "windows": {}},
+      "trend": {
+        "available": false,
+        "reason": "คะแนนหลักยังไม่พร้อม",
+        "windows": {},
+        "baseline_policy_version": null,
+        "score_formula_version": null,
+        "target_specific": false,
+        "target_key": null
+      },
       "recommendation": {
         "primary": "ระบุรูปแบบการพักและตรวจความพร้อมของ Sensor ก่อนครั้งถัดไป",
         "source_driver_key": null,
@@ -1388,12 +1472,16 @@ Nap ไม่บังคับให้หลับและไม่ควร�
     "data_quality": {
       "level": null,
       "label": null,
-      "coverage": {},
+      "coverage": {
+        "points": 0,
+        "max_points": 0,
+        "score_component": false
+      },
       "confidence": {},
       "confidence_distribution": null,
       "coverage_contributes_points": false,
-      "coverage_points": null,
-      "coverage_max_points": null,
+      "coverage_points": 0,
+      "coverage_max_points": 0,
       "coverage_can_hide_score": false
     },
     "versions": {

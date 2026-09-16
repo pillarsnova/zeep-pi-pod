@@ -1,6 +1,6 @@
 # ZEEP Sensor Interface Contract v1.2
 
-สถานะ: Approved runtime contract · 2026-09-10
+สถานะ: Approved runtime contract · 2026-09-16
 ขอบเขต: ESP32 Sensor Hub 1 → Pi5 ผ่าน USB Serial JSONL @ 115200 baud
 
 ## หลักการ
@@ -51,6 +51,15 @@ Pi จะรับเฉพาะ `event=environment` ที่ระบุ `hub
 เฉพาะ packet นั้นโดยไม่ตัดการเชื่อมต่อ USB Serial ที่ยังทำงานปกติ
 สถานะของทั้งสาม Sensor แยกจากกัน ดังนั้น SPH0645 ผิดพลาดต้องไม่ทำให้ค่า
 SHT3x-DIS หรือ OPT3001 หาย และในทางกลับกัน
+
+`temperature_c` และ `humidity_rh` ใน Packet เป็นค่าต้นทางจาก SHT3x-DIS
+Pi เก็บไว้ใน `raw_values` ก่อนสร้าง canonical environment แล้วจึงใช้ค่าชดเชยจาก
+[`calibration.json`](../calibration.json) ปัจจุบันคือ `+0.2°C` และ `−7.0`
+percentage points ตามลำดับ โดยทั้งคู่เป็น
+`provisional_one_point_field_calibration`; ห้ามเขียนค่าชดเชยกลับไปทับ Raw และต้อง
+ตรวจซ้ำหลายจุดก่อนยกระดับสถานะ Calibration ค่านี้เป็น versioned default;
+deployment อาจกำหนด `HUMIDITY_RH_BIAS` เพื่อ override เฉพาะ Pod ได้ โดย env มี
+precedence และต้องบันทึก effective value/provenance ใน Admin QA ก่อนเปิดใช้งาน
 
 ช่วง Rollback เท่านั้น Pi ยังรับ flat packet ที่ไม่มี `event` เมื่อพบ field ของ
 Hub 1 ใน allowlist ชัดเจน เช่น `temperature_c`, `humidity_rh` หรือ `lux` ส่วน

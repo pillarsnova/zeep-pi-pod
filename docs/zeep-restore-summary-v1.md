@@ -6,7 +6,7 @@
 > **Positioning:** ZEEP Wellness & Longevity · ไม่ใช่การวินิจฉัย
 > หรือการประเมินความพร้อมทั้งวัน
 >
-> **Status:** Implementation specification · 2026-09-11
+> **Status:** Implementation specification · 2026-09-16
 > **Code:**
 > [`restore_summary.py`](../zeep_pod/sessions/restore_summary.py) ·
 > [`restore_summary_baseline.py`](../zeep_pod/sessions/restore_summary_baseline.py) ·
@@ -25,8 +25,8 @@
   สถานะ จุดแข็ง จุดที่ควรปรับ Baseline ความมั่นใจ และคำแนะนำหนึ่งข้อ
 - Personal Baseline แยกตามผู้ใช้และโหมด เริ่มเปรียบเทียบเมื่อมีอย่างน้อย
   7 Session และแสดงว่าเสถียรมากขึ้นตั้งแต่ 14 Session
-- สิ่งแวดล้อมไม่สร้าง Sleep State; ใน Overnight เป็นบริบท ส่วน Nap &
-  Refresh มีผลต่อ Recovery Score แบบจำกัดสูงสุด 10 คะแนน
+- สิ่งแวดล้อมไม่สร้าง Sleep State แต่เป็นองค์ประกอบสนับสนุน
+  แบบจำกัดสูงสุด 10 คะแนนในทั้ง Sleep Score และ Recovery Score
 - ตอนนี้ใช้ชื่อที่สื่อถึงผลจากการพักใน ZEEP โดยตรง และสงวนชื่อ
   Whole-day Readiness ไว้สำหรับรุ่นที่มีข้อมูลกิจกรรมระหว่างวัน training load,
   wearable และข้อมูลก่อน–หลัง Session ที่ผ่าน validation

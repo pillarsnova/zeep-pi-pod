@@ -3,17 +3,19 @@
 > **Purpose:** เอกสารหลักฉบับเดียวของ Sleep State, Historical Replay, Sleep Score และ Session Report ที่ใช้งานจริงใน ZEEP Pod  
 > **Positioning:** Sleep Wellness · EEG-free exploratory telemetry · ไม่ใช่ PSG/การวินิจฉัย/คำสั่งรักษา  
 > **Status:** Wellness release candidate · guarded derived-result replay/promotion · G2 paired-PSG validation open
-> **Updated:** 2026-09-15
+> **Updated:** 2026-09-16
 > **Code manifest:** [`sleep_system_policy.py`](../sleep_system_policy.py)
-> **Related:** [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.0.md) · [ZEEP Restore Summary v1](zeep-restore-summary-v1.md) · [Respiratory Wellness v1.1](zeep-respiratory-wellness-v1.md) · [Historical Promotion Policy v2](sleep-history-promotion-policy-v2.md)
+> **Related:** [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.8.md) · [ZEEP Restore Summary v1](zeep-restore-summary-v1.md) · [Respiratory Wellness v1.1](zeep-respiratory-wellness-v1.md) · [Historical Promotion Policy v2](sleep-history-promotion-policy-v2.md)
 
 ## TL;DR
 
 - ระบบเก็บ Sensor ทุก 10 วินาที สรุป `sleep_stage_evidence` ทุก 30 วินาที และเปลี่ยน State เมื่อผู้ท้าชิงผ่าน Gate พร้อมยืนยัน 2 epoch/60 วินาที (N2 ใช้ 4 epoch/120 วินาที) เมื่อเริ่ม Recording ระบบยึด `W` เป็น State แรกทันที; ทุกช่วงที่ยังไม่ยืนยัน `OFF BED` ต้องมี W/N1/N2/N3/REM โดยผู้ท้าชิงที่ยังไม่ชัดจะคง State ก่อนหน้าและนับคะแนนให้ State เดิมจนกว่าจะยืนยัน State ใหม่สำเร็จ
 - Sleep-onset Guard คง W อย่างน้อย 5 นาทีแรก; หลังจากนั้น N1 ต้องมีเตียงนิ่ง ไม่มี vital rise และ HR/RR แสดงการลดลงหรือ plateau ที่ต่ำกว่าช่วงตั้งต้นอย่างสอดคล้องกัน เวลาเพียงอย่างเดียวสร้าง N1 ไม่ได้
 - หลักฐานทั้ง 5 State ถูกปรับให้อยู่บนงบ 0..1 เท่ากัน; หากผู้ชนะ <45% หรือห่างอันดับสอง <8% ระบบจะไม่เปิด State ใหม่ แต่คง State ที่ยืนยันก่อนหน้าอย่างต่อเนื่องจนกว่าผู้ท้าชิงจะผ่าน Gate; N3 ใช้เกณฑ์เดียวกันหลังผ่าน waveform/movement/CV/regularity/relative-drop gate
-- พฤติกรรมย้อนหลังเรียนรู้แยกตามบัญชีและ Rest Mode: `best_rest_window` เริ่มแสดงใน visit 2 จาก completed Session ก่อนหน้า 1 ครั้งที่ Mode/target เดียวกัน ส่วน aggregate baseline เช่น latency, ระยะเวลา และสิ่งแวดล้อมที่มักพบยังต้องมีอย่างน้อย 3 Session; ทั้งสองเป็น observation/context ไม่ใช่ preference หรือเหตุและผล ไม่มีผลต่อ Score/Sleep State/automatic control และใช้ข้อมูลอดีตแบบ forward-only ตั้งแต่ 1 ก.ย. 2569
-- BCG + Bed Status เป็นหลัก; SPH0645 ช่วยยืนยัน disturbance เมื่อตรงเวลากับ BCG/movement; Sensor อากาศอธิบายสิ่งรบกวนและ confidence เท่านั้น
+- พฤติกรรมย้อนหลังเรียนรู้แยกตามบัญชีและ Rest Mode: `best_rest_window` เริ่มแสดงใน visit 2 จาก completed Session ก่อนหน้า 1 ครั้งที่ Mode/target เดียวกัน ส่วน aggregate baseline เช่น latency, ระยะเวลา และสิ่งแวดล้อมที่มักพบเริ่มเป็น provisional/internal เมื่อมี 3 Session; หน้าผู้ใช้เริ่มเปรียบเทียบ Personal Baseline เมื่อมีอย่างน้อย 7 Session; ทั้งสองเป็น observation/context ไม่ใช่ preference หรือเหตุและผล ไม่มีผลต่อ Score/Sleep State/automatic control และใช้ข้อมูลอดีตแบบ forward-only ตั้งแต่ 1 ก.ย. 2569
+- BCG + Bed Status เป็นหลัก; SPH0645 ช่วยยืนยัน disturbance เมื่อตรงเวลากับ BCG/movement;
+  Sensor สิ่งแวดล้อมอธิบายสิ่งรบกวน/ความมั่นใจแต่ไม่สร้าง Sleep State
+  และมีผลแบบจำกัด 10 คะแนนในทั้ง Sleep Score/Recovery Score ที่ชั้น Report
 - Login ได้ก่อน แต่จะยังไม่สร้าง Session/Timeline จนกว่าอยู่บนเตียงครบ 20 วินาที และมี HR+RR สดในช่วง sanity ต่อเนื่อง 3 BCG packets ใหม่
 - การพลิกตัว ขยับแขนขา หรือขยับผ้าห่มขณะยังอยู่บนเตียงเป็น `sleep-compatible movement` และไม่เปลี่ยนเป็น Wake โดยลำพัง
 - เส้นทางหลักเริ่ม `Wake → N1 → N2`; ระบบเปิด `N1 → REM` แบบ SOREMP-like ที่ต้องผ่าน REM physiology gate, เปิด `N3 → REM` และเปิด `REM → Wake` เมื่อหลักฐานของ target ชนะ 2 epoch/60 วินาที
@@ -162,7 +164,9 @@ accuracy ดู [AASM Scoring Manual](https://learn.aasm.org/AssetListing/The-AA
 
 ### 2.3 Cadence และคุณภาพข้อมูล
 
-- สร้าง Sensor frame ทุก 10 วินาทีโดยไม่ขึ้นกับ Login/Session: Environment ทั้ง 6 ตัว, HR, RR และ Bed Status เปลี่ยนพร้อมกันทุกหน้าเมื่อ `sensor_frame.sequence` เปลี่ยนเท่านั้น
+- สร้าง Sensor frame ทุก 10 วินาทีโดยไม่ขึ้นกับ Login/Session: Environment ทั้ง 7 ปัจจัย
+  (อุณหภูมิ, ความชื้น, แสง, เสียง, CO₂, PM2.5 และ VOC), HR, RR และ
+  Bed Status เปลี่ยนพร้อมกันทุกหน้าเมื่อ `sensor_frame.sequence` เปลี่ยนเท่านั้น
 - WebSocket/Control ตอบสนองได้ถี่กว่า 10 วินาที แต่ห้ามนำ Raw packet ระหว่าง frame มาแทนค่าที่แสดง; Raw ใช้เฉพาะ Admin Packet Inspector และ Safety supervisor ยังคงอ่านสดโดยไม่รอ UI
 - เฉพาะ Sleep State ใช้ 3 Sensor frames สร้าง Evidence epoch ทุก 30 วินาที
 - เป้าหมาย confidence ใช้ rolling 6 feature buckets = 60 วินาที
@@ -271,7 +275,8 @@ probability ปลอมให้ State เดิม
 
 | ชั้น Baseline | ใช้อะไร | ใช้ทำอะไร | ห้ามใช้ทำอะไร |
 |---|---|---|---|
-| Physiology / Sleep State | BCG, Bed Status, HR/RR สด, movement, อายุ/เพศ และ personal baseline ที่ผ่าน eligibility | ให้น้ำหนักหลักฐาน W/N1/N2/N3/REM และ confidence | Sensor อากาศห้ามสร้างหรือเปลี่ยน Stage |
+| Active Sleep-State evidence | BCG, Bed Status, HR/RR สด, movement และ age/gender population prior | ให้น้ำหนักหลักฐาน W/N1/N2/N3/REM และ confidence | Sensor อากาศและ Personal Baseline ห้ามสร้างหรือเปลี่ยน Stage |
+| Personal Baseline | Completed Session ก่อนหน้าที่ผ่าน eligibility และอยู่ใน cohort เดียวกัน | Report, confidence context, Admin QA และคำแนะนำแบบ observation | รุ่น Pilot ปิด `direct_stage_influence`; ห้ามเปลี่ยน State, source score หรือสั่งอุปกรณ์ |
 | Environment Context | Temp, RH, Lux, Sound, CO₂, PM2.5, VOC ตาม policy version และ Rest Mode | อธิบายสิ่งที่อาจรบกวน, สิ่งที่ต้องแก้ และสิ่งที่ควรรักษา | ไม่ใช่การวินิจฉัยและไม่แทน life-safety alarm |
 | Mode / Quality | วัตถุประสงค์ Session, เวลาจริง, continuity, architecture/proxy และ coverage | เลือก duration target และสูตร Sleep Score/Recovery Score ให้เหมาะกับรูปแบบการพัก | ไม่ย้อนแก้ Raw BCG หรือ Stage decision เพื่อทำคะแนนให้ดีขึ้น |
 
@@ -303,6 +308,10 @@ baseline ภายใน Session ที่ผ่านเกณฑ์ ระบ�
 และ `excluded_from_personal_baseline=false`; low-confidence carry จากหลักฐานขาด/ไม่สด/
 restart ไม่ถูกใช้สอน Baseline แม้ epoch นั้นยังเข้าคะแนน และการขาด Sensor บางช่วง
 ไม่ทำให้ต้องทิ้ง Session ทั้งรายการ
+
+จำนวน 3–6 Session เป็น provisional baseline สำหรับ Internal/Admin QA เท่านั้น;
+การแสดงผลเปรียบเทียบว่าสูง/ต่ำกว่าช่วงปกติของบุคคลบนหน้าผู้ใช้เริ่มเมื่อมี
+Session ที่เข้าเกณฑ์ใน cohort เดียวกันอย่างน้อย 7 Session
 
 Personal rest-window baseline (`zeep-personal-rest-window-v1.2-bounded-partitioned-finite`) เป็นคนละชั้นกับ
 Physiology Baseline และ aggregate behavior baseline: ระบบเผย `best_rest_window`
@@ -664,7 +673,18 @@ health record เดิม การแก้ derived record จริงยั�
 
 ## 7. Sensor calibration ที่เกี่ยวกับรายงาน
 
-- Humidity ใช้ raw pass-through (`0.0 percentage-point bias`) ใน canonical environment snapshot; raw Hub diagnostics ไม่ถูกแก้
+- Temperature ใน canonical environment snapshot และหน้าแสดงผลใช้
+  `displayed °C = raw SHT3x-DIS °C + 0.2 °C`
+- Humidity ใน canonical environment snapshot และหน้าแสดงผลใช้
+  `displayed %RH = raw SHT3x-DIS %RH - 7.0 percentage points`
+- ค่าชดเชยอุณหภูมิ/ความชื้นข้างต้นมีสถานะ
+  `provisional_one_point_field_calibration` ตาม `calibration.json`: เป็นการเทียบ
+  ร่วมตำแหน่งเพียงหนึ่งจุดเมื่อ 4 กันยายน 2569
+  (Dashboard 18.2°C/65.0%RH เทียบกับ reference 18.4°C/61.0%RH
+  โดยค่าความชื้นที่แสดงเดิมรวมค่าชดเชย -3 จุดเปอร์เซ็นต์แล้ว)
+  จึงต้องตรวจซ้ำด้วย synchronized multi-point readings หลังอุปกรณ์นิ่ง
+- Raw Hub diagnostics ยังเก็บค่าต้นทางโดยไม่แก้ไข และรายงานต้องเก็บ
+  calibration provenance เพื่อให้ย้อนตรวจได้; ห้ามเขียนทับ Raw
 - Sound รับ `sound_dba` จาก ESP32 โดยตรงตาม Sensor Contract v1.2 โดย Pi ไม่ทำ
   abs, bias, recalibration หรือ LAeq/CEM/profile gate; raw dBFS เก็บภายในเพื่อ
   วิศวกรรม และ packet แบบ dBFS-only เป็น INVALID
@@ -691,7 +711,7 @@ health record เดิม การแก้ derived record จริงยั�
 | Confirmed ground-truth annotation | `sleep_stage_annotations.py`, `annotate_sleep_stage.py` | original decision/Raw BCG immutable + annotation regression |
 | User/Admin rendering | `static/index.html` | consistency text check + browser smoke test |
 | Admin deployed-policy inspection | `GET /api/admin/sleep/policy` | Admin auth + snapshot equality test |
-| Detailed baseline rationale | `docs/zeep-sleep-state-baseline-v1.0.md` (legacy filename, content v1.8) | [docs index](README.md) + consistency test |
+| Detailed baseline rationale | `docs/zeep-sleep-state-baseline-v1.8.md` | [docs index](README.md) + consistency test |
 
 ### 8.1 ความสอดคล้องของชั้นวิเคราะห์สุขภาพ
 
@@ -768,13 +788,13 @@ low-confidence carry ต้องไม่เข้า Personal Baseline ส่�
 การใช้งาน ไม่ใช่ Sleep State รายงานผู้ใช้แสดง `Sleep Score` หรือ
 `Recovery Score` ตามสัญญาสองโหมดเท่านั้น
 
-### 9.2 One-time cleanup contract
+### 9.2 Legacy one-time cleanup (ห้ามใช้กับข้อมูล Pilot ปัจจุบัน)
 
-`pi5/cleanup_short_sessions.py` ใช้ dry-run เป็นค่าเริ่มต้น และ `--apply` ทำงานตาม
-สัญญาต่อไปนี้: ลบเฉพาะ Session ที่ `end_time` มีค่าและ duration จริงต่ำกว่า 7,200
-วินาทีแบบ strict, กัน Session ใน active checkpoint, สำรอง SQLite/Profiles/Baselines,
-cascade ข้อมูลลูก, rebuild profile counters/personal baselines, ตรวจ integrity/orphan
-แล้วจึงเขียน marker ถาวร เมื่อ marker มีอยู่จะไม่ลบข้อมูลซ้ำ
+`cleanup_short_sessions.py` เป็นเครื่องมือ migration รุ่นเก่าที่เคยลบ Session ต่ำกว่า
+2 ชั่วโมง จึงไม่เข้ากับ Nap & Refresh ซึ่งเผย Recovery Score ได้ตั้งแต่ 10 นาที
+เครื่องมือนี้ไม่อยู่ใน Onboarding/ขั้นตอนปฏิบัติงานปัจจุบันและห้ามรันซ้ำบน Pod ใหม่
+ก่อนถอดจาก registry และลบ source ต้องให้ Data owner ยืนยัน marker/ประวัติการรันครบ
+ทุก Pod เพื่อไม่ทำลาย audit หรือ rollback evidence
 
 ### 9.3 Wake lock-in shadow audit
 
@@ -834,5 +854,7 @@ migration หรือ retry ผู้ดูแลยังเห็นยอด
 - ทำ Live และ Replay ให้ตรงกัน: N2/N3→Wake โดยตรงต้องมี same-window proxy; ถ้าไม่ชัดให้ bridge ผ่าน N1/N2
 - เปลี่ยน generic Moving→Wake เป็น sleep-compatible movement guard; พลิกตัว/ขยับผ้าห่มสั้น ๆ ไม่ยืนยัน Wake และไม่อ้างตำแหน่งอวัยวะจาก BCG ตัวเดียว
 - แก้คำ “หลับตื่น” เป็น “หลับตื้น” และใช้ Wake สำหรับช่วงตื่น
-- แยก environment ออกจากตัวกำหนด Stage และเก็บเป็น context/report
+- แยก environment ออกจากตัวกำหนด Stage โดยยังคงเป็น context/report
+  และองค์ประกอบสนับสนุนแบบจำกัด 10 คะแนนของทั้ง Sleep Score และ
+  Recovery Score
 - เพิ่ม canonical policy manifest + Admin policy API + cross-layer consistency regression

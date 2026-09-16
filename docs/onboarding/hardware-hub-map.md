@@ -2,20 +2,19 @@
 
 สถานะ: **Current implementation map · Internal Pilot / freeze candidate**
 ตรวจจาก branch `develop`, pushed baseline
-`d2c7af76e23942df9a778a20342e766c8a8bc6d9` และ working candidate ปัจจุบัน
-เมื่อ 16 กันยายน 2026
+`71d6a7e` เมื่อ 16 กันยายน 2026
 ขอบเขต: Pi 5 runtime, Sensor Hub 1/2, BCG, Control Hub 1/2, Audio และ GPIO
 
-การสกัด live-device freshness ไป `zeep_pod/api_state_projection.py` ในงานรอบนี้
-เป็น behavior-preserving composition refactor เหนือ baseline ดังกล่าว และไม่เปลี่ยน
-transport, command, threshold หรือ physical-device contract ที่สรุปในหน้านี้
+การสกัด BCG reader, 10-second Sensor-frame sampler และ live-device projection
+เข้า module เฉพาะถูก push อยู่ใน baseline นี้แล้ว เป็น behavior-preserving refactor
+ที่ไม่เปลี่ยน transport, command, threshold หรือ physical-device contract
 
 เอกสารนี้ตอบสี่คำถามสำหรับสมาชิกใหม่:
 
 1. อุปกรณ์ใดส่งหรือรับข้อมูลอะไร ผ่าน transport ใด
 2. ส่วนใดเป็นเจ้าของ Raw value, canonical value, command state และข้อมูลถาวร
 3. ระบบทำอะไรเมื่อ packet, transport หรืออุปกรณ์ล้มเหลว
-4. ควร refactor ต่ออย่างไรโดยไม่เปลี่ยนพฤติกรรม v1
+4. ข้อมูลใด runtime ยืนยันแล้วและ unknown ใดต้องส่งต่อ Hardware owner
 
 ค่าพอร์ต, topic, timeout และ GPIO ด้านล่างคือ **ค่า default ใน source** ซึ่งอาจถูก
 override ด้วย environment ของแต่ละ Pod ก่อนตรวจเครื่องจริงให้ดู EnvironmentFile
@@ -340,6 +339,9 @@ opto/MOSFET/relay ตาม hardware design ห้ามต่อตรง
 
 ### Policy/state/failure behavior
 
+- GPIO เปิดโดย default (`ZEEP_GPIO_ENABLED=1`). ตั้ง `0` เฉพาะ offline replay,
+  test หรือ maintenance process ที่ห้ามจับ hardware; runtime จะประกาศ
+  `ready=false` และ control route ตอบ 503 โดยไม่สร้าง mock output.
 - `GPIOManager` เขียน `state["gpio"][name]` หลังเรียก device สำเร็จ. นี่คือ
   commanded state ไม่มี input feedback ยืนยัน relay/door/light จริง.
 - Init ลอง default 10 ครั้งเฉพาะ error ที่มีคำว่า `busy`, หน่วง 0.5 s; error อื่น
@@ -380,245 +382,6 @@ Consumer API รับ detached snapshot และตัด engineering telemetr
 Freshness ของ Hub 1/2, BCG และ Control Hub 1/2 ถูก project บน detached response
 ด้วย `LiveDeviceProjectionPolicy`/`project_live_device_statuses()` ใน module เดียวกัน;
 ฟังก์ชันนี้ไม่ mutate live reader state
-
-## `app.py` wiring และ lifecycle ปัจจุบัน
-
-### Import/construction
-
-`app.py` เป็น composition root และ import adapter ทุกตัวโดยตรง จากนั้น:
-
-1. สร้าง `GPIOManager`, `AudioPlayer`, `DatabaseManager`, `BCGStorage` ใน module scope.
-2. Inject MQTT/config/state/logger เข้า Control Hub 1/2 ด้วย `configure_*()` แล้ว
-   สร้าง adapter instance.
-3. สร้าง `AudioControlService` และ include audio router.
-4. FastAPI lifespan initialize/migrate database, restore Session/Sensor frame,
-   start backup และเริ่ม daemon threads.
-
-เมื่อสร้าง response, `snapshot()` ส่ง detached state กับ stale thresholds เข้า
-`project_live_device_statuses()` แล้วจึง compose canonical environment ต่อ ไม่ได้
-คำนวณ freshness ซ้ำราย Hub ใน route
-
-Hardware threads ที่ lifespan start แยกกันคือ Sensor Hub 1, Sensor Hub 2,
-Control Hub 1, Control Hub 2, BCG รวมถึง Sensor-frame/Session/Safety supervisors.
-การล้มของ loop หนึ่งจึงไม่ควรทำให้ peer loop หยุด
-
-### Shutdown
-
-Lifespan save active checkpoint/frame, stop player, shutdown GPIO, flush BCG,
-stop backup และ drain database. Serial/MQTT loops ปัจจุบันเป็น daemon thread แบบ
-`run_forever`/`loop_forever`. BCG adapter รับ stop event ได้แล้ว แต่ `app.py`
-ยังไม่ได้ส่ง lifecycle signal ให้; Hub อื่นยังไม่มี explicit disconnect. Process exit
-จึงยังเป็นผู้ยุติ thread เหล่านี้ นี่คือ lifecycle debt ที่ควรแก้แบบ
-characterization-first ไม่ใช่เปลี่ยนพร้อม hardware behavior
-
-## Dead, duplicate และ compatibility audit
-
-ตรวจด้วย `rg` ที่ baseline ข้างต้นได้ข้อสรุปดังนี้
-
-### ไม่มี dead runtime adapter ในกลุ่ม Hardware ปัจจุบัน
-
-`app.py` import `audio`, `audio_api`, `bcg`, `controlhub1`, `controlhub2`, `gpio`,
-`sensorhub1`, `sensorhub2` และ `BCGStorage`; lifespan start reader/control threads
-ครบทุก Hub ส่วน audio/GPIO ถูก route/safety/shutdown เรียกจริง ดังนั้น **ห้ามลบ
-module ใดในกลุ่มนี้โดยอ้างว่าไม่ถูกใช้**
-
-คำสั่งยืนยัน:
-
-```bash
-rg -n 'from zeep_pod\.hardware|from bcg_storage' app.py
-rg -n 'Thread\(target=(esp32_reader|sensorhub2_mqtt_reader|controlhub1_mqtt\.run|controlhub2_bed_mqtt\.run|bcg_reader)' app.py
-rg -n 'gpio\.|player\.|bcg_storage\.|controlhub[12]' app.py
-```
-
-`zeep_pod/hardware/__init__.py` เป็น package marker หนึ่ง docstring ไม่มี runtime
-implementation จึงไม่ใช่ duplicate adapter
-
-### Code ที่ดูซ้ำแต่ยังเป็น compatibility facade
-
-| Symbol | Evidence การใช้ | สถานะ/ทางออก |
-|---|---|---|
-| `app.build_environment_snapshot()` | runtime, Safety, sampler และ tests เรียก | facade ไป pure `compose_environment_snapshot`; เก็บจนย้าย caller/tests ครบ |
-| `app.normalize_esp32_sensor()` | Inject เข้า SensorHub1Reader และ tests เรียก | ไม่ dead; เปลี่ยนชื่อ/ลบหลังสร้าง stable service interface |
-| `app.hold_last_valid_sound()` | Inject เข้า SensorHub1Reader และ tests เรียก | ไม่ dead; เป็น config-binding facade |
-| `app._normalize_aircon_command()`, `_normalize_bed_command()`, `_resolve_aircon_temperature_command()` | HTTP routes เรียก | แปลง domain `ValueError` เป็น HTTP 422; ควรย้ายไป router/service ไม่ลบตรง ๆ |
-| `analysis_frame` response key และ `app._publish_analysis_frame()` | key เก่าเป็น API compatibility; function ถูก legacy test เรียก | ย้าย test/caller ก่อนแล้วค่อยประกาศ deprecation |
-
-### Runtime-unreachable/test-only ที่เป็น cleanup candidate
-
-- `app.sound_energy_average_db()` พบเฉพาะ definition และ
-  `test_sensor_contract.py`; runtime ใช้ `summarize_sound_window()`/
-  `sensor_runtime.energy_average_db()` โดยตรง. ย้าย test ไป pure moduleแล้วจึงลบ facade ได้.
-- `app._publish_analysis_frame()` พบ caller เฉพาะ legacy regression test;
-  production samplerเรียก `_publish_sensor_frame()`. เก็บไว้จน test ใช้ public
-  Sensor-frame service ที่เสถียร.
-- `ControlHub2BedMQTT._prepare_command(..., toggle_repeat=true)` ถูก exercise ใน
-  unit test แต่ production routeส่ง `toggle_repeat=false` คงที่. ต้องให้ Product
-  ตัดสิน behavior ก่อนลบหรือเปิดใช้; ห้ามเปิดเพียงเพราะมี code อยู่.
-- `firmware/sensorhub1-esp32s3/` และ CEM tools ไม่ถูก import จาก Pi runtime และ
-  มีป้าย archive ชัดเจน. จัดเป็น audit artifact ไม่ใช่ dead code ที่นำกลับมา deploy.
-
-### Naming/ownership duplication ที่ต้องรักษาชั่วคราว
-
-- Sensor Hub 1 ใช้ชื่อ transport/module `sensorhub1` แต่ public/internal state key
-  ยังชื่อ `esp32`.
-- `analysis_frame` และ `sensor_frame` เป็น metadata aliases ชุดเดียวกันเพื่อรองรับ
-  client เก่า.
-- MH-Z19C/PMS7003/SGP40 มี physical catalog owner เป็น Hub 2 แต่ composer ยัง
-  allow Hub 1 fallback.
-- `audio_api.py` อยู่ใน package `hardware` ทั้งที่มี product/HTTP policy มากกว่า
-  device I/O; เป็น placement debt ไม่ใช่ implementation ซ้ำ.
-
-กติกาลบ code: ต้องมี `rg` ยืนยันว่าไม่มี production caller, migration/deprecation
-ของ public key เสร็จ, focused/full regression ผ่าน และ smoke test เครื่องจริงผ่าน
-
-## Target boundary หลัง refactor
-
-อย่าสร้าง “hub.py” ขนาดใหญ่ที่รวมทุกอุปกรณ์ เป้าหมายคือแยกตาม **physical
-failure domain** และแยก transport ออกจาก feature policy:
-
-```text
-FastAPI router       แปลง HTTP/auth/error เท่านั้น
-       │
-Feature service      safety, command sequence, pulse/timer, activity audit
-       │
-Device adapter       USB/MQTT/GPIO/audio wire I/O + reconnect/ACK
-       │
-Pure contract        parse/normalize/range/state projection; ไม่มี hardware side effect
-
-app.py               สร้าง config/dependencies + start/stop lifecycle เท่านั้น
-```
-
-Dependency ต้องไหลลงทางเดียว: adapter/service ห้าม import `app.py`; device adapter
-ไม่ควรรู้ FastAPI `HTTPException`; service/router map domain error เป็น status code
-
-## Staged refactor map
-
-ทุก stage ต้องเป็น behavior-preserving commit แยกจาก threshold, firmware,
-hardware wiring, Sleep formula หรือ product behavior change
-
-### Stage 0 — Freeze characterization และเติมหลักฐานเครื่องจริง
-
-- บันทึก Git SHA, Pod ID, effective non-secret ports/topics/timeouts, USB identity
-  (`/dev/serial/by-id`), broker/service health และ firmware version ที่ telemetry ส่ง.
-- ขอ authoritative BOM/pin/protocol/checksum ของ Sensor Hub 2 และ Control Hub 1/2;
-  ทำเครื่องหมาย unknown จนได้หลักฐาน ห้ามคัดจาก archived firmware.
-- เพิ่ม snapshot parity fixtures ของ state, canonical frame และ error responses
-  ก่อนย้าย code.
-- ยืนยัน legacy Hub 1 flat packet และ Hub 1 fallback ของ Hub 2 devicesว่ายังพบใน
-  field หรือถอดได้หลัง migration.
-
-Exit: อธิบาย port/topic/device/owner/ACK ได้ครบโดยไม่พึ่งความจำของคนติดตั้ง
-
-### Stage 1 — แยก LSM-800-T reader ออกจาก `app.py`
-
-สถานะ: **เสร็จใน working candidate นี้** — มี `LSM800TReader`,
-`BCGPacketPublisher`, injected serial/parser/storage/state/clock/sleeper/stop event,
-fake-serial regression และ compatibility facade บางใน `app.py` แล้ว งานที่เหลือคือ
-USB smoke หลัง deploy และการ wire stop event เข้ากับ lifespan ใน Stage 2
-
-สร้าง `zeep_pod/hardware/bcg.py` หรือ `lsm800t.py` ให้มี reader ที่ inject:
-serial factory, parser, state publisher, packet sink, event logger, clock, sleeper
-และ stop event. คง `parse_lsm800t_frame()` และ `BCGStorage` แยก pure/storage ตามเดิม
-ก่อนเพื่อให้ diff เล็ก
-
-Characterization ต้องครอบคลุม quiet gap, partial frame, wrong marker, reconnect,
-status mapping, vital hold, no-session packet และ partial epoch flush. ระหว่างย้ายให้
-`app.bcg_reader()` เป็น facade ชั่วคราว
-
-Exit: `app.py` ไม่มี byte-framing loop แต่ live state/DB bytes/timing เหมือนเดิม
-
-### Stage 2 — ทำ Sensor Hub lifecycle ให้เป็น object ที่หยุดได้
-
-- Sensor Hub 1: คง `SensorHub1Reader`/state store แต่รวม port/baud/stale config
-  เป็น immutable config และ inject stop event; รักษา packet-local failure.
-- Sensor Hub 2: เปลี่ยน free function + nested callbacks เป็น `SensorHub2MQTT`
-  instance ที่มี `start/run/stop`, config และ state port ชัดเจน.
-- ห้ามรวม MQTT client กับ Control Hub เพราะ isolation ปัจจุบันตั้งใจแยก failure.
-- คง `state.sensor.esp32` และ public JSON key จนมี versioned API migration.
-
-Exit: lifespan ปิด serial/MQTT ได้ deterministic โดยไม่รอ process kill
-
-### Stage 3 — แยก Control transport ออกจาก Aircon/Bed feature policy
-
-- เลิก module-global `configure_controlhub1/2`; constructor รับ config, state port,
-  logger และ safety callback.
-- Transport class เป็นเจ้าของ MQTT/ACK เท่านั้นและคืน domain result/error.
-- `AirconControlService` เป็นเจ้าของ ON/temp/swing sequence, fan preflight, IR gap,
-  fan reference persistence และ ACK scope.
-- `BedControlService` เป็นเจ้าของ bounded motion, generation token, auto-stop และ
-  best-effort safety stop.
-- Router แปลง busy/unavailable/timeout/rejected เป็น 429/503/504/502 เหมือนเดิม.
-
-Exit: adapter ไม่ import FastAPI; route ไม่มี MQTT/timer internals; client ยังแยกกัน
-และ command ยัง QoS 0/retain false
-
-### Stage 4 — แยก GPIO feature service/router
-
-คง `GPIOManager` เป็น primitive adapter แล้วสร้าง service สำหรับ persistent output,
-door interlock pulse, accessory lock/cooldown, safety exceptions และ activity log.
-สร้าง router แยกจาก `app.py`; config รวม logical name, BCM, mode และ pulse duration
-แต่ต้องคง all-or-nothing readiness ใน behavior-preserving stage
-
-Exit: `app.py` ไม่มี `asyncio.sleep()` สำหรับ physical output และทุก `finally LOW`
-มี fake-device regression
-
-### Stage 5 — จัด Audio ตาม feature boundary
-
-คง `AudioPlayer` ใน hardware package. ย้าย `AudioControlService`/router ไป feature
-package เช่น `zeep_pod/audio/` พร้อม compatibility import shim; renderer
-`brainwave_audio.py` เป็น pure/offline generation dependency ไม่ควรรวมกับ subprocess
-
-แยก policy decision เรื่อง `set_volume()` ที่ logical stateเปลี่ยนแม้ IPC fail เป็น
-งานถัดไปต่างหาก เพราะการทำให้ API fail จะเป็น behavior change ไม่ใช่ refactor
-
-Exit: import app ไม่สร้าง/แตะ player process, route parity ครบ และ shutdown ยัง stop
-
-### Stage 6 — แยก Sensor frame/canonical projection
-
-- **เสร็จในรอบนี้:** ย้าย freshness ของ Hub/BCG/Control และ aircon response
-  projection ไป pure `api_state_projection` แล้ว `snapshot()` เรียก facade เดียว.
-- **เสร็จในรอบนี้:** ย้าย 10-second `sensor_frame_sampler`, bounded windows และ
-  frame publication เป็น service ที่รับ snapshots จาก Hub/BCG ports.
-- ใช้ `sensor_runtime` เป็น pure source of truth ต่อไป; ห้ามให้ Dashboard/Session/
-  Safety compose alias หรือ bias คนละชุด.
-- เก็บ `analysis_frame` alias จน client migration เสร็จ.
-
-Exit: `app.py` ไม่คำนวณ canonical frame และ snapshot parity ผ่าน
-
-### Stage 7 — Hardware runtime registry และ composition root บางลง
-
-สร้าง registry/lifecycle owner ที่ถือ adapter instances และ thread handles แบบมีชื่อ,
-start ตามลำดับ, stop แบบ bounded, report health โดยไม่ซ่อน state ของแต่ละ Hub.
-สร้าง GPIO/Audio/DB ภายใน lifespan หรือ explicit factory แทน module import side effect
-
-Exit: `app.py` เหลือ config, dependency construction, router include และ lifespan;
-ไม่มี transport loop, ACK logic, pulse timer หรือ feature formula
-
-### Stage 8 — ลบ shim/dead branch หลัง migration เท่านั้น
-
-- ย้าย tests จาก `app.*` facade ไป public service/pure contract.
-- ตัดสิน `toggle_repeat`, cross-hub fallback และ legacy flat packetกับ Product/
-  Hardware owner.
-- ประกาศ version/deprecation ก่อน rename `esp32` หรือเอา `analysis_frame` ออก.
-- เก็บ archived firmwareตาม audit retention; ไม่ปะปนกับ production build/test gate.
-
-Exit: `rg` ไม่พบ caller, API contract versioned, full regression + hardware smoke ผ่าน
-
-## Test และ smoke gate ต่อ failure domain
-
-| Domain | Focused automated gate | เครื่องจริงที่ต้องดูหลัง refactor |
-|---|---|---|
-| Hub 1 | `test_sensorhub1_reader.py`, `test_sensor_contract.py`, `test_sensor_services.py` | valid/invalid sensor แยกกัน, stale 25 s, reconnect event |
-| Hub 2 | `test_sensor_services.py` | telemetry/status topics, offline/LWT behavior, stale 15 s |
-| BCG | `test_bcg_reader.py`, `test_sensor_contract.py`, BCG/storage/session gate tests | byte marker, quiet gap, partial-frame resync, fresh HR+RR gate, raw epoch flush |
-| Control 1/2 | `test_control_protocol.py`, control/RBAC tests | ACK/timeout/stale โดยใช้ safe test plan; ห้าม actuate ขณะ occupied |
-| Audio | `test_audio_defaults.py`, `test_audio_api.py`, `test_brainwave_audio.py` | backend/device, stop/pause/volume, occupied preview guard |
-| GPIO | modular/control/RBAC tests + fake output testsที่ต้องเพิ่ม | initial LOW, door interlock, pulse returns LOW, safe profile |
-| Architecture | `test_modular_architecture.py` | startup/shutdown logs และไม่มี orphan process/thread |
-
-ก่อน handoff ให้รัน gate กลางจาก [Pi 5 Software Architecture](../pi5-software-architecture.md)
-และ [TESTING.md](../../TESTING.md). Test pass บน workstation ไม่แทน Hardware smoke,
-Safety approval หรือ Final Code Freeze
 
 ## Unknowns ที่ต้องส่งต่อ Hardware owner
 

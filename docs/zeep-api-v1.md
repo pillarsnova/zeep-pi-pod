@@ -29,6 +29,10 @@ Raw BCG, Sensor Timeline หรือคำตอบ Profile ผู้ใช้
 - Context สำหรับ advisory AI อยู่ที่
   `GET /api/v1/usage-sessions/longitudinal/ai-context` โดยตัดตัวระบุโดยตรงออก
   แต่ยังเป็นข้อมูล Wellness ส่วนบุคคล ไม่ใช่ข้อมูลนิรนาม
+- ผลสำหรับหน้า User/App ที่จัดลำดับไม่ซ้ำอยู่ที่
+  `GET /api/v1/usage-sessions/{session_id}/presentation`
+- ข้อมูล QA รวมสำหรับทีมพัฒนาอยู่ที่
+  `GET /api/v1/usage-sessions/{session_id}/development` และเปิดให้ Admin เท่านั้น
 - Session ที่ปิดแล้วถือว่า closed; read adapter ไม่คำนวณคะแนนใหม่ ส่วนคะแนน
   อาจปรับย้อนหลังได้เฉพาะแบบมีเวอร์ชันและ Audit trail โดย Raw ไม่เปลี่ยน
 
@@ -218,6 +222,38 @@ purpose-specific consent และนโยบาย processor/retention ที�
 จาก Session ใน ZEEP ไม่ได้รวม Training load, กิจกรรมทั้งวัน หรือวินิจฉัยความพร้อม
 ในการขับรถ/แข่งขัน
 
+### 2.1 ผลสำหรับหน้า User/App
+
+`GET /api/v1/usage-sessions/{session_id}/presentation`
+
+Endpoint นี้เป็นลำดับการนำเสนอหลักสำหรับหน้า “ประวัติการใช้งาน” และแอป ZEEP
+โดยคืน `kind=usage_session_presentation` และ
+`data.contract_version=zeep.usage-presentation.v1` มีคะแนนหลักเพียงชุดเดียว
+พร้อมข้อมูลสำคัญที่ไม่ซ้ำ ได้แก่:
+
+- Mode และเวลา Session
+- Sleep Score หรือ Recovery Score ตาม Mode
+- Sleep Stages สำหรับ Overnight หรือ Rest Profile สำหรับ Nap
+- ตัวขับผลเชิงบวกและจุดที่ควรใส่ใจ
+- Personal Baseline, แนวโน้ม และคำแนะนำหนึ่งข้อ
+- Environment, HR/RR และความรู้สึกหลังพักเมื่อมีแบบประเมินจริง
+
+User อ่านได้เฉพาะ Session ของบัญชีตนเอง Admin อ่านได้ตามสิทธิ์ Endpoint นี้ไม่มี
+Raw Sensor, Raw BCG หรือข้อมูล QA ภายใน และไม่คำนวณคะแนนใหม่
+
+### 2.2 ข้อมูลสำหรับ Admin Development
+
+`GET /api/v1/usage-sessions/{session_id}/development`
+
+Endpoint นี้คืน `kind=usage_session_development` และ
+`data.contract_version=zeep.usage-development.v1` สำหรับตรวจสอบการปล่อยคะแนน,
+องค์ประกอบคะแนน, Continuity accounting, Environment, Respiratory wellness,
+Version provenance และ Review flags โดยรวม `user_summary` ที่ใช้ contract เดียวกับ
+Presentation ไว้ให้เทียบผล
+
+เรียกได้เฉพาะ Admin ที่ Login แล้วเท่านั้น และยังคงเป็น aggregate/raw-free
+ข้อมูลราย packet หรือ waveform ต้องใช้ protected research route แยกต่างหาก
+
 ## 3. รายงาน Session แบบละเอียดแต่ไม่มี Raw
 
 `GET /api/v1/usage-sessions/{session_id}`
@@ -250,6 +286,9 @@ Application contract เท่านั้น ไม่ได้คัดออ�
 ค่า `report.quality.available/score/score_title/formula_version/validation_status`,
 `clinical_validated` และ `level` ถูกบังคับให้ตรงกับ `data.score` ซึ่งเป็นผลที่
 อนุมัติให้เผยแพร่เสมอ เพื่อตัดกรณีรายงานเก่ามีค่าซ้ำหรือค่าภายในไม่ตรงกับคะแนนหลัก
+โดย `clinical_validated=false` เสมอใน Public API v1 และ Coverage เป็น QA context
+สำหรับสูตรปัจจุบันจึงมี `score_component=false` กับ 0 คะแนน ผล Legacy อาจคงค่า
+Coverage ตามสูตรเดิมเพื่อ Audit และต้องอ่านคู่กับ `formula_version`
 
 ชนิดคะแนนยึด `Session.rest_mode` และผล Quality ที่ผ่าน release policy ไม่ยอมให้
 `session_report.rest_mode` รุ่นเก่าสลับ Overnight เป็น Nap หรือกลับกัน หาก Metadata
@@ -340,4 +379,8 @@ Nap & Refresh
    `xApiKey`, `clientApiKey` หรือ `privateKey`
 5. Overnight ต้องเป็น `sleep_score`; Nap ต้องเป็น `recovery_score`
 6. `restore_summary.creates_independent_score` ต้องเป็น `false`
-7. ใช้ `formula_version`, `session_report` และ `request_id` ใน Bug report
+7. User เรียก `/presentation` ได้เฉพาะ Session ตนเอง; `/development` ต้องได้ `403`
+8. Admin เรียก `/development` ได้ และ response ต้องมี `raw_data_included=false`
+9. ตรวจว่า Public result บังคับ `clinical_validated=false`; ผลที่สร้างด้วยสูตร
+   ปัจจุบันต้องมี Coverage `score_component=false`/0 คะแนน
+10. ใช้ `formula_version`, `session_report` และ `request_id` ใน Bug report

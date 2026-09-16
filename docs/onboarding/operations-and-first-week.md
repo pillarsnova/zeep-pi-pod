@@ -6,8 +6,8 @@ Runbook หลัก: [Pi 5 Operations Runbook](../pi5-operations-runbook.md)
 
 Release gate หลัก: [TESTING.md](../../TESTING.md)
 
-คำสั่งในหน้านี้เป็นทางลัดสำหรับสมาชิกใหม่ หากต่างจาก runbook, CI หรือ
-configuration ของ Pod ที่ deploy ให้หยุดและตรวจแหล่งหลักก่อนดำเนินการ
+หน้านี้เป็นเส้นทางเริ่มงานและ checklist เท่านั้น คำสั่ง, ชุดทดสอบ และลำดับ deploy
+เปลี่ยนได้ตาม release จึงต้องอ่านจาก Runbook และ TESTING โดยตรง ไม่คัดลอกมาไว้ซ้ำ
 
 ## กฎก่อนแตะระบบ
 
@@ -23,144 +23,44 @@ configuration ของ Pod ที่ deploy ให้หยุดและต�
 
 ## เตรียมสิทธิ์และเครื่องทำงาน
 
-ต้องมี:
+- ใช้ repository access และสิทธิ์ Pod/data ตามบทบาทและหลัก least privilege
+- ใช้เครื่องทีมที่อนุมัติและเปิด FileVault หรือ LUKS/dm-crypt ก่อน Sync snapshot
+- เตรียม environment ตาม repository และระบุ owner ของ Product, Safety, Hardware,
+  Data/Privacy และ Operations
+- งานที่กระทบ Pod ต้องมี maintenance window และยืนยันว่าไม่มีผู้ใช้/Recording
+- ผู้ที่ไม่ต้องวิเคราะห์ข้อมูลจริงให้ใช้ synthetic/temp data และไม่ Sync snapshot
 
-- repository access และสิทธิ์ตามบทบาท; Pod/Tailscale/production data ให้เฉพาะคน
-  ที่ต้องใช้จริง
-- เครื่องทีมที่เปิด FileVault (macOS) หรือ LUKS/dm-crypt (Linux)
-- Python environment และ dev dependencies ตาม
-  [`requirements-dev.txt`](../../requirements-dev.txt)
-- owner/contact สำหรับ Product, Safety, Hardware, Data/Privacy และ Operations
-- maintenance window ก่อนทำงานที่กระทบ Pod
-
-Windows/BitLocker ยังไม่ผ่าน ACL + transport tests ใน workflow นี้ จึงไม่รองรับ
-workstation snapshot อย่าสร้าง approval marker เองหรือคัดลอกจากเครื่องอื่น
-
-### อนุมัติ workstation ที่ต้องใช้ Pod snapshot
-
-ผู้มีอำนาจต้องรันบนเครื่องจริง:
-
-```bash
-sudo python3 approve_workstation.py --approved-by "ชื่อผู้อนุมัติ"
-```
-
-Approval ผูก hostname + stable machine ID, ตรวจ disk encryption จริง และมีอายุ
-สูงสุด 365 วัน Marker ต้องเป็น root-owned ตามตำแหน่ง/permission ใน runbook
-นี่เป็น local operational record ไม่ใช่ central cryptographic approval
-
-ผู้ที่ไม่ต้องวิเคราะห์ข้อมูลผู้ใช้ควรใช้ synthetic/temp data และไม่ Sync snapshot
-เพียงเพื่อความสะดวก
+ขั้นตอนอนุมัติเครื่อง ตำแหน่ง marker, ระบบปฏิบัติการที่รองรับ และคำสั่งล่าสุดอยู่ใน
+[Pi 5 Operations Runbook](../pi5-operations-runbook.md) เท่านั้น ห้ามสร้าง approval
+marker เองหรือคัดลอกจากเครื่องอื่น
 
 ## เริ่มงานประจำวัน
 
-บน workstation ที่อนุมัติและมีสิทธิ์ข้อมูล ให้เริ่มจาก branch `develop`:
+- เริ่มจาก `develop`, ตรวจสถานะ Git แล้ว Sync ด้วย workflow ที่ Runbook ระบุ
+- อ่านผล Sync ทุกครั้ง: code หรือ snapshot ที่ใช้ต้องบอก source, Git SHA, เวลาและ
+  สถานะ freshness; ห้ามเดาตำแหน่งไฟล์
+- Snapshot เป็น read-only analysis input และ **ไม่ใช่ application `DATA_DIR`**
+- สร้าง branch หลัง Sync สำเร็จ งานหนึ่ง branch ควรมีขอบเขต function/feature เดียว
+- งาน source-only ใช้ synthetic/temp data; hardware ที่ไม่มีต้องแสดง unavailable จริง
 
-```bash
-./start_work.sh
-```
-
-สคริปต์ตรวจ approval/encryption, fetch + fast-forward `origin/develop` และดึง
-read-only verified snapshot จาก Pod ผ่าน Tailscale ก่อน fallback ไป LAN
-
-ข้อควรอ่านจากผลคำสั่ง:
-
-- ถ้า origin ติดต่อไม่ได้ สคริปต์อาจทำงานต่อด้วย code ที่ไม่ใช่ล่าสุด
-- ถ้า Pod ติดต่อไม่ได้ อาจใช้ verified snapshot ล่าสุดและจะระบุว่าข้อมูลอาจเก่า
-- ตำแหน่ง snapshot อ่านจาก JSON output; ห้ามเดา path
-- snapshot อยู่ใน `private-data/pod-sync/` โดยค่าเริ่มต้นและ **ไม่ถูกนำเป็น
-  application `DATA_DIR` อัตโนมัติ**
-- ห้ามส่งต่อ snapshot หรือใช้บนเครื่องส่วนตัว/ดิสก์ไม่เข้ารหัส
-
-ก่อนสร้าง branch งาน:
-
-```bash
-git status --short --branch
-git branch --show-current
-```
-
-`start_work.sh` ต้องเริ่มบน `develop` เมื่อ sync เสร็จจึงสร้าง branch ตาม
-convention ของทีม งานหนึ่ง branch ควรมีขอบเขต function/feature เดียวและไม่ปน
-refactor, formula change, hardware behavior และ data migration โดยไม่มีเหตุผลที่
-review แยกไม่ได้
-
-### Source-only / local bootstrap
-
-สำหรับงานที่ไม่ต้องใช้ Pod data ให้ใช้ข้อมูลจำลองและ bootstrap ตาม
-[README หัวข้อเริ่มใช้เร็วสุด](../../README.md) `./run.sh`
-สร้าง `.venv`, ติดตั้ง runtime dependency และรัน local app Hardware ที่ไม่มีต้อง
-แสดง Disconnected/disabled ตามจริง อย่าใช้ mock pass เป็น Production evidence
-
-เพื่อรัน release gate ต้องติดตั้ง dev dependencies และ activate environment ของ
-workspace นั้นก่อน ตัวอย่าง environment ที่ทีมปัจจุบันใช้บน Mac คือ:
-
-```bash
-source pi5/.venv/bin/activate
-```
-
-หาก environment/layout ต่างไป ให้ยึด runbook และบันทึก Python/dependency version
-กับผล test
+คำสั่งเริ่มงาน, fallback, local bootstrap และ snapshot workflow ล่าสุดอยู่ใน
+[Pi 5 Operations Runbook](../pi5-operations-runbook.md)
 
 ## เลือก test ตามสิ่งที่แก้
 
-เริ่มด้วย focused suite แล้วจึงรัน full gate ก่อน push/deploy อย่าใช้จำนวน test
-คงที่เป็นเกณฑ์ เพราะ suite เพิ่มได้ ให้บันทึกผลจริง, failure/error/skip และ Git SHA
+เริ่มด้วย focused suite ของ domain แล้วจึงรัน full gate ก่อน push/deploy อย่าใช้
+จำนวน test คงที่เป็นเกณฑ์ เพราะ suite เปลี่ยนได้ ให้บันทึก Git SHA, environment,
+passed/failed/error/skipped และ hardware ที่ได้หรือไม่ได้ทดสอบ
 
-| ขอบเขต | Focused regression เริ่มต้น |
-|---|---|
-| Hardware/module boundary | `test_modular_architecture.py test_sensor_contract.py test_sensor_services.py test_api_state_projection.py test_bcg_reader.py test_control_protocol.py test_audio_api.py test_session_lifecycle.py` |
-| Sleep/score/baseline | `test_sleep_signal_features.py test_sleep_system_consistency.py test_sleep_baseline_policy.py test_personal_baseline_policy.py test_sleep_session_report.py test_recovery_policy_guardrails.py` |
-| API/access/privacy | `test_rbac_api.py test_access_and_occupancy.py test_usage_session_api.py test_user_ai_context.py test_account_erasure_api.py` |
-| UI/Product copy | `test_ui_composer.py test_product_language.py` และ `python ui_composer.py check` |
-| Pod snapshot sync | `test_pod_data_sync.py test_workstation_approval.py test_pod_snapshot_export_limits.py` |
+รายการคำสั่งและชุดทดสอบปัจจุบันอยู่ที่ [TESTING.md](../../TESTING.md) เท่านั้น
+หลักที่ต้องรักษาคือ:
 
-รูปแบบคำสั่ง:
-
-```bash
-python -m unittest -q test_modular_architecture.py test_sensor_services.py
-```
-
-### Full application/release gate
-
-ก่อน push หรือ deploy:
-
-```bash
-python -m unittest discover -q
-python ui_composer.py check
-ruff check zeep_pod
-ruff format --check zeep_pod
-python -m py_compile app.py *.py
-git diff --check
-```
-
-ก่อน v1 Code Freeze ให้เพิ่ม Evidence gate:
-
-```bash
-python research/evidence-library/update_research_library.py check
-```
-
-บน GitHub ต้องยืนยัน workflow `Python architecture and style` และ
-`Evidence library integrity` ด้วย Full Product Gate ต้องไม่มี skipped test ใน
-environment ที่ลง dev dependencies ครบ
-
-### UI rule
-
-แก้ source ที่ `static/index.template.html` หรือ `static/partials/{control,app}`
-แล้ว build/check ด้วย [`ui_composer.py`](../../ui_composer.py) ห้ามแก้เฉพาะ
-generated `static/index.html` เพราะ runtime bundle จะไม่ตรง source
-
-### Data maintenance rule
-
-Reclassify, rescore, recalibrate, cleanup, trim, reset และ annotation เป็น offline
-maintenance boundary:
-
-- ตรวจ declaration/guard ที่ `maintenance_registry.py`
-- เริ่มด้วย dry-run ทุกครั้ง
-- เก็บ policy/model version, immutable-Raw hash, before/after และ audit trail
-- หยุดเมื่อ integrity, staging parity หรือ provenance ไม่ครบ
-- ห้ามเรียก destructive maintenance ผ่าน Browser API
-
-อ่าน [Sleep History Promotion Policy](../sleep-history-promotion-policy-v2.md)
-ก่อนงานย้อนหลังทุกครั้ง
+- UI แก้ source template/partial แล้วตรวจ generated bundle ตาม TESTING
+- งานย้อนหลังต้องผ่าน [`maintenance_registry.py`](../../maintenance_registry.py),
+  เริ่ม dry-run และเก็บ immutable-Raw provenance กับ before/after audit
+- อ่าน [Sleep History Promotion Policy](../sleep-history-promotion-policy-v2.md)
+  ก่อน reclassify/rescore/recalibrate/cleanup/trim/reset/annotation
+- Local/Mock pass ไม่แทนเครื่องจริง และ Hardware smoke ไม่แทน Full Product Gate
 
 ## Pull request / handoff ที่ review ได้
 
@@ -181,22 +81,9 @@ caller ย้ายครบ และไม่เปลี่ยน threshold/s
 ## Deploy ไป Pod 1
 
 เฉพาะ operator ที่ได้รับมอบหมาย ใน maintenance window ที่ยืนยันว่าไม่มีผู้ใช้และ
-ไม่มี Recording:
-
-```bash
-ssh pod1@pod1.starling-altered.ts.net
-cd /home/pod1/pi5
-git pull --ff-only origin develop
-.venv/bin/python -m unittest -q \
-  test_modular_architecture.py test_sensor_services.py test_control_protocol.py
-sudo systemctl restart zeep-pod.service
-systemctl is-active zeep-pod.service
-curl -f http://127.0.0.1:8000/api/v1/public/health
-```
-
-สาม focused suites บน Pi เป็น smoke gate ของ module/Sensor/Control เท่านั้น
-ไม่แทน full application gate หากแก้ Sleep, Session, Auth, API หรือ Privacy ต้องรัน
-focused suite ของส่วนนั้นก่อน restart ด้วย
+ไม่มี Recording ให้ทำตาม [Pi 5 Operations Runbook](../pi5-operations-runbook.md)
+และ release gate ใน [TESTING.md](../../TESTING.md) โดยใช้ approved Git ref เท่านั้น
+คำสั่ง host/path/service ไม่ทำสำเนาไว้ใน Onboarding เพราะอาจเปลี่ยนตาม deployment
 
 ### ตรวจหลัง restart
 
@@ -212,17 +99,20 @@ focused suite ของส่วนนั้นก่อน restart ด้วย
 “ดูปกติ” เก็บ service status/log, Git SHA, policy snapshot และเวลาที่เกิดเหตุ
 จากนั้นใช้ recovery/rollback ที่ owner อนุมัติ
 
-## Backup, shutdown และ remote access
+## Backup, shutdown และ network boundary
 
 - Daily backup รวม SQLite, Profile, Personal Baseline และ manifest; Production
   config เก็บ 3 daily archives ตาม runbook
 - `POST /api/system/shutdown` ใช้ได้เมื่อ `ENABLE_SYSTEM_POWEROFF=1`; จะ checkpoint,
   flush, close storage และ sync ก่อน poweroff โดย **ไม่ finalize Session**
 - การดึงปลั๊กเสี่ยงทำ checkpoint/ข้อมูลท้ายช่วงไม่ครบ
-- LAN HTTP ใช้ได้เฉพาะ network ควบคุม; Tailscale เป็นทางเข้าทีม
-- Public reverse proxy ต้อง HTTPS + `AUTH_SECURE_COOKIE=true` + Access policy และ
-  privacy review ตาม [REMOTE-ACCESS.md](../../REMOTE-ACCESS.md)
+- LAN HTTP ใช้ได้เฉพาะ network ควบคุม เส้นทางนอก LAN ต้องใช้ช่องทางและ access
+  policy ที่ Operations/Data owner อนุมัติ
+- Public reverse proxy ต้องใช้ HTTPS, secure cookie, access policy และ privacy review
 - physical control ระยะไกลต้องมีผู้ยืนยันหน้างานตาม policy; ห้ามสันนิษฐานว่ารางว่าง
+
+ค่าการสำรอง ขั้นตอน shutdown, recovery และ network access ล่าสุดอยู่ใน
+[Pi 5 Operations Runbook](../pi5-operations-runbook.md)
 
 ## First-week plan
 

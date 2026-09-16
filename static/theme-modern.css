@@ -4268,6 +4268,24 @@ body[data-view="sessions"] .hist-row > .hist-quality {
   background: rgba(8, 31, 39, .58);
 }
 
+.user-vitals-head {
+  grid-column: 1 / -1;
+}
+
+.user-vitals-head small {
+  color: #54dce3;
+  font-size: 8px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.user-vitals-head h3 {
+  margin: 2px 0 0;
+  color: #dff7f7;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .user-vitals-values {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4312,6 +4330,12 @@ body[data-view="sessions"] .hist-row > .hist-quality {
   margin-bottom: 2px;
   color: #cce2e5;
   font-size: 9.5px;
+}
+
+.user-vitals-compact .user-vitals-baseline {
+  grid-column: 1 / -1;
+  padding-top: 7px;
+  border-top: 1px solid rgba(104, 166, 178, .14);
 }
 
 .user-off-bed-note {

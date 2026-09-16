@@ -4230,7 +4230,7 @@ def take_session_sample() -> Dict[str, Any]:
             snap.get("sensor_frame") or {},
             minimum_packets=SLEEP_BUCKET_MIN_BCG_PACKETS,
             minimum_coverage=SLEEP_MIN_PAIRED_VITAL_COVERAGE,
-            rr_range=RR_SANITY_RANGE_PER_MIN,
+            hr_range=HR_SANITY_RANGE_BPM, rr_range=RR_SANITY_RANGE_PER_MIN,
         ),
         # Operational statuses are never counted or learned as Sleep Stages.
         "sleep": sleep.get("state") if sleep_recordable else None,

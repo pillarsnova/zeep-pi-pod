@@ -8163,8 +8163,9 @@ function respiratoryWellnessTone(status){
 }
 
 function renderRespiratoryWellness(report,adminView=false){
-  const summary=report?.respiratory_wellness;
-  if(!summary||typeof summary!=='object')return '';
+  const source=report?.respiratory_wellness;
+  const summary=source&&typeof source==='object'?source:{};
+  const currentContract=summary.version==='zeep-respiratory-wellness-v1.2-paired-hr-rr';
   const status=summary.status||{};
   const observations=summary.observations||{};
   const vital=summary.vital_summary||{};
@@ -8172,75 +8173,89 @@ function renderRespiratoryWellness(report,adminView=false){
   const baseline=summary.personal_baseline||{};
   const confidence=summary.confidence||{};
   const finite=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value));
+  const pairedAvailable=currentContract&&vital.available===true
+    &&finite(vital.heart_rate_bpm)&&finite(vital.respiration_rate_brpm);
+  const heartRate=pairedAvailable
+    ?`${Number(vital.heart_rate_bpm).toFixed(1)} ครั้ง/นาที`:'ไม่มีข้อมูลสำหรับครั้งนี้';
+  const breathingRate=pairedAvailable
+    ?`${Number(vital.respiration_rate_brpm).toFixed(1)} ครั้ง/นาที`:'ไม่มีข้อมูลสำหรับครั้งนี้';
+  const currentResult=pairedAvailable&&typeof vital.summary==='string'&&vital.summary.trim()
+    ?vital.summary
+    :'ครั้งนี้ช่วงที่วัดชีพจรและการหายใจพร้อมกันยังไม่ต่อเนื่องพอ จึงยังสรุปแนวโน้มไม่ได้';
+  const currentAction=pairedAvailable&&typeof vital.recommendation==='string'&&vital.recommendation.trim()
+    ?vital.recommendation
+    :'ครั้งถัดไปลองพักให้นิ่งและจัดท่านอนให้สบาย เพื่อให้เซนเซอร์เก็บข้อมูลได้ต่อเนื่องขึ้น';
   const median=finite(observations.median_rr_brpm)
     ?`${Number(observations.median_rr_brpm).toFixed(1)} ครั้ง/นาที`:'—';
+  const baselineSessions=currentContract&&finite(baseline.sessions_used)
+    ?Math.max(0,Math.round(Number(baseline.sessions_used))):0;
+  const baselineMinimum=3;
+  const baselineProgress=Math.min(baselineMinimum,baselineSessions);
+  const baselineText=currentContract&&baseline.available
+    ?`${baseline.label||'เทียบกับข้อมูลอ้างอิงของคุณแล้ว'} · อ้างอิงจากการพัก ${baselineSessions} ครั้ง`
+    :currentContract&&baseline.reference_ready===true
+    ?'ข้อมูลอ้างอิงพร้อม · ครั้งนี้ยังเทียบไม่ได้'
+    :`กำลังเก็บข้อมูล ${baselineProgress} จาก ${baselineMinimum} ครั้ง`;
   if(!adminView){
-    const heartRate=finite(vital.heart_rate_bpm)
-      ?`${Number(vital.heart_rate_bpm).toFixed(1)} ครั้ง/นาที`:'ไม่มีข้อมูลสำหรับครั้งนี้';
-    const breathingRate=finite(vital.respiration_rate_brpm)
-      ?`${Number(vital.respiration_rate_brpm).toFixed(1)} ครั้ง/นาที`:'ไม่มีข้อมูลสำหรับครั้งนี้';
-    const summaryText=typeof vital.summary==='string'&&vital.summary.trim()
-      ?vital.summary:'ข้อมูลชีพจรและการหายใจยังไม่พอสรุป';
-    return `<section class="user-vitals-compact" aria-label="ชีพจรและการหายใจระหว่างพัก">
+    return `<section class="user-vitals-compact" aria-label="ชีพจรและการหายใจขณะพัก">
+      <div class="user-vitals-head"><small>ผลสัญญาณชีพระหว่างพัก</small><h3>ชีพจรและการหายใจขณะพัก</h3></div>
       <div class="user-vitals-values">
-        <span><small>ชีพจร</small><b>${historyEscape(heartRate)}</b></span>
-        <span><small>การหายใจ</small><b>${historyEscape(breathingRate)}</b></span>
+        <span><small>ชีพจรขณะพักโดยประมาณ</small><b>${historyEscape(heartRate)}</b></span>
+        <span><small>อัตราการหายใจขณะพัก</small><b>${historyEscape(breathingRate)}</b></span>
       </div>
-      <p><b>แนวโน้มระหว่างพัก</b>${historyEscape(summaryText)}</p>
+      <div><p><b>ผลจากการวัดครั้งนี้</b>${historyEscape(currentResult)}</p><p><b>คำแนะนำ</b>${historyEscape(currentAction)}</p></div>
+      <p class="user-vitals-baseline"><b>รูปแบบประจำของคุณ</b>${historyEscape(baselineText)}</p>
     </section>`;
   }
   const range=finite(observations.p10_rr_brpm)&&finite(observations.p90_rr_brpm)
     ?`${Number(observations.p10_rr_brpm).toFixed(1)}–${Number(observations.p90_rr_brpm).toFixed(1)} ครั้ง/นาที`:'ข้อมูลไม่พอสรุป';
-  const regularity=({stable:'จังหวะค่อนข้างสม่ำเสมอ',mixed:'จังหวะเปลี่ยนแปลงบางช่วง',variable:'จังหวะเปลี่ยนแปลงระหว่างพัก',insufficient:'กำลังเรียนรู้รูปแบบของคุณ'})[
+  const regularity=({stable:'จังหวะค่อนข้างสม่ำเสมอ',mixed:'จังหวะเปลี่ยนแปลงบางช่วง',variable:'จังหวะเปลี่ยนแปลงระหว่างพัก',insufficient:'ข้อมูลความต่อเนื่องยังไม่เพียงพอ'})[
     observations.regularity_key
-  ]||'กำลังเรียนรู้รูปแบบของคุณ';
-  const baselineText=baseline.available
-    ?`${adminView?(baseline.label||'เทียบกับรูปแบบของคุณแล้ว'):'เทียบกับรูปแบบการพักของคุณแล้ว'} · จากการพัก ${baseline.sessions_used||0} ครั้ง`
-    :adminView
-      ?`กำลังเรียนรู้ ${baseline.sessions_used||0}/${baseline.minimum_sessions||7} ครั้ง`
-      :'กำลังเรียนรู้รูปแบบของคุณจากการพักหลายครั้ง';
+  ]||'ข้อมูลความต่อเนื่องยังไม่เพียงพอ';
   const ageText=age.available
     ?adminView?`${age.label||age.age_band}`:'เทียบกับช่วงวัยของคุณ'
     :'เพิ่มข้อมูลอายุเพื่อรับคำแนะนำที่เหมาะกับช่วงวัย';
   const ageGuidance=adminView&&age.guidance
     ?age.guidance:'ดูแนวโน้มหลายครั้งร่วมกับความรู้สึกหลังพักและกิจกรรมประจำวัน';
-  const userStatusLabels={supportive:'จังหวะการหายใจสม่ำเสมอ',observe:'มีการเปลี่ยนแปลงบางช่วง',needs_recheck:'ลองติดตามเพิ่มอีกครั้ง'};
-  const statusLabel=adminView
-    ?status.label||(summary.available?'สรุปผลแล้ว':'กำลังเรียนรู้รูปแบบของคุณ')
-    :userStatusLabels[status.key]||(summary.available?'สรุปแนวโน้มแล้ว':'กำลังเรียนรู้รูปแบบของคุณ');
-  const interpretation=adminView
-    ?summary.interpretation||'ข้อมูลครั้งนี้ยังไม่พอสรุปแนวโน้ม'
-    :summary.available?'แสดงแนวโน้มการหายใจที่พบระหว่างการพักครั้งนี้':'ข้อมูลครั้งนี้ยังไม่พอสรุปแนวโน้ม';
+  const statusLabel=typeof vital.status_label==='string'&&vital.status_label.trim()
+    ?vital.status_label
+    :pairedAvailable?'พร้อมดูแนวโน้ม':'ข้อมูลครั้งนี้ยังไม่เพียงพอ';
   const confidenceLabel=adminView
     ?confidence.label||'หลักฐานจำกัด'
     :({high:'ชัดเจน',medium:'เพียงพอ',low:'กำลังสะสม'})[confidence.level]||'กำลังสะสม';
-  const observationList=adminView
-    ?`<li>ค่ากลาง ${historyEscape(median)}</li><li>ช่วง P10–P90 ${historyEscape(range)}</li><li>${historyEscape(regularity)}</li>`
-    :`<li>อัตราการหายใจ ${historyEscape(median)}</li><li>ช่วงที่พบเป็นส่วนใหญ่ ${historyEscape(range)}</li><li>${historyEscape(regularity)}</li>`;
+  const observationList=`<li>ชีพจรขณะพักโดยประมาณ ${historyEscape(heartRate)}</li><li>อัตราการหายใจขณะพัก ${historyEscape(breathingRate)}</li><li>${historyEscape(regularity)}</li>`;
   const adminDetails=adminView?`<details class="report-details respiratory-technical"><summary>รายละเอียดคุณภาพสัญญาณสำหรับผู้ดูแล</summary><div class="classification-accounting-detail">
-      <span><small>ช่วงใช้ได้</small><b>${finite(observations.valid_minutes)?Number(observations.valid_minutes).toFixed(1):'—'} นาที</b></span>
-      <span><small>Coverage</small><b>${finite(observations.coverage_pct)?Number(observations.coverage_pct).toFixed(1):'—'}%</b></span>
-      <span><small>ตัวอย่างที่ใช้</small><b>${finite(observations.valid_samples)?Math.round(Number(observations.valid_samples)):'—'}</b></span>
-      <span><small>ต่อเนื่องสูงสุด</small><b>${finite(observations.longest_valid_run_seconds)?fmtDur(Number(observations.longest_valid_run_seconds)):'—'}</b></span>
+      <span><small>RR ค่ากลางจากช่วงคู่</small><b>${historyEscape(median)}</b></span>
+      <span><small>RR ช่วง P10–P90</small><b>${historyEscape(range)}</b></span>
+      <span><small>ช่วง HR/RR ที่ใช้ได้</small><b>${finite(observations.paired_hr_rr_minutes)?Number(observations.paired_hr_rr_minutes).toFixed(1):'—'} นาที</b></span>
+      <span><small>HR/RR Coverage</small><b>${finite(observations.paired_hr_rr_coverage_pct)?Number(observations.paired_hr_rr_coverage_pct).toFixed(1):'—'}%</b></span>
+      <span><small>คู่ข้อมูล HR/RR</small><b>${finite(observations.paired_hr_rr_samples)?Math.round(Number(observations.paired_hr_rr_samples)):'—'}</b></span>
+      <span><small>HR/RR ต่อเนื่องสูงสุด</small><b>${finite(observations.longest_paired_hr_rr_run_seconds)?fmtDur(Number(observations.longest_paired_hr_rr_run_seconds)):'—'}</b></span>
       <span><small>Regularity</small><b>${finite(observations.regularity_factor)?Number(observations.regularity_factor).toFixed(3):'—'}</b></span>
       <span><small>ตัด Movement/สัญญาณอ่อน</small><b>${finite(observations.excluded_motion_or_weak_signal_minutes)?Number(observations.excluded_motion_or_weak_signal_minutes).toFixed(1):'—'} นาที</b></span>
       <span><small>ตัด Invalid/Held</small><b>${finite(observations.excluded_invalid_or_held_minutes)?Number(observations.excluded_invalid_or_held_minutes).toFixed(1):'—'} นาที</b></span>
       <span><small>Version</small><b>${historyEscape(summary.version||'—')}</b></span>
     </div></details>`:'';
   return `<section class="restore-summary-card respiratory-wellness-card">
-    <div class="restore-summary-head"><div><span>RESTING BREATHING</span><h3>การหายใจระหว่างพัก</h3><small>${adminView?'วิเคราะห์จาก RR ที่ผ่านคุณภาพสัญญาณ BCG':'ดูจากจังหวะและความสม่ำเสมอตลอดช่วงพัก'}</small></div><strong class="restore-status ${respiratoryWellnessTone(status.key)}">${historyEscape(statusLabel)}</strong></div>
-    <p class="restore-status-meaning">${historyEscape(interpretation)}</p>
+    <div class="restore-summary-head"><div><span>ผลสัญญาณชีพระหว่างพัก</span><h3>ชีพจรและการหายใจขณะพัก</h3><small>สรุปจากช่วงที่ตรวจพบชีพจรและการหายใจพร้อมกันอย่างต่อเนื่อง</small></div><strong class="restore-status ${respiratoryWellnessTone(status.key)}">${historyEscape(statusLabel)}</strong></div>
+    <p class="restore-status-meaning"><b>ผลจากการวัดครั้งนี้</b> · ${historyEscape(currentResult)}</p>
     <div class="restore-summary-grid"><div class="restore-driver-group respiratory-observation"><b>สิ่งที่สังเกตได้</b><ul>${observationList}</ul></div></div>
-    <div class="restore-summary-meta"><span><b>ช่วงวัย</b>${historyEscape(ageText)}</span><span><b>รูปแบบประจำของคุณ</b>${historyEscape(baselineText)}</span><span><b>${adminView?'ความมั่นใจ':'ความชัดเจนของข้อมูล'}</b>${historyEscape(confidenceLabel)}</span></div>
+    <div class="restore-summary-meta"><span><b>ช่วงวัย</b>${historyEscape(ageText)}</span><span><b>ข้อมูลอ้างอิงส่วนบุคคล</b> · ${historyEscape(baselineText)}</span><span><b>${adminView?'ความมั่นใจ':'ความชัดเจนของข้อมูล'}</b>${historyEscape(confidenceLabel)}</span></div>
+    <p class="respiratory-age-guidance"><b>คำแนะนำสำหรับครั้งนี้</b> · ${historyEscape(currentAction)}</p>
     <p class="respiratory-age-guidance"><b>คำแนะนำตามช่วงอายุ</b> · ${historyEscape(ageGuidance)}</p>
     ${adminDetails}
-    <div class="restore-claim-note">${adminView?'ประเมินจาก BCG · ไม่วัด PFT, SpO₂ หรือ sleep apnea และไม่เปลี่ยน Sleep/Recovery Score':'ข้อมูลนี้ช่วยดูแนวโน้มระหว่างพัก ไม่ใช่การตรวจสมรรถภาพปอด ออกซิเจนในเลือด หรือการวินิจฉัยโรค'}</div>
+    <div class="restore-claim-note">${adminView?'ใช้ดูแนวโน้มชีพจรและการหายใจขณะพัก ไม่ใช่ผลตรวจทางการแพทย์ และไม่เปลี่ยนคะแนน':'ข้อมูลนี้ช่วยดูแนวโน้มระหว่างพัก ไม่ใช่การตรวจสมรรถภาพปอด ออกซิเจนในเลือด หรือการวินิจฉัยโรค'}</div>
   </section>`;
 }
 
 function renderSessionOverview(report,hasRestoreSummary=false,presentationOverride){
-  if(!report?.available)return '';
   const adminView=currentPrincipal?.role==='admin';
+  if(!report?.available){
+    const unavailable=`<section class="session-report-overview mode-unknown"><div class="session-report-head"><div><div class="sleep-quality-eyebrow">SESSION DETAIL</div><h3>ข้อมูลครั้งนี้ยังไม่เพียงพอสำหรับสรุปการพัก</h3></div></div>${renderRespiratoryWellness(report||{},adminView)}</section>`;
+    return adminView
+      ?`<details class="report-details admin-overview-details session-overview-details"><summary>ดูข้อมูลที่บันทึกได้</summary>${unavailable}</details>`
+      :`<details class="report-details user-result-details session-overview-details"><summary>ดูข้อมูลที่บันทึกได้</summary>${unavailable}</details>`;
+  }
   const sleep=report.sleep||{},quality=report.quality||{};
   const data=report.data_quality||{};
   const presentation=presentationOverride||reportPresentationMode(report);

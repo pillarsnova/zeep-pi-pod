@@ -57,6 +57,8 @@ from sessions.baseline_cache import BaselineCacheLifecycle
 from sessions.personal_behaviour import (
     aggregate_behaviour_by_mode,
     empty_best_rest_window,
+    empty_respiratory_reference,
+    respiratory_session_values,
 )
 from sessions.score_identity import assess_score_identity
 from sessions.target_provenance import assess_target_provenance
@@ -683,24 +685,8 @@ class BaselineStore(BaselineCacheLifecycle):
             detected_sleep_s = max(0.0, float(detected_sleep_s or 0.0))
         except (TypeError, ValueError, OverflowError):
             detected_sleep_s = 0.0
-        respiratory = report.get("respiratory_wellness") or {}
-        respiratory_observations = (
-            respiratory.get("observations") or {}
-            if isinstance(respiratory, dict)
-            else {}
-        )
-        respiratory_confidence = (
-            respiratory.get("confidence") or {} if isinstance(respiratory, dict) else {}
-        )
-        respiratory_status = (
-            respiratory.get("status") or {} if isinstance(respiratory, dict) else {}
-        )
-        respiratory_available = bool(
-            isinstance(respiratory, dict)
-            and respiratory.get("available") is True
-            and respiratory_confidence.get("level") == "high"
-            and respiratory_confidence.get("direct_measurements_only") is True
-            and respiratory_status.get("key") in {"supportive", "observe"}
+        respiratory_values = respiratory_session_values(
+            report.get("respiratory_wellness")
         )
         target = target_provenance.get("target") or resolve_rest_target(
             group or resolved,
@@ -733,16 +719,7 @@ class BaselineStore(BaselineCacheLifecycle):
             "co2_median": median_field("co2"),
             "lux_median": median_field("lux"),
             "sound_median": median_field("sound"),
-            "respiratory_rr_median": (
-                respiratory_observations.get("median_rr_brpm")
-                if respiratory_available
-                else None
-            ),
-            "respiratory_regularity_factor": (
-                respiratory_observations.get("regularity_factor")
-                if respiratory_available
-                else None
-            ),
+            **respiratory_values,
         }
 
     def update_user(self, username_key: str) -> dict:
@@ -923,6 +900,7 @@ class BaselineStore(BaselineCacheLifecycle):
         grouped = record.get("behaviour_by_mode")
         stored = grouped.get(group) if isinstance(grouped, dict) else None
         context = dict(stored) if isinstance(stored, dict) else {}
+        same_mode_respiratory = context.get("respiratory_reference")
         target = resolve_rest_target(rest_mode, target_duration_s)
         if group == "nap_recovery":
             by_target = context.get("by_target")
@@ -941,19 +919,7 @@ class BaselineStore(BaselineCacheLifecycle):
                 "typical_duration_minutes": None,
                 "typical_start_local_hour": None,
                 "typical_environment": {},
-                "respiratory_reference": {
-                    "status": "no_data",
-                    "sessions_used": 0,
-                    "minimum_sessions": (RESTORE_BASELINE_MIN_COMPARISON_SESSIONS),
-                    "median_rr_brpm": None,
-                    "typical_range_rr_brpm": None,
-                    "regularity_median": None,
-                    "method": "median_and_interquartile_range",
-                    "same_mode_only": True,
-                    "prior_completed_sessions_only": True,
-                    "direct_stage_influence": False,
-                    "affects_score": False,
-                },
+                "respiratory_reference": empty_respiratory_reference("no_data"),
                 "scores": [],
                 "score_median": None,
                 "score_typical_range": None,
@@ -977,6 +943,8 @@ class BaselineStore(BaselineCacheLifecycle):
                 "direct_stage_influence": False,
                 "role": "expectation_report_and_confidence_context_only",
             }
+        if group == "nap_recovery" and isinstance(same_mode_respiratory, dict):
+            context["respiratory_reference"] = dict(same_mode_respiratory)
         context["baseline_policy_version"] = record.get("behaviour_policy_version")
         context.setdefault(
             "best_rest_window",

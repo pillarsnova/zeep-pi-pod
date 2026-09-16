@@ -994,7 +994,7 @@ engineering shadow score
         "affects_source_score": false,
         "population_prior_is_cold_start_only": true,
         "must_not_mix_sleep_and_nap_sessions": true,
-        "baseline_policy_version": "zeep-personal-behaviour-baseline-v1.3-bounded-partitioned-finite-circular-time",
+        "baseline_policy_version": "zeep-personal-behaviour-baseline-v1.4-paired-vitals-three-session-reference",
         "score_formula_version": "zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10",
         "target_specific": true,
         "target_key": "overnight_7h"
@@ -1009,7 +1009,7 @@ engineering shadow score
         },
         "mode_specific": true,
         "whole_day_readiness_trend": false,
-        "baseline_policy_version": "zeep-personal-behaviour-baseline-v1.3-bounded-partitioned-finite-circular-time",
+        "baseline_policy_version": "zeep-personal-behaviour-baseline-v1.4-paired-vitals-three-session-reference",
         "score_formula_version": "zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10",
         "target_specific": true,
         "target_key": "overnight_7h"
@@ -1216,7 +1216,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
         "affects_source_score": false,
         "population_prior_is_cold_start_only": true,
         "must_not_mix_sleep_and_nap_sessions": true,
-        "baseline_policy_version": "zeep-personal-behaviour-baseline-v1.3-bounded-partitioned-finite-circular-time",
+        "baseline_policy_version": "zeep-personal-behaviour-baseline-v1.4-paired-vitals-three-session-reference",
         "score_formula_version": "zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10",
         "target_specific": true,
         "target_key": "nap_30"
@@ -1229,7 +1229,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
         },
         "mode_specific": true,
         "whole_day_readiness_trend": false,
-        "baseline_policy_version": "zeep-personal-behaviour-baseline-v1.3-bounded-partitioned-finite-circular-time",
+        "baseline_policy_version": "zeep-personal-behaviour-baseline-v1.4-paired-vitals-three-session-reference",
         "score_formula_version": "zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10",
         "target_specific": true,
         "target_key": "nap_30"

@@ -127,8 +127,14 @@ def build_observations(
     minimum_valid_seconds: float,
     minimum_context_coverage_pct: float,
 ) -> dict[str, Any]:
-    """Build RR observations and release paired medians only after its gate."""
+    """Build respiratory observations from rows with a valid HR/RR pair.
+
+    RR-only measurements remain counted in the technical quality fields, but
+    every customer-facing rate, range and regularity result is derived from
+    rows where HR and RR were measured together.
+    """
     measured = metrics["measured"]
+    paired_rr = metrics["measured_paired_rr"]
     occupied_seconds = metrics["occupied_seconds"]
     valid_seconds = metrics["valid_seconds"]
     coverage_pct = _coverage_pct(valid_seconds, occupied_seconds)
@@ -144,10 +150,10 @@ def build_observations(
     )
     median_hr = weighted_quantile(metrics["measured_hr"], 0.5)
     median_paired_rr = weighted_quantile(metrics["measured_paired_rr"], 0.5)
-    median = weighted_quantile(measured, 0.5)
-    p10 = weighted_quantile(measured, 0.1)
-    p90 = weighted_quantile(measured, 0.9)
-    regularity_factor, regularity_key = regularity(measured)
+    median = weighted_quantile(paired_rr, 0.5)
+    p10 = weighted_quantile(paired_rr, 0.1)
+    p90 = weighted_quantile(paired_rr, 0.9)
+    regularity_factor, regularity_key = regularity(paired_rr)
     return {
         "median_hr_bpm": _gated_round(median_hr, paired_evidence_sufficient),
         "median_paired_rr_brpm": _gated_round(

@@ -126,10 +126,14 @@ def measured_quiet_hr(row: Mapping[str, Any]) -> float | None:
     """Return current HR from the same direct, quiet evidence used for RR."""
     if measured_quiet_rr(row) is None:
         return None
-    if (
-        row.get("heart_rate_held") is True
-        or row.get("heart_rate_current_valid") is False
-    ):
+    if row.get("heart_rate_held") is True:
+        return None
+    current_valid = row.get("heart_rate_current_valid") is True
+    persisted_joint_evidence = bool(
+        row.get("respiratory_evidence_valid") is True
+        and row.get("respiratory_evidence_reason") == "eligible_direct_bcg_hr_rr"
+    )
+    if not current_valid and not persisted_joint_evidence:
         return None
     value = finite_number(row.get("hr"))
     return value if value is not None and 30.0 <= value <= 220.0 else None
@@ -188,6 +192,7 @@ def _live_evidence_verdict(
     *,
     minimum_packets: int,
     minimum_coverage: float,
+    hr_range: tuple[float, float],
     rr_range: tuple[float, float],
 ) -> tuple[bool, str]:
     if not bcg.get("connected"):
@@ -208,6 +213,10 @@ def _live_evidence_verdict(
         return False, "occupancy_not_confirmed"
     if bcg.get("analysis_valid") is not True:
         return False, "analysis_quality_gate_failed"
+    if bcg.get("heart_rate_current_valid") is not True:
+        return False, "hr_not_current"
+    if bcg.get("heart_rate_held") is True:
+        return False, "hr_display_hold"
     if bcg.get("respiration_current_valid") is not True:
         return False, "rr_not_current"
     if bcg.get("respiration_held") is True:
@@ -218,10 +227,13 @@ def _live_evidence_verdict(
     coverage = finite_number(bcg.get("paired_vital_coverage"))
     if coverage is None or coverage < minimum_coverage:
         return False, "insufficient_paired_coverage"
+    hr = finite_number(bcg.get("heart_rate_bpm"))
+    if hr is None or not hr_range[0] <= hr <= hr_range[1]:
+        return False, "hr_outside_sensor_sanity_range"
     rr = finite_number(bcg.get("respiration_rate"))
     if rr is None or not rr_range[0] <= rr <= rr_range[1]:
         return False, "rr_outside_sensor_sanity_range"
-    return True, "eligible_direct_bcg_rr"
+    return True, "eligible_direct_bcg_hr_rr"
 
 
 def live_session_sample_fields(
@@ -230,6 +242,7 @@ def live_session_sample_fields(
     *,
     minimum_packets: int,
     minimum_coverage: float,
+    hr_range: tuple[float, float],
     rr_range: tuple[float, float],
 ) -> dict[str, Any]:
     """Return compact provenance persisted with a Session Timeline row."""
@@ -238,6 +251,7 @@ def live_session_sample_fields(
         sensor_frame,
         minimum_packets=minimum_packets,
         minimum_coverage=minimum_coverage,
+        hr_range=hr_range,
         rr_range=rr_range,
     )
     connected = bool(bcg.get("connected"))

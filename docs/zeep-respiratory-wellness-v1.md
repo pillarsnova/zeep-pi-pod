@@ -1,12 +1,12 @@
-# ZEEP Respiratory Wellness v1.1
+# ZEEP Resting Heart & Breathing Wellness v1.2
 
 **สถานะ:** ข้อกำหนดสำหรับ Pilot / Wellness เท่านั้น
-**เวอร์ชันผลลัพธ์:** `zeep-respiratory-wellness-v1.1`
+**เวอร์ชันผลลัพธ์:** `zeep-respiratory-wellness-v1.2-paired-hr-rr`
 **ตรวจทานแหล่งอ้างอิง:** 13 กันยายน 2026
 
 ## 1. วัตถุประสงค์และขอบเขต
 
-ZEEP สรุป **ชีพจรและการหายใจระหว่างพัก** จาก HR และ RR คู่กันในช่วงหลักฐาน
+ZEEP สรุป **ชีพจรและการหายใจขณะพัก** จาก HR และ RR คู่กันในช่วงหลักฐาน
 BCG โดยตรง การ์ดผู้ใช้มีเพียงหนึ่งบรรทัดสรุปและหนึ่งบรรทัดคำแนะนำ ส่วนข้อมูล
 เชิงเทคนิคและความครอบคลุมยังอยู่ในมุมมองผู้ดูแล
 
@@ -29,24 +29,28 @@ oxygenation ให้ใช้ pulse oximeter ที่ผ่านการต�
 
 ## 2. Direct paired HR/RR evidence
 
-ระบบคงเกณฑ์สถานะ RR เดิมไว้โดยไม่เปลี่ยน threshold และเพิ่มค่ากลาง HR เฉพาะ
-จากหน้าต่างหลักฐานเดียวกันที่ไม่ถูก hold เพื่อสร้างข้อความ HR/RR ร่วมกัน:
+ระบบสรุปผลต่อผู้ใช้เฉพาะหน้าต่างหลักฐานที่มี HR และ RR วัดพร้อมกันโดยตรง
+ส่วน RR ที่ไม่มี HR คู่กันเก็บไว้เพื่อ QA ทางเทคนิค แต่ไม่นำมาตัดสินสถานะหรือ
+สร้างข้อความเชิงสุขภาพ:
 
 1. ยืนยันว่ามีผู้ใช้อยู่บนเตียงจาก Bed Status; ห้ามอนุมาน occupancy จาก Sleep
    State และตัดช่วง `OFF BED` ออก
-2. BCG analysis valid, RR เป็นค่าปัจจุบัน ไม่ใช่ค่าที่ hold/carry จากก่อน restart
+2. BCG analysis valid, HR และ RR เป็นค่าปัจจุบัน ไม่ใช่ค่าที่ hold/carry จากก่อน restart
 3. ไม่อยู่ในช่วง movement, weak signal, synthetic gap หรือสถานะข้อมูลเสีย/ค้าง
 4. มี paired vital อย่างน้อย 8 packets และ coverage อย่างน้อย 80% ในหน้าต่างสด
-5. RR เป็นตัวเลข finite ใน sanity range 4–60 ครั้ง/นาที
+5. HR อยู่ใน sanity range 30–220 ครั้ง/นาที และ RR อยู่ใน 4–60 ครั้ง/นาที
 
 ข้อความสรุปร่วมจะแสดง `vital_summary.available = true` เมื่อมีค่ากลาง HR และ RR
 จากหลักฐานคู่โดยตรง หาก HR ขาด ระบบไม่อนุมานจากสถานะ RR และจะแสดงเพียงว่า
-ข้อมูลร่วมกันยังไม่ครบ สถานะ RR เดิมยังคงใช้เพื่อ QA และไม่ถูกตีความว่า HR
-สม่ำเสมอ
+ข้อมูลร่วมกันยังไม่ครบ และจะไม่เผยแพร่ผลจาก RR เพียงค่าเดียว
 
 ข้อมูลย้อนหลังที่ไม่มี provenance ว่า RR ผ่าน gate จะ fail closed: ยังเก็บ Timeline
 เดิมไว้ได้ แต่ไม่นำมาสร้างคำกล่าวด้านการหายใจ รายงานจะอธิบายด้วย
 `historical_provenance_unavailable` แทนการคาดเดา
+การเผยแพร่และการเรียนรู้ Baseline ยอมรับเฉพาะ sub-version
+`zeep-respiratory-wellness-v1.2-paired-hr-rr`; ผลรุ่นก่อนหน้าจะไม่ถูกตีความ
+ใหม่ว่าเป็นหลักฐาน HR/RR คู่กัน และ UI จะเริ่มความคืบหน้าอ้างอิงใหม่ที่ 0 จาก 3
+โดยไม่แก้ข้อมูลดิบเดิม
 
 การเผยแพร่ผลต้องมีข้อมูลใช้ได้อย่างน้อย 120 วินาที, อย่างน้อย 4 ตัวอย่าง
 (รองรับทั้ง cadence 10 และ 30 วินาที),
@@ -54,9 +58,10 @@ oxygenation ให้ใช้ pulse oximeter ที่ผ่านการต�
 Confidence เป็น `high` เมื่อ coverage ≥80%, `medium` เมื่อ 50–79.9% และ `low`
 เมื่อหลักฐานไม่พอ
 
-ค่าที่สรุปประกอบด้วย weighted median, P10–P90 และ regularity factor ภายใน
-Session. Regularity เป็นกติกา Wellness ภายในของ ZEEP ไม่ใช่ clinical cutoff
-และความแปรปรวนอาจเปลี่ยนตาม Sleep Stage, ท่าทาง และการเคลื่อนไหวได้
+การ์ดหลักแสดงค่าชีพจรและอัตราการหายใจที่พบโดยทั่วไป พร้อมผลและคำแนะนำของ
+Session ปัจจุบัน ส่วน weighted median, P10–P90 และ regularity factor อยู่ใน
+รายละเอียดสำหรับผู้ดูแลเท่านั้น Regularity เป็นกติกา Wellness ภายในของ ZEEP
+ไม่ใช่ clinical cutoff และอาจเปลี่ยนตาม Sleep Stage, ท่าทาง และการเคลื่อนไหวได้
 
 ## 3. บทบาทของช่วงอายุ
 
@@ -81,26 +86,33 @@ UI ให้คำแนะนำเชิงบริบทต่างกั�
 ## 4. Personal Baseline
 
 Personal Baseline มีน้ำหนักในการอธิบายมากกว่าการเทียบประชากร แต่เปิดใช้เมื่อมี
-**อย่างน้อย 7 Session ก่อนหน้า** ที่ครบทุกข้อ:
+**อย่างน้อย 3 Session ก่อนหน้า** ที่ครบทุกข้อ:
 
 - เป็น Session ที่จบแล้วและเกิดก่อน Session ปัจจุบัน
 - อยู่ในโหมดเดียวกัน (`overnight_sleep` แยกจาก `nap_or_rest`)
-- respiratory result ใช้ direct measurements, Confidence ระดับสูง และสถานะ
-  `supportive` หรือ `observe`
-- มีค่ากลาง RR และ regularity ที่ตรวจสอบได้
+- ผลใช้ direct paired HR/RR, Confidence ระดับสูง และสถานะ `supportive` หรือ
+  `observe`
+- มีค่ากลาง HR, RR และ regularity ที่ตรวจสอบได้
 
-ระบบใช้ median และ IQR (P25–P75) ของ Session เหล่านั้นเป็น typical range แล้ว
+สำหรับ `nap_or_rest` การเรียนรู้ชีพจรและการหายใจรวม Session เป้าหมาย 30 และ
+90 นาทีในโหมดเดียวกัน เพราะเป็น Baseline สัญญาณชีพขณะพัก ไม่ใช่ Baseline
+คะแนนตามระยะเวลา; ส่วน Recovery Score และช่วงพักที่ดีที่สุดยังแยกตามเป้าหมาย
+30/90 นาทีตามเดิม
+
+ระบบใช้ median และ IQR (P25–P75) ของ HR/RR ใน Session เหล่านั้นเป็น typical range แล้ว
 รายงาน `below`, `within` หรือ `above`. Baseline นี้มีไว้แสดงแนวโน้มเท่านั้น:
 `affects_score = false` และไม่มีอิทธิพลโดยตรงต่อ Sleep State
 
-ก่อนครบ 7 Session UI แสดงความคืบหน้า เช่น `กำลังเรียนรู้ 4/7 Session`
-โดยไม่เติมค่าที่หายหรือรวม Nap กับ Overnight
+ก่อนครบ 3 Session UI แสดง `ข้อมูลอ้างอิงส่วนบุคคล · กำลังเก็บข้อมูล 2 จาก 3 ครั้ง`
+โดยไม่เติมค่าที่หาย ไม่ใช้ Session ที่ขาด HR หรือ RR และไม่รวม Nap กับ Overnight
+เมื่อข้อมูลอ้างอิงครบแล้วแต่ Session ปัจจุบันมี HR/RR ไม่ต่อเนื่องพอ UI แสดง
+`ข้อมูลอ้างอิงพร้อม · ครั้งนี้ยังเทียบไม่ได้` แทนข้อความ `3 จาก 3 ครั้ง`
 
 ## 5. สถานะที่เผยแพร่
 
 | `status.key` | ข้อความผู้ใช้ | หลักการ |
 |---|---|---|
-| `insufficient` | กำลังเรียนรู้รูปแบบของคุณ | ไม่ผ่านเวลาขั้นต่ำ จำนวนตัวอย่าง ความต่อเนื่อง หรือ coverage |
+| `insufficient` | ข้อมูลครั้งนี้ยังไม่เพียงพอ | HR/RR คู่กันไม่ผ่านเวลาขั้นต่ำ จำนวนตัวอย่าง ความต่อเนื่อง หรือ coverage |
 | `needs_recheck` | แนะนำให้เช็กอีกครั้ง | มีข้อมูลใช้ได้ ≥5 นาที, coverage ≥70% และ median RR ≤8 หรือ ≥25; เป็น trigger ให้ยืนยัน ไม่ใช่การวินิจฉัย |
 | `supportive` | จังหวะการหายใจค่อนข้างสม่ำเสมอ | median อยู่ในช่วงอ้างอิงกว้าง 12–20, coverage ≥70% และ regularity เพียงพอ |
 | `observe` | มีการเปลี่ยนแปลงบางช่วง | มีหลักฐานพอสรุป แต่ยังไม่เข้าเงื่อนไข `supportive` หรือ `needs_recheck` |
@@ -119,7 +131,7 @@ Personal Baseline มีน้ำหนักในการอธิบาย�
 ```json
 {
   "respiratory_wellness": {
-    "version": "zeep-respiratory-wellness-v1.1",
+    "version": "zeep-respiratory-wellness-v1.2-paired-hr-rr",
     "available": true,
     "intended_use": "age_contextual_wellness_pattern_not_lung_function",
     "context": "overnight_sleep",
@@ -128,7 +140,7 @@ Personal Baseline มีน้ำหนักในการอธิบาย�
       "label": "จังหวะการหายใจค่อนข้างสม่ำเสมอ"
     },
     "reason_codes": [],
-    "interpretation": "จังหวะหายใจค่อนข้างสม่ำเสมอระหว่างพัก",
+    "interpretation": "บันทึกชีพจรและการหายใจได้ต่อเนื่อง โดยจังหวะหายใจค่อนข้างสม่ำเสมอระหว่างพัก",
     "observations": {
       "median_hr_bpm": 58.4,
       "median_paired_rr_brpm": 16.2,
@@ -154,7 +166,7 @@ Personal Baseline มีน้ำหนักในการอธิบาย�
       "status_label": "พร้อมดูแนวโน้ม",
       "heart_rate_bpm": 58.4,
       "respiration_rate_brpm": 16.2,
-      "summary": "จังหวะหายใจค่อนข้างสม่ำเสมอระหว่างพัก",
+      "summary": "บันทึกชีพจรและการหายใจได้ต่อเนื่อง โดยจังหวะหายใจค่อนข้างสม่ำเสมอระหว่างพัก",
       "recommendation": "รักษารูปแบบการพักที่สบายนี้ไว้",
       "basis": "direct_paired_hr_rr",
       "aggregation": "weighted_median",
@@ -174,9 +186,13 @@ Personal Baseline มีน้ำหนักในการอธิบาย�
     },
     "personal_baseline": {
       "available": true,
+      "reference_ready": true,
       "sessions_used": 8,
+      "minimum_sessions": 3,
       "status": "within",
+      "typical_range_hr_bpm": [55.8, 61.3],
       "typical_range_rr_brpm": [15.4, 17.2],
+      "requires_paired_hr_rr": true,
       "same_mode_only": true,
       "prior_sessions_only": true,
       "affects_score": false
@@ -207,18 +223,19 @@ Personal Baseline มีน้ำหนักในการอธิบาย�
 
 ## 7. การแสดงผลบน UI
 
-หน้า **ประวัติการใช้งาน** แสดงการ์ด “ชีพจรและการหายใจระหว่างพัก” เพียงจุดเดียว:
+หน้า **ประวัติการใช้งาน** แสดงการ์ด “ชีพจรและการหายใจขณะพัก” เพียงจุดเดียว:
 
 - ผู้ใช้เห็น `vital_summary.summary` หนึ่งบรรทัด และ
   `vital_summary.recommendation` หนึ่งบรรทัด ทั้ง Overnight และ Nap
-- ห้ามให้ Client สรุปว่า HR สม่ำเสมอจาก `status` เพราะสถานะดังกล่าวยังเป็น
-  การจัดกลุ่ม RR; ให้ใช้ `vital_summary.status` สำหรับความพร้อมของข้อมูลคู่
-- ผู้ดูแลกางรายละเอียดดู valid minutes, coverage, จำนวนตัวอย่าง, longest run,
-  regularity factor, เวลาที่ตัดเพราะ movement/weak/invalid/held และ version ได้
+- Client ต้องใช้ `vital_summary.available` และค่าคู่ HR/RR สำหรับการ์ดหลัก
+- ผู้ดูแลกางรายละเอียดดู paired HR/RR minutes, coverage, จำนวนคู่ข้อมูล,
+  longest paired run, regularity factor, เวลาที่ตัดเพราะ movement/weak/invalid/held
+  และ version ได้
 - ทุกมุมมองแสดงข้อความสั้นว่าเป็นข้อมูล Wellness จากช่วงพัก ไม่ใช่ผลตรวจ
   สมรรถภาพปอด, SpO₂ หรือ sleep apnea
-- เมื่อข้อมูลกำลังสะสม ให้บอกว่าระบบกำลังเรียนรู้รูปแบบของผู้ใช้ โดยไม่แปลงเป็น
-  คำว่า “ปอดไม่แข็งแรง”
+- เมื่อหลักฐาน Session ไม่พอ ให้บอกว่าช่วง HR/RR ที่วัดพร้อมกันยังไม่ต่อเนื่องพอ
+  และแนะนำให้พักนิ่งในครั้งถัดไป;
+  อย่าเรียกว่า “กำลังเรียนรู้ Baseline” หรือแปลงเป็นคำว่า “ปอดไม่แข็งแรง”
 
 หลีกเลี่ยงการแสดง RR ซ้ำในหลายการ์ดแก่ผู้ใช้ ส่วน Raw/provenance และเหตุผลจาก
 gate เก็บไว้ใน Admin Monitor และ Audit
@@ -231,7 +248,8 @@ gate เก็บไว้ใน Admin Monitor และ Audit
 2. **Gate regression:** replay เคส off-bed, movement, weak signal, sensor gap,
    restart/held, packet loss และ legacy provenance; ต้องไม่มี carried/synthetic RR
    หลุดเข้าผล และ Timeline ดิบต้องไม่ถูกแก้
-3. **Longitudinal validation:** ตรวจว่า median/IQR จาก ≥7 Session มีเสถียรภาพ
+3. **Longitudinal validation:** ตรวจว่า median/IQR จาก ≥3 Session มีประโยชน์
+   สำหรับการอธิบายเบื้องต้น และทบทวนความเสถียรอีกครั้งเมื่อมีข้อมูลมากขึ้น
    และไม่ปนข้อมูลระหว่าง Nap กับ Overnight; ประเมิน false recheck เป็นรายกลุ่ม
 4. **Clinical-reference study:** หากต้องการกล่าวถึง oxygenation ให้เก็บ SpO₂ จาก
    อุปกรณ์ที่ผ่านการตรวจสอบ; หากต้องการกล่าวถึงปอดให้ทำ spirometry/PFT; หาก

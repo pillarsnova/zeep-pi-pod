@@ -6,7 +6,11 @@ from presentation.language import (
     user_confidence_level,
     user_environment_finding_copy,
     user_environment_level,
+    user_paired_vital_status,
     user_respiratory_age_context,
+    user_respiratory_baseline_copy,
+    user_respiratory_interpretation,
+    user_respiratory_status,
     user_score_level,
 )
 from sessions.quality_publication import (
@@ -85,6 +89,25 @@ class ProductLanguageTests(unittest.TestCase):
         outcome = canonical_subjective_outcome(None)
         self.assertEqual(outcome["status"], "not_measured")
         self.assertEqual(outcome["label"], "ยังไม่ได้บันทึกความรู้สึกหลังพัก")
+
+    def test_insufficient_vital_copy_describes_this_measurement_not_baseline(self):
+        self.assertEqual(
+            user_respiratory_status("insufficient"),
+            ("insufficient", "ข้อมูลครั้งนี้ยังไม่เพียงพอ"),
+        )
+        self.assertEqual(
+            user_paired_vital_status("insufficient", None, None),
+            ("insufficient", "ข้อมูลครั้งนี้ยังไม่เพียงพอ"),
+        )
+        _, reason = user_respiratory_baseline_copy("not_ready", available=False)
+        self.assertIn("ครบ 3 ครั้ง", reason)
+        self.assertNotIn("หลายครั้ง", reason)
+
+    def test_available_vital_copy_explicitly_combines_heart_and_breathing(self):
+        summary = user_respiratory_interpretation("supportive", 60, 14)
+
+        self.assertIn("ชีพจรและการหายใจ", summary)
+        self.assertIn("ได้ต่อเนื่อง", summary)
 
     def test_public_api_rewrites_legacy_harsh_environment_copy(self):
         metric = public_environment_metric({"status_key": "critical", "status": "วิกฤต"})

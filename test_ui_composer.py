@@ -385,12 +385,12 @@ class UiComposerTests(unittest.TestCase):
         css = (ui_composer.STATIC / "theme-modern.css").read_text(encoding="utf-8")
 
         self.assertIn("function renderRespiratoryWellness", template)
-        self.assertIn("การหายใจระหว่างพัก", template)
+        self.assertIn("ชีพจรและการหายใจขณะพัก", template)
         self.assertIn("ข้อมูลนี้ช่วยดูแนวโน้มระหว่างพัก", template)
         self.assertIn("ไม่ใช่การตรวจสมรรถภาพปอด", template)
         self.assertIn("ออกซิเจนในเลือด หรือการวินิจฉัยโรค", template)
         self.assertIn(
-            "ไม่เปลี่ยน Sleep/Recovery Score",
+            "ไม่เปลี่ยนคะแนน",
             template,
         )
         self.assertIn("respiratory_wellness", template)
@@ -416,20 +416,56 @@ class UiComposerTests(unittest.TestCase):
 
         self.assertIn("if(!adminView){", renderer)
         self.assertIn("ชีพจรและการหายใจ", renderer)
+        self.assertIn("vital.available===true", renderer)
         self.assertIn("vital.heart_rate_bpm", renderer)
         self.assertIn("vital.respiration_rate_brpm", renderer)
+        self.assertIn("vital.recommendation", renderer)
         self.assertIn('class="user-vitals-compact"', renderer)
         self.assertIn('class="user-vitals-values"', renderer)
-        self.assertIn("<small>ชีพจร</small>", renderer)
-        self.assertIn("<small>การหายใจ</small>", renderer)
+        self.assertIn("<small>ชีพจรขณะพักโดยประมาณ</small>", renderer)
+        self.assertIn("<small>อัตราการหายใจขณะพัก</small>", renderer)
         self.assertIn("value!==null&&value!==undefined&&value!==''", renderer)
-        self.assertIn("<b>แนวโน้มระหว่างพัก</b>", renderer)
+        self.assertIn("<b>ผลจากการวัดครั้งนี้</b>", renderer)
+        self.assertIn("<b>คำแนะนำ</b>", renderer)
+        self.assertIn("<b>คำแนะนำสำหรับครั้งนี้</b>", renderer)
+        self.assertIn(
+            "ครั้งนี้ช่วงที่วัดชีพจรและการหายใจพร้อมกันยังไม่ต่อเนื่องพอ",
+            renderer,
+        )
+        self.assertIn("ครั้งถัดไปลองพักให้นิ่งและจัดท่านอนให้สบาย", renderer)
+        self.assertIn("<h3>ชีพจรและการหายใจขณะพัก</h3>", renderer)
+        self.assertIn('class="user-vitals-head"', renderer)
+        self.assertIn('class="user-vitals-baseline"', renderer)
+        self.assertIn("รูปแบบประจำของคุณ", renderer)
+        self.assertIn("ข้อมูลอ้างอิงส่วนบุคคล", renderer)
+        self.assertIn(
+            "กำลังเก็บข้อมูล ${baselineProgress} จาก ${baselineMinimum} ครั้ง",
+            renderer,
+        )
+        self.assertIn("ข้อมูลอ้างอิงพร้อม · ครั้งนี้ยังเทียบไม่ได้", renderer)
+        self.assertIn("const baselineMinimum=3;", renderer)
+        self.assertNotIn("baseline.minimum_sessions", renderer)
+        self.assertNotIn("baseline.minimum_sessions||7", renderer)
+        main_observations = renderer.split("const observationList=", 1)[1].split(
+            "const adminDetails=", 1
+        )[0]
+        self.assertNotIn("P10", main_observations)
+        self.assertIn("RR ช่วง P10–P90", renderer)
         user_branch = renderer.split("if(!adminView){", 1)[1].split("const range=", 1)[
             0
         ]
         self.assertNotIn("คำแนะนำตามช่วงอายุ", user_branch)
         self.assertNotIn("Personal Baseline", user_branch)
         self.assertNotIn("Coverage", user_branch)
+        self.assertNotIn("กำลังเรียนรู้รูปแบบของคุณ", renderer)
+        self.assertNotIn("if(!summary||typeof summary!=='object')return '';", renderer)
+        self.assertIn("currentContract&&vital.available===true", renderer)
+        self.assertIn("zeep-respiratory-wellness-v1.2-paired-hr-rr", renderer)
+        overview_start = template.index("function renderSessionOverview")
+        overview_end = template.index("function renderReport", overview_start)
+        overview = template[overview_start:overview_end]
+        self.assertNotIn("if(!report?.available)return '';", overview)
+        self.assertIn("ข้อมูลครั้งนี้ยังไม่เพียงพอสำหรับสรุปการพัก", overview)
         self.assertNotIn("quality.physiology?.heart_rate_average", renderer)
         self.assertNotIn(
             "summary.interpretation",

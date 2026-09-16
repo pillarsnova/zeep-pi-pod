@@ -19,7 +19,7 @@ SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.29-complete-occupied-epochs"
 SLEEP_EVIDENCE_VERSION = "zeep-sleep-state-evidence-v3.7-complete-occupied-epochs"
 ZEEP_SLEEP_BASELINE_VERSION = "zeep-sleep-state-baseline-v1.8-sep1-cutover"
 PERSONAL_BEHAVIOUR_BASELINE_VERSION = (
-    "zeep-personal-behaviour-baseline-v1.3-bounded-partitioned-finite-circular-time"
+    "zeep-personal-behaviour-baseline-v1.4-paired-vitals-three-session-reference"
 )
 PERSONAL_REST_WINDOW_BASELINE_VERSION = (
     "zeep-personal-rest-window-v1.2-bounded-partitioned-finite"
@@ -139,7 +139,7 @@ APPROVED_SCORE_FORMULA_VERSIONS_BY_GROUP = {
     ),
 }
 RESTORE_SUMMARY_VERSION = "zeep-restore-summary-v1.0"
-RESPIRATORY_WELLNESS_VERSION = "zeep-respiratory-wellness-v1.1"
+RESPIRATORY_WELLNESS_VERSION = "zeep-respiratory-wellness-v1.2-paired-hr-rr"
 RESTORE_ACTION_BANDS_VERSION = "zeep-restore-action-bands-v1.1-observational-copy"
 RESTORE_DRIVER_POLICY_VERSION = "zeep-restore-drivers-v1.0"
 RESTORE_BASELINE_COMPARISON_VERSION = "zeep-restore-personal-baseline-v1.0"

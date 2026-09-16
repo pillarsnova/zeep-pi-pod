@@ -21,6 +21,7 @@ from sleep_system_policy import (
     PREVIOUS_SESSION_REPORT_VERSION,
     PREVIOUS_SLEEP_QUALITY_VERSION,
     RECOVERY_SCORE_FORMULA_VERSION,
+    RESPIRATORY_WELLNESS_VERSION,
     SESSION_REPORT_VERSION,
     SLEEP_QUALITY_VERSION,
     SLEEP_SCORE_FORMULA_VERSION,
@@ -107,7 +108,17 @@ def _summary(*, quality_type, sleep_detected, estimated_sleep_s):
     }
 
 
-def _behaviour_summary(*, mode_group, resolved, rr, confidence="high"):
+def _behaviour_summary(
+    *,
+    mode_group,
+    resolved,
+    rr,
+    confidence="high",
+    hr=62.0,
+    respiratory_version=RESPIRATORY_WELLNESS_VERSION,
+    target_key="nap_30",
+    target_seconds=1_800,
+):
     quality_type = "sleep" if mode_group == "sleep" else "rest_goal"
     quality = {
         "available": True,
@@ -124,8 +135,8 @@ def _behaviour_summary(*, mode_group, resolved, rr, confidence="high"):
     }
     if mode_group == "nap_recovery":
         quality["duration_target"] = {
-            "key": "nap_30",
-            "seconds": 1_800,
+            "key": target_key,
+            "seconds": target_seconds,
         }
     else:
         quality["duration_target"] = {
@@ -139,14 +150,23 @@ def _behaviour_summary(*, mode_group, resolved, rr, confidence="high"):
             "rest_mode": {"group": mode_group, "resolved": resolved},
             "quality": quality,
             "respiratory_wellness": {
+                "version": respiratory_version,
                 "available": True,
                 "status": {"key": "supportive"},
+                "vital_summary": {
+                    "available": hr is not None,
+                    "heart_rate_bpm": hr,
+                    "respiration_rate_brpm": rr,
+                },
                 "confidence": {
                     "level": confidence,
                     "direct_measurements_only": True,
                 },
                 "observations": {
+                    "median_hr_bpm": hr,
+                    "median_paired_rr_brpm": rr if hr is not None else None,
                     "median_rr_brpm": rr,
+                    "paired_hr_rr_evidence_sufficient": hr is not None,
                     "regularity_factor": 0.9,
                 },
             },
@@ -1022,6 +1042,20 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
             30.0,
             "low",
         )
+        sessions.append({
+            "session_id": "nap-90",
+            "duration": 5_400.0,
+            "start_time": (start + timedelta(days=21)).isoformat(),
+        })
+        summaries["nap-90"] = _behaviour_summary(
+            mode_group="nap_recovery",
+            resolved="full_cycle_nap",
+            rr=18.0,
+            confidence="high",
+            target_key="nap_90",
+            target_seconds=5_400,
+        )
+        timelines["nap-90"] = []
 
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -1034,9 +1068,11 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
         nap = record["behaviour_by_mode"]["nap_recovery"]
         sleep = record["behaviour_by_mode"]["sleep"]
 
-        self.assertEqual(nap["sessions_used"], 8)
-        self.assertEqual(nap["respiratory_reference"]["sessions_used"], 7)
+        self.assertEqual(nap["sessions_used"], 9)
+        self.assertEqual(nap["respiratory_reference"]["sessions_used"], 8)
         self.assertEqual(nap["respiratory_reference"]["status"], "active")
+        self.assertEqual(nap["respiratory_reference"]["minimum_sessions"], 3)
+        self.assertEqual(nap["respiratory_reference"]["median_hr_bpm"], 62.0)
         self.assertEqual(nap["respiratory_reference"]["median_rr_brpm"], 17.0)
         self.assertEqual(sleep["respiratory_reference"]["sessions_used"], 7)
         self.assertEqual(sleep["respiratory_reference"]["median_rr_brpm"], 13.0)
@@ -1044,6 +1080,48 @@ class PersonalBaselineEligibilityTests(unittest.TestCase):
         self.assertTrue(nap["respiratory_reference"]["prior_completed_sessions_only"])
         self.assertFalse(nap["respiratory_reference"]["affects_score"])
         self.assertFalse(nap["respiratory_reference"]["direct_stage_influence"])
+        selected_nap = store.behaviour_context(
+            "person@example.com",
+            "nap_recovery",
+            1_800,
+        )
+        self.assertEqual(
+            selected_nap["respiratory_reference"]["sessions_used"],
+            8,
+        )
+
+    def test_legacy_respiratory_version_never_enters_new_reference(self):
+        sessions = []
+        summaries = {}
+        start = datetime(2026, 9, 1, tzinfo=UTC)
+        for index in range(3):
+            session_id = f"legacy-respiratory-{index}"
+            sessions.append({
+                "session_id": session_id,
+                "duration": 1_800.0,
+                "start_time": (start + timedelta(days=index)).isoformat(),
+            })
+            summaries[session_id] = _behaviour_summary(
+                mode_group="nap_recovery",
+                resolved="short_nap",
+                rr=14.0,
+                respiratory_version="zeep-respiratory-wellness-v1.1",
+            )
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        store = BaselineStore(
+            _BehaviourDatabaseStub(sessions, summaries, {}),
+            Path(temporary.name),
+        )
+
+        record = store.update_user("person@example.com")
+        reference = record["behaviour_by_mode"]["nap_recovery"][
+            "respiratory_reference"
+        ]
+
+        self.assertEqual(reference["sessions_used"], 0)
+        self.assertEqual(reference["status"], "learning")
+        self.assertEqual(reference["minimum_sessions"], 3)
 
     def test_update_user_partitions_before_capping_each_mode_and_target(self):
         sessions = []

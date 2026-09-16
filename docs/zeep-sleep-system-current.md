@@ -5,7 +5,7 @@
 > **Status:** Wellness release candidate · guarded derived-result replay/promotion · G2 paired-PSG validation open
 > **Updated:** 2026-09-16
 > **Code manifest:** [`sleep_system_policy.py`](../sleep_system_policy.py)
-> **Related:** [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.8.md) · [ZEEP Restore Summary v1](zeep-restore-summary-v1.md) · [Respiratory Wellness v1.1](zeep-respiratory-wellness-v1.md) · [Historical Promotion Policy v2](sleep-history-promotion-policy-v2.md)
+> **Related:** [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.8.md) · [ZEEP Restore Summary v1](zeep-restore-summary-v1.md) · [Resting Heart & Breathing Wellness v1.2](zeep-respiratory-wellness-v1.md) · [Historical Promotion Policy v2](sleep-history-promotion-policy-v2.md)
 
 ## TL;DR
 
@@ -13,6 +13,7 @@
 - Sleep-onset Guard คง W อย่างน้อย 5 นาทีแรก; หลังจากนั้น N1 ต้องมีเตียงนิ่ง ไม่มี vital rise และ HR/RR แสดงการลดลงหรือ plateau ที่ต่ำกว่าช่วงตั้งต้นอย่างสอดคล้องกัน เวลาเพียงอย่างเดียวสร้าง N1 ไม่ได้
 - หลักฐานทั้ง 5 State ถูกปรับให้อยู่บนงบ 0..1 เท่ากัน; หากผู้ชนะ <45% หรือห่างอันดับสอง <8% ระบบจะไม่เปิด State ใหม่ แต่คง State ที่ยืนยันก่อนหน้าอย่างต่อเนื่องจนกว่าผู้ท้าชิงจะผ่าน Gate; N3 ใช้เกณฑ์เดียวกันหลังผ่าน waveform/movement/CV/regularity/relative-drop gate
 - พฤติกรรมย้อนหลังเรียนรู้แยกตามบัญชีและ Rest Mode: `best_rest_window` เริ่มแสดงใน visit 2 จาก completed Session ก่อนหน้า 1 ครั้งที่ Mode/target เดียวกัน ส่วน aggregate baseline เช่น latency, ระยะเวลา และสิ่งแวดล้อมที่มักพบเริ่มเป็น provisional/internal เมื่อมี 3 Session; หน้าผู้ใช้เริ่มเปรียบเทียบ Personal Baseline เมื่อมีอย่างน้อย 7 Session; ทั้งสองเป็น observation/context ไม่ใช่ preference หรือเหตุและผล ไม่มีผลต่อ Score/Sleep State/automatic control และใช้ข้อมูลอดีตแบบ forward-only ตั้งแต่ 1 ก.ย. 2569
+- ข้อยกเว้นเฉพาะการ์ดชีพจรและการหายใจขณะพัก: เริ่มสร้างข้อมูลอ้างอิงส่วนบุคคลเมื่อมี prior Session โหมดเดียวกันที่ HR/RR ผ่านพร้อมกัน 3 ครั้ง; ไม่ลดเกณฑ์ Personal Score comparison 7 ครั้งของส่วนอื่น
 - BCG + Bed Status เป็นหลัก; SPH0645 ช่วยยืนยัน disturbance เมื่อตรงเวลากับ BCG/movement;
   Sensor สิ่งแวดล้อมอธิบายสิ่งรบกวน/ความมั่นใจแต่ไม่สร้าง Sleep State
   และมีผลแบบจำกัด 10 คะแนนในทั้ง Sleep Score/Recovery Score ที่ชั้น Report
@@ -45,11 +46,11 @@
 | Recovery Score formula | `zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10` |
 | Session report | `zeep-session-report-v10.12-minimum-only-score-release` |
 | Restore Summary | `zeep-restore-summary-v1.0` |
-| Respiratory Wellness | `zeep-respiratory-wellness-v1.1` |
+| Respiratory Wellness | `zeep-respiratory-wellness-v1.2-paired-hr-rr` |
 | Restore action bands | `zeep-restore-action-bands-v1.1-observational-copy` |
 | Restore driver policy | `zeep-restore-drivers-v1.0` |
 | Restore Personal Baseline | `zeep-restore-personal-baseline-v1.0` |
-| Personal behaviour baseline | `zeep-personal-behaviour-baseline-v1.3-bounded-partitioned-finite-circular-time` |
+| Personal behaviour baseline | `zeep-personal-behaviour-baseline-v1.4-paired-vitals-three-session-reference` |
 | Personal rest-window baseline | `zeep-personal-rest-window-v1.2-bounded-partitioned-finite` |
 | Restore recommendation | `zeep-restore-recommendation-v1.1-observational-copy` |
 | Product language | `zeep-product-language-v1.1` |
@@ -312,6 +313,10 @@ restart ไม่ถูกใช้สอน Baseline แม้ epoch นั้�
 จำนวน 3–6 Session เป็น provisional baseline สำหรับ Internal/Admin QA เท่านั้น;
 การแสดงผลเปรียบเทียบว่าสูง/ต่ำกว่าช่วงปกติของบุคคลบนหน้าผู้ใช้เริ่มเมื่อมี
 Session ที่เข้าเกณฑ์ใน cohort เดียวกันอย่างน้อย 7 Session
+
+การ์ดชีพจรและการหายใจเป็น contract แยก: ใช้เฉพาะ direct paired HR/RR และ
+เริ่มเปรียบเทียบข้อมูลอ้างอิงส่วนบุคคลที่ 3 Session ก่อนหน้า โดยไม่เปลี่ยน Score
+หรือเกณฑ์ Personal Baseline ของส่วนอื่น
 
 Personal rest-window baseline (`zeep-personal-rest-window-v1.2-bounded-partitioned-finite`) เป็นคนละชั้นกับ
 Physiology Baseline และ aggregate behavior baseline: ระบบเผย `best_rest_window`

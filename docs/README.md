@@ -45,7 +45,7 @@
 | API | [ZEEP API v1](zeep-api-v1.md) | คู่มือ endpoint สำหรับทีมแอป |
 | API schema | [API Schema Reference v1](zeep-api-schema-reference-v1.md) | Field, enum, privacy และ response contract |
 | Sensor interface | [Sensor Interface Contract v1.2](zeep-sensor-interface-contract-v1.2.md) | ESP32/BCG field, validity และ provenance |
-| Respiratory wellness | [Respiratory Wellness v1.1](zeep-respiratory-wellness-v1.md) | การสรุป HR/RR เชิง Wellness |
+| Respiratory wellness | [Respiratory Wellness v1.2](zeep-respiratory-wellness-v1.md) | การสรุป HR/RR เชิง Wellness |
 | Product language | [Product Language Guideline v1](zeep-product-language-guideline-v1.md) | คำสั้น กระชับ เป็นมิตร และไม่วินิจฉัย |
 | Interface map และ UI | [Interface Map & UI Standard v1](zeep-interface-map-and-ui-standard-v1.md) | หน้าที่ทุกหน้า ลำดับข้อมูล Touch/Type/Icon และ viewport QA |
 | Acoustic Intelligence | [หูอัจฉริยะ · DSP Plan](onboarding/smart-ear-dsp-plan.md) | P0.5 Admin level-only/capability contract อยู่ใน runtime; classifier, event และ user result ยังเป็น **ROADMAP/SHADOW** |

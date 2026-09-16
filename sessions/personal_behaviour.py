@@ -7,10 +7,14 @@ import statistics
 from collections.abc import Mapping
 from typing import Any
 
+from sessions.respiratory_policy import (
+    RESPIRATORY_BASELINE_MIN_COMPARISON_SESSIONS,
+)
 from sleep_system_policy import (
     PERSONAL_BASELINE_LEARNING_START_TIMEZONE,
     PERSONAL_REST_WINDOW_BASELINE_VERSION,
     RECOVERY_SCORE_FORMULA_VERSION,
+    RESPIRATORY_WELLNESS_VERSION,
     RESTORE_BASELINE_MIN_COMPARISON_SESSIONS,
     RESTORE_BASELINE_STABLE_SESSIONS,
     SLEEP_SCORE_FORMULA_VERSION,
@@ -87,25 +91,86 @@ def _formula_for(group: str) -> str:
     )
 
 
-def _respiratory_reference(
-    rows: list[Mapping[str, Any]],
-    minimum_sessions: int,
-) -> dict[str, Any]:
-    rates = _numbers(rows, "respiratory_rr_median")
-    regularity = _numbers(rows, "respiratory_regularity_factor")
+def empty_respiratory_reference(status: str = "learning") -> dict[str, Any]:
+    """Return the canonical cold-start contract for paired HR/RR learning."""
     return {
-        "status": "active" if len(rates) >= minimum_sessions else "learning",
-        "sessions_used": len(rates),
-        "minimum_sessions": minimum_sessions,
-        "median_rr_brpm": _median(rates),
-        "typical_range_rr_brpm": _typical_range(rates),
-        "regularity_median": _median(regularity, 3),
+        "status": status,
+        "sessions_used": 0,
+        "minimum_sessions": RESPIRATORY_BASELINE_MIN_COMPARISON_SESSIONS,
+        "median_hr_bpm": None,
+        "typical_range_hr_bpm": None,
+        "median_rr_brpm": None,
+        "typical_range_rr_brpm": None,
+        "regularity_median": None,
         "method": "median_and_interquartile_range",
+        "requires_paired_hr_rr": True,
         "same_mode_only": True,
         "prior_completed_sessions_only": True,
         "direct_stage_influence": False,
         "affects_score": False,
     }
+
+
+def respiratory_session_values(value: Any) -> dict[str, Any]:
+    """Extract one baseline-safe HR/RR observation from a Session report."""
+    source = value if isinstance(value, Mapping) else {}
+    observations = source.get("observations") or {}
+    confidence = source.get("confidence") or {}
+    status = source.get("status") or {}
+    vital = source.get("vital_summary") or {}
+    eligible = bool(
+        isinstance(observations, Mapping)
+        and isinstance(confidence, Mapping)
+        and isinstance(status, Mapping)
+        and isinstance(vital, Mapping)
+        and source.get("version") == RESPIRATORY_WELLNESS_VERSION
+        and vital.get("available") is True
+        and observations.get("paired_hr_rr_evidence_sufficient") is True
+        and confidence.get("level") == "high"
+        and confidence.get("direct_measurements_only") is True
+        and status.get("key") in {"supportive", "observe"}
+    )
+    return {
+        "respiratory_hr_median": (
+            observations.get("median_hr_bpm") if eligible else None
+        ),
+        "respiratory_rr_median": (
+            observations.get("median_paired_rr_brpm") if eligible else None
+        ),
+        "respiratory_regularity_factor": (
+            observations.get("regularity_factor") if eligible else None
+        ),
+    }
+
+
+def _respiratory_reference(
+    rows: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    paired_rows = [
+        row
+        for row in rows
+        if _finite_number(row.get("respiratory_hr_median"))
+        and _finite_number(row.get("respiratory_rr_median"))
+    ]
+    heart_rates = _numbers(paired_rows, "respiratory_hr_median")
+    breathing_rates = _numbers(paired_rows, "respiratory_rr_median")
+    regularity = _numbers(paired_rows, "respiratory_regularity_factor")
+    sessions = len(paired_rows)
+    reference = empty_respiratory_reference()
+    reference.update({
+        "status": (
+            "active"
+            if sessions >= RESPIRATORY_BASELINE_MIN_COMPARISON_SESSIONS
+            else "learning"
+        ),
+        "sessions_used": sessions,
+        "median_hr_bpm": _median(heart_rates),
+        "typical_range_hr_bpm": _typical_range(heart_rates),
+        "median_rr_brpm": _median(breathing_rates),
+        "typical_range_rr_brpm": _typical_range(breathing_rates),
+        "regularity_median": _median(regularity, 3),
+    })
+    return reference
 
 
 def empty_best_rest_window(
@@ -289,10 +354,9 @@ def _cohort(
         "typical_environment": {
             key: _median(_numbers(reference_rows, key)) for key in ENVIRONMENT_KEYS
         },
-        "respiratory_reference": _respiratory_reference(
-            reference_rows,
-            score_minimum_sessions,
-        ),
+        # Paired HR/RR has its own evidence gate. A low-confidence score must
+        # not hide otherwise valid vital evidence from this reference.
+        "respiratory_reference": _respiratory_reference(rows),
         "best_rest_window": _best_rest_window(
             rows,
             group=group,

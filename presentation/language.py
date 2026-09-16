@@ -74,7 +74,7 @@ RESPIRATORY_AGE_GUIDANCE = {
 }
 
 RESPIRATORY_STATUS_LABELS = {
-    "insufficient": "กำลังเรียนรู้รูปแบบของคุณ",
+    "insufficient": "ข้อมูลครั้งนี้ยังไม่เพียงพอ",
     "needs_recheck": "แนะนำให้เช็กอีกครั้ง",
     "supportive": "จังหวะการหายใจค่อนข้างสม่ำเสมอ",
     "observe": "มีการเปลี่ยนแปลงบางช่วง",
@@ -90,13 +90,16 @@ RESPIRATORY_RECOMMENDATIONS = {
     "supportive": "รักษารูปแบบการพักที่สบายนี้ไว้",
     "observe": "ติดตามอีก 2–3 ครั้งร่วมกับความรู้สึกหลังพัก",
     "needs_recheck": "ลองติดตามอีกครั้งขณะพักนิ่ง หากรู้สึกไม่สบายให้ปรึกษาผู้เชี่ยวชาญ",
-    "insufficient": "พักตามปกติ เพื่อให้ ZEEP เรียนรู้เพิ่ม",
+    "insufficient": (
+        "ครั้งถัดไปลองพักให้นิ่งและจัดท่านอนให้สบาย "
+        "เพื่อให้เซนเซอร์เก็บข้อมูลได้ต่อเนื่องขึ้น"
+    ),
 }
 
 PAIRED_VITAL_STATUS_LABELS = {
     "available": "พร้อมดูแนวโน้ม",
     "needs_recheck": "แนะนำให้เช็กอีกครั้ง",
-    "insufficient": "กำลังรวบรวมข้อมูล",
+    "insufficient": "ข้อมูลครั้งนี้ยังไม่เพียงพอ",
 }
 
 USER_ENVIRONMENT_METRIC_LABELS = {
@@ -252,13 +255,20 @@ def user_respiratory_baseline_copy(
     status_key: Any,
     *,
     available: bool,
+    reference_ready: bool = False,
 ) -> tuple[str | None, str | None]:
     """Return canonical Baseline wording from a stable comparison key."""
     key = str(status_key or "").strip().casefold()
     if available and key in RESPIRATORY_BASELINE_LABELS:
         return RESPIRATORY_BASELINE_LABELS[key], None
+    if reference_ready:
+        return None, (
+            "ข้อมูลอ้างอิงส่วนบุคคลพร้อมแล้ว "
+            "แต่ข้อมูลครั้งนี้ยังไม่เพียงพอสำหรับเปรียบเทียบ"
+        )
     return None, (
-        "กำลังเรียนรู้รูปแบบของคุณ เมื่อมีข้อมูลการพักรูปแบบนี้จากหลายครั้ง ZEEP จะเปรียบเทียบแนวโน้มได้ชัดขึ้น"
+        "กำลังเก็บข้อมูลอ้างอิงส่วนบุคคลจากชีพจรและการหายใจ "
+        "เมื่อครบ 3 ครั้งในรูปแบบการพักเดียวกัน ZEEP จะเริ่มเปรียบเทียบแนวโน้มให้"
     )
 
 
@@ -281,12 +291,24 @@ def user_respiratory_interpretation(
         and 4.0 <= respiration_rate <= 60.0
     )
     if key == "insufficient" or not paired_values_available:
-        return "ข้อมูลชีพจรและการหายใจยังไม่พอสรุป"
+        return (
+            "ครั้งนี้ช่วงที่วัดชีพจรและการหายใจพร้อมกันยังไม่ต่อเนื่องพอ "
+            "จึงยังสรุปแนวโน้มไม่ได้"
+        )
     if key == "needs_recheck":
-        return "รูปแบบการหายใจต่างจากช่วงอ้างอิง ลองติดตามอีกครั้ง"
+        return (
+            "บันทึกชีพจรและการหายใจได้ แต่รูปแบบการหายใจต่างจากช่วงอ้างอิง "
+            "แนะนำให้ติดตามอีกครั้ง"
+        )
     if key == "supportive":
-        return "จังหวะหายใจค่อนข้างสม่ำเสมอระหว่างพัก"
-    return "จังหวะหายใจเปลี่ยนแปลงบางช่วง"
+        return (
+            "บันทึกชีพจรและการหายใจได้ต่อเนื่อง "
+            "โดยจังหวะหายใจค่อนข้างสม่ำเสมอระหว่างพัก"
+        )
+    return (
+        "บันทึกชีพจรและการหายใจได้ต่อเนื่อง "
+        "โดยจังหวะหายใจเปลี่ยนแปลงบางช่วง"
+    )
 
 
 def user_paired_vital_status(

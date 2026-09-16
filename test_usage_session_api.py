@@ -1016,7 +1016,10 @@ class UsageSessionApiTests(unittest.TestCase):
         self.assertFalse(data["vital_signals"]["available"])
         self.assertEqual(
             data["vital_signals"]["summary"],
-            "ข้อมูลชีพจรและการหายใจยังไม่พอสรุป",
+            (
+                "ครั้งนี้ช่วงที่วัดชีพจรและการหายใจพร้อมกันยังไม่ต่อเนื่องพอ "
+                "จึงยังสรุปแนวโน้มไม่ได้"
+            ),
         )
 
     def test_zero_duration_sleep_stages_are_not_marked_available(self) -> None:

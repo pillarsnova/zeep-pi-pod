@@ -98,7 +98,7 @@ Overnight ใช้ cohort `overnight_7h`; Nap แยก `nap_30` และ `nap
 “ค่าที่ผู้ใช้ชอบ” จนกว่าจะมีการเลือกหรือ feedback ยืนยัน
 
 Personal comparison เปิดใช้ต่อเมื่อ provenance ตรงกันครบ 4 จุด: behavior policy
-`zeep-personal-behaviour-baseline-v1.3-bounded-partitioned-finite-circular-time`, mode, target และ
+`zeep-personal-behaviour-baseline-v1.4-paired-vitals-three-session-reference`, mode, target และ
 score formula version หากข้อใดไม่ตรง ระบบยังแสดงประวัติจริง แต่ไม่แสดงการเทียบ
 Baseline หรือ trend ข้ามรุ่น
 
@@ -134,6 +134,10 @@ Baseline จะใช้เฉพาะ Session ที่ผ่านเกณ�
 จำนวนที่แสดงในประวัติได้ นี่เป็น QA ที่ตั้งใจไว้ ไม่ใช่ข้อมูลหาย ช่วง 3–6
 Session คือ provisional baseline สำหรับตรวจคุณภาพภายในเท่านั้น; การเปรียบเทียบเชิงบุคคลบน
 หน้าผู้ใช้เริ่มเมื่อมี Session ที่เข้าเกณฑ์ใน cohort เดียวกันอย่างน้อย 7 Session
+
+ข้อยกเว้นเฉพาะข้อมูลอ้างอิง “ชีพจรและการหายใจขณะพัก” ใช้ prior Session
+โหมดเดียวกันที่มี direct paired HR/RR ครบ 3 ครั้ง และไม่เปลี่ยนเกณฑ์คะแนนส่วนตัว
+หรือสถานะ maturity ของข้อมูลประเภทอื่น
 
 Nap 30 และ Nap 90 แสดงจำนวนครั้ง คะแนนล่าสุด ค่าเฉลี่ย/มัธยฐาน แนวโน้ม และ
 Personal Baseline แยกใน `targets` คะแนนรวมระดับ `nap_recovery` จึงจงใจไม่แสดง

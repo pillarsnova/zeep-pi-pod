@@ -61,6 +61,7 @@ def row(
             else environment_reference_eligible
         ),
         "temp_median": 23.0,
+        "respiratory_hr_median": 60.0,
         "respiratory_rr_median": 14.0,
     }
 
@@ -75,6 +76,54 @@ def aggregate(rows: list[dict]) -> dict:
 
 
 class PersonalBehaviourTests(unittest.TestCase):
+    def test_respiratory_reference_activates_after_three_paired_sessions(self):
+        rows = [
+            row(
+                f"paired-{index}",
+                group="sleep",
+                score=80 + index,
+                formula=SLEEP_SCORE_FORMULA_VERSION,
+            )
+            for index in range(3)
+        ]
+
+        reference = aggregate(rows)["sleep"]["respiratory_reference"]
+
+        self.assertEqual(reference["status"], "active")
+        self.assertEqual(reference["sessions_used"], 3)
+        self.assertEqual(reference["minimum_sessions"], 3)
+        self.assertEqual(reference["median_hr_bpm"], 60.0)
+        self.assertEqual(reference["median_rr_brpm"], 14.0)
+        self.assertTrue(reference["requires_paired_hr_rr"])
+
+    def test_respiratory_reference_rejects_rr_without_hr(self):
+        incomplete = row(
+            "rr-only",
+            group="sleep",
+            score=80,
+            formula=SLEEP_SCORE_FORMULA_VERSION,
+        )
+        incomplete["respiratory_hr_median"] = None
+
+        reference = aggregate([incomplete])["sleep"]["respiratory_reference"]
+
+        self.assertEqual(reference["status"], "learning")
+        self.assertEqual(reference["sessions_used"], 0)
+
+    def test_respiration_reference_is_independent_of_score_eligibility(self):
+        vital_only = row(
+            "vital-only",
+            group="sleep",
+            score=40,
+            formula=SLEEP_SCORE_FORMULA_VERSION,
+            baseline_reference_eligible=False,
+        )
+
+        context = aggregate([vital_only])["sleep"]
+
+        self.assertEqual(context["sessions_used"], 0)
+        self.assertEqual(context["respiratory_reference"]["sessions_used"], 1)
+
     def test_cold_start_nap_baseline_keeps_requested_target_identity(self) -> None:
         for key in ("nap_30", "nap_90"):
             with self.subTest(key=key):

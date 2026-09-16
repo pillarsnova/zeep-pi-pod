@@ -250,7 +250,10 @@ def _vital_signals(detail: Mapping[str, Any]) -> dict[str, Any]:
         "summary": (
             str(vital.get("summary") or "ดูแนวโน้มระหว่างพัก")
             if available
-            else "ข้อมูลชีพจรและการหายใจยังไม่พอสรุป"
+            else (
+                "ครั้งนี้ช่วงที่วัดชีพจรและการหายใจพร้อมกันยังไม่ต่อเนื่องพอ "
+                "จึงยังสรุปแนวโน้มไม่ได้"
+            )
         ),
         "wellness_only": True,
     }

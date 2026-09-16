@@ -481,9 +481,12 @@ def sleep_movement_evidence(
     )
     vital_rise = bool(hr_slope >= 2.0 or rr_slope >= 1.2)
     waveform_corroboration = bool(shift_ratio is not None and shift_ratio >= 0.12)
+    # A raw ``Get out of bed`` label is an occupancy candidate, not evidence
+    # that the person is physiologically awake.  The runtime debounces that
+    # signal separately and emits OFF BED when confirmed.  Only corroborated
+    # movement while the person remains on the bed may support Wake here.
     wake_compatible = bool(
-        bed_exit
-        or (sustained_on_bed and vital_rise and waveform_corroboration)
+        sustained_on_bed and vital_rise and waveform_corroboration
     )
     if bed_exit:
         category = "bed_exit"
@@ -502,7 +505,6 @@ def sleep_movement_evidence(
     # sustained on-bed movement window can reduce stage confidence, but cannot
     # declare Wake without physiological corroboration.
     wake_score_support = (
-        2.0 if bed_exit else
         1.6 if wake_compatible else
         0.35 if sustained_on_bed else
         0.0
@@ -578,8 +580,6 @@ def arousal_proxy_evidence(
         evidence.append("bcg_amplitude_shift")
     if movement["wake_compatible"] and movement["category"] != "bed_exit":
         evidence.append("wake_compatible_motion")
-    if movement["category"] == "bed_exit":
-        evidence.append("bed_exit")
     return {
         "present": bool(evidence),
         "evidence": evidence,

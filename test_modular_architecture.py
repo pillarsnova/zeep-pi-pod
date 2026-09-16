@@ -16,13 +16,18 @@ MAX_BCG_READER_FACADE_LINES = 31
 MAX_SENSOR_FRAME_SAMPLER_FACADE_LINES = 27
 MAX_FINALIZATION_COMMIT_FACADE_LINES = 19
 LEGACY_FILE_LINE_CAPS = {
+    "access_control.py": 508,
+    "pod_occupancy.py": 387,
+    "reclassify_sleep_history.py": 1_109,
     "sleep_session_report.py": 3_584,
     "sleep_stage_scoring.py": 977,
     "sleep_system_policy.py": 1_885,
     "sleep_signal_features.py": 830,
-    "personal.py": 1_124,
+    "personal.py": 1_117,
 }
 LEGACY_FUNCTION_LINE_CAPS = {
+    "reclassify_sleep_history.py:main": 291,
+    "reclassify_sleep_history.py:rescore_event": 239,
     "app.py:estimate_sleep_state": 940,
     "app.py:_finalize_active_session": 464,
     "sleep_session_report.py:_build_awake_rest_quality": 447,
@@ -93,6 +98,7 @@ class ModularArchitectureTests(unittest.TestCase):
 
     def test_legacy_function_hotspots_cannot_grow(self) -> None:
         oversized: dict[str, int] = {}
+        found: set[str] = set()
         grouped: dict[str, dict[str, int]] = {}
         for key, maximum in LEGACY_FUNCTION_LINE_CAPS.items():
             relative_path, function_name = key.split(":", 1)
@@ -104,10 +110,13 @@ class ModularArchitectureTests(unittest.TestCase):
                     continue
                 if node.name not in limits:
                     continue
+                key = f"{relative_path}:{node.name}"
+                found.add(key)
                 length = int(node.end_lineno or node.lineno) - node.lineno + 1
                 if length > limits[node.name]:
-                    oversized[f"{relative_path}:{node.name}"] = length
+                    oversized[key] = length
         self.assertEqual(oversized, {})
+        self.assertEqual(set(LEGACY_FUNCTION_LINE_CAPS) - found, set())
 
     def test_live_snapshot_composition_cannot_regrow(self) -> None:
         tree = ast.parse((ROOT / "app.py").read_text(encoding="utf-8"))

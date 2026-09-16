@@ -1546,7 +1546,7 @@ def sleep_policy_snapshot() -> dict[str, Any]:
                 "session_owner_change",
                 "session_end",
             ],
-            "confirmed_bed_exit_effect": "OFF display and new Wake cycle",
+            "confirmed_bed_exit_effect": "OFF; reset Wake cycle after confirmed return",
             "evidence_and_confirmed_state_separate": True,
             "safety_supervisor_seconds": 1.0,
         },

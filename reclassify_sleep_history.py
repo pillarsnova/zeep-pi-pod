@@ -6,27 +6,30 @@ every 30 seconds; older Sessions may contain 5- or 10-second decisions. Those
 events retain the rolling-window HR/RR means, variability, movement and any
 time-aligned BCG/audio/bed corroboration available at capture time. Environment
 support remains explanatory metadata and never changes a replayed stage. This
-tool replays the transition policy in timestamp order, creates an online SQLite
-backup, and updates only rounds produced by an older estimator version.
+tool replays the transition policy in timestamp order without mutating the
+SQLite source. Promotion remains a separate guarded workflow.
 
 It intentionally does not invent EEG/EOG/EMG evidence: the resulting W/N1/N2/
 N3/REM labels remain ZEEP Wellness estimates rather than retrospective AASM
-scores.  Run without ``--apply`` first to inspect the change matrix.
+scores. The legacy ``--apply`` flag fails closed; only the separate versioned
+shadow-promotion workflow may write derived results.
 """
 
 from __future__ import annotations
 
 import argparse
-from bisect import bisect_right
-from collections import Counter, deque
-from datetime import datetime, timezone
 import json
 import math
 import os
+from bisect import bisect_right
+from collections import Counter, deque
+from collections.abc import Mapping
+from datetime import datetime, timezone
 from pathlib import Path
-import sqlite3
 from typing import Any, Optional
 
+from database import DatabaseManager
+from personal import BaselineStore
 from sleep_signal_features import (
     HR_SANITY_RANGE_BPM,
     RR_SANITY_RANGE_PER_MIN,
@@ -43,40 +46,56 @@ from sleep_stage_scoring import (
     candidate_from_stage_evidence,
     fuse_hr_rr_fit_with_stage_probabilities,
     score_sleep_evidence,
-    softmax_stage_evidence,
     smooth_stage_probabilities,
+    softmax_stage_evidence,
 )
 from sleep_system_policy import (
+    PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED,
     SLEEP_ALLOWED_TRANSITIONS,
-    SLEEP_CONFIRMATION_SECONDS,
     SLEEP_CONFIRM_EPOCHS,
+    SLEEP_CONFIRMATION_SECONDS,
+    SLEEP_DISPLAY_WINNER_MARGIN,
+    SLEEP_ESTIMATOR_VERSION,
     SLEEP_HISTORY_BACKFILL_VERSION,
     SLEEP_HR_RR_FIT_FUSION_AGREEMENT_WEIGHT,
     SLEEP_HR_RR_FIT_FUSION_WEIGHT,
-    PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED,
-    SLEEP_DISPLAY_WINNER_MARGIN,
-    SLEEP_PROBABILITY_EMA_ALPHA,
-    SLEEP_PROBABILITY_SWITCH_MARGIN,
-    SLEEP_SCORE_SOFTMAX_TEMPERATURE,
     SLEEP_ONSET_INITIAL_WAKE_SUPPORT,
     SLEEP_ONSET_MAX_HR_RISE_BPM_PER_MIN,
     SLEEP_ONSET_MAX_MOVEMENT_RATIO,
     SLEEP_ONSET_MAX_RR_RISE_PER_MIN,
     SLEEP_ONSET_MIN_DOWNWARD_TRANSITION,
     SLEEP_ONSET_MIN_OBSERVATION_SECONDS,
+    SLEEP_PROBABILITY_EMA_ALPHA,
+    SLEEP_PROBABILITY_SWITCH_MARGIN,
     SLEEP_PROHIBITED_TRANSITIONS,
+    SLEEP_SCORE_SOFTMAX_TEMPERATURE,
     SLEEP_STAGE_CONFIRM_TICKS,
     SLEEP_STAGE_CONFIRMATION_SECONDS,
     SLEEP_STAGE_MIN_DWELL_SECONDS,
     ZEEP_SLEEP_STATES,
     ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
+    age_group,
     continuity_hold_contract,
+    gender_adjusted_baseline,
+)
+from zeep_pod.sessions.historical_replay_audit import (
+    audit_replayed_sequence,
+    count_states,
+)
+from zeep_pod.sessions.historical_replay_runtime import (
+    HistoricalReplayRuntime,
+)
+from zeep_pod.sessions.historical_replay_storage import (
+    load_bcg_packets,
+    load_session_sleep_events,
+)
+from zeep_pod.sessions.sleep_runtime_evidence import (
+    baseline_interval_proximity,
 )
 from zeep_pod.sessions.sleep_transition_state import (
     transition_allowed,
     transition_fallback_state,
 )
-
 
 MAINTENANCE_TOOL_NAME = "reclassify_sleep_history.py"
 BACKFILL_VERSION = SLEEP_HISTORY_BACKFILL_VERSION
@@ -89,7 +108,7 @@ def parse_timestamp(value: str) -> float:
 
 
 def decision_interval_seconds(
-    parsed: list[tuple[sqlite3.Row, dict[str, Any]]],
+    parsed: list[tuple[Mapping[str, Any], dict[str, Any]]],
     fallback: float = 5.0,
 ) -> float:
     """Recover each Session's versioned decision cadence without rewriting it."""
@@ -119,7 +138,11 @@ def decision_interval_seconds(
 class RawBcgWindow:
     """Rebuild versioned decision windows from persisted raw BCG packets."""
 
-    def __init__(self, packets: list[sqlite3.Row], sample_seconds: float = 5.0) -> None:
+    def __init__(
+        self,
+        packets: list[Mapping[str, Any]],
+        sample_seconds: float = 5.0,
+    ) -> None:
         self.sample_seconds = sample_seconds
         ordered = sorted(packets, key=lambda row: row["timestamp"])
         self.packets = ordered
@@ -151,7 +174,12 @@ class RawBcgWindow:
             return None
         start = parse_timestamp(start_raw)
         end = parse_timestamp(end_raw)
-        requested = max(1, int(value.get("sample_count") or round((end - start) / self.sample_seconds)))
+        requested = max(
+            1,
+            int(
+                value.get("sample_count") or round((end - start) / self.sample_seconds)
+            ),
+        )
         bucket_hrs: list[float] = []
         bucket_rrs: list[float] = []
         bucket_statuses: list[int] = []
@@ -178,23 +206,31 @@ class RawBcgWindow:
             for packet_samples in self.packet_samples[left:right]:
                 raw_samples.extend(packet_samples)
             packets_used += len(rows)
-            raw_hrs = [row["heart_rate"] for row in rows if row["heart_rate"] is not None]
-            raw_rrs = [row["respiration_rate"] for row in rows
-                       if row["respiration_rate"] is not None]
+            raw_hrs = [
+                row["heart_rate"] for row in rows if row["heart_rate"] is not None
+            ]
+            raw_rrs = [
+                row["respiration_rate"]
+                for row in rows
+                if row["respiration_rate"] is not None
+            ]
             hrs = filter_vital_values(raw_hrs, HR_SANITY_RANGE_BPM)
             rrs = filter_vital_values(raw_rrs, RR_SANITY_RANGE_PER_MIN)
             paired_vitals = [
-                row for row in rows
-                if filter_vital_values(
-                    [row["heart_rate"]], HR_SANITY_RANGE_BPM
-                )
+                row
+                for row in rows
+                if filter_vital_values([row["heart_rate"]], HR_SANITY_RANGE_BPM)
                 and filter_vital_values(
                     [row["respiration_rate"]], RR_SANITY_RANGE_PER_MIN
                 )
             ]
             invalid_hr_packets += len(raw_hrs) - len(hrs)
             invalid_rr_packets += len(raw_rrs) - len(rrs)
-            statuses = [int(row["status_code"]) for row in rows if row["status_code"] is not None]
+            statuses = [
+                int(row["status_code"])
+                for row in rows
+                if row["status_code"] is not None
+            ]
             latest_raw_exit_frames = sum(status == 1 for status in statuses)
             latest_raw_total_frames = len(statuses)
             hr = self._mean(hrs)
@@ -229,8 +265,12 @@ class RawBcgWindow:
             return None
         mean_hr = self._mean(bucket_hrs) or 0.0
         mean_rr = self._mean(bucket_rrs) or 0.0
-        hr_sd = math.sqrt(sum((item - mean_hr) ** 2 for item in bucket_hrs) / len(bucket_hrs))
-        rr_sd = math.sqrt(sum((item - mean_rr) ** 2 for item in bucket_rrs) / len(bucket_rrs))
+        hr_sd = math.sqrt(
+            sum((item - mean_hr) ** 2 for item in bucket_hrs) / len(bucket_hrs)
+        )
+        rr_sd = math.sqrt(
+            sum((item - mean_rr) ** 2 for item in bucket_rrs) / len(bucket_rrs)
+        )
         trends = summary_features(bucket_hrs, bucket_rrs, self.sample_seconds)
         signal = waveform_features(raw_samples)
         return {
@@ -242,8 +282,10 @@ class RawBcgWindow:
             "max_moving_run_frames": movement_window["max_moving_run_frames"],
             "movement_burst_count": movement_window["movement_burst_count"],
             "bed_status": (
-                "Moving" if bucket_statuses and bucket_statuses[-1] == 2
-                else "Get out of bed" if bed_exit["confirmed"]
+                "Moving"
+                if bucket_statuses and bucket_statuses[-1] == 2
+                else "Get out of bed"
+                if bed_exit["confirmed"]
                 else "On bed"
             ),
             "bed_exit_evidence": bed_exit,
@@ -323,9 +365,7 @@ class HistoricalStagePath:
             meta = {
                 "raw_candidate": candidate,
                 "bridge_state": None,
-                "blocked_candidate": (
-                    candidate if candidate != "wake" else None
-                ),
+                "blocked_candidate": (candidate if candidate != "wake" else None),
                 "transition_allowed": candidate == "wake",
                 "previous_state": None,
                 "strong_wake_override": strong_wake,
@@ -337,11 +377,13 @@ class HistoricalStagePath:
                 "confirmation_seconds": 0.0,
                 "confirmation_complete": True,
             }
-            meta.update(continuity_hold_contract(
-                None,
-                candidate=candidate,
-                decision="initial_awake_anchor",
-            ))
+            meta.update(
+                continuity_hold_contract(
+                    None,
+                    candidate=candidate,
+                    decision="initial_awake_anchor",
+                )
+            )
             return "wake", meta
         allowed = self._allowed(candidate, strong_wake)
         target = candidate if allowed else self._fallback(candidate)
@@ -358,94 +400,114 @@ class HistoricalStagePath:
             self.candidate = None
             self.candidate_ticks = 0
             self.continuity_hold_ticks += 1
-            meta.update({
-                "required_ticks": 0,
-                "candidate_ticks": 0,
-                "candidate_epochs": 0,
-                "required_epochs": 0,
-                "confirmation_seconds": SLEEP_STAGE_CONFIRMATION_SECONDS.get(
-                    target, SLEEP_CONFIRMATION_SECONDS),
-                "confirmation_complete": False,
-            })
-            meta.update(continuity_hold_contract(
-                self.last,
-                candidate=candidate,
-                decision=(
-                    "ambiguous_evidence_hold"
-                    if candidate is None
-                    else "blocked_transition_hold"
-                ),
-                hold_epochs=self.continuity_hold_ticks,
-            ))
+            meta.update(
+                {
+                    "required_ticks": 0,
+                    "candidate_ticks": 0,
+                    "candidate_epochs": 0,
+                    "required_epochs": 0,
+                    "confirmation_seconds": SLEEP_STAGE_CONFIRMATION_SECONDS.get(
+                        target, SLEEP_CONFIRMATION_SECONDS
+                    ),
+                    "confirmation_complete": False,
+                }
+            )
+            meta.update(
+                continuity_hold_contract(
+                    self.last,
+                    candidate=candidate,
+                    decision=(
+                        "ambiguous_evidence_hold"
+                        if candidate is None
+                        else "blocked_transition_hold"
+                    ),
+                    hold_epochs=self.continuity_hold_ticks,
+                )
+            )
             return (self.last or "wake"), meta
         if target == self.last:
             self.candidate = None
             self.candidate_ticks = 0
             self.continuity_hold_ticks = 0
-            meta.update({
-                "required_ticks": SLEEP_CONFIRM_EPOCHS,
-                "candidate_ticks": SLEEP_CONFIRM_EPOCHS,
-                "candidate_epochs": SLEEP_CONFIRM_EPOCHS,
-                "required_epochs": SLEEP_CONFIRM_EPOCHS,
-                "confirmation_seconds": SLEEP_STAGE_CONFIRMATION_SECONDS.get(
-                    self.last, SLEEP_CONFIRMATION_SECONDS),
-                "held": False,
-                "confirmation_complete": True,
-                "confirmed_state": self.last,
-                "held_previous_state": False,
-                "provisional": False,
-                "decision": "hold_confirmed",
-                "decision_kind": "confirmed_state",
-                "score_eligible": True,
-                "excluded_from_score": False,
-                "excluded_from_personal_baseline": False,
-            })
+            meta.update(
+                {
+                    "required_ticks": SLEEP_CONFIRM_EPOCHS,
+                    "candidate_ticks": SLEEP_CONFIRM_EPOCHS,
+                    "candidate_epochs": SLEEP_CONFIRM_EPOCHS,
+                    "required_epochs": SLEEP_CONFIRM_EPOCHS,
+                    "confirmation_seconds": SLEEP_STAGE_CONFIRMATION_SECONDS.get(
+                        self.last, SLEEP_CONFIRMATION_SECONDS
+                    ),
+                    "held": False,
+                    "confirmation_complete": True,
+                    "confirmed_state": self.last,
+                    "held_previous_state": False,
+                    "provisional": False,
+                    "decision": "hold_confirmed",
+                    "decision_kind": "confirmed_state",
+                    "score_eligible": True,
+                    "excluded_from_score": False,
+                    "excluded_from_personal_baseline": False,
+                }
+            )
             return self.last, meta
 
-        dwell = max(0.0, now - self.stage_since) if self.stage_since is not None else 0.0
+        dwell = (
+            max(0.0, now - self.stage_since) if self.stage_since is not None else 0.0
+        )
         if self.candidate == target:
             self.candidate_ticks += 1
         else:
             self.candidate = target
             self.candidate_ticks = 1
         required = self.confirm_ticks.get(target, 2)
-        held = dwell < self.minimum_dwell.get(self.last, 0.0) or self.candidate_ticks < required
+        held = (
+            dwell < self.minimum_dwell.get(self.last, 0.0)
+            or self.candidate_ticks < required
+        )
         if held:
             self.continuity_hold_ticks += 1
         else:
             self.continuity_hold_ticks = 0
-        meta.update({
-            "required_ticks": required,
-            "candidate_ticks": self.candidate_ticks,
-            "candidate_epochs": self.candidate_ticks,
-            "required_epochs": required,
-            "confirmation_seconds": SLEEP_STAGE_CONFIRMATION_SECONDS.get(
-                target, SLEEP_CONFIRMATION_SECONDS),
-            "dwell_s": round(dwell, 1),
-            "minimum_dwell_s": self.minimum_dwell.get(self.last, 0.0),
-            "held": held,
-            "confirmation_complete": not held,
-            "confirmed_state": self.last if held else target,
-        })
+        meta.update(
+            {
+                "required_ticks": required,
+                "candidate_ticks": self.candidate_ticks,
+                "candidate_epochs": self.candidate_ticks,
+                "required_epochs": required,
+                "confirmation_seconds": SLEEP_STAGE_CONFIRMATION_SECONDS.get(
+                    target, SLEEP_CONFIRMATION_SECONDS
+                ),
+                "dwell_s": round(dwell, 1),
+                "minimum_dwell_s": self.minimum_dwell.get(self.last, 0.0),
+                "held": held,
+                "confirmation_complete": not held,
+                "confirmed_state": self.last if held else target,
+            }
+        )
         if held:
-            meta.update(continuity_hold_contract(
-                self.last,
-                candidate=target,
-                decision="confirming",
-                hold_epochs=self.continuity_hold_ticks,
-            ))
+            meta.update(
+                continuity_hold_contract(
+                    self.last,
+                    candidate=target,
+                    decision="confirming",
+                    hold_epochs=self.continuity_hold_ticks,
+                )
+            )
         else:
-            meta.update({
-                "held_previous_state": False,
-                "provisional": False,
-                "decision": "confirmed",
-                "decision_kind": "confirmed_state",
-                "score_attribution_state": target,
-                "challenger_counted_as_new_state": True,
-                "score_eligible": True,
-                "excluded_from_score": False,
-                "excluded_from_personal_baseline": False,
-            })
+            meta.update(
+                {
+                    "held_previous_state": False,
+                    "provisional": False,
+                    "decision": "confirmed",
+                    "decision_kind": "confirmed_state",
+                    "score_attribution_state": target,
+                    "challenger_counted_as_new_state": True,
+                    "score_eligible": True,
+                    "excluded_from_score": False,
+                    "excluded_from_personal_baseline": False,
+                }
+            )
         return (self.last if held else target), meta
 
     def commit(self, stage: str, now: float) -> tuple[bool, list[str]]:
@@ -467,9 +529,12 @@ class HistoricalStagePath:
 
 def adjusted_probabilities(raw: dict[str, float], selected: str) -> dict[str, float]:
     result = align_probabilities_to_emitted_stage(
-        raw, selected, winner_margin=SLEEP_DISPLAY_WINNER_MARGIN)
+        raw, selected, winner_margin=SLEEP_DISPLAY_WINNER_MARGIN
+    )
     rounded = {key: round(value, 4) for key, value in result.items()}
-    rounded[selected] = round(rounded[selected] + round(1.0 - sum(rounded.values()), 4), 4)
+    rounded[selected] = round(
+        rounded[selected] + round(1.0 - sum(rounded.values()), 4), 4
+    )
     return rounded
 
 
@@ -482,16 +547,13 @@ def rescore_event(
     cv_deep_threshold: float,
     cv_rem_threshold: float,
     path: HistoricalStagePath,
-    zeep: Any,
+    runtime: HistoricalReplayRuntime,
     reclassified_at: str,
 ) -> dict[str, Any]:
     metrics = dict(value.get("metrics") or {})
     mean_hr = float(metrics["mean_hr"])
     mean_rr = float(metrics["mean_rr"])
-    hr_cv = float(metrics.get("hr_cv") or 0.0)
-    rr_cv = float(metrics.get("rr_cv") or 0.0)
     movement = float(metrics.get("movement_ratio") or 0.0)
-    bed_status = str(metrics.get("bed_status") or "")
     now = parse_timestamp(event_timestamp)
     elapsed_min = max(0.0, (now - session_start) / 60.0)
 
@@ -499,9 +561,9 @@ def rescore_event(
     hr_fits: dict[str, float] = {}
     rr_fits: dict[str, float] = {}
     for stage in STAGES:
-        hr_fit, _ = zeep._baseline_interval_proximity(mean_hr, baseline[stage]["hr"])
-        rr_fit, _ = zeep._baseline_interval_proximity(mean_rr, baseline[stage]["rr"])
-        base_scores[stage] = zeep._physiological_baseline_fit(hr_fit, rr_fit)
+        hr_fit, _ = baseline_interval_proximity(mean_hr, baseline[stage]["hr"])
+        rr_fit, _ = baseline_interval_proximity(mean_rr, baseline[stage]["rr"])
+        base_scores[stage] = runtime.physiological_baseline_fit(hr_fit, rr_fit)
         hr_fits[stage] = hr_fit
         rr_fits[stage] = rr_fit
     scores, evidence = score_sleep_evidence(
@@ -511,10 +573,10 @@ def rescore_event(
         metrics=metrics,
         elapsed_min=elapsed_min,
         rem_variability_weight=rem_variability_weight,
-        n3_rr_conflict_penalty=zeep.SLEEP_N3_RR_CONFLICT_PENALTY,
-        n2_rr_conflict_support=zeep.SLEEP_N2_RR_CONFLICT_SUPPORT,
-        move_wake_ratio=zeep.SLEEP_MOVE_WAKE_RATIO,
-        move_deep_ratio=zeep.SLEEP_MOVE_DEEP_RATIO,
+        n3_rr_conflict_penalty=runtime.n3_rr_conflict_penalty,
+        n2_rr_conflict_support=runtime.n2_rr_conflict_support,
+        move_wake_ratio=runtime.move_wake_ratio,
+        move_deep_ratio=runtime.move_deep_ratio,
         onset_min_observation_minutes=SLEEP_ONSET_MIN_OBSERVATION_SECONDS / 60.0,
         onset_max_movement_ratio=SLEEP_ONSET_MAX_MOVEMENT_RATIO,
         onset_min_downward_transition=SLEEP_ONSET_MIN_DOWNWARD_TRANSITION,
@@ -558,20 +620,15 @@ def rescore_event(
         path.last,
         switch_margin=SLEEP_PROBABILITY_SWITCH_MARGIN,
         n3_gate=bool(evidence["n3_gate"]),
-        sleep_onset_gate_passed=bool(
-            evidence["sleep_onset_gate"]["passed"]
-        ),
+        sleep_onset_gate_passed=bool(evidence["sleep_onset_gate"]["passed"]),
         eligible_states=eligible_states,
     )
     strong_wake = bool(
         instant_candidate == "wake" and evidence["movement"]["strong_wake"]
     )
-    if bed_status == "Get out of bed":
-        candidate = "wake"
-        strong_wake = True
-        raw = {"wake": 0.99, "n1": 0.01, "n2": 0.0, "n3": 0.0, "rem": 0.0}
-        path.probability_ema = dict(raw)
-    elif strong_wake:
+    # Confirmed exits are resolved by the replay occupancy path as OFF BED.
+    # A raw ``Get out of bed`` label must not manufacture a Wake epoch.
+    if strong_wake:
         candidate = "wake"
 
     selected, transition = path.stabilize(candidate, now, strong_wake)
@@ -581,12 +638,9 @@ def rescore_event(
     probabilities = {
         key: round(value, 4) for key, value in path.probability_ema.items()
     }
-    probability_winner = (
-        candidate if candidate in STAGES else instant_candidate
-    )
+    probability_winner = candidate if candidate in STAGES else instant_candidate
     probabilities[probability_winner] = round(
-        probabilities[probability_winner]
-        + round(1.0 - sum(probabilities.values()), 4),
+        probabilities[probability_winner] + round(1.0 - sum(probabilities.values()), 4),
         4,
     )
     held_previous_state = bool(transition.get("held_previous_state"))
@@ -599,7 +653,11 @@ def rescore_event(
     changed, progression = path.commit(selected, now)
     winner = probabilities[probability_winner]
     confidence = "high" if winner >= 0.72 else "medium" if winner >= 0.48 else "low"
-    if transition.get("bridge_state") or transition.get("held") or int(value.get("sample_count") or 0) < 6:
+    if (
+        transition.get("bridge_state")
+        or transition.get("held")
+        or int(value.get("sample_count") or 0) < 6
+    ):
         confidence = "low"
     if metrics.get("bcg_baseline_drift_flag"):
         confidence = "low"
@@ -608,316 +666,127 @@ def rescore_event(
     old_version = value.get("estimator_version")
     reason = (
         f"Historical replay · HR เฉลี่ย {mean_hr:.1f} · RR เฉลี่ย {mean_rr:.1f} · "
-        f"movement {movement*100:.0f}%"
+        f"movement {movement * 100:.0f}%"
     )
     if evidence["n3_rr_conflict"] >= 0.05:
-        reason += f" · RR ใกล้ N2 มากกว่า N3 {evidence['n3_rr_conflict']*100:.0f}%"
+        reason += f" · RR ใกล้ N2 มากกว่า N3 {evidence['n3_rr_conflict'] * 100:.0f}%"
     if selected == "rem" and not evidence["rem_gate"]:
         reason += " · REM evidence gate ไม่ผ่าน"
     if evidence["movement"]["sleep_compatible"] and movement > 0:
         reason += " · การขยับบนเตียงไม่ยืนยัน Wake โดยลำพัง"
-    arousal_proxy = arousal_proxy_evidence(metrics, zeep.SLEEP_MOVE_WAKE_RATIO)
+    arousal_proxy = arousal_proxy_evidence(metrics, runtime.move_wake_ratio)
 
     updated = dict(value)
-    updated.update({
-        "state": selected,
-        "probabilities": probabilities,
-        "evidence_probabilities": probabilities,
-        "confirmed_probabilities": confirmed_probabilities,
-        "confirmed_state": selected,
-        "raw_probabilities": {key: round(item, 4) for key, item in raw.items()},
-        "pre_fusion_probabilities": {
-            key: round(item, 4)
-            for key, item in stage_evidence_probabilities.items()
-        },
-        "smoothed_probabilities": {
-            key: round(item, 4) for key, item in path.probability_ema.items()
-        },
-        "instant_candidate": instant_candidate,
-        "raw_candidate": candidate,
-        "probability_winner": probability_winner,
-        "probability_filter": {
-            "method": "ema_after_60s_rolling_features",
-            "alpha": SLEEP_PROBABILITY_EMA_ALPHA,
-            "candidate_switch_margin": SLEEP_PROBABILITY_SWITCH_MARGIN,
-            "candidate_source": "ema_with_gated_n3_current_evidence_override",
-            "ema_role": "default_candidate_stability_and_display",
-            "display_winner_margin": SLEEP_DISPLAY_WINNER_MARGIN,
-            **probability_transition,
-        },
-        "confidence": confidence,
-        "evidence": {
-            "candidate": candidate,
+    updated.update(
+        {
+            "state": selected,
             "probabilities": probabilities,
-            "epoch_seconds": 30.0,
-        },
-        "confirmation": {
+            "evidence_probabilities": probabilities,
+            "confirmed_probabilities": confirmed_probabilities,
             "confirmed_state": selected,
-            "pending_state": (
-                transition.get("pending_state")
-                if transition.get("held") else None
-            ),
-            "candidate_epochs": transition.get("candidate_epochs", 0),
-            "required_epochs": transition.get("required_epochs", SLEEP_CONFIRM_EPOCHS),
-            "required_seconds": float(
-                transition.get("confirmation_seconds")
-                or SLEEP_CONFIRMATION_SECONDS
-            ),
-            "complete": bool(transition.get("confirmation_complete")),
-            "decision": transition.get("decision"),
-            "decision_kind": transition.get("decision_kind"),
+            "raw_probabilities": {key: round(item, 4) for key, item in raw.items()},
+            "pre_fusion_probabilities": {
+                key: round(item, 4)
+                for key, item in stage_evidence_probabilities.items()
+            },
+            "smoothed_probabilities": {
+                key: round(item, 4) for key, item in path.probability_ema.items()
+            },
+            "instant_candidate": instant_candidate,
+            "raw_candidate": candidate,
+            "probability_winner": probability_winner,
+            "probability_filter": {
+                "method": "ema_after_60s_rolling_features",
+                "alpha": SLEEP_PROBABILITY_EMA_ALPHA,
+                "candidate_switch_margin": SLEEP_PROBABILITY_SWITCH_MARGIN,
+                "candidate_source": "ema_with_gated_n3_current_evidence_override",
+                "ema_role": "default_candidate_stability_and_display",
+                "display_winner_margin": SLEEP_DISPLAY_WINNER_MARGIN,
+                **probability_transition,
+            },
+            "confidence": confidence,
+            "evidence": {
+                "candidate": candidate,
+                "probabilities": probabilities,
+                "epoch_seconds": 30.0,
+            },
+            "confirmation": {
+                "confirmed_state": selected,
+                "pending_state": (
+                    transition.get("pending_state") if transition.get("held") else None
+                ),
+                "candidate_epochs": transition.get("candidate_epochs", 0),
+                "required_epochs": transition.get(
+                    "required_epochs", SLEEP_CONFIRM_EPOCHS
+                ),
+                "required_seconds": float(
+                    transition.get("confirmation_seconds") or SLEEP_CONFIRMATION_SECONDS
+                ),
+                "complete": bool(transition.get("confirmation_complete")),
+                "decision": transition.get("decision"),
+                "decision_kind": transition.get("decision_kind"),
+                "held_previous_state": held_previous_state,
+                "provisional": bool(transition.get("provisional")),
+                "challenger_counted_as_new_state": bool(
+                    transition.get("challenger_counted_as_new_state")
+                ),
+            },
+            "decision_kind": transition.get("decision_kind", "confirmed_state"),
             "held_previous_state": held_previous_state,
             "provisional": bool(transition.get("provisional")),
+            "pending_state": transition.get("pending_state"),
+            "score_attribution_state": (
+                transition.get("score_attribution_state") or selected
+            ),
             "challenger_counted_as_new_state": bool(
                 transition.get("challenger_counted_as_new_state")
             ),
-        },
-        "decision_kind": transition.get(
-            "decision_kind", "confirmed_state"
-        ),
-        "held_previous_state": held_previous_state,
-        "provisional": bool(transition.get("provisional")),
-        "pending_state": transition.get("pending_state"),
-        "score_attribution_state": (
-            transition.get("score_attribution_state") or selected
-        ),
-        "challenger_counted_as_new_state": bool(
-            transition.get("challenger_counted_as_new_state")
-        ),
-        "score_eligible": bool(
-            transition.get("score_eligible", True)
-        ),
-        "excluded_from_score": bool(
-            transition.get("excluded_from_score", False)
-        ),
-        "excluded_from_personal_baseline": bool(
-            transition.get("excluded_from_personal_baseline", False)
-        ),
-        "reason": reason,
-        "progression": progression,
-        "metrics": {
-            **metrics,
-            "rr_n2_fit": round(rr_fits["n2"], 4),
-            "rr_n3_fit": round(rr_fits["n3"], 4),
-            "rr_n3_conflict": evidence["n3_rr_conflict"],
-            "arousal_proxy": arousal_proxy,
-            "sleep_evidence": evidence,
-        },
-        **zeep._sleep_decision_provenance(),
-        "state_changed": changed,
-        "historical_reclassification": {
-            "version": BACKFILL_VERSION,
-            "reclassified_at": reclassified_at,
-            "source": "raw_bcg_rebuilt_5s_buckets",
-            "original_state": old_state,
-            "original_estimator_version": old_version,
-            "weights": {
-                "hr_baseline": zeep.SLEEP_BASELINE_HR_WEIGHT,
-                "rr_baseline": zeep.SLEEP_BASELINE_RR_WEIGHT,
+            "score_eligible": bool(transition.get("score_eligible", True)),
+            "excluded_from_score": bool(transition.get("excluded_from_score", False)),
+            "excluded_from_personal_baseline": bool(
+                transition.get("excluded_from_personal_baseline", False)
+            ),
+            "reason": reason,
+            "progression": progression,
+            "metrics": {
+                **metrics,
+                "rr_n2_fit": round(rr_fits["n2"], 4),
+                "rr_n3_fit": round(rr_fits["n3"], 4),
+                "rr_n3_conflict": evidence["n3_rr_conflict"],
+                "arousal_proxy": arousal_proxy,
+                "sleep_evidence": evidence,
             },
-            "aasm_psg_equivalent": False,
-        },
-    })
+            **runtime.decision_provenance(),
+            "state_changed": changed,
+            "historical_reclassification": {
+                "version": BACKFILL_VERSION,
+                "reclassified_at": reclassified_at,
+                "source": "raw_bcg_rebuilt_5s_buckets",
+                "original_state": old_state,
+                "original_estimator_version": old_version,
+                "weights": {
+                    "hr_baseline": runtime.baseline_hr_weight,
+                    "rr_baseline": runtime.baseline_rr_weight,
+                },
+                "aasm_psg_equivalent": False,
+            },
+        }
+    )
     return updated
-
-
-def count_states(values: list[dict[str, Any]]) -> dict[str, int]:
-    counts = Counter(value.get("state") for value in values)
-    return {stage: counts.get(stage, 0) for stage in STAGES}
-
-
-def audit_replayed_sequence(
-    events: list[tuple[str, dict[str, Any]]],
-    movement_threshold: float = 0.15,
-) -> dict[str, Any]:
-    """Build the mandatory read-only quality gate for a replay candidate.
-
-    The transition matrix is the emitted state sequence, not the old-to-new
-    reclassification matrix. A sleep-to-Wake transition passes its evidence
-    check when the *same rolling window* contains a BCG amplitude shift,
-    physiology-corroborated sustained movement, or bed exit. Brief position
-    changes are sleep-compatible. Amplitude alone is never called a cortical
-    arousal.
-    """
-    sequence = [
-        (timestamp, str(value.get("state") or "").lower(), value)
-        for timestamp, value in events
-        if str(value.get("state") or "").lower() in STAGES
-    ]
-    matrix = {source: {target: 0 for target in STAGES} for source in STAGES}
-    changes = {source: {target: 0 for target in STAGES} for source in STAGES}
-    prohibited: list[dict[str, Any]] = []
-    sleep_to_wake: list[dict[str, Any]] = []
-    for previous, current in zip(sequence, sequence[1:]):
-        previous_at, source, _ = previous
-        current_at, target, value = current
-        matrix[source][target] += 1
-        if source != target:
-            changes[source][target] += 1
-        if (source, target) in PROHIBITED_TRANSITIONS:
-            prohibited.append({
-                "from": source, "to": target,
-                "from_timestamp": previous_at, "to_timestamp": current_at,
-            })
-        if source in {"n2", "n3"} and target == "wake":
-            metrics = dict(value.get("metrics") or {})
-            proxy = metrics.get("arousal_proxy")
-            if not isinstance(proxy, dict):
-                proxy = arousal_proxy_evidence(metrics, movement_threshold)
-            evidence = list(proxy.get("evidence") or [])
-            sleep_to_wake.append({
-                "from": source,
-                "timestamp": current_at,
-                "amplitude_shift_aligned": "bcg_amplitude_shift" in evidence,
-                "movement_or_bed_exit_aligned": bool(
-                    {"wake_compatible_motion", "bed_exit"}.intersection(evidence)
-                ),
-                "any_same_window_proxy": bool(proxy.get("present")),
-                "evidence": evidence,
-            })
-
-    one_epoch: list[dict[str, Any]] = []
-    two_epoch: list[dict[str, Any]] = []
-    for index in range(len(sequence) - 2):
-        first, middle, last = sequence[index:index + 3]
-        if first[1] == last[1] and first[1] != middle[1]:
-            one_epoch.append({
-                "pattern": f"{first[1]}->{middle[1]}->{last[1]}",
-                "timestamp": middle[0],
-            })
-    for index in range(len(sequence) - 3):
-        first, middle_a, middle_b, last = sequence[index:index + 4]
-        if (first[1] == last[1] and middle_a[1] == middle_b[1]
-                and first[1] != middle_a[1]):
-            two_epoch.append({
-                "pattern": f"{first[1]}->{middle_a[1]}->{middle_b[1]}->{last[1]}",
-                "timestamp": middle_a[0],
-            })
-    n2_rem_one = [item for item in one_epoch
-                  if item["pattern"] in {"n2->rem->n2", "rem->n2->rem"}]
-    n2_rem_two = [item for item in two_epoch
-                  if item["pattern"] in {
-                      "n2->rem->rem->n2", "rem->n2->n2->rem",
-                  }]
-    n3_rem_one = [item for item in one_epoch
-                  if item["pattern"] in {"n3->rem->n3", "rem->n3->rem"}]
-    n3_rem_two = [item for item in two_epoch
-                  if item["pattern"] in {
-                      "n3->rem->rem->n3", "rem->n3->n3->rem",
-                  }]
-
-    edge_counts = Counter()
-    edge_examples: list[dict[str, Any]] = []
-    for timestamp, _, value in sequence:
-        metrics = dict(value.get("metrics") or {})
-        hr_values = filter_vital_values([metrics.get("mean_hr")], HR_SANITY_RANGE_BPM)
-        rr_values = filter_vital_values([metrics.get("mean_rr")], RR_SANITY_RANGE_PER_MIN)
-        issues: list[str] = []
-        if not hr_values:
-            issues.append("invalid_or_missing_mean_hr")
-        if not rr_values:
-            issues.append("invalid_or_missing_mean_rr")
-        for issue in issues:
-            edge_counts[issue] += 1
-        if issues and len(edge_examples) < 10:
-            edge_examples.append({"timestamp": timestamp, "issues": issues})
-        if not metrics.get("waveform_available"):
-            edge_counts["waveform_unavailable"] += 1
-        if metrics.get("bcg_baseline_drift_flag"):
-            edge_counts["bcg_baseline_drift_flag"] += 1
-        edge_counts["invalid_hr_packets"] += int(metrics.get("invalid_hr_packets") or 0)
-        edge_counts["invalid_rr_packets"] += int(metrics.get("invalid_rr_packets") or 0)
-
-    missing_wake_proxy = [item for item in sleep_to_wake
-                          if not item["any_same_window_proxy"]]
-    gate_failures: list[str] = []
-    if not sequence or sequence[0][1] != "wake":
-        gate_failures.append("first_emitted_state_must_be_wake")
-    if prohibited:
-        gate_failures.append("prohibited_state_transition")
-    if n2_rem_one or n2_rem_two or n3_rem_one or n3_rem_two:
-        gate_failures.append("rem_boundary_ping_pong")
-    if missing_wake_proxy:
-        gate_failures.append("sleep_to_wake_without_same_window_proxy")
-    if (edge_counts["invalid_or_missing_mean_hr"]
-            or edge_counts["invalid_or_missing_mean_rr"]):
-        gate_failures.append("invalid_vitals_entered_state_machine")
-
-    amplitude_missing = [item for item in sleep_to_wake
-                         if not item["amplitude_shift_aligned"]]
-    warnings: list[str] = []
-    if amplitude_missing:
-        warnings.append(
-            "Some sleep-to-Wake transitions use movement/bed-exit evidence "
-            "without a BCG amplitude shift; this is allowed because the BCG "
-            "proxy is not an AASM cortical-arousal measurement."
-        )
-    if edge_counts["waveform_unavailable"]:
-        warnings.append("Some rounds lack enough raw waveform; confidence remains low.")
-    if edge_counts["bcg_baseline_drift_flag"]:
-        warnings.append("Some detrended BCG windows carry a baseline-drift quality flag.")
-
-    return {
-        "rounds": len(sequence),
-        "first_state": sequence[0][1] if sequence else None,
-        "state_transition_matrix": matrix,
-        "state_change_matrix": changes,
-        "transition_verification": {
-            "prohibited_count": len(prohibited),
-            "n3_to_rem": changes["n3"]["rem"],
-            "wake_to_n3": changes["wake"]["n3"],
-            "examples": prohibited[:10],
-        },
-        "arousal_proxy_validation": {
-            "sleep_to_wake_count": len(sleep_to_wake),
-            "amplitude_shift_aligned": sum(
-                item["amplitude_shift_aligned"] for item in sleep_to_wake
-            ),
-            "movement_or_bed_exit_aligned": sum(
-                item["movement_or_bed_exit_aligned"] for item in sleep_to_wake
-            ),
-            "any_same_window_proxy": sum(
-                item["any_same_window_proxy"] for item in sleep_to_wake
-            ),
-            "missing_proxy_count": len(missing_wake_proxy),
-            "missing_examples": missing_wake_proxy[:10],
-            "cortical_arousal_claim": False,
-        },
-        "boundary_packet_smoothness": {
-            "all_one_epoch_aba": len(one_epoch),
-            "n3_rem_one_epoch_ping_pong": len(n3_rem_one),
-            "n3_rem_two_epoch_ping_pong": len(n3_rem_two),
-            "all_two_epoch_abba": len(two_epoch),
-            "n2_rem_one_epoch_ping_pong": len(n2_rem_one),
-            "n2_rem_two_epoch_ping_pong": len(n2_rem_two),
-            "examples": (n2_rem_one + n2_rem_two + n3_rem_one + n3_rem_two)[:10],
-        },
-        "edge_case_validation": {
-            "invalid_or_missing_mean_hr": edge_counts["invalid_or_missing_mean_hr"],
-            "invalid_or_missing_mean_rr": edge_counts["invalid_or_missing_mean_rr"],
-            "waveform_unavailable": edge_counts["waveform_unavailable"],
-            "bcg_baseline_drift_flag": edge_counts["bcg_baseline_drift_flag"],
-            "invalid_hr_packets": edge_counts["invalid_hr_packets"],
-            "invalid_rr_packets": edge_counts["invalid_rr_packets"],
-            **dict(edge_counts),
-            "examples": edge_examples,
-            "invalid_stage_label": "held_previous_five_state_with_data_status",
-        },
-        "warnings": warnings,
-        "apply_gate": {
-            "passed": not gate_failures,
-            "failures": gate_failures,
-        },
-    }
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument("--session-id", help="Default: newest open session")
-    parser.add_argument("--apply", action="store_true", help="Commit changes after backup")
     parser.add_argument(
-        "--force", action="store_true",
+        "--apply",
+        action="store_true",
+        help="Deprecated and disabled; historical replay is audit-only",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
         help="Replay every eligible round, including the current estimator version",
     )
     return parser.parse_args()
@@ -925,14 +794,9 @@ def parse_args() -> argparse.Namespace:
 
 def baseline_provenance(personal_meta: dict[str, Any]) -> dict[str, Any]:
     """Describe the Baseline candidate separately from the classifier source."""
-    candidate_source = str(
-        personal_meta.get("source") or "age_gender_default"
-    ).strip()
+    candidate_source = str(personal_meta.get("source") or "age_gender_default").strip()
     classification_source = "age_gender_default"
-    if (
-        PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED
-        and candidate_source == "personal"
-    ):
+    if PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED and candidate_source == "personal":
         classification_source = "personal"
     return {
         "classification_source": classification_source,
@@ -955,58 +819,40 @@ def main() -> None:
             "and promote a versioned shadow run only after all gates pass."
         )
     data_dir = args.data_dir.resolve()
-    os.environ["DATA_DIR"] = str(data_dir)
-    os.environ.setdefault("ZEEP_GPIO_ENABLED", "0")
-    # Importing the application gives this tool the exact versioned scoring
-    # constants. Do not contend with the live service for the GPIO chip.
-    os.environ.setdefault("GPIO_INIT_ATTEMPTS", "1")
-    import app as zeep  # Imported after DATA_DIR is fixed for personal baseline parity.
+    runtime = HistoricalReplayRuntime.from_environment(os.environ)
 
-    sessions_path = data_dir / "sessions.db"
-    connection = sqlite3.connect(sessions_path, timeout=15)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA busy_timeout=15000")
-    if args.session_id:
-        session = connection.execute(
-            "SELECT * FROM sessions WHERE session_id=?", (args.session_id,)
-        ).fetchone()
-    else:
-        session = connection.execute(
-            "SELECT * FROM sessions ORDER BY (end_time IS NULL) DESC,start_time DESC LIMIT 1"
-        ).fetchone()
+    session, rows = load_session_sleep_events(
+        data_dir / "sessions.db",
+        args.session_id,
+    )
     if session is None:
         raise SystemExit("Session not found")
-    session = dict(session)
-
-    rows = connection.execute(
-        "SELECT id,timestamp,value FROM events WHERE session_id=? AND type='sleep_stage' ORDER BY timestamp,id",
-        (session["session_id"],),
-    ).fetchall()
-    parsed: list[tuple[sqlite3.Row, dict[str, Any]]] = []
+    parsed: list[tuple[Mapping[str, Any], dict[str, Any]]] = []
     for row in rows:
         try:
             value = json.loads(row["value"])
         except (TypeError, json.JSONDecodeError):
             continue
-        if not args.force and value.get("estimator_version") == zeep.SLEEP_ESTIMATOR_VERSION:
+        if not args.force and value.get("estimator_version") == SLEEP_ESTIMATOR_VERSION:
             continue
         if str(value.get("state") or "").lower() not in STAGES:
             continue
         parsed.append((row, value))
     if not parsed:
-        print(json.dumps({"status": "nothing_to_reclassify", "session_id": session["session_id"]}))
+        print(
+            json.dumps(
+                {
+                    "status": "nothing_to_reclassify",
+                    "session_id": session["session_id"],
+                }
+            )
+        )
         return
 
-    bcg_connection = sqlite3.connect(data_dir / "bcg.db", timeout=15)
-    bcg_connection.row_factory = sqlite3.Row
-    packet_rows = bcg_connection.execute(
-        """SELECT p.timestamp,p.status_code,p.heart_rate,p.respiration_rate
-           ,p.bcg_base64
-           FROM bcg_packets p JOIN bcg_epochs e ON e.epoch_id=p.epoch_id
-           WHERE e.session_id=? ORDER BY p.timestamp,p.id""",
-        (session["session_id"],),
-    ).fetchall()
-    bcg_connection.close()
+    packet_rows = load_bcg_packets(
+        data_dir / "bcg.db",
+        session["session_id"],
+    )
     # Never reinterpret legacy 5-second events as today's 10-second Sensor
     # cadence. New stable-30s events declare 30 s explicitly; old records keep
     # their own versioned/inferred interval for byte-compatible replay.
@@ -1019,15 +865,25 @@ def main() -> None:
         profiles = {}
     profile = profiles.get(session["username_key"], {})
     age = profile.get("age")
-    age_group = profile.get("age_group") or zeep._age_group(age)
-    baseline, gender_adjustment = zeep._gender_adjusted_baseline(age_group, session.get("gender"))
-    personal_candidate, personal_meta = zeep.baselines.personalize_baseline(
+    selected_age_group = profile.get("age_group") or age_group(age)
+    baseline, gender_adjustment = gender_adjusted_baseline(
+        selected_age_group,
+        session.get("gender"),
+    )
+    baseline_store = BaselineStore(
+        DatabaseManager(
+            data_dir,
+            int(os.getenv("DB_QUEUE_SIZE", "10000")),
+        ),
+        data_dir,
+    )
+    personal_candidate, personal_meta = baseline_store.personalize_baseline(
         session["username_key"], baseline
     )
     if PERSONAL_BASELINE_STAGE_INFLUENCE_ENABLED:
         baseline = personal_candidate
         personal_thresholds = (
-            zeep.baselines.thresholds_for(session["username_key"]) or {}
+            baseline_store.thresholds_for(session["username_key"]) or {}
         )
     else:
         personal_thresholds = {}
@@ -1036,13 +892,13 @@ def main() -> None:
             "direct_stage_influence": False,
             "candidate_available": personal_candidate != baseline,
         }
-    cv_deep = float(personal_thresholds.get("cv_deep", zeep.SLEEP_HR_CV_DEEP))
-    cv_rem = float(personal_thresholds.get("cv_rem", zeep.SLEEP_HR_CV_REM))
+    cv_deep = float(personal_thresholds.get("cv_deep", runtime.hr_cv_deep))
+    cv_rem = float(personal_thresholds.get("cv_rem", runtime.hr_cv_rem))
 
     path = HistoricalStagePath()
     reclassified_at = datetime.now(timezone.utc).isoformat()
     original_values = [value for _, value in parsed]
-    updates: list[tuple[str, int]] = []
+    updated_rounds = 0
     new_values: list[dict[str, Any]] = []
     new_events: list[tuple[str, dict[str, Any]]] = []
     changes: Counter[tuple[str, str]] = Counter()
@@ -1054,15 +910,11 @@ def main() -> None:
     continuity_carried_without_raw = 0
     session_start = parse_timestamp(session["start_time"])
     session_end = (
-        parse_timestamp(session["end_time"])
-        if session.get("end_time")
-        else None
+        parse_timestamp(session["end_time"]) if session.get("end_time") else None
     )
     for row, value in parsed:
         window_end = (
-            parse_timestamp(value["window_end"])
-            if value.get("window_end")
-            else None
+            parse_timestamp(value["window_end"]) if value.get("window_end") else None
         )
         terminal_session_boundary = bool(
             session_end is not None
@@ -1080,17 +932,14 @@ def main() -> None:
                 str(metrics.get("bed_status") or "") == "Get out of bed"
                 and bed_exit_evidence.get("confirmed") is True
             ):
-                path.observe_confirmed_off_bed(
-                    parse_timestamp(row["timestamp"])
-                )
+                path.observe_confirmed_off_bed(parse_timestamp(row["timestamp"]))
                 skipped_without_raw += 1
                 continue
             if path.off_bed_latched:
                 skipped_without_raw += 1
                 continue
             trusted_recent_estimate = bool(
-                value.get("estimator_version")
-                == zeep.SLEEP_ESTIMATOR_VERSION
+                value.get("estimator_version") == SLEEP_ESTIMATOR_VERSION
                 or (
                     str(value.get("estimator_version") or "").startswith(
                         "bcg-wellness-5state-v1."
@@ -1106,10 +955,12 @@ def main() -> None:
                 path.commit(value["state"], parse_timestamp(row["timestamp"]))
                 new_values.append(value)
                 new_events.append((row["timestamp"], value))
-                changes[(
-                    str(value.get("state")),
-                    str(value.get("state")),
-                )] += 1
+                changes[
+                    (
+                        str(value.get("state")),
+                        str(value.get("state")),
+                    )
+                ] += 1
                 skipped_without_raw += 1
                 preserved_current_without_raw += 1
                 continue
@@ -1120,8 +971,7 @@ def main() -> None:
             selected, transition = path.stabilize(None, now, False)
             changed, progression = path.commit(selected, now)
             probabilities = {
-                stage: 1.0 if stage == selected else 0.0
-                for stage in STAGES
+                stage: 1.0 if stage == selected else 0.0 for stage in STAGES
             }
             updated = {
                 **value,
@@ -1131,9 +981,7 @@ def main() -> None:
                 "confirmed_probabilities": probabilities,
                 "confidence": "low",
                 "decision_kind": transition["decision_kind"],
-                "held_previous_state": bool(
-                    transition["held_previous_state"]
-                ),
+                "held_previous_state": bool(transition["held_previous_state"]),
                 "provisional": False,
                 "score_attribution_state": selected,
                 "score_eligible": True,
@@ -1146,16 +994,9 @@ def main() -> None:
                 ),
                 "progression": progression,
                 "state_changed": changed,
-                **zeep._sleep_decision_provenance(),
+                **runtime.decision_provenance(),
             }
-            updates.append((
-                json.dumps(
-                    updated,
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                ),
-                row["id"],
-            ))
+            updated_rounds += 1
             new_values.append(updated)
             new_events.append((row["timestamp"], updated))
             changes[(str(value.get("state")), selected)] += 1
@@ -1167,9 +1008,7 @@ def main() -> None:
             # OFF BED; this legacy comparison deliberately omits the row.
             path.observe_confirmed_off_bed(parse_timestamp(row["timestamp"]))
             continue
-        if path.off_bed_latched and not reconstructed.get(
-            "fresh_on_bed_vitals"
-        ):
+        if path.off_bed_latched and not reconstructed.get("fresh_on_bed_vitals"):
             skipped_without_raw += 1
             continue
         if reconstructed.get("fresh_on_bed_vitals"):
@@ -1189,11 +1028,18 @@ def main() -> None:
         score_value["sample_count"] = reconstructed["feature_buckets"]
         reconstructed_rounds += 1
         updated = rescore_event(
-            score_value, row["timestamp"], session_start, baseline,
-            float(gender_adjustment["rem_variability_weight"]), cv_deep, cv_rem,
-            path, zeep, reclassified_at,
+            score_value,
+            row["timestamp"],
+            session_start,
+            baseline,
+            float(gender_adjustment["rem_variability_weight"]),
+            cv_deep,
+            cv_rem,
+            path,
+            runtime,
+            reclassified_at,
         )
-        updates.append((json.dumps(updated, ensure_ascii=False, separators=(",", ":")), row["id"]))
+        updated_rounds += 1
         new_values.append(updated)
         new_events.append((row["timestamp"], updated))
         changes[(str(value.get("state")), str(updated.get("state")))] += 1
@@ -1201,32 +1047,38 @@ def main() -> None:
     old_counts = count_states(original_values)
     new_counts = count_states(new_values)
     sequence_audit = audit_replayed_sequence(
-        new_events, movement_threshold=zeep.SLEEP_MOVE_WAKE_RATIO)
+        new_events,
+        movement_threshold=runtime.move_wake_ratio,
+    )
     manifest: dict[str, Any] = {
-        "status": "applied" if args.apply else "dry_run",
+        "status": "dry_run",
         "version": BACKFILL_VERSION,
         "forced_full_replay": bool(args.force),
         "session_id": session["session_id"],
         "reclassified_at": reclassified_at,
         "rounds_considered": len(parsed),
-        "rounds_updated": len(updates),
+        "rounds_updated": updated_rounds,
         "old_counts": old_counts,
         "new_counts": new_counts,
         "n3_reduction": old_counts["n3"] - new_counts["n3"],
-        "changed_rounds": sum(count for (old, new), count in changes.items() if old != new),
+        "changed_rounds": sum(
+            count for (old, new), count in changes.items() if old != new
+        ),
         "raw_bcg_reconstruction": {
             "rounds": reconstructed_rounds,
             "skipped_without_raw": skipped_without_raw,
             "preserved_current_without_raw": preserved_current_without_raw,
-            "continuity_carried_without_raw": (
-                continuity_carried_without_raw
-            ),
+            "continuity_carried_without_raw": (continuity_carried_without_raw),
             "packets_available": len(packet_rows),
             "mean_hr_absolute_delta_bpm": (
-                round(sum(mean_hr_deltas) / len(mean_hr_deltas), 3) if mean_hr_deltas else None
+                round(sum(mean_hr_deltas) / len(mean_hr_deltas), 3)
+                if mean_hr_deltas
+                else None
             ),
             "mean_rr_absolute_delta_per_min": (
-                round(sum(mean_rr_deltas) / len(mean_rr_deltas), 3) if mean_rr_deltas else None
+                round(sum(mean_rr_deltas) / len(mean_rr_deltas), 3)
+                if mean_rr_deltas
+                else None
             ),
         },
         "reclassification_matrix": {
@@ -1239,48 +1091,15 @@ def main() -> None:
         },
         "pre_apply_audit": sequence_audit,
         "weights": {
-            "hr_baseline": zeep.SLEEP_BASELINE_HR_WEIGHT,
-            "rr_baseline": zeep.SLEEP_BASELINE_RR_WEIGHT,
+            "hr_baseline": runtime.baseline_hr_weight,
+            "rr_baseline": runtime.baseline_rr_weight,
         },
-        "age_group": age_group,
+        "age_group": selected_age_group,
         "gender": session.get("gender"),
         **baseline_provenance(personal_meta),
         "backup": None,
     }
 
-    if args.apply:
-        if not sequence_audit["apply_gate"]["passed"]:
-            manifest["status"] = "apply_rejected"
-            connection.close()
-            print(json.dumps(manifest, ensure_ascii=False, indent=2))
-            raise SystemExit(2)
-        backup_dir = data_dir.parent / "backup"
-        backup_dir.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        backup_path = backup_dir / f"sessions-pre-sleep-reclass-{stamp}.db"
-        backup = sqlite3.connect(backup_path)
-        try:
-            connection.backup(backup)
-        finally:
-            backup.close()
-        manifest["backup"] = str(backup_path)
-        try:
-            connection.execute("BEGIN IMMEDIATE")
-            connection.executemany("UPDATE events SET value=? WHERE id=?", updates)
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
-        if integrity != "ok":
-            raise SystemExit(f"Integrity check failed after update: {integrity}")
-        manifest["integrity_check"] = integrity
-        manifest_path = data_dir / "sleep-history-reclassification-latest.json"
-        temporary = manifest_path.with_suffix(".json.tmp")
-        temporary.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(temporary, manifest_path)
-
-    connection.close()
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
 
 

@@ -99,12 +99,13 @@ class SignalFeatureTests(unittest.TestCase):
         self.assertEqual(window["max_moving_run_frames"], 2)
         self.assertEqual(window["movement_burst_count"], 2)
 
-    def test_bed_exit_remains_direct_wake_evidence(self):
+    def test_bed_exit_is_occupancy_evidence_not_direct_wake(self):
         movement = sleep_movement_evidence({
             "movement_ratio": 0.0,
             "bed_status": "Get out of bed",
         })
-        self.assertTrue(movement["strong_wake"])
+        self.assertFalse(movement["strong_wake"])
+        self.assertEqual(movement["wake_score_support"], 0.0)
         self.assertEqual(movement["category"], "bed_exit")
 
     def test_single_bed_exit_packet_is_rejected_as_transient(self):

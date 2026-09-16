@@ -34,7 +34,7 @@ app, ต่อ lifecycle, ประกอบ dependency และเรียก
 | Live API projection | `api/state_projection.py` | ประกอบ freshness/stale/fallback ของ Hub, BCG และ Control จาก detached snapshot โดยไม่แก้ live reader state |
 | Control transports | `hardware/controlhub1.py`, `controlhub2.py` | MQTT command/ACK ของแอร์และเตียง แยกจาก HTTP routes |
 | Control intent persistence | `hardware/aircon_reference.py` | Repository เก็บค่าอ้างอิงพัดลม 1–5 แบบ atomic; constructor ไม่เปิดไฟล์และ initialize ใน lifespan |
-| Audio controls | `hardware/audio.py`, `audio_api.py` | MPV/fallback player และนโยบาย HTTP ของเพลง/Brainwave ที่ทดสอบได้โดยไม่เปิด audio hardware |
+| Audio controls | `hardware/audio_library.py`, `audio_runtime.py`, `audio_process.py`, `audio_watchers.py`, `audio.py`, `audio_api.py` | Pure defaults/listing, runtime contract, subprocess/IPC adapter, watcher registry, player facade และ HTTP policy โดยไม่มี I/O ตอน import |
 | Shadow guidance | `smart_response.py` | ประเมินคำแนะนำสภาพแวดล้อมโดยไม่สั่งอุปกรณ์ |
 | Adaptive learning monitor | `adaptive/learning.py`, `adaptive/features.py` | เทียบ Live กับ Baseline และรวม version/device intent ใน Shadow mode |
 | Sleep evidence | `sleep_signal_features.py` | Movement, Bed Exit, Arousal, HR/RR และ waveform features |
@@ -103,8 +103,7 @@ Dashboard, Session และ Safety ต้องอ่านค่าจาก *
 - Pure helper ห้ามเปิดไฟล์, Serial, MQTT, GPIO หรือ database ตอน import
 - Resource ที่ย้ายแล้ว ได้แก่ Database, Auth, Occupancy, Personal Baseline และ GPIO
   ใช้ constructor ที่ไม่เปิด I/O แล้ว initialize ใน Production lifespan ตามลำดับ
-  Database → Auth → Occupancy → Baseline → Aircon reference → GPIO; Music/Audio
-  discovery ยังเป็นงานถัดไป
+  Database → Auth → Occupancy → Baseline → Aircon reference → GPIO → Audio
 - Module ใหม่ภายใต้ top-level domain packages ไม่เกิน 500 บรรทัด
 - Function/method ใหม่ไม่เกิน 90 บรรทัด
 - Public boundary และ safety decision ต้องมี type hints และ docstring
@@ -170,7 +169,7 @@ Onboarding ใช้เอกสารนี้เป็น Roadmap ทางเ
 ### 6.1 สิ่งที่อยู่บน `origin/develop`
 
 สถานะในตารางนี้ตรวจจาก source ใน `origin/develop`; Git SHA ที่ deploy จริงให้ตรวจ
-จาก health/version response และ closure record ของ release นั้น:
+จาก `git rev-parse HEAD` บน Pod และ closure record ของ release นั้น:
 
 | ระยะ | สถานะ | Boundary ที่แยกแล้ว |
 |---|---|---|
@@ -183,6 +182,7 @@ Onboarding ใช้เอกสารนี้เป็น Roadmap ทางเ
 | R6 | เสร็จแล้ว | Sensor package แยก contract/catalog/constants/BCG/calibration/environment/normalization/sound และ shared value library |
 | R7a | เสร็จแล้ว | Aircon fan-reference ใช้ Repository + explicit lifespan initialization; import `app.py` ไม่อ่านหรือเขียนไฟล์ reference |
 | R7b | เสร็จแล้ว | Live Session ใช้ typed Contract + pure projection module + app Adapter/Facade; Restart รักษา Wellness context และ Logout ล้าง Personal context ครบ |
+| R7c | เสร็จแล้ว | Audio ใช้ pure Library + typed runtime Contract + system/process Adapter + lifecycle Facade; import ไม่ค้นหา player/ALSA หรือสร้าง music directory และ shutdown drain watcher แบบ bounded |
 
 `app.py` คงอยู่ที่ไม่เกิน 7,995 บรรทัด และเป็น composition root ต่อไป ส่วน API,
 Sensor contract/calibration/normalization/environment/sound และ value helpers อยู่ใน
@@ -202,11 +202,22 @@ Live Session boundary ใช้รูปแบบเดียวกันตล�
   `_patch_session_projection_locked()` เป็นทางเขียน live state เพียงจุดเดียว โดยรักษา
   object identity และลำดับ lock เดิม
 
+Audio boundary ใช้รูปแบบเดียวกันโดยไม่เปลี่ยนนโยบายเล่นเพลงเดิม:
+
+- **Contract** — `AudioRuntimeSelection` และ `AudioRuntimeDiscovery` ระบุผล discovery
+  ที่ player ยอมรับ
+- **Module/Library** — `select_audio_runtime()`, music defaults และ contained listing
+  แยกจาก subprocess และ FastAPI
+- **Adapter** — `SystemAudioRuntimeAdapter` อ่าน executable, environment และ ALSA
+  เฉพาะเมื่อ lifespan เริ่ม; `AudioProcessAdapter` แปลง intent เป็น MPV/fallback
+  subprocess และ Unix-socket IPC
+- **Facade** — `AudioPlayer` serialize play กับ shutdown และใช้ watcher registry
+  เพื่อ teardown แบบมีเวลาสิ้นสุด
+
 ### 6.2 Working candidate ที่ยังไม่ใช่ Release fact
 
-- Constructor ของ Database, Auth, Occupancy, Personal Baseline และ GPIO ไม่ควรเปิด
-  I/O ตอน import; Production initialize ตามลำดับ
-  Database → Auth → Occupancy → Baseline → GPIO
+- Constructor ของ Database, Auth, Occupancy, Personal Baseline, GPIO และ Audio ไม่เปิด
+  I/O ตอน import; Production initialize ตามลำดับที่ระบุใน §3.1
 - Historical replay อ่าน SQLite แบบ read-only ผ่าน storage boundary และไม่ import
   FastAPI composition root
 - Guarded lazy initialization มีไว้เพื่อ compatibility ของ direct caller/test เดิม;
@@ -215,11 +226,10 @@ Live Session boundary ใช้รูปแบบเดียวกันตล�
 
 ### 6.3 ลำดับถัดไป
 
-1. ปิด import side effects ของ Music/Audio discovery พร้อม lifecycle rollback และ
-   thread registry ที่ deterministic
-2. แยก Session lifecycle orchestration ที่เหลือ: waiting-bed, start, resume และ
-   finalize ออกจาก composition root โดยใช้ Live Session contract ที่แยกแล้วและรักษา
-   Restart continuity
+1. แยก Session lifecycle orchestration แบบทีละช่วง โดยเริ่ม waiting-bed → recording
+   start; คง DB durability, gate recheck และ checkpoint ordering เดิม
+2. จากนั้นจึงแยก resume และ finalize ออกจาก composition root โดยใช้ Live Session
+   contract ที่แยกแล้วและรักษา Restart continuity
 3. ทำ Sleep estimator facade ให้รับ typed input แล้ว delegate ไปยัง feature,
    scorer และ policy เดิม พร้อม golden replay; ห้ามเปลี่ยน threshold ใน change นี้
 4. รวม report pipeline ที่ซ้ำระหว่าง Live, Replay, Rescore และ Trim ให้ใช้ contract เดียว

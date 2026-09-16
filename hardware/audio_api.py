@@ -18,7 +18,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.models import BrainwavePreviewCommand, TrackCommand, VolumeCommand
-from hardware.audio import contained_audio_paths
+from hardware.audio_library import contained_audio_paths
 
 PREVIEW_MAX_VOLUME = 60
 

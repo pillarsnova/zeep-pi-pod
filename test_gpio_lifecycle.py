@@ -215,6 +215,7 @@ class AppGPIOImportSafetyTests(unittest.TestCase):
                 import os
                 from pathlib import Path
 
+                import hardware.audio_process as audio_process_module
                 import hardware.gpio as gpio_module
 
                 marker = Path(os.environ["GPIO_TEST_MARKER"])
@@ -256,20 +257,36 @@ class AppGPIOImportSafetyTests(unittest.TestCase):
                 gpio_module.LGPIOFactory = Factory
                 gpio_module.OutputDevice = Output
 
+                original_gettempdir = audio_process_module.tempfile.gettempdir
+
+                def reject_import_time_temp_path():
+                    raise AssertionError("app import resolved an audio temp path")
+
+                audio_process_module.tempfile.gettempdir = reject_import_time_temp_path
+
                 import app
+
+                audio_process_module.tempfile.gettempdir = original_gettempdir
 
                 assert not marker.exists(), "app import touched GPIO hardware"
                 data_dir = Path(os.environ["DATA_DIR"])
+                music_dir = Path(os.environ["MUSIC_DIR"])
                 assert not (data_dir / "auth.db").exists()
                 assert not (data_dir / "occupancy.db").exists()
+                assert not music_dir.exists(), "app import created music storage"
                 assert app.auth_sessions.initialized is False
                 assert app.occupancy_store.initialized is False
                 assert app.baselines.initialized is False
+                assert app.player.initialized is False
+                assert app.state["system"]["player"] is None
                 assert app.state["system"]["gpio_available"] is False
                 assert app.state["system"]["gpio_error"] is None
                 assert app.gpio.initialize() is True
+                app.player.initialize()
                 assert app.state["system"]["gpio_available"] is True
+                assert music_dir.is_dir()
                 assert marker.read_text(encoding="utf-8").startswith("factory:0\\n")
+                app.player.shutdown()
                 app.gpio.shutdown()
                 """
             )

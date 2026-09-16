@@ -42,7 +42,7 @@ python -m unittest -q \
   test_sensor_services.py test_api_state_projection.py \
   test_bcg_reader.py test_sensor_frame_sampler.py \
   test_gpio_lifecycle.py test_occupancy_lifecycle.py \
-  test_control_protocol.py test_audio_api.py \
+  test_control_protocol.py test_audio_api.py test_audio_lifecycle.py \
   test_session_lifecycle.py test_session_finalization_commit.py
 
 # Sleep State, Baseline และคะแนน

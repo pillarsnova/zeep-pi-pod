@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import threading
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from api_models import TrackCommand
 from hardware.audio import (
@@ -15,6 +17,15 @@ from hardware.audio import (
 
 
 class AudioDefaultTests(unittest.TestCase):
+    @staticmethod
+    def _player(state, music_dir):
+        return AudioPlayer(
+            music_dir=music_dir,
+            max_volume=100,
+            state=state,
+            state_lock=threading.Lock(),
+        )
+
     def test_default_contract_is_manual_play_repeat_one_at_sixty_percent(self):
         command = TrackCommand(track="test.wav")
 
@@ -39,18 +50,9 @@ class AudioDefaultTests(unittest.TestCase):
                 "queue_length": 3,
             }
         }
-        player = object.__new__(AudioPlayer)
-        player.lock = threading.Lock()
-        player.state_lock = threading.Lock()
-        player.state = state
-        player.loop = False
-        player.current_path = None
-        player.queue_paths = []
-        player.queue_index = 0
-        player.proc = None
-        player.sock_path = "/tmp/zeep-audio-default-test.sock"
-
-        player.stop()
+        with TemporaryDirectory() as temporary:
+            player = self._player(state, Path(temporary))
+            player.stop()
 
         self.assertFalse(state["music"]["playing"])
         self.assertEqual(state["music"]["volume"], 42)
@@ -68,29 +70,19 @@ class AudioDefaultTests(unittest.TestCase):
                 "mode": "single",
             }
         }
-        player = object.__new__(AudioPlayer)
-        player.lock = threading.Lock()
-        player.state_lock = threading.Lock()
-        player.state = state
-        player.loop = False
-        player.current_path = None
-        player.queue_paths = []
-        player.queue_index = 0
-        player.proc = None
-        player.sock_path = "/tmp/zeep-audio-default-test.sock"
-
-        player.stop()
+        with TemporaryDirectory() as temporary:
+            player = self._player(state, Path(temporary))
+            player.stop()
 
         self.assertEqual(state["music"]["mode"], "repeat_one")
         self.assertTrue(state["music"]["loop"])
 
     def test_snapshot_is_music_only_and_detached(self):
         state = {"music": default_music_state(), "system": {"private": True}}
-        player = object.__new__(AudioPlayer)
-        player.state_lock = threading.Lock()
-        player.state = state
+        with TemporaryDirectory() as temporary:
+            player = self._player(state, Path(temporary))
 
-        result = player.snapshot()
+            result = player.snapshot()
 
         self.assertNotIn("system", result)
         result["volume"] = 1

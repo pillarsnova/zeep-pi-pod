@@ -348,7 +348,6 @@ from sleep_system_policy import (
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 MUSIC_DIR = Path(os.getenv("MUSIC_DIR", str(BASE_DIR / "music")))
-MUSIC_DIR.mkdir(parents=True, exist_ok=True)
 
 # ---------- EDIT THESE PINS TO MATCH YOUR WIRING ----------
 GPIO_PINS = {
@@ -1061,8 +1060,6 @@ def _initialize_aircon_fan_reference() -> Dict[str, Any]:
 
 
 gpio = GPIOManager(GPIO_PINS, state, state_lock)
-
-
 player = AudioPlayer(
     music_dir=MUSIC_DIR,
     max_volume=MAX_VOLUME,
@@ -5468,91 +5465,94 @@ async def lifespan(_: FastAPI):
     occupancy_store.initialize()
     baselines.initialize()
     _initialize_aircon_fan_reference()
-    gpio.initialize()
-    log_event("system", "start", gpio=gpio.ready, player=player.backend)
-    with state_lock:
-        state["system"]["occupancy"] = occupancy_client.health()
     try:
-        result = migrate_jsonl(database, SESSIONS_PATH)
-        if result["status"] == "migrated":
-            log_event(
-                "db",
-                "migrated_jsonl",
-                imported=result["imported"],
-                backup=str(result["backup"]),
-            )
-    except Exception as exc:
-        # Never rename or discard the legacy file on a failed migration.
-        log_event("db", "migration_skipped", error=str(exc))
-    try:
-        account_mapping = _migrate_profiles_to_email_keys()
-    except Exception as exc:
-        log_event("db", "profile_key_migration_failed", error=str(exc))
-    else:
-        if account_mapping:
-            outcome = migrate_identity_stores(
-                account_mapping,
-                session_migration=database.rekey_session_accounts,
-                baseline_migration=baselines.rebuild_rekeyed_users,
-                auth_migration=auth_sessions.rekey_account_keys,
-            )
-            log_event("db", "account_keys_migrated_to_email", **outcome)
-    database.start()
-    try:
-        _restore_interrupted_session()
-    except Exception as exc:
-        log_event("session", "restart_resume_failed", error=str(exc))
-    try:
-        _restore_latest_sensor_frame()
-    except Exception as exc:
-        # A damaged display cache must not block startup; live readers replace it.
-        log_event("sensor_frame", "restart_restore_failed", error=str(exc))
-    try:
-        # Nights recorded while the account backend was unreachable.
-        _sweep_ingest_outbox()
-    except Exception as exc:
-        log_event("ingest", "sweep_failed", error=str(exc))
-    daily_backup.start()
-    threading.Thread(target=esp32_reader, daemon=True).start()
-    threading.Thread(target=sensorhub2_mqtt_reader, daemon=True).start()
-    threading.Thread(target=controlhub1_mqtt.run, daemon=True).start()
-    threading.Thread(target=controlhub2_bed_mqtt.run, daemon=True).start()
-    threading.Thread(target=bcg_reader, daemon=True).start()
-    threading.Thread(target=sensor_frame_sampler, daemon=True).start()
-    threading.Thread(target=session_sampler, daemon=True).start()
-    threading.Thread(target=occupancy_lease_supervisor, daemon=True).start()
-    threading.Thread(target=safety_supervisor, daemon=True).start()
-    threading.Thread(target=ingest_outbox_sweeper, daemon=True).start()
-    yield
-    with session_lock:
-        active = _active_session
-    if active is not None:
+        gpio.initialize()
+        player.initialize()
+        log_event("system", "start", gpio=gpio.ready, player=player.backend)
+        with state_lock:
+            state["system"]["occupancy"] = occupancy_client.health()
         try:
-            _save_active_session_checkpoint(active)
+            result = migrate_jsonl(database, SESSIONS_PATH)
+            if result["status"] == "migrated":
+                log_event(
+                    "db",
+                    "migrated_jsonl",
+                    imported=result["imported"],
+                    backup=str(result["backup"]),
+                )
         except Exception as exc:
-            log_event("session", "restart_checkpoint_save_failed", error=str(exc))
-        if active.get("phase") == "recording":
-            database.enqueue(
-                "sessions",
-                "event",
-                {
-                    "session_id": active["record"]["session_id"],
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "type": "service_pause",
-                    "value": {"reason": "server_shutdown"},
-                },
-            )
-        database.flush(30)
-    try:
-        _persist_last_sensor_frame(analysis_frame_cached())
-    except Exception as exc:
-        log_event("sensor_frame", "restart_cache_save_failed", error=str(exc))
-    player.stop()
-    gpio.shutdown()
-    bcg_storage.flush()
-    daily_backup.stop()
-    database.stop(30)
-    log_event("system", "stop")
+            # Never rename or discard the legacy file on a failed migration.
+            log_event("db", "migration_skipped", error=str(exc))
+        try:
+            account_mapping = _migrate_profiles_to_email_keys()
+        except Exception as exc:
+            log_event("db", "profile_key_migration_failed", error=str(exc))
+        else:
+            if account_mapping:
+                outcome = migrate_identity_stores(
+                    account_mapping,
+                    session_migration=database.rekey_session_accounts,
+                    baseline_migration=baselines.rebuild_rekeyed_users,
+                    auth_migration=auth_sessions.rekey_account_keys,
+                )
+                log_event("db", "account_keys_migrated_to_email", **outcome)
+        database.start()
+        try:
+            _restore_interrupted_session()
+        except Exception as exc:
+            log_event("session", "restart_resume_failed", error=str(exc))
+        try:
+            _restore_latest_sensor_frame()
+        except Exception as exc:
+            # A damaged display cache must not block startup; live readers replace it.
+            log_event("sensor_frame", "restart_restore_failed", error=str(exc))
+        try:
+            # Nights recorded while the account backend was unreachable.
+            _sweep_ingest_outbox()
+        except Exception as exc:
+            log_event("ingest", "sweep_failed", error=str(exc))
+        daily_backup.start()
+        threading.Thread(target=esp32_reader, daemon=True).start()
+        threading.Thread(target=sensorhub2_mqtt_reader, daemon=True).start()
+        threading.Thread(target=controlhub1_mqtt.run, daemon=True).start()
+        threading.Thread(target=controlhub2_bed_mqtt.run, daemon=True).start()
+        threading.Thread(target=bcg_reader, daemon=True).start()
+        threading.Thread(target=sensor_frame_sampler, daemon=True).start()
+        threading.Thread(target=session_sampler, daemon=True).start()
+        threading.Thread(target=occupancy_lease_supervisor, daemon=True).start()
+        threading.Thread(target=safety_supervisor, daemon=True).start()
+        threading.Thread(target=ingest_outbox_sweeper, daemon=True).start()
+        yield
+    finally:
+        with session_lock:
+            active = _active_session
+        if active is not None:
+            try:
+                _save_active_session_checkpoint(active)
+            except Exception as exc:
+                log_event("session", "restart_checkpoint_save_failed", error=str(exc))
+            if active.get("phase") == "recording":
+                database.enqueue(
+                    "sessions",
+                    "event",
+                    {
+                        "session_id": active["record"]["session_id"],
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "type": "service_pause",
+                        "value": {"reason": "server_shutdown"},
+                    },
+                )
+            database.flush(30)
+        player.shutdown()
+        try:
+            _persist_last_sensor_frame(analysis_frame_cached())
+        except Exception as exc:
+            log_event("sensor_frame", "restart_cache_save_failed", error=str(exc))
+        gpio.shutdown()
+        bcg_storage.flush()
+        daily_backup.stop()
+        database.stop(30)
+        log_event("system", "stop")
 
 
 def _service_principal() -> Principal:
@@ -7932,7 +7932,7 @@ def _graceful_poweroff() -> None:
         database.flush(30)
         daily_backup.stop()
         database.stop(30)
-        player.stop()
+        player.shutdown()
         gpio.all_off()
         log_event("system", "poweroff")
         if hasattr(os, "sync"):

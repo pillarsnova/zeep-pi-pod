@@ -53,6 +53,7 @@ PROFILE_TESTS: dict[str, tuple[str, ...]] = {
         "test_gpio_lifecycle.py",
         "test_audio_api.py",
         "test_audio_defaults.py",
+        "test_audio_lifecycle.py",
     ),
     "sleep": (
         "test_sleep_signal_features.py",

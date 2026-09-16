@@ -2,53 +2,33 @@
 
 from __future__ import annotations
 
-import json
-import os
-import shutil
-import socket
 import subprocess
-import tempfile
 import threading
 import time
 from pathlib import Path
 from typing import Any
 
-DEFAULT_AUDIO_MODE = "repeat_one"
-DEFAULT_AUDIO_VOLUME_PERCENT = 60
-SUPPORTED_AUDIO_EXTENSIONS = frozenset(
-    {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".aac"}
+from hardware.audio_library import (
+    DEFAULT_AUDIO_MODE,
+    DEFAULT_AUDIO_VOLUME_PERCENT,
+    contained_audio_paths,
+    default_music_state,
 )
+from hardware.audio_process import AudioProcessAdapter
+from hardware.audio_runtime import (
+    AudioRuntimeDiscovery,
+    AudioRuntimeSelection,
+    SystemAudioRuntimeAdapter,
+)
+from hardware.audio_watchers import AudioWatcherRegistry, terminate_audio_process
 
-
-def default_music_state() -> dict[str, Any]:
-    """Return a fresh, stopped player state with safe bedside defaults."""
-    return {
-        "playing": False,
-        "paused": False,
-        "track": None,
-        "volume": DEFAULT_AUDIO_VOLUME_PERCENT,
-        "loop": True,
-        "mode": DEFAULT_AUDIO_MODE,
-        "queue_position": 0,
-        "queue_length": 0,
-        "error": None,
-    }
-
-
-def contained_audio_paths(music_dir: Path) -> list[Path]:
-    """List playable files whose resolved targets remain under ``music_dir``."""
-    root = music_dir.resolve()
-    paths: list[Path] = []
-    for entry in music_dir.iterdir():
-        if (
-            not entry.is_file()
-            or entry.suffix.lower() not in SUPPORTED_AUDIO_EXTENSIONS
-        ):
-            continue
-        resolved = entry.resolve()
-        if root in resolved.parents:
-            paths.append(resolved)
-    return sorted(set(paths))
+__all__ = (
+    "AudioPlayer",
+    "DEFAULT_AUDIO_MODE",
+    "DEFAULT_AUDIO_VOLUME_PERCENT",
+    "contained_audio_paths",
+    "default_music_state",
+)
 
 
 class AudioPlayer:
@@ -65,67 +45,89 @@ class AudioPlayer:
         max_volume: int,
         state: dict[str, Any],
         state_lock: threading.Lock,
+        runtime_discovery: AudioRuntimeDiscovery | None = None,
+        process_adapter: AudioProcessAdapter | None = None,
     ) -> None:
         self.music_dir = music_dir
         self.max_volume = max_volume
         self.state = state
         self.state_lock = state_lock
         self.proc: subprocess.Popen[str] | None = None
-        self.sock_path = os.path.join(
-            tempfile.gettempdir(),
-            "pi5_local_mpv.sock",
-        )
+        self.sock_path: str | None = None
         self.lock = threading.Lock()
-        self.backend = next(
-            (
-                backend
-                for backend in ("mpv", "afplay", "ffplay")
-                if shutil.which(backend)
-            ),
-            None,
-        )
-        self.audio_device = os.getenv("MPV_AUDIO_DEVICE", "").strip() or None
-        if self.backend == "mpv" and not self.audio_device:
-            if Path("/proc/asound/Device").exists():
-                self.audio_device = "alsa/plughw:CARD=Device,DEV=0"
+        self._lifecycle_lock = threading.RLock()
+        self._watchers = AudioWatcherRegistry()
+        self._runtime_discovery = runtime_discovery or SystemAudioRuntimeAdapter()
+        self._process_adapter = process_adapter or AudioProcessAdapter()
+        self._initialized = False
+        self._closing = False
+        self._closed = False
+        self.backend: str | None = None
+        self.audio_device: str | None = None
         self.loop = False
         self.current_path: Path | None = None
         self.queue_paths: list[Path] = []
         self.queue_index = 0
+
+    def initialize(self) -> AudioRuntimeSelection:
+        """Discover and publish audio capabilities once per active lifecycle."""
+        with self._lifecycle_lock:
+            if self._closing:
+                raise RuntimeError("Audio runtime is closing")
+            was_closed = self._closed
+            self._closed = False
+            try:
+                return self._initialize_locked()
+            except Exception:
+                self._closed = was_closed
+                raise
+
+    def _initialize_locked(self) -> AudioRuntimeSelection:
+        """Initialize while the caller owns the lifecycle lock."""
+        if self._initialized:
+            return AudioRuntimeSelection(self.backend, self.audio_device)
+        self.music_dir.mkdir(parents=True, exist_ok=True)
+        selected = self._runtime_discovery.discover()
+        socket_path = self._process_adapter.resolve_socket_path()
+        self._publish_runtime(selected.backend, selected.audio_device)
+        self.sock_path = socket_path
+        self.backend = selected.backend
+        self.audio_device = selected.audio_device
+        self._initialized = True
+        return selected
+
+    def _ensure_runtime_locked(self) -> AudioRuntimeSelection:
+        """Lazy-start only a new runtime; shutdown requires explicit reopen."""
+        if self._closing or self._closed:
+            raise RuntimeError("Audio runtime is closed")
+        return self._initialize_locked()
+
+    def _publish_runtime(
+        self,
+        backend: str | None,
+        audio_device: str | None,
+    ) -> None:
+        """Expose only the selected capability through synchronized state."""
         with self.state_lock:
-            self.state["system"]["player"] = self.backend
-            self.state["system"]["audio_device"] = self.audio_device
+            system = self.state.setdefault("system", {})
+            system["player"] = backend
+            system["audio_device"] = audio_device
+
+    @property
+    def initialized(self) -> bool:
+        """Return whether runtime discovery completed for this lifecycle."""
+        with self._lifecycle_lock:
+            return self._initialized
 
     def _cleanup_socket(self) -> None:
-        try:
-            os.unlink(self.sock_path)
-        except FileNotFoundError:
-            pass
+        self._process_adapter.cleanup_socket(self.sock_path)
 
     def _send(self, command: list[Any]) -> bool:
-        try:
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-                sock.settimeout(0.5)
-                sock.connect(self.sock_path)
-                payload = json.dumps({"command": command}) + "\n"
-                sock.sendall(payload.encode())
-            return True
-        except Exception:
-            return False
+        return self._process_adapter.send(self.sock_path, command)
 
     def _send_commands(self, commands: list[list[Any]]) -> bool:
         """Send ordered MPV commands through one short-lived socket."""
-        try:
-            payload = "".join(
-                json.dumps({"command": command}) + "\n" for command in commands
-            ).encode()
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-                sock.settimeout(0.5)
-                sock.connect(self.sock_path)
-                sock.sendall(payload)
-            return True
-        except Exception:
-            return False
+        return self._process_adapter.send_commands(self.sock_path, commands)
 
     def _send_retry(
         self,
@@ -133,70 +135,29 @@ class AudioPlayer:
         attempts: int = 5,
         delay: float = 0.2,
     ) -> bool:
-        for _ in range(attempts):
-            if self._send(command):
-                return True
-            time.sleep(delay)
-        return False
+        return self._process_adapter.send_retry(
+            self.sock_path,
+            command,
+            attempts,
+            delay,
+        )
 
     def _spawn(
         self,
         file_path: Path,
         volume: int,
     ) -> subprocess.Popen[str]:
-        if self.backend == "mpv":
-            command = [
-                "mpv",
-                "--no-config",
-                "--no-video",
-                "--really-quiet",
-                f"--volume={volume}",
-                f"--loop-file={'inf' if self.loop else 'no'}",
-                f"--input-ipc-server={self.sock_path}",
-            ]
-            if self.audio_device:
-                command.append(f"--audio-device={self.audio_device}")
-            command.append(str(file_path))
-        elif self.backend == "afplay":
-            bounded_volume = max(0, min(100, volume)) / 100
-            command = [
-                "afplay",
-                "-v",
-                f"{bounded_volume:.2f}",
-                str(file_path),
-            ]
-        elif self.backend == "ffplay":
-            command = [
-                "ffplay",
-                "-nodisp",
-                "-autoexit",
-                "-loglevel",
-                "quiet",
-                "-volume",
-                str(max(0, min(100, volume))),
-            ]
-            if self.loop:
-                command.extend(["-loop", "0"])
-            command.append(str(file_path))
-        else:
-            raise RuntimeError(
-                "ไม่พบโปรแกรมเล่นเสียง — Pi/Linux: sudo apt install -y mpv · "
-                "macOS: brew install mpv · Windows: ติดตั้ง ffmpeg"
-            )
-        return subprocess.Popen(
-            command,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
+        return self._process_adapter.spawn(
+            backend=self.backend,
+            audio_device=self.audio_device,
+            socket_path=self.sock_path,
+            file_path=file_path,
+            volume=volume,
+            loop=self.loop,
         )
 
-    @staticmethod
-    def _process_error(proc: subprocess.Popen[str]) -> str:
-        try:
-            detail = (proc.stderr.read() if proc.stderr else "").strip()
-        except Exception:
-            detail = ""
-        return detail[-1000:] or f"player exited with code {proc.returncode}"
+    def _process_error(self, proc: subprocess.Popen[str]) -> str:
+        return self._process_adapter.process_error(proc)
 
     def play(
         self,
@@ -205,32 +166,39 @@ class AudioPlayer:
         queue: bool = False,
     ) -> None:
         """Start or replace playback and update the authoritative state."""
-        with self.lock:
-            self.loop = bool(loop)
-            queue_paths = self._queue_for(file_path, queue)
-            if self._replace_active_mpv(file_path, queue_paths, queue):
-                return
+        with self._lifecycle_lock:
+            self._ensure_runtime_locked()
+            with self.lock:
+                self.loop = bool(loop)
+                queue_paths = self._queue_for(file_path, queue)
+                if self._replace_active_mpv(file_path, queue_paths, queue):
+                    return
 
-            self._stop_locked()
-            self._cleanup_socket()
-            self.loop = bool(loop)
-            self.current_path = file_path
-            self.queue_paths = queue_paths
-            self.queue_index = 0
-            with self.state_lock:
-                volume = int(self.state["music"]["volume"])
-            self.proc = self._spawn(file_path, volume)
-            proc = self.proc
-            time.sleep(0.2)
-            if proc.poll() is not None:
-                error = self._publish_spawn_error(proc)
-                raise RuntimeError(error)
-            self._publish_playing(file_path, queue)
-        threading.Thread(
-            target=self._watch,
-            args=(proc,),
-            daemon=True,
-        ).start()
+                self._stop_locked()
+                self._cleanup_socket()
+                self.loop = bool(loop)
+                self.current_path = file_path
+                self.queue_paths = queue_paths
+                self.queue_index = 0
+                with self.state_lock:
+                    volume = int(self.state["music"]["volume"])
+                self.proc = self._spawn(file_path, volume)
+                proc = self.proc
+                time.sleep(0.2)
+                if proc.poll() is not None:
+                    error = self._publish_spawn_error(proc)
+                    raise RuntimeError(error)
+                self._publish_playing(file_path, queue)
+                self._start_watcher_locked(proc)
+
+    def _start_watcher_locked(self, proc: subprocess.Popen[str]) -> None:
+        """Register a spawned process or roll it back while holding player lock."""
+        try:
+            self._watchers.start(proc, self._watch)
+        except Exception:
+            if self.proc is proc:
+                self._stop_locked()
+            raise
 
     def _queue_for(self, file_path: Path, queue: bool) -> list[Path]:
         if not queue or self.loop:
@@ -340,11 +308,7 @@ class AudioPlayer:
         with self.state_lock:
             volume = int(self.state["music"]["volume"])
         self.proc = self._spawn(self.current_path, volume)
-        threading.Thread(
-            target=self._watch,
-            args=(self.proc,),
-            daemon=True,
-        ).start()
+        self._start_watcher_locked(self.proc)
         return True
 
     def _start_next_queue_track(self) -> bool:
@@ -370,11 +334,7 @@ class AudioPlayer:
                     "error": None,
                 }
             )
-        threading.Thread(
-            target=self._watch,
-            args=(next_proc,),
-            daemon=True,
-        ).start()
+        self._start_watcher_locked(next_proc)
         return True
 
     def _stop_locked(self) -> None:
@@ -387,11 +347,9 @@ class AudioPlayer:
         self.queue_paths = []
         self.queue_index = 0
         if self.proc and self.proc.poll() is None:
-            self.proc.terminate()
-            try:
-                self.proc.wait(timeout=1)
-            except subprocess.TimeoutExpired:
-                self.proc.kill()
+            error = terminate_audio_process(self.proc)
+            if error:
+                print(f"[MUSIC] process cleanup failed: {error}")
         self.proc = None
         self._cleanup_socket()
         with self.state_lock:
@@ -412,29 +370,64 @@ class AudioPlayer:
         with self.lock:
             self._stop_locked()
 
+    def shutdown(self, watcher_timeout: float = 2.0) -> None:
+        """Stop playback, drain watcher threads and release runtime selection."""
+        with self._lifecycle_lock:
+            self._closing = True
+            errors: list[str] = []
+            survivors: tuple[str, ...] = ()
+            try:
+                try:
+                    self.stop()
+                except Exception as exc:
+                    errors.append(f"stop failed: {exc}")
+                try:
+                    survivors = self._watchers.drain(watcher_timeout)
+                except Exception as exc:
+                    errors.append(f"watcher drain failed: {exc}")
+            finally:
+                self.backend = None
+                self.audio_device = None
+                self._initialized = False
+                self._closed = True
+                try:
+                    self._publish_runtime(None, None)
+                except Exception as exc:
+                    errors.append(f"status publication failed: {exc}")
+                finally:
+                    self._closing = False
+            if survivors:
+                errors.append(f"watchers still draining: {', '.join(survivors)}")
+            if errors:
+                print(f"[MUSIC] shutdown incomplete: {'; '.join(errors)}")
+
     def pause_toggle(self) -> bool:
         """Toggle MPV pause and report whether the command was accepted."""
-        with self.lock:
-            with self.state_lock:
-                if not self.state["music"]["playing"]:
-                    return True
-                paused = not bool(self.state["music"]["paused"])
-            if self.backend != "mpv":
-                return False
-            if not self._send_retry(["set_property", "pause", paused]):
-                return False
-            with self.state_lock:
-                self.state["music"]["paused"] = paused
-            return True
+        with self._lifecycle_lock:
+            self._ensure_runtime_locked()
+            with self.lock:
+                with self.state_lock:
+                    if not self.state["music"]["playing"]:
+                        return True
+                    paused = not bool(self.state["music"]["paused"])
+                if self.backend != "mpv":
+                    return False
+                if not self._send_retry(["set_property", "pause", paused]):
+                    return False
+                with self.state_lock:
+                    self.state["music"]["paused"] = paused
+                return True
 
     def set_volume(self, volume: int) -> None:
         """Apply a bounded volume to MPV and the authoritative state."""
         bounded = max(0, min(self.max_volume, int(volume)))
-        with self.lock:
-            if self.backend == "mpv":
-                self._send(["set_property", "volume", bounded])
-        with self.state_lock:
-            self.state["music"]["volume"] = bounded
+        with self._lifecycle_lock:
+            self._ensure_runtime_locked()
+            with self.lock:
+                if self.backend == "mpv":
+                    self._send(["set_property", "volume", bounded])
+            with self.state_lock:
+                self.state["music"]["volume"] = bounded
 
     def snapshot(self) -> dict[str, Any]:
         """Return a detached music-only state without building a Pod snapshot."""

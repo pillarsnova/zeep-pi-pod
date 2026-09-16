@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
-import threading
 import time
 import unittest
 from pathlib import Path
@@ -1051,9 +1050,7 @@ class RbacApiTests(unittest.TestCase):
             with pod_app.state_lock:
                 self.assertTrue(pod_app.state["safety"]["armed"])
                 self.assertTrue(pod_app.state["safety"]["latched"])
-                self.assertTrue(
-                    pod_app.state["session"]["wellness_context_available"]
-                )
+                self.assertTrue(pod_app.state["session"]["wellness_context_available"])
                 self.assertEqual(
                     pod_app.state["session"]["personal_rest_baseline"],
                     expected_baseline,
@@ -1672,20 +1669,17 @@ class RbacApiTests(unittest.TestCase):
 
     def test_audio_track_change_reuses_live_mpv_process(self) -> None:
         """Changing tracks must keep ALSA/MPV open to avoid a silent restart gap."""
-        player = object.__new__(pod_app.AudioPlayer)
+        player = pod_app.AudioPlayer(
+            music_dir=pod_app.MUSIC_DIR,
+            max_volume=pod_app.MAX_VOLUME,
+            state=pod_app.state,
+            state_lock=pod_app.state_lock,
+        )
+        player._initialized = True
         player.proc = SimpleNamespace(poll=lambda: None)
         player.sock_path = "/tmp/test-zeep-mpv.sock"
-        player.lock = threading.Lock()
         player.backend = "mpv"
         player.audio_device = None
-        player.music_dir = pod_app.MUSIC_DIR
-        player.max_volume = pod_app.MAX_VOLUME
-        player.state = pod_app.state
-        player.state_lock = pod_app.state_lock
-        player.loop = False
-        player.current_path = None
-        player.queue_paths = []
-        player.queue_index = 0
         player._send_commands = MagicMock(return_value=True)
         player._stop_locked = MagicMock()
         target = pod_app.MUSIC_DIR / "Sleep-02-WindDown-Theta-Mix.wav"

@@ -192,6 +192,73 @@ function adminBaselineTone(value,range){
   if(!Number.isFinite(minimum)||!Number.isFinite(maximum))return 'unknown';
   return numeric>=minimum&&numeric<=maximum?'good':'fair';
 }
+function monitorRestModeLabel(mode){
+  return ({
+    sleep:'Overnight Recovery',overnight:'Overnight Recovery',
+    nap_recovery:'Nap & Refresh',short_nap:'Nap & Refresh',
+    cycle_nap:'Nap & Refresh',relax_meditation:'Nap & Refresh',
+    recovery_readiness:'Nap & Refresh',performance_prep:'Nap & Refresh',
+    physical_comfort:'Nap & Refresh',
+  })[mode]||mode||'รอ Mode';
+}
+function monitorMaskedAccount(session={}){
+  const display=String(session.display_name||session.username||'ผู้ใช้งาน').trim();
+  const account=String(session.email||session.account_key||'').trim();
+  if(!account)return display;
+  if(!account.includes('@')){
+    const hint=account.length<=2?`${account.slice(0,1)}***`:`${account.slice(0,2)}***`;
+    return display===account?hint:`${display} · ${hint}`;
+  }
+  const [local,domain]=account.split('@',2);
+  const hint=`${local.slice(0,Math.min(2,local.length))}***@${domain}`;
+  return display===account?hint:`${display} · ${hint}`;
+}
+function setMonitorLiveMetric(cardId,valueId,noteId,{value='--',note='รอข้อมูล',tone='neutral'}={}){
+  const card=document.getElementById(cardId),valueEl=document.getElementById(valueId),noteEl=document.getElementById(noteId);
+  if(!card||!valueEl||!noteEl)return;
+  card.classList.remove('is-good','is-warning','is-muted');
+  card.classList.add(tone==='good'?'is-good':tone==='warning'?'is-warning':'is-muted');
+  valueEl.textContent=value;
+  noteEl.textContent=note;
+}
+function renderMonitorLiveSummary({bcg={},sleep={},session={},analysisEligible=false,hrValid=false,rrValid=false,hr=null,rr=null}={}){
+  const root=document.getElementById('monitorLiveSummary');
+  if(!root)return;
+  const active=session.active===true;
+  const stageKey=sleep.classification_active===true?(sleep.confirmed_state||sleep.state):null;
+  const stage=SLEEP_TH[stageKey]||SLEEP_TH.no_data;
+  const confidence=({high:'มั่นใจสูง',medium:'มั่นใจปานกลาง',low:'มั่นใจต่ำ'})[sleep.confidence]||'รอความมั่นใจ';
+  const source=sleep.classification_source==='personal'?'Personal Baseline':'Age + Gender Baseline';
+  const bedLabel=BCG_STATUS_TH[bcg.status_code]||bcg.status_text||'รอสัญญาณ';
+  const age=Number(bcg.analysis_data_age_s??bcg.data_age_s);
+  const freshness=Number.isFinite(age)?`ข้อมูล ${age.toFixed(1)} วินาทีก่อน`:'ยังไม่มีเวลา Packet';
+  const coverage=Number(bcg.paired_vital_coverage);
+  const personal=sleep.personal_baseline||{};
+  const nights=Math.max(0,Number(personal.nights_used)||0);
+  const personalReady=personal.status==='active'||personal.status==='early'||personal.status==='mature';
+  document.getElementById('monitorLiveIdentity').textContent=active?monitorMaskedAccount(session):'ยังไม่มีผู้ใช้งานใน Session';
+  document.getElementById('monitorLiveMode').textContent=monitorRestModeLabel(session.rest_mode);
+  document.getElementById('monitorLiveReference').textContent=`Sleep State · ${source}`;
+  setMonitorLiveMetric('monitorLiveHrCard','monitorLiveHr','monitorLiveHrNote',{
+    value:hrValid?hr.toFixed(1):'--',note:hrValid?'ครั้ง/นาที · ใช้วิเคราะห์ได้':bcg.heart_rate_bpm!=null?'มีค่า แต่ Gate ยังไม่ครบ':'รอ BCG',tone:hrValid?'good':'muted',
+  });
+  setMonitorLiveMetric('monitorLiveRrCard','monitorLiveRr','monitorLiveRrNote',{
+    value:rrValid?rr.toFixed(1):'--',note:rrValid?'ครั้ง/นาที · ใช้วิเคราะห์ได้':bcg.respiration_rate!=null?'มีค่า แต่ Gate ยังไม่ครบ':'รอ BCG',tone:rrValid?'good':'muted',
+  });
+  setMonitorLiveMetric('monitorLiveBedCard','monitorLiveBed','monitorLiveBedNote',{
+    value:bedLabel,note:freshness,tone:active&&bcg.connected&&!bcg.stale?'good':'muted',
+  });
+  setMonitorLiveMetric('monitorLiveStageCard','monitorLiveStage','monitorLiveStageNote',{
+    value:stageKey?`${stage.code} · ${stage.label}`:'กำลังยืนยัน',note:stageKey?`${confidence} · Confirmed`:'ยังไม่สร้าง State แทนข้อมูลที่หาย',tone:stageKey?'good':'warning',
+  });
+  setMonitorLiveMetric('monitorLiveQualityCard','monitorLiveQuality','monitorLiveQualityNote',{
+    value:analysisEligible&&hrValid&&rrValid?'พร้อม':'กำลังตรวจ',note:Number.isFinite(coverage)?`HR/RR coverage ${Math.round(coverage*100)}% · ${freshness}`:freshness,tone:analysisEligible&&hrValid&&rrValid?'good':'warning',
+  });
+  setMonitorLiveMetric('monitorLivePersonalCard','monitorLivePersonal','monitorLivePersonalNote',{
+    value:personalReady?'พร้อมเทียบ':nights?'กำลังเรียนรู้':'ยังไม่มีข้อมูล',note:`${nights} คืน · ใช้เทียบและแนะนำเท่านั้น`,tone:personalReady?'good':'muted',
+  });
+  document.getElementById('monitorLivePolicy').textContent=`Sleep State ใช้ ${source} · Personal Reference เป็นข้อมูลรายบัญชีสำหรับเปรียบเทียบและคำแนะนำ ยังไม่เปลี่ยน State โดยตรง`;
+}
 function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
   const bioRoot=document.getElementById('adminBioExplanation');
   const modeRoot=document.getElementById('adminExplanationMode');
@@ -223,6 +290,7 @@ function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
     &&bcg.respiration_held!==true&&rawRrVisible;
   const hrRestored=restored&&rawHr!==null&&rawHr!==undefined&&rawHr!==''&&Number.isFinite(hr);
   const rrRestored=restored&&rawRr!==null&&rawRr!==undefined&&rawRr!==''&&Number.isFinite(rr);
+  renderMonitorLiveSummary({bcg,sleep,session,analysisEligible,hrValid,rrValid,hr,rr});
   const stageTone=stageKey?'info':'unknown';
   const source=sleep.classification_source==='personal'?'Baseline ส่วนบุคคล':'Baseline อายุและเพศ';
   const confidence=({high:'สูง',medium:'ปานกลาง',low:'ต่ำ'})[sleep.confidence]||'ไม่ระบุ';
@@ -257,14 +325,7 @@ function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
   bioRoot.innerHTML=bioRows.join('');
 
   const result=atmosphere||{};
-  const modeLabel=({
-    sleep:'Overnight Recovery',
-    nap_recovery:'Nap & Refresh',
-    relax_meditation:'Nap & Refresh',
-    recovery_readiness:'Nap & Refresh',
-    performance_prep:'Nap & Refresh',
-    physical_comfort:'Nap & Refresh',
-  })[result.mode]||session.rest_mode||'รอ Mode';
+  const modeLabel=monitorRestModeLabel(result.mode||session.rest_mode);
   modeRoot.textContent=`โหมด · ${modeLabel}`;
 }
 const personalRestModeLabels=Object.freeze({

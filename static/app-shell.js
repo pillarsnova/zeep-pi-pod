@@ -33,9 +33,9 @@
       document: 'Control Debug',
     },
     monitor: {
-      title: 'Live System & Adaptive Learning',
-      subtitle: 'ตรวจ Sensor, Baseline, Version และเหตุผลของระบบแบบสด',
-      document: 'Adaptive Learning Monitor',
+      title: 'มอนิเตอร์ระบบและการพัก',
+      subtitle: 'ดูความปลอดภัย ข้อมูลสด Reference และคำแนะนำจากจุดเดียว',
+      document: 'System Monitor',
     },
     sessions: {
       title: 'ประวัติการใช้งาน',

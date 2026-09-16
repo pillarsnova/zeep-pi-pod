@@ -17,6 +17,8 @@
     reuse a cached stylesheet.
   -->
   <link rel="stylesheet" href="/static/theme-modern.css?v=20260916-155" />
+  <link rel="stylesheet" href="/static/styles/monitor.css?v=20260916-1" />
+  <link rel="stylesheet" href="/static/styles/sessions.css?v=20260916-1" />
 </head>
 <body>
 <!-- Shared line-icon library: every interactive view reuses the same 24 px
@@ -75,7 +77,7 @@
   <div class="boot-text">กำลังเตรียม ZEEP<span class="cursor"></span></div>
   <div class="boot-sub">พื้นที่พักผ่อนของคุณ</div>
 </div>
-<div id="login" class="hide">
+<div id="login" class="hide" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
   <div class="login-card">
     <div class="section-title" id="loginTitle">เข้าสู่ระบบผู้ใช้งาน · ZEEP</div>
     <div class="login-route-badge" id="loginRouteBadge" aria-live="polite">
@@ -297,7 +299,7 @@
   <nav class="main-nav" aria-label="ZEEP sections">
     <a href="/dashboard" data-view="dashboard" aria-label="ภาพรวม" title="ภาพรวม"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10M9.5 20v-6h5v6"/></svg></span><span><b>ภาพรวม</b></span></a>
     <a href="/control" data-view="control" aria-label="ควบคุม" title="ควบคุม"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M10 14v6"/></svg></span><span><b>ควบคุม</b></span></a>
-    <a href="/monitor" data-view="monitor" class="admin-only" aria-label="ระบบ" title="ระบบ"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h4l2.2-5 4.2 10 2.2-5H21"/><path d="M4 4h16v16H4z"/></svg></span><span><b>ระบบ</b></span></a>
+    <a href="/monitor" data-view="monitor" class="admin-only" aria-label="มอนิเตอร์" title="มอนิเตอร์"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h4l2.2-5 4.2 10 2.2-5H21"/><path d="M4 4h16v16H4z"/></svg></span><span><b>มอนิเตอร์</b></span></a>
     <a href="/sessions" data-view="sessions" aria-label="ประวัติการใช้งาน" title="ประวัติการใช้งาน"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg></span><span><b>ประวัติใช้งาน</b></span></a>
     <!-- This shared action stays available on every view, including Focus
          Mode, so touch users always have an obvious way to exit fullscreen. -->
@@ -318,12 +320,44 @@
     <a id="safetyUserAlertAction" href="/control">เปิดหน้าควบคุมประตู</a>
   </div>
   <div class="monitor-alert-bar" data-pages="monitor">
-    <span class="ui-section-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-bell"/></svg></span><div class="monitor-alert-status" id="monitorAlertStatus">Monitor alerts พร้อมทำงาน · เสียงปิดอยู่</div>
+    <span class="ui-section-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-bell"/></svg></span><div class="monitor-alert-status" id="monitorAlertStatus">ระบบแจ้งเตือนพร้อมทำงาน · ปิดเสียงอยู่</div>
     <button class="btn ui-label-button" id="alertSoundBtn" onclick="toggleAlertSound()"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-volume-off"/></svg><span class="ui-button-label">เปิดเสียงแจ้งเตือน</span></button>
-    <button class="btn monitor-advanced-btn ui-label-button" id="monitorAdvancedBtn" onclick="toggleAdvancedMonitor()"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-diagnostics"/></svg><span class="ui-button-label">เปิด Advanced Diagnostics</span></button>
+    <button class="btn monitor-advanced-btn ui-label-button" id="monitorAdvancedBtn" onclick="toggleAdvancedMonitor()" aria-expanded="false"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-diagnostics"/></svg><span class="ui-button-label">เปิด Advanced Diagnostics</span></button>
   </div>
 
   <div class="grid">
+    <header class="monitor-section-heading monitor-section-now" id="monitorNowHeading" data-pages="monitor">
+      <span>01</span><div><h3>ต้องดูตอนนี้</h3><p>ความปลอดภัย Session และความพร้อมของ Sensor</p></div>
+    </header>
+    <header class="monitor-section-heading monitor-section-live" id="monitorLiveHeading" data-pages="monitor">
+      <span>02</span><div><h3>ผู้ใช้งานและสถานะสด</h3><p>ค่าปัจจุบัน แหล่ง Reference และสิ่งที่ Admin ควรติดตาม</p></div>
+    </header>
+    <header class="monitor-section-heading monitor-section-environment" id="monitorEnvironmentHeading" data-pages="monitor">
+      <span>03</span><div><h3>สภาพแวดล้อมและคำแนะนำ</h3><p>สิ่งที่ควรปรับ โดยแยกเกณฑ์ของโหมดออกจาก Reference รายบุคคล</p></div>
+    </header>
+    <header class="monitor-section-heading monitor-section-advanced" id="monitorAdvancedHeading" data-pages="monitor">
+      <span>04</span><div><h3>Advanced Diagnostics</h3><p>Model, BCG, System, Calibration, Packet และหลักฐานเชิงเทคนิค</p></div>
+    </header>
+
+    <section class="card monitor-live-summary" id="monitorLiveSummary" data-pages="monitor" data-admin-panel aria-labelledby="monitorLiveSummaryTitle">
+      <div class="monitor-live-summary-head">
+        <div class="monitor-live-summary-identity">
+          <span class="ui-section-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-heart"/></svg></span>
+          <div><em>LIVE PHYSIOLOGY</em><h3 id="monitorLiveSummaryTitle">ข้อมูลชีวภาพสด</h3><p id="monitorLiveIdentity">ยังไม่มีผู้ใช้งานใน Session</p></div>
+        </div>
+        <div class="monitor-live-summary-context"><span id="monitorLiveMode">รอ Mode</span><strong id="monitorLiveReference">Sleep State · Age + Gender</strong></div>
+      </div>
+      <div class="monitor-live-metrics" aria-live="polite">
+        <article id="monitorLiveHrCard"><small>ชีพจร</small><b id="monitorLiveHr">--</b><span id="monitorLiveHrNote">รอ BCG</span></article>
+        <article id="monitorLiveRrCard"><small>การหายใจ</small><b id="monitorLiveRr">--</b><span id="monitorLiveRrNote">รอ BCG</span></article>
+        <article id="monitorLiveBedCard"><small>สถานะเตียง</small><b id="monitorLiveBed">--</b><span id="monitorLiveBedNote">รอข้อมูล</span></article>
+        <article id="monitorLiveStageCard"><small>Sleep State</small><b id="monitorLiveStage">--</b><span id="monitorLiveStageNote">รอยืนยัน</span></article>
+        <article id="monitorLiveQualityCard"><small>คุณภาพข้อมูล</small><b id="monitorLiveQuality">--</b><span id="monitorLiveQualityNote">รอตรวจ Gate</span></article>
+        <article id="monitorLivePersonalCard"><small>Personal Reference</small><b id="monitorLivePersonal">กำลังเรียนรู้</b><span id="monitorLivePersonalNote">ใช้เพื่อเทียบและแนะนำ</span></article>
+      </div>
+      <div class="monitor-live-summary-foot" id="monitorLivePolicy">Sleep State ใช้ Reference ที่ระบุด้านบน · Personal Reference ยังไม่เปลี่ยน State โดยตรง</div>
+    </section>
+
     <section class="card dashboard-overview" id="dashboardOverview" data-pages="dashboard" aria-label="สุขภาพผู้ใช้งานและ Sensor">
       <div class="tablet-deck-head">
         <h3>ข้อมูลล่าสุด</h3>
@@ -612,8 +646,8 @@
     </div>
     <section class="card adaptive-monitor" id="adaptiveMonitorCard" data-pages="monitor" data-admin-panel aria-labelledby="adaptiveMonitorTitle">
       <div class="adaptive-monitor-head">
-        <div><div class="section-title" id="adaptiveMonitorTitle">Adaptive Learning · Live</div><p>เทียบข้อมูลสดกับ Baseline เพื่อเตรียม Model ควบคุมสภาพแวดล้อมแบบเฉพาะบุคคล</p></div>
-        <div class="adaptive-shadow-badge">SHADOW · NO AUTO CONTROL</div>
+        <div><div class="section-title" id="adaptiveMonitorTitle">Personal Reference · Live</div><p>เทียบข้อมูลสดของ Session นี้กับข้อมูลเดิมของผู้ใช้งาน โดยแสดงแหล่งอ้างอิงแยกรายค่า</p></div>
+        <div class="adaptive-shadow-badge">คำแนะนำเท่านั้น · ไม่สั่งอัตโนมัติ</div>
       </div>
       <div class="adaptive-status-grid" aria-live="polite">
         <article><span>SESSION</span><b id="adaptiveSessionState">ยังไม่มี Session</b><small id="adaptiveSessionMeta">รอผู้ใช้งาน</small></article>
@@ -623,7 +657,7 @@
       </div>
       <div class="adaptive-monitor-layout">
         <section class="adaptive-panel adaptive-feature-panel">
-          <div class="adaptive-panel-head"><div><b>Live เทียบ Personal Reference</b><span>คำว่า สูง/ต่ำ หมายถึงเทียบค่าของบุคคล ไม่ใช่การวินิจฉัย</span></div><em id="adaptiveWindowMeta">Rolling window · 5 นาที</em></div>
+          <div class="adaptive-panel-head"><div><b>Live เทียบ Reference ของ Session นี้</b><span id="adaptiveReferenceOwner">รอผู้ใช้งานและรูปแบบการพัก</span></div><em id="adaptiveWindowMeta">Rolling window · 5 นาที</em></div>
           <div class="adaptive-feature-table" id="adaptiveFeatureRows"><div class="adaptive-empty">กำลังรอ Adaptive dataset</div></div>
         </section>
         <section class="adaptive-panel adaptive-decision-panel">
@@ -804,7 +838,7 @@
           <div><strong>Bed Status</strong>สถานะที่อุปกรณ์ส่งมา เช่น อยู่บนเตียง ลุกออก หรือกำลังขยับ ใช้ช่วยบอกว่าควรเชื่อค่าช่วงนั้นมากน้อยเพียงใด</div>
         </div>
       </details>
-      <div class="mini" data-pages="monitor">Sleep Wellness estimate จาก HR, RR, Bed Status และการเคลื่อนไหวแบบไม่สัมผัส · ใช้ Personal Baseline ร่วมกับ Age Baseline</div>
+      <div class="mini" data-pages="monitor">Sleep Wellness estimate จาก HR, RR, Bed Status และการเคลื่อนไหวแบบไม่สัมผัส · Sleep State ใช้ Age + Gender เป็นค่าเริ่มต้น ส่วน Personal Reference ใช้เพื่อเปรียบเทียบและให้คำแนะนำ โดยยังไม่ตัดสิน Stage โดยตรง</div>
     </div>
 
     <div class="card control-center" id="environmentControlCenter" data-pages="control">

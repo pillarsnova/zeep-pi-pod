@@ -866,6 +866,8 @@
     reuse a cached stylesheet.
   -->
   <link rel="stylesheet" href="/static/theme-modern.css?v=20260916-155" />
+  <link rel="stylesheet" href="/static/styles/monitor.css?v=20260916-1" />
+  <link rel="stylesheet" href="/static/styles/sessions.css?v=20260916-1" />
 </head>
 <body>
 <!-- Shared line-icon library: every interactive view reuses the same 24 px
@@ -924,7 +926,7 @@
   <div class="boot-text">กำลังเตรียม ZEEP<span class="cursor"></span></div>
   <div class="boot-sub">พื้นที่พักผ่อนของคุณ</div>
 </div>
-<div id="login" class="hide">
+<div id="login" class="hide" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
   <div class="login-card">
     <div class="section-title" id="loginTitle">เข้าสู่ระบบผู้ใช้งาน · ZEEP</div>
     <div class="login-route-badge" id="loginRouteBadge" aria-live="polite">
@@ -1146,7 +1148,7 @@
   <nav class="main-nav" aria-label="ZEEP sections">
     <a href="/dashboard" data-view="dashboard" aria-label="ภาพรวม" title="ภาพรวม"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10M9.5 20v-6h5v6"/></svg></span><span><b>ภาพรวม</b></span></a>
     <a href="/control" data-view="control" aria-label="ควบคุม" title="ควบคุม"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M10 14v6"/></svg></span><span><b>ควบคุม</b></span></a>
-    <a href="/monitor" data-view="monitor" class="admin-only" aria-label="ระบบ" title="ระบบ"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h4l2.2-5 4.2 10 2.2-5H21"/><path d="M4 4h16v16H4z"/></svg></span><span><b>ระบบ</b></span></a>
+    <a href="/monitor" data-view="monitor" class="admin-only" aria-label="มอนิเตอร์" title="มอนิเตอร์"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h4l2.2-5 4.2 10 2.2-5H21"/><path d="M4 4h16v16H4z"/></svg></span><span><b>มอนิเตอร์</b></span></a>
     <a href="/sessions" data-view="sessions" aria-label="ประวัติการใช้งาน" title="ประวัติการใช้งาน"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg></span><span><b>ประวัติใช้งาน</b></span></a>
     <!-- This shared action stays available on every view, including Focus
          Mode, so touch users always have an obvious way to exit fullscreen. -->
@@ -1167,12 +1169,44 @@
     <a id="safetyUserAlertAction" href="/control">เปิดหน้าควบคุมประตู</a>
   </div>
   <div class="monitor-alert-bar" data-pages="monitor">
-    <span class="ui-section-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-bell"/></svg></span><div class="monitor-alert-status" id="monitorAlertStatus">Monitor alerts พร้อมทำงาน · เสียงปิดอยู่</div>
+    <span class="ui-section-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-bell"/></svg></span><div class="monitor-alert-status" id="monitorAlertStatus">ระบบแจ้งเตือนพร้อมทำงาน · ปิดเสียงอยู่</div>
     <button class="btn ui-label-button" id="alertSoundBtn" onclick="toggleAlertSound()"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-volume-off"/></svg><span class="ui-button-label">เปิดเสียงแจ้งเตือน</span></button>
-    <button class="btn monitor-advanced-btn ui-label-button" id="monitorAdvancedBtn" onclick="toggleAdvancedMonitor()"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-diagnostics"/></svg><span class="ui-button-label">เปิด Advanced Diagnostics</span></button>
+    <button class="btn monitor-advanced-btn ui-label-button" id="monitorAdvancedBtn" onclick="toggleAdvancedMonitor()" aria-expanded="false"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-diagnostics"/></svg><span class="ui-button-label">เปิด Advanced Diagnostics</span></button>
   </div>
 
   <div class="grid">
+    <header class="monitor-section-heading monitor-section-now" id="monitorNowHeading" data-pages="monitor">
+      <span>01</span><div><h3>ต้องดูตอนนี้</h3><p>ความปลอดภัย Session และความพร้อมของ Sensor</p></div>
+    </header>
+    <header class="monitor-section-heading monitor-section-live" id="monitorLiveHeading" data-pages="monitor">
+      <span>02</span><div><h3>ผู้ใช้งานและสถานะสด</h3><p>ค่าปัจจุบัน แหล่ง Reference และสิ่งที่ Admin ควรติดตาม</p></div>
+    </header>
+    <header class="monitor-section-heading monitor-section-environment" id="monitorEnvironmentHeading" data-pages="monitor">
+      <span>03</span><div><h3>สภาพแวดล้อมและคำแนะนำ</h3><p>สิ่งที่ควรปรับ โดยแยกเกณฑ์ของโหมดออกจาก Reference รายบุคคล</p></div>
+    </header>
+    <header class="monitor-section-heading monitor-section-advanced" id="monitorAdvancedHeading" data-pages="monitor">
+      <span>04</span><div><h3>Advanced Diagnostics</h3><p>Model, BCG, System, Calibration, Packet และหลักฐานเชิงเทคนิค</p></div>
+    </header>
+
+    <section class="card monitor-live-summary" id="monitorLiveSummary" data-pages="monitor" data-admin-panel aria-labelledby="monitorLiveSummaryTitle">
+      <div class="monitor-live-summary-head">
+        <div class="monitor-live-summary-identity">
+          <span class="ui-section-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-heart"/></svg></span>
+          <div><em>LIVE PHYSIOLOGY</em><h3 id="monitorLiveSummaryTitle">ข้อมูลชีวภาพสด</h3><p id="monitorLiveIdentity">ยังไม่มีผู้ใช้งานใน Session</p></div>
+        </div>
+        <div class="monitor-live-summary-context"><span id="monitorLiveMode">รอ Mode</span><strong id="monitorLiveReference">Sleep State · Age + Gender</strong></div>
+      </div>
+      <div class="monitor-live-metrics" aria-live="polite">
+        <article id="monitorLiveHrCard"><small>ชีพจร</small><b id="monitorLiveHr">--</b><span id="monitorLiveHrNote">รอ BCG</span></article>
+        <article id="monitorLiveRrCard"><small>การหายใจ</small><b id="monitorLiveRr">--</b><span id="monitorLiveRrNote">รอ BCG</span></article>
+        <article id="monitorLiveBedCard"><small>สถานะเตียง</small><b id="monitorLiveBed">--</b><span id="monitorLiveBedNote">รอข้อมูล</span></article>
+        <article id="monitorLiveStageCard"><small>Sleep State</small><b id="monitorLiveStage">--</b><span id="monitorLiveStageNote">รอยืนยัน</span></article>
+        <article id="monitorLiveQualityCard"><small>คุณภาพข้อมูล</small><b id="monitorLiveQuality">--</b><span id="monitorLiveQualityNote">รอตรวจ Gate</span></article>
+        <article id="monitorLivePersonalCard"><small>Personal Reference</small><b id="monitorLivePersonal">กำลังเรียนรู้</b><span id="monitorLivePersonalNote">ใช้เพื่อเทียบและแนะนำ</span></article>
+      </div>
+      <div class="monitor-live-summary-foot" id="monitorLivePolicy">Sleep State ใช้ Reference ที่ระบุด้านบน · Personal Reference ยังไม่เปลี่ยน State โดยตรง</div>
+    </section>
+
     <section class="card dashboard-overview" id="dashboardOverview" data-pages="dashboard" aria-label="สุขภาพผู้ใช้งานและ Sensor">
       <div class="tablet-deck-head">
         <h3>ข้อมูลล่าสุด</h3>
@@ -1737,8 +1771,8 @@
     </div>
     <section class="card adaptive-monitor" id="adaptiveMonitorCard" data-pages="monitor" data-admin-panel aria-labelledby="adaptiveMonitorTitle">
       <div class="adaptive-monitor-head">
-        <div><div class="section-title" id="adaptiveMonitorTitle">Adaptive Learning · Live</div><p>เทียบข้อมูลสดกับ Baseline เพื่อเตรียม Model ควบคุมสภาพแวดล้อมแบบเฉพาะบุคคล</p></div>
-        <div class="adaptive-shadow-badge">SHADOW · NO AUTO CONTROL</div>
+        <div><div class="section-title" id="adaptiveMonitorTitle">Personal Reference · Live</div><p>เทียบข้อมูลสดของ Session นี้กับข้อมูลเดิมของผู้ใช้งาน โดยแสดงแหล่งอ้างอิงแยกรายค่า</p></div>
+        <div class="adaptive-shadow-badge">คำแนะนำเท่านั้น · ไม่สั่งอัตโนมัติ</div>
       </div>
       <div class="adaptive-status-grid" aria-live="polite">
         <article><span>SESSION</span><b id="adaptiveSessionState">ยังไม่มี Session</b><small id="adaptiveSessionMeta">รอผู้ใช้งาน</small></article>
@@ -1748,7 +1782,7 @@
       </div>
       <div class="adaptive-monitor-layout">
         <section class="adaptive-panel adaptive-feature-panel">
-          <div class="adaptive-panel-head"><div><b>Live เทียบ Personal Reference</b><span>คำว่า สูง/ต่ำ หมายถึงเทียบค่าของบุคคล ไม่ใช่การวินิจฉัย</span></div><em id="adaptiveWindowMeta">Rolling window · 5 นาที</em></div>
+          <div class="adaptive-panel-head"><div><b>Live เทียบ Reference ของ Session นี้</b><span id="adaptiveReferenceOwner">รอผู้ใช้งานและรูปแบบการพัก</span></div><em id="adaptiveWindowMeta">Rolling window · 5 นาที</em></div>
           <div class="adaptive-feature-table" id="adaptiveFeatureRows"><div class="adaptive-empty">กำลังรอ Adaptive dataset</div></div>
         </section>
         <section class="adaptive-panel adaptive-decision-panel">
@@ -1929,7 +1963,7 @@
           <div><strong>Bed Status</strong>สถานะที่อุปกรณ์ส่งมา เช่น อยู่บนเตียง ลุกออก หรือกำลังขยับ ใช้ช่วยบอกว่าควรเชื่อค่าช่วงนั้นมากน้อยเพียงใด</div>
         </div>
       </details>
-      <div class="mini" data-pages="monitor">Sleep Wellness estimate จาก HR, RR, Bed Status และการเคลื่อนไหวแบบไม่สัมผัส · ใช้ Personal Baseline ร่วมกับ Age Baseline</div>
+      <div class="mini" data-pages="monitor">Sleep Wellness estimate จาก HR, RR, Bed Status และการเคลื่อนไหวแบบไม่สัมผัส · Sleep State ใช้ Age + Gender เป็นค่าเริ่มต้น ส่วน Personal Reference ใช้เพื่อเปรียบเทียบและให้คำแนะนำ โดยยังไม่ตัดสิน Stage โดยตรง</div>
     </div>
 
     <div class="card control-center" id="environmentControlCenter" data-pages="control">
@@ -2797,7 +2831,7 @@ function renderSleepState(sl={},session={},bcg={}){
   const base=sl.baseline||{}, names={wake:'W · ตื่น',n1:'N1',n2:'N2',n3:'N3',rem:'REM'};
   const baselineRows=order.filter(k=>base[k]).map(k=>`<tr class="${classificationActive&&sl.state===k?'current':''}"><td>${names[k]}</td><td>${base[k].hr[0]}–${base[k].hr[1]} BPM</td><td>${base[k].rr[0]}–${base[k].rr[1]} ครั้ง/นาที</td></tr>`).join('');
   const genderAdj=sl.gender_adjustment||{};
-  const baselineTable=baselineRows?`<div class="baseline-block"><div class="baseline-title"><strong>Wellness Baseline · ${ageGroupDisplay(sl.age_group)} · ${genderTh(sl.gender)}</strong><span>Age + Gender directional starting range</span></div><table class="baseline-table"><thead><tr><th>Sleep State</th><th>HR · Heart Rate</th><th>RR · Respiratory Rate</th></tr></thead><tbody>${baselineRows}</tbody></table></div>`:'';
+  const baselineTable=baselineRows?`<div class="baseline-block"><div class="baseline-title"><strong>Wellness Baseline · ${ageGroupDisplay(sl.age_group)} · ${genderTh(sl.gender)}</strong><span>Reference ที่ใช้ตัดสิน State · ${source}</span></div><table class="baseline-table"><thead><tr><th>Sleep State</th><th>HR · Heart Rate</th><th>RR · Respiratory Rate</th></tr></thead><tbody>${baselineRows}</tbody></table></div>`:'';
   const env=sl.environment||{}, q=sl.signal_quality||{};
   const envParts=[
     env.temperature_c!=null?`🌡 ${env.temperature_c}°C`:null,
@@ -3267,6 +3301,73 @@ function adminBaselineTone(value,range){
   if(!Number.isFinite(minimum)||!Number.isFinite(maximum))return 'unknown';
   return numeric>=minimum&&numeric<=maximum?'good':'fair';
 }
+function monitorRestModeLabel(mode){
+  return ({
+    sleep:'Overnight Recovery',overnight:'Overnight Recovery',
+    nap_recovery:'Nap & Refresh',short_nap:'Nap & Refresh',
+    cycle_nap:'Nap & Refresh',relax_meditation:'Nap & Refresh',
+    recovery_readiness:'Nap & Refresh',performance_prep:'Nap & Refresh',
+    physical_comfort:'Nap & Refresh',
+  })[mode]||mode||'รอ Mode';
+}
+function monitorMaskedAccount(session={}){
+  const display=String(session.display_name||session.username||'ผู้ใช้งาน').trim();
+  const account=String(session.email||session.account_key||'').trim();
+  if(!account)return display;
+  if(!account.includes('@')){
+    const hint=account.length<=2?`${account.slice(0,1)}***`:`${account.slice(0,2)}***`;
+    return display===account?hint:`${display} · ${hint}`;
+  }
+  const [local,domain]=account.split('@',2);
+  const hint=`${local.slice(0,Math.min(2,local.length))}***@${domain}`;
+  return display===account?hint:`${display} · ${hint}`;
+}
+function setMonitorLiveMetric(cardId,valueId,noteId,{value='--',note='รอข้อมูล',tone='neutral'}={}){
+  const card=document.getElementById(cardId),valueEl=document.getElementById(valueId),noteEl=document.getElementById(noteId);
+  if(!card||!valueEl||!noteEl)return;
+  card.classList.remove('is-good','is-warning','is-muted');
+  card.classList.add(tone==='good'?'is-good':tone==='warning'?'is-warning':'is-muted');
+  valueEl.textContent=value;
+  noteEl.textContent=note;
+}
+function renderMonitorLiveSummary({bcg={},sleep={},session={},analysisEligible=false,hrValid=false,rrValid=false,hr=null,rr=null}={}){
+  const root=document.getElementById('monitorLiveSummary');
+  if(!root)return;
+  const active=session.active===true;
+  const stageKey=sleep.classification_active===true?(sleep.confirmed_state||sleep.state):null;
+  const stage=SLEEP_TH[stageKey]||SLEEP_TH.no_data;
+  const confidence=({high:'มั่นใจสูง',medium:'มั่นใจปานกลาง',low:'มั่นใจต่ำ'})[sleep.confidence]||'รอความมั่นใจ';
+  const source=sleep.classification_source==='personal'?'Personal Baseline':'Age + Gender Baseline';
+  const bedLabel=BCG_STATUS_TH[bcg.status_code]||bcg.status_text||'รอสัญญาณ';
+  const age=Number(bcg.analysis_data_age_s??bcg.data_age_s);
+  const freshness=Number.isFinite(age)?`ข้อมูล ${age.toFixed(1)} วินาทีก่อน`:'ยังไม่มีเวลา Packet';
+  const coverage=Number(bcg.paired_vital_coverage);
+  const personal=sleep.personal_baseline||{};
+  const nights=Math.max(0,Number(personal.nights_used)||0);
+  const personalReady=personal.status==='active'||personal.status==='early'||personal.status==='mature';
+  document.getElementById('monitorLiveIdentity').textContent=active?monitorMaskedAccount(session):'ยังไม่มีผู้ใช้งานใน Session';
+  document.getElementById('monitorLiveMode').textContent=monitorRestModeLabel(session.rest_mode);
+  document.getElementById('monitorLiveReference').textContent=`Sleep State · ${source}`;
+  setMonitorLiveMetric('monitorLiveHrCard','monitorLiveHr','monitorLiveHrNote',{
+    value:hrValid?hr.toFixed(1):'--',note:hrValid?'ครั้ง/นาที · ใช้วิเคราะห์ได้':bcg.heart_rate_bpm!=null?'มีค่า แต่ Gate ยังไม่ครบ':'รอ BCG',tone:hrValid?'good':'muted',
+  });
+  setMonitorLiveMetric('monitorLiveRrCard','monitorLiveRr','monitorLiveRrNote',{
+    value:rrValid?rr.toFixed(1):'--',note:rrValid?'ครั้ง/นาที · ใช้วิเคราะห์ได้':bcg.respiration_rate!=null?'มีค่า แต่ Gate ยังไม่ครบ':'รอ BCG',tone:rrValid?'good':'muted',
+  });
+  setMonitorLiveMetric('monitorLiveBedCard','monitorLiveBed','monitorLiveBedNote',{
+    value:bedLabel,note:freshness,tone:active&&bcg.connected&&!bcg.stale?'good':'muted',
+  });
+  setMonitorLiveMetric('monitorLiveStageCard','monitorLiveStage','monitorLiveStageNote',{
+    value:stageKey?`${stage.code} · ${stage.label}`:'กำลังยืนยัน',note:stageKey?`${confidence} · Confirmed`:'ยังไม่สร้าง State แทนข้อมูลที่หาย',tone:stageKey?'good':'warning',
+  });
+  setMonitorLiveMetric('monitorLiveQualityCard','monitorLiveQuality','monitorLiveQualityNote',{
+    value:analysisEligible&&hrValid&&rrValid?'พร้อม':'กำลังตรวจ',note:Number.isFinite(coverage)?`HR/RR coverage ${Math.round(coverage*100)}% · ${freshness}`:freshness,tone:analysisEligible&&hrValid&&rrValid?'good':'warning',
+  });
+  setMonitorLiveMetric('monitorLivePersonalCard','monitorLivePersonal','monitorLivePersonalNote',{
+    value:personalReady?'พร้อมเทียบ':nights?'กำลังเรียนรู้':'ยังไม่มีข้อมูล',note:`${nights} คืน · ใช้เทียบและแนะนำเท่านั้น`,tone:personalReady?'good':'muted',
+  });
+  document.getElementById('monitorLivePolicy').textContent=`Sleep State ใช้ ${source} · Personal Reference เป็นข้อมูลรายบัญชีสำหรับเปรียบเทียบและคำแนะนำ ยังไม่เปลี่ยน State โดยตรง`;
+}
 function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
   const bioRoot=document.getElementById('adminBioExplanation');
   const modeRoot=document.getElementById('adminExplanationMode');
@@ -3298,6 +3399,7 @@ function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
     &&bcg.respiration_held!==true&&rawRrVisible;
   const hrRestored=restored&&rawHr!==null&&rawHr!==undefined&&rawHr!==''&&Number.isFinite(hr);
   const rrRestored=restored&&rawRr!==null&&rawRr!==undefined&&rawRr!==''&&Number.isFinite(rr);
+  renderMonitorLiveSummary({bcg,sleep,session,analysisEligible,hrValid,rrValid,hr,rr});
   const stageTone=stageKey?'info':'unknown';
   const source=sleep.classification_source==='personal'?'Baseline ส่วนบุคคล':'Baseline อายุและเพศ';
   const confidence=({high:'สูง',medium:'ปานกลาง',low:'ต่ำ'})[sleep.confidence]||'ไม่ระบุ';
@@ -3332,14 +3434,7 @@ function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
   bioRoot.innerHTML=bioRows.join('');
 
   const result=atmosphere||{};
-  const modeLabel=({
-    sleep:'Overnight Recovery',
-    nap_recovery:'Nap & Refresh',
-    relax_meditation:'Nap & Refresh',
-    recovery_readiness:'Nap & Refresh',
-    performance_prep:'Nap & Refresh',
-    physical_comfort:'Nap & Refresh',
-  })[result.mode]||session.rest_mode||'รอ Mode';
+  const modeLabel=monitorRestModeLabel(result.mode||session.rest_mode);
   modeRoot.textContent=`โหมด · ${modeLabel}`;
 }
 const personalRestModeLabels=Object.freeze({
@@ -5523,7 +5618,7 @@ function adaptiveValue(value,digits=1){
 }
 
 function adaptiveComparison(metric={}){
-  const labels={near_reference:'ใกล้ค่าประจำตัว',above_reference:'สูงกว่าค่าประจำตัว',below_reference:'ต่ำกว่าค่าประจำตัว',no_reference:'กำลังสร้าง Baseline',no_live_value:'ไม่มีข้อมูลสด'};
+  const labels={near_reference:'ใกล้ Reference',above_reference:'สูงกว่า Reference',below_reference:'ต่ำกว่า Reference',no_reference:'กำลังเรียนรู้',no_live_value:'ไม่มีข้อมูลสด'};
   const tone={near_reference:'near',above_reference:'above',below_reference:'below',no_reference:'unknown',no_live_value:'missing'}[metric.comparison]||'unknown';
   const delta=metric.delta==null?Number.NaN:Number(metric.delta);
   const suffix=Number.isFinite(delta)?` · ${delta>0?'+':''}${adaptiveValue(delta,1)} ${metric.unit||''}`:'';
@@ -5535,7 +5630,7 @@ function adaptiveModeLabel(mode){
 }
 
 function adaptiveReferenceScope(scope){
-  return ({prior_completed_same_mode_sessions:'Ref: Session ก่อนหน้าในโหมดเดียวกัน',qualified_overnight_reference:'Ref: Overnight ที่ผ่านเกณฑ์',sensor_owned:'Ref: Baseline ภายใน Sensor',none:'ยังไม่มี Reference'})[scope]||`Ref: ${scope||'กำลังเรียนรู้'}`;
+  return ({prior_completed_same_mode_sessions:'ส่วนบุคคล · โหมดเดียวกัน',qualified_overnight_reference:'ส่วนบุคคล · Overnight',sensor_owned:'Sensor baseline',none:'ยังไม่มี Reference'})[scope]||`Reference · ${scope||'กำลังเรียนรู้'}`;
 }
 
 function renderAdaptiveFeatures(data={}){
@@ -5548,8 +5643,8 @@ function renderAdaptiveFeatures(data={}){
     const reference=metric.reference==null?'กำลังเรียนรู้':`${adaptiveValue(metric.reference,metric.key==='co2'?0:1)} ${escapeMarkup(metric.unit||'')}`;
     const mean=window.mean==null?'--':`${adaptiveValue(window.mean,metric.key==='co2'?0:1)} ${escapeMarkup(metric.unit||'')}`;
     const coverage=window.coverage_pct==null?'':` · ${adaptiveValue(window.coverage_pct,0)}%`;
-    const provenance=`${metric.live_source||''} · ${adaptiveReferenceScope(metric.reference_scope)}`;
-    return `<article class="adaptive-feature-row ${comparison.tone}"><div><b>${escapeMarkup(metric.label)}</b><small title="${escapeMarkup(provenance)}">${escapeMarkup(provenance)}</small></div><span><em>LIVE</em><strong>${current}</strong></span><span><em>BASELINE</em><strong>${reference}</strong></span><span><em>5 MIN AVG</em><strong>${mean}${coverage}</strong></span><mark>${escapeMarkup(comparison.label)}</mark></article>`;
+    const scope=adaptiveReferenceScope(metric.reference_scope);
+    return `<article class="adaptive-feature-row ${comparison.tone}"><div><b>${escapeMarkup(metric.label)}</b><small>${escapeMarkup(metric.live_source||'ไม่ทราบ Source')}</small><i class="adaptive-reference-scope">${escapeMarkup(scope)}</i></div><span><em>ค่าปัจจุบัน</em><strong>${current}</strong></span><span><em>Reference</em><strong>${reference}</strong></span><span><em>เฉลี่ย 5 นาที</em><strong>${mean}${coverage}</strong></span><mark>${escapeMarkup(comparison.label)}</mark></article>`;
   }).join('');
 }
 
@@ -5592,11 +5687,17 @@ function renderAdaptiveLearning(data={}){
   document.getElementById('adaptiveSessionMeta').textContent=`${adaptiveModeLabel(session.rest_mode)}${session.session_id?` · ${String(session.session_id).slice(0,8)}`:''}`;
   document.getElementById('adaptiveFrameState').textContent=quality.sensor_frame_stale?'STALE':versions.sensor_frame_sequence==null?'รอ Frame':`SEQ ${versions.sensor_frame_sequence}`;
   document.getElementById('adaptiveFrameMeta').textContent=`อายุ ${quality.sensor_frame_age_s==null?'--':adaptiveValue(quality.sensor_frame_age_s,1)}s · ทุก ${data.cadence?.sensor_frame_s||10}s`;
-  document.getElementById('adaptiveBaselineState').textContent=baseline.comparison_ready?'พร้อมเทียบ':baseline.status==='learning'?'กำลังเรียนรู้':'ยังไม่มีข้อมูล';
-  document.getElementById('adaptiveBaselineMeta').textContent=`${baseline.sessions_used||0}/${baseline.minimum_sessions||3} Sessions · Stage ${baseline.active_stage_source||'age_gender'} · Personal influence ${baseline.personal_direct_stage_influence?'ON':'OFF'}`;
+  const referenceCount=Number(baseline.reference_metrics)||0;
+  document.getElementById('adaptiveBaselineState').textContent=referenceCount?`มี Reference ${referenceCount} ค่า`:baseline.status==='learning'?'กำลังเรียนรู้':'ยังไม่มี Reference';
+  document.getElementById('adaptiveBaselineMeta').textContent=`คำแนะนำ ${baseline.sessions_used||0}/${baseline.minimum_sessions||3} Sessions · Sleep State ${baseline.active_stage_source==='personal'?'Personal':'Age + Gender'}`;
   document.getElementById('adaptiveQualityState').textContent=quality.vital_pair_live?'HR/RR พร้อม':'HR/RR ไม่ครบ';
   document.getElementById('adaptiveQualityMeta').textContent=`Environment ${quality.environment_live||0}/${quality.environment_total||6} · Window ${quality.window_coverage_pct??0}%`;
   document.getElementById('adaptiveWindowMeta').textContent=`Rolling window · ${Math.round((data.cadence?.rolling_window_s||300)/60)} นาที · ${quality.window_samples||0} จุด`;
+  const activeSession=current.session||{};
+  const owner=document.getElementById('adaptiveReferenceOwner');
+  if(owner)owner.textContent=activeSession.active
+    ?`${monitorMaskedAccount(activeSession)} · ${adaptiveModeLabel(session.rest_mode)} · Reference แยกตามข้อมูลแต่ละค่า`
+    :'ยังไม่มีผู้ใช้งานใน Session · ระบบจะไม่ข้ามข้อมูลระหว่างบัญชี';
   document.getElementById('adaptiveDecisionSummary').textContent=data.summary||'กำลังรอข้อมูล';
   document.getElementById('adaptiveEvaluationTime').textContent=data.generated_at?new Date(data.generated_at).toLocaleTimeString('th-TH',{hour12:false}):'--';
   renderAdaptiveFeatures(data);renderAdaptiveDecision(data);renderAdaptiveDevices(data);renderAdaptiveVersions(data);

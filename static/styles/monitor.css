@@ -1,0 +1,316 @@
+/* ZEEP Monitor · canonical view layer --------------------------------------
+ * The Monitor is a desktop-first working surface. Keep its hierarchy here so
+ * later Control/Dashboard refinements cannot accidentally change diagnostic
+ * density, ordering, or responsive behaviour through the legacy theme stack.
+ */
+
+body[data-view="monitor"] .grid {
+  gap: 12px;
+  align-items: start;
+}
+
+body[data-view="monitor"] .monitor-section-heading {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  margin: 7px 2px -2px;
+  padding: 8px 2px;
+  border-bottom: 1px solid rgba(75, 132, 153, .24);
+}
+
+body[data-view="monitor"] .monitor-section-heading > span {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  flex: 0 0 30px;
+  border: 1px solid rgba(73, 215, 232, .34);
+  border-radius: 9px;
+  color: #77e7f4;
+  background: rgba(20, 89, 106, .2);
+  font: 800 10px "SF Mono", ui-monospace, monospace;
+}
+
+body[data-view="monitor"] .monitor-section-heading h3,
+body[data-view="monitor"] .monitor-section-heading p {
+  margin: 0;
+}
+
+body[data-view="monitor"] .monitor-section-heading h3 {
+  color: #e9f8fb;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+body[data-view="monitor"] .monitor-section-heading p {
+  margin-top: 2px;
+  color: #79939f;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+body[data-view="monitor"] .monitor-section-now { order: 0; }
+body[data-view="monitor"] #safetyCard { order: 1; grid-column: span 7; }
+body[data-view="monitor"] #sensorIntegrityCard { order: 1; grid-column: span 5; }
+body[data-view="monitor"] .monitor-section-live { order: 2; }
+body[data-view="monitor"] #monitorLiveSummary { order: 3; grid-column: 1 / -1; }
+body[data-view="monitor"] #adminLiveExplanation { order: 4; grid-column: 1 / -1; }
+body[data-view="monitor"] #adaptiveMonitorCard { order: 5; grid-column: 1 / -1; }
+body[data-view="monitor"] .monitor-section-environment { order: 6; }
+body[data-view="monitor"] #adminAtmosphereCard { order: 7; grid-column: 1 / -1; }
+body[data-view="monitor"] .monitor-section-advanced { order: 8; }
+body[data-view="monitor"] #dashSleepBaseline { order: 9; grid-column: span 8; }
+body[data-view="monitor"] #systemCard { order: 9; grid-column: span 4; align-self: stretch; }
+body[data-view="monitor"] #bcgCard { order: 10; grid-column: 1 / -1; }
+body[data-view="monitor"] #rawMonitorCard { order: 11; grid-column: 1 / -1; }
+
+body[data-view="monitor"]:not(.show-advanced-monitor) :is(
+  #dashSleepBaseline,
+  #systemCard,
+  #bcgCard,
+  #rawMonitorCard,
+  .monitor-section-advanced,
+  .adaptive-device-panel,
+  .adaptive-version-panel
+) {
+  display: none !important;
+}
+
+body[data-view="monitor"].show-advanced-monitor .monitor-section-advanced {
+  display: flex;
+}
+
+/* Live physiology is the authoritative, always-visible value strip. */
+body[data-view="monitor"] .monitor-live-summary {
+  padding: 15px 16px;
+  border-color: rgba(64, 185, 205, .36);
+  background: linear-gradient(145deg, rgba(10, 34, 48, .98), rgba(7, 20, 31, .98));
+}
+
+.monitor-live-summary-head,
+.monitor-live-summary-identity,
+.monitor-live-summary-context {
+  display: flex;
+  align-items: center;
+}
+
+.monitor-live-summary-head {
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 11px;
+}
+
+.monitor-live-summary-identity { gap: 10px; min-width: 0; }
+.monitor-live-summary-identity > div { min-width: 0; }
+.monitor-live-summary-identity em,
+.monitor-live-summary-identity h3,
+.monitor-live-summary-identity p { display: block; margin: 0; }
+.monitor-live-summary-identity em {
+  color: #50dbe9;
+  font: 800 9px "SF Mono", ui-monospace, monospace;
+  letter-spacing: .13em;
+}
+.monitor-live-summary-identity h3 { margin-top: 2px; color: #effcff; font-size: 16px; }
+.monitor-live-summary-identity p { margin-top: 2px; color: #8fa8b3; font-size: 11px; }
+
+.monitor-live-summary-context {
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.monitor-live-summary-context span,
+.monitor-live-summary-context strong {
+  padding: 6px 9px;
+  border: 1px solid rgba(75, 137, 156, .27);
+  border-radius: 999px;
+  background: rgba(7, 25, 37, .82);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.monitor-live-summary-context span { color: #9cb4bd; }
+.monitor-live-summary-context strong { color: #9aeeef; border-color: rgba(66, 203, 217, .34); }
+
+.monitor-live-metrics {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.monitor-live-metrics article {
+  position: relative;
+  min-width: 0;
+  min-height: 86px;
+  padding: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(72, 119, 139, .23);
+  border-radius: 10px;
+  background: rgba(5, 19, 30, .84);
+}
+
+.monitor-live-metrics article::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 2px;
+  content: "";
+  background: #617985;
+}
+.monitor-live-metrics article.is-good::before { background: #38d9a0; }
+.monitor-live-metrics article.is-warning::before { background: #f0b94c; }
+.monitor-live-metrics small,
+.monitor-live-metrics b,
+.monitor-live-metrics span { display: block; }
+.monitor-live-metrics small { color: #76919d; font-size: 11px; }
+.monitor-live-metrics b {
+  margin-top: 7px;
+  overflow: hidden;
+  color: #edf9fc;
+  font: 760 15px "SF Mono", ui-monospace, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.monitor-live-metrics span {
+  margin-top: 5px;
+  overflow: hidden;
+  color: #718b97;
+  font-size: 10px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.monitor-live-metrics article.is-good b { color: #dffdf2; }
+.monitor-live-metrics article.is-warning b { color: #ffe2a5; }
+
+.monitor-live-summary-foot {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(78, 128, 146, .18);
+  color: #78939e;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+/* Default Monitor is exception-first. The full Stage model remains Advanced. */
+body[data-view="monitor"] .admin-live-explanation-grid.single {
+  grid-template-columns: 1fr;
+}
+
+body[data-view="monitor"] .admin-live-explanation-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+body[data-view="monitor"] .adaptive-reference-scope {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  margin-top: 5px;
+  padding: 3px 6px;
+  overflow: hidden;
+  border: 1px solid rgba(74, 148, 168, .25);
+  border-radius: 999px;
+  color: #8ddce5;
+  background: rgba(24, 91, 108, .14);
+  font-size: 9px;
+  font-style: normal;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Readable diagnostic typography: details are disclosed, not miniaturised. */
+body[data-view="monitor"] :is(
+  .admin-sleep-baseline-head small,
+  .admin-sleep-baseline-foot,
+  .admin-sleep-stage-head span small,
+  .admin-sleep-stage-ranges small,
+  .admin-sleep-stage-ranges em,
+  .admin-live-explanation-identity small,
+  .admin-live-explanation-group-head small,
+  .admin-live-explanation-row p,
+  .admin-live-explanation-row > small,
+  .admin-live-explanation-note small,
+  .adaptive-status-grid small,
+  .adaptive-panel-head span,
+  .adaptive-feature-row > div small,
+  .adaptive-feature-row > span em,
+  .adaptive-feature-row mark,
+  .adaptive-device-grid span,
+  .adaptive-device-grid small,
+  .adaptive-version-panel summary small,
+  .adaptive-version-grid span,
+  .adaptive-version-grid b,
+  .adaptive-guardrail
+) {
+  font-size: 10px;
+}
+
+body[data-view="monitor"] .admin-sleep-baseline-head b,
+body[data-view="monitor"] .admin-live-explanation-group h4,
+body[data-view="monitor"] .adaptive-panel-head b,
+body[data-view="monitor"] .adaptive-feature-row > div b {
+  font-size: 12px;
+}
+
+body[data-view="monitor"] .admin-sleep-stage-ranges b,
+body[data-view="monitor"] .adaptive-feature-row > span strong {
+  font-size: 11px;
+}
+
+body[data-view="monitor"] .admin-sleep-baseline-head > span,
+body[data-view="monitor"] .admin-sleep-stage-head em {
+  font-size: 10px;
+}
+
+@media (max-width: 1300px) {
+  body[data-view="monitor"] #safetyCard,
+  body[data-view="monitor"] #sensorIntegrityCard,
+  body[data-view="monitor"] #dashSleepBaseline,
+  body[data-view="monitor"] #systemCard {
+    grid-column: 1 / -1;
+  }
+
+  .monitor-live-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  body[data-view="monitor"] .admin-live-explanation-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 900px) {
+  body[data-view="monitor"] .monitor-alert-bar {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+  body[data-view="monitor"] .monitor-alert-bar .btn {
+    width: 100%;
+    min-width: 0;
+  }
+  body[data-view="monitor"] .monitor-alert-bar .btn:first-of-type { grid-column: 1 / 2; }
+  body[data-view="monitor"] .monitor-alert-bar .btn:last-of-type { grid-column: 2 / 3; }
+  .monitor-live-summary-head { align-items: flex-start; flex-direction: column; }
+  .monitor-live-summary-context { justify-content: flex-start; }
+  body[data-view="monitor"] .adaptive-feature-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  body[data-view="monitor"] .adaptive-feature-row > div,
+  body[data-view="monitor"] .adaptive-feature-row > mark { grid-column: 1 / -1; }
+  body[data-view="monitor"] .adaptive-feature-row > span:nth-of-type(3) { display: block; }
+}
+
+@media (max-width: 680px) {
+  body[data-view="monitor"] .monitor-section-heading { align-items: flex-start; }
+  .monitor-live-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body[data-view="monitor"] .admin-live-explanation-list { grid-template-columns: 1fr; }
+  body[data-view="monitor"] .monitor-alert-bar {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+  body[data-view="monitor"] .monitor-alert-bar .btn:first-of-type,
+  body[data-view="monitor"] .monitor-alert-bar .btn:last-of-type { grid-column: 1 / -1; }
+}
+
+@media (max-width: 430px) {
+  .monitor-live-metrics { grid-template-columns: 1fr; }
+  .monitor-live-summary-context { display: grid; width: 100%; }
+  .monitor-live-summary-context span,
+  .monitor-live-summary-context strong { width: 100%; text-align: center; }
+}

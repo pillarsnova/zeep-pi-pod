@@ -409,7 +409,7 @@ function renderSleepState(sl={},session={},bcg={}){
   const base=sl.baseline||{}, names={wake:'W · ตื่น',n1:'N1',n2:'N2',n3:'N3',rem:'REM'};
   const baselineRows=order.filter(k=>base[k]).map(k=>`<tr class="${classificationActive&&sl.state===k?'current':''}"><td>${names[k]}</td><td>${base[k].hr[0]}–${base[k].hr[1]} BPM</td><td>${base[k].rr[0]}–${base[k].rr[1]} ครั้ง/นาที</td></tr>`).join('');
   const genderAdj=sl.gender_adjustment||{};
-  const baselineTable=baselineRows?`<div class="baseline-block"><div class="baseline-title"><strong>Wellness Baseline · ${ageGroupDisplay(sl.age_group)} · ${genderTh(sl.gender)}</strong><span>Age + Gender directional starting range</span></div><table class="baseline-table"><thead><tr><th>Sleep State</th><th>HR · Heart Rate</th><th>RR · Respiratory Rate</th></tr></thead><tbody>${baselineRows}</tbody></table></div>`:'';
+  const baselineTable=baselineRows?`<div class="baseline-block"><div class="baseline-title"><strong>Wellness Baseline · ${ageGroupDisplay(sl.age_group)} · ${genderTh(sl.gender)}</strong><span>Reference ที่ใช้ตัดสิน State · ${source}</span></div><table class="baseline-table"><thead><tr><th>Sleep State</th><th>HR · Heart Rate</th><th>RR · Respiratory Rate</th></tr></thead><tbody>${baselineRows}</tbody></table></div>`:'';
   const env=sl.environment||{}, q=sl.signal_quality||{};
   const envParts=[
     env.temperature_c!=null?`🌡 ${env.temperature_c}°C`:null,

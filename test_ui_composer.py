@@ -112,12 +112,63 @@ class UiComposerTests(unittest.TestCase):
         template = ui_composer.render()
         self.assertIn('id="adaptiveMonitorCard"', template)
         self.assertIn('data-pages="monitor" data-admin-panel', template)
-        self.assertIn("SHADOW · NO AUTO CONTROL", template)
+        self.assertIn("คำแนะนำเท่านั้น · ไม่สั่งอัตโนมัติ", template)
         self.assertIn("function renderAdaptiveLearning(data={})", template)
         self.assertIn("renderAdaptiveLearning(s.adaptive_learning||{})", template)
-        self.assertIn("personal_direct_stage_influence", template)
+        self.assertIn("Sleep State ${baseline.active_stage_source", template)
+        self.assertIn("ยังไม่เปลี่ยน State โดยตรง", template)
         self.assertIn("metric.delta==null?Number.NaN:Number(metric.delta)", template)
         self.assertIn("function adaptiveReferenceScope(scope)", template)
+
+    def test_monitor_has_clear_information_hierarchy_and_reference_scope(self):
+        template = ui_composer.render()
+        monitor_css = (
+            ui_composer.STATIC / "styles" / "monitor.css"
+        ).read_text(encoding="utf-8")
+
+        for element_id in (
+            "monitorNowHeading",
+            "monitorLiveHeading",
+            "monitorEnvironmentHeading",
+            "monitorAdvancedHeading",
+            "monitorLiveSummary",
+            "monitorLiveIdentity",
+            "monitorLiveReference",
+            "adaptiveReferenceOwner",
+        ):
+            self.assertIn(f'id="{element_id}"', template)
+        self.assertIn("Live เทียบ Reference ของ Session นี้", template)
+        self.assertIn("Reference แยกตามข้อมูลแต่ละค่า", template)
+        self.assertIn("Sleep State ใช้ Age + Gender เป็นค่าเริ่มต้น", template)
+        self.assertNotIn("ใช้ Personal Baseline ร่วมกับ Age Baseline", template)
+        self.assertIn(
+            'body[data-view="monitor"]:not(.show-advanced-monitor)',
+            monitor_css,
+        )
+        self.assertIn(".admin-live-explanation-grid.single", monitor_css)
+        self.assertIn(
+            ".adaptive-feature-row > span:nth-of-type(3) { display: block; }",
+            monitor_css,
+        )
+
+    def test_sessions_tablet_filters_fit_and_login_is_a_dialog(self):
+        template = ui_composer.render()
+        sessions_css = (
+            ui_composer.STATIC / "styles" / "sessions.css"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('/static/styles/sessions.css?v=20260916-1', template)
+        self.assertIn(
+            'id="login" class="hide" role="dialog" aria-modal="true" '
+            'aria-labelledby="loginTitle"',
+            template,
+        )
+        self.assertIn(
+            "@media (min-width: 761px) and (max-width: 1120px)",
+            sessions_css,
+        )
+        self.assertIn(".history-filter-actions {", sessions_css)
+        self.assertIn("grid-column: 1 / -1;", sessions_css)
 
     def test_dashboard_personal_rest_window_starts_on_second_visit(self):
         template = ui_composer.render()

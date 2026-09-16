@@ -1,0 +1,25 @@
+/* ZEEP Usage History · canonical responsive corrections -------------------
+ * Admin filters contain more controls than the user view. Keep the tablet
+ * layout explicit so actions never clip, while desktop stays compact and the
+ * existing mobile rule remains a single-column flow.
+ */
+
+@media (min-width: 761px) and (max-width: 1120px) {
+  body[data-view="sessions"] #historyToolbar.history-filter-panel {
+    grid-template-columns: minmax(0, 1.35fr) minmax(180px, .65fr);
+  }
+
+  body[data-view="sessions"] .history-admin-filter,
+  body[data-view="sessions"] .history-filter-actions {
+    grid-column: 1 / -1;
+  }
+
+  body[data-view="sessions"] .history-filter-actions {
+    grid-auto-columns: minmax(0, 1fr);
+  }
+
+  body[data-view="sessions"] #historyToolbar .history-filter-actions .btn {
+    width: 100%;
+    min-width: 0;
+  }
+}

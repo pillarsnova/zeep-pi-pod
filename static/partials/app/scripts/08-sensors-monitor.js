@@ -263,7 +263,7 @@ function adaptiveValue(value,digits=1){
 }
 
 function adaptiveComparison(metric={}){
-  const labels={near_reference:'ใกล้ค่าประจำตัว',above_reference:'สูงกว่าค่าประจำตัว',below_reference:'ต่ำกว่าค่าประจำตัว',no_reference:'กำลังสร้าง Baseline',no_live_value:'ไม่มีข้อมูลสด'};
+  const labels={near_reference:'ใกล้ Reference',above_reference:'สูงกว่า Reference',below_reference:'ต่ำกว่า Reference',no_reference:'กำลังเรียนรู้',no_live_value:'ไม่มีข้อมูลสด'};
   const tone={near_reference:'near',above_reference:'above',below_reference:'below',no_reference:'unknown',no_live_value:'missing'}[metric.comparison]||'unknown';
   const delta=metric.delta==null?Number.NaN:Number(metric.delta);
   const suffix=Number.isFinite(delta)?` · ${delta>0?'+':''}${adaptiveValue(delta,1)} ${metric.unit||''}`:'';
@@ -275,7 +275,7 @@ function adaptiveModeLabel(mode){
 }
 
 function adaptiveReferenceScope(scope){
-  return ({prior_completed_same_mode_sessions:'Ref: Session ก่อนหน้าในโหมดเดียวกัน',qualified_overnight_reference:'Ref: Overnight ที่ผ่านเกณฑ์',sensor_owned:'Ref: Baseline ภายใน Sensor',none:'ยังไม่มี Reference'})[scope]||`Ref: ${scope||'กำลังเรียนรู้'}`;
+  return ({prior_completed_same_mode_sessions:'ส่วนบุคคล · โหมดเดียวกัน',qualified_overnight_reference:'ส่วนบุคคล · Overnight',sensor_owned:'Sensor baseline',none:'ยังไม่มี Reference'})[scope]||`Reference · ${scope||'กำลังเรียนรู้'}`;
 }
 
 function renderAdaptiveFeatures(data={}){
@@ -288,8 +288,8 @@ function renderAdaptiveFeatures(data={}){
     const reference=metric.reference==null?'กำลังเรียนรู้':`${adaptiveValue(metric.reference,metric.key==='co2'?0:1)} ${escapeMarkup(metric.unit||'')}`;
     const mean=window.mean==null?'--':`${adaptiveValue(window.mean,metric.key==='co2'?0:1)} ${escapeMarkup(metric.unit||'')}`;
     const coverage=window.coverage_pct==null?'':` · ${adaptiveValue(window.coverage_pct,0)}%`;
-    const provenance=`${metric.live_source||''} · ${adaptiveReferenceScope(metric.reference_scope)}`;
-    return `<article class="adaptive-feature-row ${comparison.tone}"><div><b>${escapeMarkup(metric.label)}</b><small title="${escapeMarkup(provenance)}">${escapeMarkup(provenance)}</small></div><span><em>LIVE</em><strong>${current}</strong></span><span><em>BASELINE</em><strong>${reference}</strong></span><span><em>5 MIN AVG</em><strong>${mean}${coverage}</strong></span><mark>${escapeMarkup(comparison.label)}</mark></article>`;
+    const scope=adaptiveReferenceScope(metric.reference_scope);
+    return `<article class="adaptive-feature-row ${comparison.tone}"><div><b>${escapeMarkup(metric.label)}</b><small>${escapeMarkup(metric.live_source||'ไม่ทราบ Source')}</small><i class="adaptive-reference-scope">${escapeMarkup(scope)}</i></div><span><em>ค่าปัจจุบัน</em><strong>${current}</strong></span><span><em>Reference</em><strong>${reference}</strong></span><span><em>เฉลี่ย 5 นาที</em><strong>${mean}${coverage}</strong></span><mark>${escapeMarkup(comparison.label)}</mark></article>`;
   }).join('');
 }
 
@@ -332,11 +332,17 @@ function renderAdaptiveLearning(data={}){
   document.getElementById('adaptiveSessionMeta').textContent=`${adaptiveModeLabel(session.rest_mode)}${session.session_id?` · ${String(session.session_id).slice(0,8)}`:''}`;
   document.getElementById('adaptiveFrameState').textContent=quality.sensor_frame_stale?'STALE':versions.sensor_frame_sequence==null?'รอ Frame':`SEQ ${versions.sensor_frame_sequence}`;
   document.getElementById('adaptiveFrameMeta').textContent=`อายุ ${quality.sensor_frame_age_s==null?'--':adaptiveValue(quality.sensor_frame_age_s,1)}s · ทุก ${data.cadence?.sensor_frame_s||10}s`;
-  document.getElementById('adaptiveBaselineState').textContent=baseline.comparison_ready?'พร้อมเทียบ':baseline.status==='learning'?'กำลังเรียนรู้':'ยังไม่มีข้อมูล';
-  document.getElementById('adaptiveBaselineMeta').textContent=`${baseline.sessions_used||0}/${baseline.minimum_sessions||3} Sessions · Stage ${baseline.active_stage_source||'age_gender'} · Personal influence ${baseline.personal_direct_stage_influence?'ON':'OFF'}`;
+  const referenceCount=Number(baseline.reference_metrics)||0;
+  document.getElementById('adaptiveBaselineState').textContent=referenceCount?`มี Reference ${referenceCount} ค่า`:baseline.status==='learning'?'กำลังเรียนรู้':'ยังไม่มี Reference';
+  document.getElementById('adaptiveBaselineMeta').textContent=`คำแนะนำ ${baseline.sessions_used||0}/${baseline.minimum_sessions||3} Sessions · Sleep State ${baseline.active_stage_source==='personal'?'Personal':'Age + Gender'}`;
   document.getElementById('adaptiveQualityState').textContent=quality.vital_pair_live?'HR/RR พร้อม':'HR/RR ไม่ครบ';
   document.getElementById('adaptiveQualityMeta').textContent=`Environment ${quality.environment_live||0}/${quality.environment_total||6} · Window ${quality.window_coverage_pct??0}%`;
   document.getElementById('adaptiveWindowMeta').textContent=`Rolling window · ${Math.round((data.cadence?.rolling_window_s||300)/60)} นาที · ${quality.window_samples||0} จุด`;
+  const activeSession=current.session||{};
+  const owner=document.getElementById('adaptiveReferenceOwner');
+  if(owner)owner.textContent=activeSession.active
+    ?`${monitorMaskedAccount(activeSession)} · ${adaptiveModeLabel(session.rest_mode)} · Reference แยกตามข้อมูลแต่ละค่า`
+    :'ยังไม่มีผู้ใช้งานใน Session · ระบบจะไม่ข้ามข้อมูลระหว่างบัญชี';
   document.getElementById('adaptiveDecisionSummary').textContent=data.summary||'กำลังรอข้อมูล';
   document.getElementById('adaptiveEvaluationTime').textContent=data.generated_at?new Date(data.generated_at).toLocaleTimeString('th-TH',{hour12:false}):'--';
   renderAdaptiveFeatures(data);renderAdaptiveDecision(data);renderAdaptiveDevices(data);renderAdaptiveVersions(data);

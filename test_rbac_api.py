@@ -1893,7 +1893,10 @@ class RbacApiTests(unittest.TestCase):
         self.assertEqual(ui.count('id="appFullscreenBtn"'), 1)
         self.assertIn('src="/static/app-shell.js?', ui)
         self.assertIn("function toggleFullscreen", shell)
-        self.assertIn("'dashboard', 'control', 'monitor', 'sessions'", shell)
+        self.assertIn(
+            "'dashboard', 'control', 'control_debug', 'monitor', 'sessions'",
+            shell,
+        )
         self.assertIn(".main-nav > .app-fullscreen-button", css)
         self.assertIn("body.control-focus-mode .top", css)
 

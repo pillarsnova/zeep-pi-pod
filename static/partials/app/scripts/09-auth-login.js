@@ -49,7 +49,7 @@ async function loadUsers(){
     allUsers.value='';allUsers.textContent='ผู้ใช้งานทุกคน';sel.appendChild(allUsers);
     const orderedUsers=sortHistoryUsersNewestFirst(d.users);
     orderedUsers.forEach(u=>{
-      const c = document.createElement('button'); c.className = 'chip';
+      const c = document.createElement('button'); c.type = 'button'; c.className = 'chip';
       c.textContent = `${identityLabel(u)} · ${genderTh(u.gender)}`;
       c.onclick = ()=>{
         document.querySelectorAll('.chip').forEach(x=>x.classList.remove('sel'));

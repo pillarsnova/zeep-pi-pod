@@ -1,0 +1,533 @@
+/* ZEEP interface consistency layer ----------------------------------------
+ * This file is intentionally loaded last. It is the canonical, scoped layer
+ * for shared readability, touch targets and responsive behaviour while the
+ * older theme is gradually split into page modules. Keep device/session logic
+ * out of this file.
+ */
+
+:root {
+  --zeep-touch-target: 44px;
+  --zeep-copy-caption: 11px;
+  --zeep-copy-label: 12px;
+  --zeep-copy-heading: 16px;
+  --zeep-card-radius: 16px;
+  --zeep-card-gap: 12px;
+}
+
+.ui-icon {
+  width: 1.25em;
+  height: 1.25em;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.pill.health,
+.control-debug-link {
+  align-items: center;
+  gap: 7px;
+}
+
+.pill.health .ui-icon,
+.control-debug-link .ui-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+}
+
+.top-user-copy > span,
+.top-session-state {
+  font-size: 10px !important;
+}
+
+.main-nav a:is([aria-current="page"], [aria-current="location"]) {
+  border-color: rgba(79, 221, 238, .38);
+}
+
+/* Login: persistent labels, keyboard submit and a card matching the app. */
+#login .login-card {
+  max-height: calc(100dvh - 28px);
+  overflow: auto;
+  border-radius: 20px;
+  clip-path: none;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .48);
+  background: linear-gradient(180deg, #0c1f2d, #07141f);
+}
+
+#login {
+  background: linear-gradient(180deg, #020711 0%, #061522 100%);
+  backdrop-filter: blur(16px);
+}
+
+#login .login-field-label {
+  display: block;
+  margin: 11px 0 -5px;
+  color: #a8c3ce;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+#login .login-field-label + :is(input, select, .pw-field) {
+  margin-top: 8px;
+}
+
+#login .pilot-steps > summary {
+  display: flex;
+  min-height: var(--zeep-touch-target);
+  align-items: center;
+}
+
+/* Dashboard follows the same visual, keyboard and screen-reader order. */
+body[data-view="dashboard"] :is(
+  .dash-profile-reference-head small,
+  .dash-profile-fact span,
+  .dash-health small,
+  .dash-foot
+) {
+  font-size: var(--zeep-copy-caption);
+  line-height: 1.45;
+}
+
+body[data-view="dashboard"] :is(
+  #dashClockZone,
+  #dashClockDate,
+  .dashboard-zone-head > span,
+  #dashSensorSummary,
+  #dashAtmosphereReason,
+  .dash-personal-rest-status,
+  .dash-personal-rest-guardrail
+) {
+  font-size: 10px;
+}
+
+body[data-view="dashboard"] :is(.dash-health span, .dash-sensor span) {
+  font-size: var(--zeep-copy-label);
+}
+
+/* Control: one visual order equals DOM/Tab order on every viewport. */
+body[data-view="control"] :is(
+  .unified-room-state,
+  .control-debug-link > span
+) {
+  font-size: 10px !important;
+  line-height: 1.35;
+}
+
+body[data-view="control"] .door-zone { order: 1; }
+body[data-view="control"] .light-zone { order: 2; }
+body[data-view="control"] .air-zone { order: 3; }
+body[data-view="control"] .aroma-zone { order: 4; }
+body[data-view="control"] .bed-zone { order: 5; }
+body[data-view="control"] .audio-zone { order: 6; }
+
+body[data-view="control"] .device-zone-head {
+  min-width: 0;
+}
+
+body[data-view="control"] .device-zone-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-view="control"] .control-debug-link {
+  display: inline-flex;
+  min-height: var(--zeep-touch-target);
+  padding: 8px 11px;
+}
+
+body[data-view="control"][data-role="admin"] .control-debug-link {
+  width: auto !important;
+  min-width: 90px !important;
+  height: auto !important;
+  min-height: var(--zeep-touch-target) !important;
+}
+
+body[data-view="control"][data-role="admin"] .control-debug-link > span {
+  display: inline !important;
+}
+
+body[data-view="control"] .audio-zone :is(#unifiedTrackSelect, #unifiedVolume) {
+  min-height: var(--zeep-touch-target);
+}
+
+/* Desktop/landscape uses six cards in two rows; tablet remains two columns. */
+@media (min-width: 1100px) {
+  body[data-view="control"] .device-zone-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Phone controls must never be squeezed into two columns. */
+@media (max-width: 620px) {
+  body[data-view="control"] .device-zone-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-view="control"] :is(.device-zone, .device-zone.wide) {
+    min-height: 0;
+  }
+
+  body[data-view="control"] .device-zone-head {
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  body[data-view="control"] .device-zone-status {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  body[data-view="control"] .device-zone :is(
+    button,
+    select,
+    input:not([type="hidden"]),
+    summary
+  ) {
+    min-height: var(--zeep-touch-target);
+  }
+}
+
+/* Control Debug: technical detail stays dense, but never microscopic. */
+body[data-view="control_debug"] :is(
+  .debug-deck-head span,
+  .debug-device-head > code,
+  .debug-controller-strip span,
+  .debug-command-button code,
+  .debug-aroma-reference-head small,
+  .debug-aroma-slot span,
+  .debug-aroma-slot small,
+  .debug-aroma-unassigned,
+  .debug-steam-water-rule span,
+  .debug-aroma-reference > p,
+  .debug-inline-command small,
+  .brainwave-lab-head span,
+  .brainwave-lab-head small,
+  .brainwave-lab-grid label > span,
+  .brainwave-preset-summary span,
+  .brainwave-preset-summary code,
+  .brainwave-lab > p,
+  .debug-log-head span,
+  .debug-log-legend,
+  .debug-log-entry-head span,
+  .debug-log-entry-head strong,
+  .debug-log-entry > code,
+  .debug-log-meta,
+  .debug-log-entry > span,
+  .debug-log-entry pre
+) {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+body[data-view="control_debug"] :is(
+  .debug-deck-head p,
+  .debug-safety-banner small,
+  .debug-controller-strip b,
+  .debug-device-head b,
+  .debug-command-button b,
+  .debug-subtitle,
+  .debug-aroma-reference-head b,
+  .debug-aroma-slot b,
+  .debug-steam-water-rule b,
+  .debug-inline-command b,
+  .brainwave-lab-head b,
+  .debug-log-entry-head b,
+  .debug-log-empty small
+) {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+body[data-view="control_debug"] .control-debug-deck :is(small, code, p, label) {
+  font-size: 10px !important;
+  line-height: 1.4;
+}
+
+body[data-view="control_debug"] :is(
+  .debug-aircon-telemetry span,
+  .debug-paired-grid b,
+  .debug-audio-row select,
+  .brainwave-lab-grid select,
+  #brainwavePresetName,
+  .brainwave-preset-summary strong,
+  .ui-label-button > span
+) {
+  font-size: 10px !important;
+  line-height: 1.35;
+}
+
+body[data-view="control_debug"] :is(
+  .debug-back-link,
+  .debug-paired-grid button,
+  .debug-audio-row button,
+  .debug-inline-command button,
+  .debug-log-head button,
+  .debug-inline-command select,
+  .debug-audio-row select,
+  .brainwave-lab-grid select,
+  .brainwave-lab-grid button
+) {
+  min-height: var(--zeep-touch-target);
+}
+
+body[data-view="control_debug"] .debug-paired-grid > div {
+  grid-template-columns: minmax(0, 1fr) 52px 52px;
+}
+
+body[data-view="control_debug"] .debug-paired-grid button {
+  display: grid;
+  place-items: center;
+  gap: 1px;
+}
+
+body[data-view="control_debug"] .debug-paired-grid button::after {
+  color: currentColor;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+body[data-view="control_debug"] .brainwave-lab-head > strong {
+  font-size: 10px !important;
+  line-height: 1.35;
+}
+
+body[data-view="control_debug"] .debug-paired-grid button[aria-label^="เปิด"]::after {
+  content: "เปิด";
+}
+
+body[data-view="control_debug"] .debug-paired-grid button[aria-label^="ปิด"]::after {
+  content: "ปิด";
+}
+
+/* Monitor: operational actions are touch-safe; diagnostics remain readable. */
+body[data-view="monitor"] :is(
+  .monitor-alert-bar .btn,
+  .safety-actions .btn,
+  .safety-summary,
+  .calibration-apply,
+  .btn.compact
+) {
+  height: auto !important;
+  min-height: var(--zeep-touch-target) !important;
+}
+
+body[data-view="monitor"] :is(
+  .monitor-provenance-card > summary,
+  .safety-case-guide > summary
+) {
+  min-height: var(--zeep-touch-target);
+}
+
+body[data-view="monitor"] .safety-card :is(small, span, .muted),
+body[data-view="monitor"] .admin-live-explanation :is(small, p, em),
+body[data-view="monitor"] .admin-live-explanation-basis span {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+body[data-view="monitor"] :is(
+  .safety-fault,
+  .safety-fault b,
+  .safety-summary,
+  .admin-occupant-actions .btn b,
+  .admin-occupant-actions .btn small,
+  .adaptive-shadow-badge,
+  .adaptive-empty
+) {
+  font-size: 10px !important;
+  line-height: 1.4;
+}
+
+body[data-view="monitor"] :is(
+  .page-kicker,
+  .safety-actions .btn small,
+  .safety-case-guide em,
+  .safety-case-guide b,
+  .adaptive-status-grid span,
+  .adaptive-panel-head em,
+  .adaptive-version-panel em,
+  #adaptiveWindowMeta,
+  #adaptiveEvaluationTime,
+  #adaptiveSleepContext,
+  .admin-atmosphere-note,
+  #adminAtmosphereCoverage,
+  .admin-atmosphere-reference > summary small,
+  .monitor-provenance-card > summary em,
+  .monitor-live-summary-identity em,
+  #adminExplanationMode,
+  .admin-live-explanation-note b
+) {
+  font-size: 10px !important;
+  line-height: 1.4;
+}
+
+body[data-view="monitor"] .monitor-alert-bar .btn {
+  min-width: var(--zeep-touch-target) !important;
+}
+
+body[data-view="monitor"] :is(
+  .calibration-device-head small,
+  .calibration-live,
+  .calibration-channel-title span,
+  .calibration-value span,
+  .calibration-value small,
+  .calibration-input label,
+  .calibration-lock,
+  .calibration-legend,
+  .raw-subhead span
+) {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+body[data-view="monitor"] :is(
+  .calibration-device-head strong,
+  .calibration-channel-title b,
+  .raw-subhead strong
+) {
+  font-size: 12px;
+}
+
+body[data-view="monitor"] .calibration-value b {
+  font-size: 14px;
+}
+
+body[data-view="monitor"] .calibration-input input {
+  min-height: var(--zeep-touch-target);
+  font-size: 12px;
+}
+
+/* Usage history: retain one clear page heading and flatten nested filter cards. */
+body[data-view="sessions"] .history-deck-head {
+  display: flex;
+  min-height: 44px;
+  margin-bottom: 12px;
+}
+
+body[data-view="sessions"] .history-deck-head > span {
+  font-size: 10px !important;
+}
+
+body[data-view="sessions"] .history-filter-section #historyToolbar {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+body[data-view="sessions"] :is(
+  .history-filter-group label > span,
+  .history-section-head small,
+  .history-journey-panel > summary small,
+  .history-summary-heading > small,
+  .history-summary-metrics span,
+  .history-summary-metrics small
+) {
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+body[data-view="sessions"] :is(
+  .history-filter-group input,
+  .history-filter-group select,
+  .history-day-step,
+  .history-today-button,
+  #historyToolbar .history-filter-actions .btn
+) {
+  height: var(--zeep-touch-target);
+  min-height: var(--zeep-touch-target);
+}
+
+body[data-view="sessions"] .history-date-group {
+  grid-template-columns: 44px minmax(120px, 1fr) minmax(120px, 1fr) 64px 44px;
+}
+
+body[data-view="sessions"] .history-day-step {
+  min-width: var(--zeep-touch-target);
+}
+
+body[data-view="sessions"] .history-journey-panel > summary {
+  display: flex;
+  min-height: var(--zeep-touch-target);
+  align-items: center;
+}
+
+body[data-view="sessions"] #historyToolbar.history-filter-panel
+  .history-filter-group select {
+  height: var(--zeep-touch-target);
+  min-height: var(--zeep-touch-target);
+}
+
+body[data-view="sessions"] :is(
+  .sleep-env small,
+  .sleep-period-note,
+  .session-key-metric small,
+  .report-subhead small,
+  .stage-donut small,
+  .stage-legend-row,
+  .classification-accounting-metrics span,
+  .classification-accounting-detail small,
+  .classification-accounting-card p,
+  .disturbance-item small,
+  .disturbance-item > span,
+  .report-context-note
+) {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+@media (max-width: 760px) {
+  body[data-view="sessions"] .hist-list {
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+/* End-of-session result uses the same rounded card language as Sessions. */
+.session-end-card {
+  border-radius: 20px;
+  clip-path: none;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .48);
+}
+
+@media (max-width: 1100px) {
+  .session-end-share {
+    position: static;
+    order: -1;
+  }
+}
+
+@media (max-width: 520px) {
+  body[data-view="sessions"] .history-date-group {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 460px) {
+  #login {
+    align-items: flex-start;
+    padding: 10px;
+  }
+
+  #login .login-card {
+    width: 100%;
+    max-height: calc(100dvh - 20px);
+    padding: 18px;
+  }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+}

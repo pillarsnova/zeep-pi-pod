@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -868,6 +868,7 @@
   <link rel="stylesheet" href="/static/theme-modern.css?v=20260916-155" />
   <link rel="stylesheet" href="/static/styles/monitor.css?v=20260916-1" />
   <link rel="stylesheet" href="/static/styles/sessions.css?v=20260916-1" />
+  <link rel="stylesheet" href="/static/styles/interface-consistency.css?v=20260916-1" />
 </head>
 <body>
 <!-- Shared line-icon library: every interactive view reuses the same 24 px
@@ -886,6 +887,7 @@
   <symbol id="ui-icon-light" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/></symbol>
   <symbol id="ui-icon-droplet" viewBox="0 0 24 24"><path d="M12 3C9 8 6 11 6 15a6 6 0 0 0 12 0c0-4-3-7-6-12Z"/><path d="M9 16c.5 1.5 1.5 2 3 2"/></symbol>
   <symbol id="ui-icon-diagnostics" viewBox="0 0 24 24"><path d="M4 18v-5m4 5V9m4 9V5m4 13v-7m4 7V7"/><path d="M3 21h18"/></symbol>
+  <symbol id="ui-icon-network" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="19" cy="18" r="2"/><path d="m7 11 10-4M7 13l10 4"/></symbol>
   <symbol id="ui-icon-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M7 8a7 7 0 0 1 11 2m-1 6A7 7 0 0 1 6 14"/></symbol>
   <symbol id="ui-icon-history" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></symbol>
   <symbol id="ui-icon-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5"/></symbol>
@@ -927,7 +929,7 @@
   <div class="boot-sub">พื้นที่พักผ่อนของคุณ</div>
 </div>
 <div id="login" class="hide" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
-  <div class="login-card">
+  <form class="login-card" onsubmit="event.preventDefault();submitLogin(document.getElementById('loginStartBtn'))">
     <div class="section-title" id="loginTitle">เข้าสู่ระบบผู้ใช้งาน · ZEEP</div>
     <div class="login-route-badge" id="loginRouteBadge" aria-live="polite">
       <span class="login-route-icon" aria-hidden="true">Z</span>
@@ -937,8 +939,10 @@
     <!-- โหมดปกติ: บัญชี ZEEP (API ตัวเดียวกับแอปมือถือ) -->
     <div id="loginPaneZeep">
       <div class="muted" id="loginAudienceHelp">ใช้บัญชี ZEEP เดียวกับในแอปมือถือ · หนึ่งบัญชีใช้งานได้ครั้งละหนึ่งตู้</div>
+      <label class="login-field-label" for="loginIdentifier">อีเมลหรือชื่อผู้ใช้</label>
       <input id="loginIdentifier" type="text" placeholder="อีเมลหรือชื่อผู้ใช้" maxlength="120"
              autocomplete="username" autocapitalize="off" spellcheck="false">
+      <label class="login-field-label" for="loginPassword">รหัสผ่าน</label>
       <div class="pw-field">
         <input id="loginPassword" type="password" placeholder="รหัสผ่าน" maxlength="120" autocomplete="current-password">
         <button type="button" id="loginPwToggle" onclick="toggleLoginPassword()" aria-label="แสดงรหัสผ่าน">แสดง</button>
@@ -949,18 +953,19 @@
     <div id="loginPaneLocal" class="login-off">
       <div class="muted">ใช้งานแบบออฟไลน์ · ข้อมูลการพักบันทึกใน ZEEP เครื่องนี้</div>
       <div id="userChips" class="chips"></div>
+      <label class="login-field-label" for="loginName">ชื่อผู้ใช้งาน</label>
       <input id="loginName" type="text" placeholder="ชื่อผู้ใช้ (username)" maxlength="40" autocomplete="off">
       <div class="genders" id="genderSeg">
-        <button data-g="male" onclick="selectGender('male')">ชาย</button>
-        <button data-g="female" onclick="selectGender('female')">หญิง</button>
-        <button data-g="other" onclick="selectGender('other')">อื่น ๆ</button>
-        <button data-g="unspecified" onclick="selectGender('unspecified')">ไม่ระบุ</button>
+        <button type="button" data-g="male" onclick="selectGender('male')">ชาย</button>
+        <button type="button" data-g="female" onclick="selectGender('female')">หญิง</button>
+        <button type="button" data-g="other" onclick="selectGender('other')">อื่น ๆ</button>
+        <button type="button" data-g="unspecified" onclick="selectGender('unspecified')">ไม่ระบุ</button>
       </div>
     </div>
 
     <!-- ช่วงอายุ: โหมด Local ใช้ทุกครั้ง · โหมด ZEEP โชว์เฉพาะบัญชีที่ยังไม่ตั้งวันเกิด -->
     <div id="loginAgeBlock" class="login-off">
-      <div class="muted">เลือกช่วงอายุ</div>
+      <label class="login-field-label" for="loginAgeGroup">ช่วงอายุ</label>
       <select id="loginAgeGroup" onchange="renderLoginBaseline()">
         <option value="">— เลือกช่วงอายุ —</option>
         <option value="18-29">18–29 ปี</option>
@@ -973,7 +978,7 @@
 
     <div id="loginRestModeBlock">
       <div class="pilot-welcome"><b>ยินดีต้อนรับสู่การทดสอบใช้งาน ZEEP</b><span>เลือกรูปแบบการพัก 1 แบบก่อนเริ่ม</span></div>
-      <div class="muted">รูปแบบการทดสอบ</div>
+      <label class="login-field-label" for="loginRestMode">รูปแบบการพักครั้งนี้</label>
       <select id="loginRestMode" onchange="renderRestModeHint()">
         <option value="nap_recovery">Nap &amp; Refresh · พักระหว่างวัน</option>
         <option value="sleep">Overnight Recovery · พักค้างคืน</option>
@@ -1012,11 +1017,11 @@
 
     <div id="loginError" class="login-safety danger login-off" role="alert"></div>
     <div id="loginSafety" class="login-safety login-off" role="alert" aria-live="assertive"></div>
-    <button class="btn primary" id="loginStartBtn" style="width:100%;margin-top:14px" onclick="submitLogin(this)">เข้าสู่ระบบ</button>
+    <button type="submit" class="btn primary" id="loginStartBtn" style="width:100%;margin-top:14px">เข้าสู่ระบบ</button>
     <button type="button" class="login-mode-link login-off" id="loginModeLink" onclick="toggleLoginMode()"></button>
     <button type="button" class="login-mode-link login-off" id="loginQrLink" onclick="toggleQrLogin()"></button>
     <div class="mini">ข้อมูลการพักจะถูกบันทึกใน ZEEP เครื่องนี้</div>
-  </div>
+  </form>
 </div>
 <!-- ผลการพักหลังจบ Session: จอตู้เป็นจอรวม ผู้ใช้จึงต้องหยิบผลกลับไปเองด้วย QR -->
 <div id="sessionEndScreen" class="hide" role="dialog" aria-modal="true" aria-labelledby="sessionEndTitle">
@@ -1140,7 +1145,7 @@
       <button id="accountLogoutBtn" class="btn icon-only ui-icon-button" style="display:none" onclick="doAuthLogout(this)" aria-label="ออกจากบัญชี" title="ออกจากบัญชี"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-sign-out"/></svg><span class="sr-only">ออกจากบัญชี</span></button>
       <div class="system-health">
         <div id="wifiPill" class="pill health bad"><span class="wifi-signal level-0"><i></i><i></i><i></i><i></i></span><span>Wi‑Fi --</span></div>
-        <div id="ipPill" class="pill health">⇄ IP --</div>
+        <div id="ipPill" class="pill health"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-network"/></svg><span>IP --</span></div>
       </div>
     </div>
   </div>
@@ -1164,7 +1169,7 @@
   </section>
   <div id="pageMessage" class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังเชื่อมต่อระบบ</b><span>รอข้อมูลสถานะล่าสุดจาก ZEEP</span></div></div>
   <div id="safetyUserAlert" class="safety-user-alert" role="alert" aria-live="assertive" hidden>
-    <span class="safety-alert-icon" aria-hidden="true">!</span>
+    <span class="safety-alert-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-alert"/></svg></span>
     <div><b id="safetyUserAlertTitle"></b><span id="safetyUserAlertDetail"></span></div>
     <a id="safetyUserAlertAction" href="/control">เปิดหน้าควบคุมประตู</a>
   </div>
@@ -1221,35 +1226,6 @@
           <em id="dashClockZone">Timezone --</em>
         </div>
       </div>
-      <section class="dash-profile-reference idle" id="dashProfileReference" aria-label="ข้อมูลอ้างอิงสุขภาพของผู้ใช้งาน">
-        <div class="dash-profile-reference-head"><b>ข้อมูลสำหรับคำแนะนำของคุณ</b><small id="dashProfileSource">ข้อมูลจาก Profile ช่วยให้คำแนะนำเหมาะกับคุณมากขึ้น</small></div>
-        <div class="dash-profile-reference-grid">
-          <div class="dash-profile-fact" id="dashProfileGender"><span>เพศ</span><strong>—</strong></div>
-          <div class="dash-profile-fact" id="dashProfileAge"><span>อายุ</span><strong>—</strong></div>
-          <div class="dash-profile-fact" id="dashProfileHeight"><span>ส่วนสูง</span><strong>—</strong></div>
-          <div class="dash-profile-fact" id="dashProfileWeight"><span>น้ำหนัก</span><strong>—</strong></div>
-          <div class="dash-profile-fact" id="dashProfileBlood"><span>กรุ๊ปเลือด</span><strong>—</strong></div>
-        </div>
-      </section>
-      <section class="dash-personal-rest-baseline idle" id="dashPersonalRestBaseline" aria-label="Baseline ช่วงเวลาพักส่วนบุคคล" aria-live="polite">
-        <div class="dash-personal-rest-head">
-          <span class="dash-personal-rest-icon" aria-hidden="true"><svg class="ui-icon" focusable="false"><use href="#ui-icon-diagnostics"/></svg></span>
-          <div><b id="dashPersonalRestTitle">Baseline ช่วงเวลาพักของคุณ</b><small id="dashPersonalRestEvidence">เข้าสู่ระบบเพื่อเริ่มเรียนรู้จากการพักของคุณ</small></div>
-          <span class="dash-personal-rest-status" id="dashPersonalRestStatus">รอเริ่ม</span>
-        </div>
-        <div class="dash-personal-rest-body">
-          <div class="dash-personal-rest-time">
-            <small id="dashPersonalRestMode">รูปแบบการพัก</small>
-            <strong id="dashPersonalRestTime">--:-- – --:--</strong>
-            <span id="dashPersonalRestDuration">ยังไม่มีข้อมูลช่วงเวลา</span>
-          </div>
-          <div class="dash-personal-rest-result">
-            <b id="dashPersonalRestScore">กำลังรอผลการพักครั้งแรก</b>
-            <p id="dashPersonalRestAdvice">เมื่อกลับมาใช้ครั้งที่ 2 ZEEP จะเริ่มแนะนำช่วงเวลาที่เหมาะกับคุณ</p>
-          </div>
-        </div>
-        <small class="dash-personal-rest-guardrail" id="dashPersonalRestGuardrail">คำแนะนำส่วนบุคคล · คุณยืนยันก่อนปรับอุปกรณ์</small>
-      </section>
       <div class="dashboard-zone-grid">
         <section class="dashboard-zone dashboard-health-zone" aria-label="สุขภาพผู้ใช้งาน">
           <div class="dashboard-zone-head"><div><span class="dashboard-zone-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M3 12h4l2-4 4 9 2-5h6"/><path d="M12 21C5 17 3 13 3 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 9 2.5c0 3.5-2 7.5-9 11.5Z"/></svg></span>สุขภาพผู้ใช้งาน</div><span>ข้อมูลระหว่างพัก</span></div>
@@ -1279,6 +1255,35 @@
           </div>
         </section>
       </div>
+      <section class="dash-personal-rest-baseline idle" id="dashPersonalRestBaseline" aria-label="Baseline ช่วงเวลาพักส่วนบุคคล" aria-live="polite">
+        <div class="dash-personal-rest-head">
+          <span class="dash-personal-rest-icon" aria-hidden="true"><svg class="ui-icon" focusable="false"><use href="#ui-icon-diagnostics"/></svg></span>
+          <div><b id="dashPersonalRestTitle">Baseline ช่วงเวลาพักของคุณ</b><small id="dashPersonalRestEvidence">เข้าสู่ระบบเพื่อเริ่มเรียนรู้จากการพักของคุณ</small></div>
+          <span class="dash-personal-rest-status" id="dashPersonalRestStatus">รอเริ่ม</span>
+        </div>
+        <div class="dash-personal-rest-body">
+          <div class="dash-personal-rest-time">
+            <small id="dashPersonalRestMode">รูปแบบการพัก</small>
+            <strong id="dashPersonalRestTime">--:-- – --:--</strong>
+            <span id="dashPersonalRestDuration">ยังไม่มีข้อมูลช่วงเวลา</span>
+          </div>
+          <div class="dash-personal-rest-result">
+            <b id="dashPersonalRestScore">กำลังรอผลการพักครั้งแรก</b>
+            <p id="dashPersonalRestAdvice">เมื่อกลับมาใช้ครั้งที่ 2 ZEEP จะเริ่มแนะนำช่วงเวลาที่เหมาะกับคุณ</p>
+          </div>
+        </div>
+        <small class="dash-personal-rest-guardrail" id="dashPersonalRestGuardrail">คำแนะนำส่วนบุคคล · คุณยืนยันก่อนปรับอุปกรณ์</small>
+      </section>
+      <section class="dash-profile-reference idle" id="dashProfileReference" aria-label="ข้อมูลอ้างอิงสุขภาพของผู้ใช้งาน">
+        <div class="dash-profile-reference-head"><b>ข้อมูลสำหรับคำแนะนำของคุณ</b><small id="dashProfileSource">ข้อมูลจาก Profile ช่วยให้คำแนะนำเหมาะกับคุณมากขึ้น</small></div>
+        <div class="dash-profile-reference-grid">
+          <div class="dash-profile-fact" id="dashProfileGender"><span>เพศ</span><strong>—</strong></div>
+          <div class="dash-profile-fact" id="dashProfileAge"><span>อายุ</span><strong>—</strong></div>
+          <div class="dash-profile-fact" id="dashProfileHeight"><span>ส่วนสูง</span><strong>—</strong></div>
+          <div class="dash-profile-fact" id="dashProfileWeight"><span>น้ำหนัก</span><strong>—</strong></div>
+          <div class="dash-profile-fact" id="dashProfileBlood"><span>กรุ๊ปเลือด</span><strong>—</strong></div>
+        </div>
+      </section>
       <div class="dash-foot"><span class="dash-foot-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></svg></span><span id="dashHealthNote">ข้อมูลช่วยดูแนวโน้มระหว่างพัก · ไม่ใช่การวินิจฉัย</span></div>
     </section>
 
@@ -1313,7 +1318,7 @@
     <section class="card unified-control" id="unifiedControlCard" data-pages="control" aria-label="ศูนย์ควบคุมอุปกรณ์ทั้งหมด">
       <div class="unified-head">
         <div><h3>ควบคุมสภาพแวดล้อมภายใน ZEEP</h3></div>
-        <div class="control-head-actions"><a class="control-debug-link admin-only" href="/control-debug" aria-label="เปิดหน้า Control Debug"><span aria-hidden="true">⌘</span> Debug</a><div class="unified-room-state" id="unifiedRoomState">กำลังตรวจระบบ</div></div>
+        <div class="control-head-actions"><a class="control-debug-link admin-only" href="/control-debug" aria-label="เปิดหน้า Control Debug"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-diagnostics"/></svg><span>Debug</span></a><div class="unified-room-state" id="unifiedRoomState">กำลังตรวจระบบ</div></div>
       </div>
 
       <div class="device-zone-grid">
@@ -1350,96 +1355,6 @@
           </div>
           <div class="zone-sensor-grid single-sensor-grid door-safety-grid" aria-label="ข้อมูลความปลอดภัยก่อนควบคุมประตู">
             <div class="zone-sensor door-safety-sensor"><span aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-alert"/></svg></span><b>ตรวจทางเดินและผู้ใช้งานก่อนปิดประตู</b><small>SAFETY CHECK</small></div>
-          </div>
-        </section>
-
-        <section class="device-zone wide air-zone" data-controller="ESP32 AIRCON">
-          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon device-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9.5 5.5 12 8l2.5-2.5M9.5 18.5 12 16l2.5 2.5"/></svg></span>อากาศและอุณหภูมิ</div><span class="device-zone-status" id="unifiedAirconStatus">กำลังเชื่อมต่อแอร์</span></div>
-          <div class="zone-sensor-grid air-sensor-grid" aria-label="ค่าตรวจวัดอากาศภายใน ZEEP">
-            <div class="zone-sensor" id="zoneSensorTemp"><span title="อุณหภูมิ"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-thermometer"/></svg></span><b id="unifiedTemp">--</b><small>อุณหภูมิ · °C</small></div>
-            <div class="zone-sensor quality-unknown" id="zoneSensorAirQuality"><span title="สภาพอากาศ"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-air-quality"/></svg></span><b id="unifiedAirQuality">รอข้อมูล</b><small id="unifiedAirQualityDetail">ข้อมูลอากาศ 0/3</small></div>
-          </div>
-          <div class="aircon-comfort-panel" aria-label="ควบคุมเครื่องปรับอากาศและอุณหภูมิ">
-            <div id="airconComfortMap" class="aircon-comfort-map" role="img" aria-label="เครื่องปรับอากาศปิดอยู่">
-              <svg viewBox="0 0 260 168" aria-hidden="true" focusable="false">
-                <defs>
-                  <linearGradient id="airDoorPodShellGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#18354a"/><stop offset=".58" stop-color="#0b2032"/><stop offset="1" stop-color="#061321"/></linearGradient>
-                  <linearGradient id="airDoorPodInnerGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#071a2b"/><stop offset="1" stop-color="#020a13"/></linearGradient>
-                </defs>
-                <path class="pod-door-view-shell" fill="url(#airDoorPodShellGradient)" d="M20 144Q14 129 23 93Q34 43 86 24Q123 10 178 16Q219 20 238 57Q250 80 244 144Z"/>
-                <path class="pod-door-view-opening" fill="url(#airDoorPodInnerGradient)" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124Z"/>
-                <path class="pod-door-view-aperture" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124"/>
-                <path class="pod-door-view-floor" d="M25 144Q112 126 244 144"/>
-                <g class="pod-door-view-static-lamp"><path d="M109 40h35l-5 9h-25Z"/><path d="m110 53-5 6m22-6v8m17-8 5 6"/></g>
-                <g class="aircon-unit pod-head-end-aircon"><rect x="168" y="49" width="40" height="17" rx="5"/><path d="M173 60h30m-23-6h17"/></g>
-                <g class="cool-air-flow pod-flow-head-to-foot"><path d="M166 70c-18 0-20 12-37 12s-20 13-36 13-19 10-33 10"/><path d="M167 78c-16 0-20 11-34 11s-18 12-33 12-17 8-29 8"/><path d="m72 101-12 4 9 8"/></g>
-                <g class="fresh-air-spark"><path d="M148 64v10m-5-5h10m-29 14v8m-4-4h8"/></g>
-                <g class="pod-door-view-bed air-pod-bed">
-                  <path class="pod-door-view-bed-base" d="M43 124H222L239 144H25Z"/>
-                  <path class="pod-door-view-mattress" d="M49 110H207Q214 110 216 118L219 131H46V118Q46 112 49 110Z"/>
-                  <path class="pod-door-view-headboard" d="M180 78Q197 66 213 81L216 111H180Z"/>
-                  <path class="pod-door-view-pillow" d="M179 102Q194 85 210 97L212 110H184Z"/>
-                  <path class="pod-door-view-seams" d="M106 111v20m55-20v20"/>
-                </g>
-              </svg>
-              <span><b>แอร์ ZEEP</b><small id="airconComfortCaption">แอร์ปิดอยู่</small></span>
-            </div>
-            <small class="control-scene-caption">ทำความเย็นและกระจายลมทั่ว ZEEP</small>
-            <div class="aircon-control-stack">
-              <div class="aircon-power-pair" role="group" aria-label="เปิดหรือปิดเครื่องปรับอากาศ">
-                <button id="unifiedAirconPowerBtn" class="smart-switch action-toggle visual-power-toggle stateful-content aircon-action aircon-power-toggle state-unknown" data-control-label="เปิดหรือปิดแอร์" data-aircon-command="on" onclick="unifiedAirconPowerToggle(this)" aria-pressed="false" aria-label="เปิดเครื่องปรับอากาศ" title="เปิดเครื่องปรับอากาศ"><span class="toggle-status-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-power"/></svg></span><span class="toggle-state-copy"><b data-action-label>เปิด</b><small data-state-label>ยังไม่ทราบ</small></span><small class="control-button-caption">แอร์</small></button>
-              </div>
-              <button id="unifiedSwingBtn" class="smart-switch action-toggle visual-power-toggle stateful-content aircon-action state-unknown" data-control-label="สวิงพัดลม" data-aircon-command="swing_on" onclick="unifiedSwingToggle(this)" aria-label="เปิดสวิงพัดลม" title="เปิดสวิงพัดลม"><span class="toggle-status-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-swing"/></svg></span><span class="toggle-state-copy"><b data-action-label>เปิด</b><small data-state-label>ยังไม่ทราบ</small></span><small class="control-button-caption">สวิง</small></button>
-              <button id="unifiedFanLevelBtn" class="smart-switch action-toggle visual-power-toggle stateful-content aircon-action fan-level-control state-unknown" data-control-label="แรงลม" data-aircon-command="fan" onclick="unifiedFanLevelCycle(this)" aria-label="ปรับแรงลมแอร์" title="กดเพื่อปรับแรงลมแอร์"><span class="toggle-status-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-fan"/></svg></span><span class="toggle-state-copy"><b data-action-label>ปรับแรงลม</b><small data-state-label>กดเพื่อปรับ</small></span><small class="control-button-caption">แรงลม</small></button>
-              <div class="temperature-quick-control"><div class="temperature-quick-copy"><b>อุณหภูมิ</b><small>15–28°C</small></div><div class="device-inline temperature-auto-control" id="unifiedAirconTempControl" data-state="ready"><select id="unifiedAirconTemp" aria-label="เลือกอุณหภูมิภายใน ZEEP ระหว่าง 15 ถึง 28 องศา และปรับทันที" onchange="applyUnifiedAirconTemperature(this)"><option value="15">15°C</option><option value="16">16°C</option><option value="17">17°C</option><option value="18" selected>18°C</option><option value="19">19°C</option><option value="20">20°C</option><option value="21">21°C</option><option value="22">22°C</option><option value="23">23°C</option><option value="24">24°C</option><option value="25">25°C</option><option value="26">26°C</option><option value="27">27°C</option><option value="28">28°C</option></select><span class="temperature-auto-state" id="unifiedAirconTempState" aria-live="polite"></span></div></div>
-            </div>
-          </div>
-        </section>
-
-        <section class="device-zone wide bed-zone priority-health" data-controller="ESP32 BED">
-          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon device-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M3 18h18M5 18v3m14-3v3M5 16V9m0 5h14v4M7 11h4q2 0 2 3H7Z"/></svg></span>เตียงและผู้ใช้งาน</div><span class="device-zone-status" id="unifiedBedStatus">กำลังเชื่อมต่อ</span></div>
-          <div class="zone-sensor-grid bed-sensor-grid" aria-label="ค่าตรวจวัดผู้ใช้งานบนเตียง">
-            <div class="zone-sensor" id="zoneSensorHeart"><span title="ชีพจร"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-heart"/></svg></span><b id="unifiedHeartRate">--</b><small>ชีพจร · bpm</small></div>
-            <div class="zone-sensor" id="zoneSensorRespiration"><span title="อัตราหายใจ"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-lungs"/></svg></span><b id="unifiedRespiration">--</b><small>หายใจ/นาที</small></div>
-            <div class="zone-sensor" id="zoneSensorBed"><span title="สถานะบนเตียง"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-bed-flat"/></svg></span><b id="unifiedBedPresence">--</b><small>สถานะเตียง</small></div>
-          </div>
-          <div class="bed-motion-panel">
-            <div id="bedPodMap" class="bed-pod-scene unified-pod-device-map" role="img" aria-label="เตียงภายใน ZEEP พร้อมใช้งาน">
-              <svg viewBox="0 0 260 168" aria-hidden="true" focusable="false">
-                <defs><linearGradient id="bedPodShellGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#18354a"/><stop offset=".58" stop-color="#0b2032"/><stop offset="1" stop-color="#061321"/></linearGradient><linearGradient id="bedPodInnerGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#071a2b"/><stop offset="1" stop-color="#020a13"/></linearGradient></defs>
-                <path class="pod-door-view-shell" fill="url(#bedPodShellGradient)" d="M20 144Q14 129 23 93Q34 43 86 24Q123 10 178 16Q219 20 238 57Q250 80 244 144Z"/>
-                <path class="pod-door-view-opening" fill="url(#bedPodInnerGradient)" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124Z"/>
-                <path class="pod-door-view-aperture" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124"/><path class="pod-door-view-floor" d="M25 144Q112 126 244 144"/>
-                <g class="pod-door-view-bed">
-                  <path class="pod-door-view-bed-base" d="M43 130H222L239 144H25Z"/>
-                  <g id="bedSceneFoot" class="bed-device-region bed-device-foot bed-tilt-segment"><path class="bed-segment-surface" d="M47 111h59v19H47Z"/><path class="bed-device-arrow" d="M75 103V82m-6 7 6-7 6 7"/></g>
-                  <path class="bed-segment-surface bed-device-middle" d="M106 111h55v19h-55Z"/>
-                  <g id="bedSceneHead" class="bed-device-region bed-device-head bed-tilt-segment"><path class="bed-segment-surface" d="M161 111h54v19h-54Z"/><path class="pod-door-view-headboard" d="M181 79Q197 68 212 82L215 110H181Z"/><path class="pod-door-view-pillow" d="M179 102Q194 85 210 97L212 110H184Z"/><path class="bed-device-arrow" d="M195 73V52m-6 7 6-7 6 7"/></g>
-                  <path class="pod-door-view-seams" d="M106 111v20m55-20v20"/>
-                </g>
-              </svg>
-              <span><b>เตียง ZEEP</b><small id="bedPodSceneState">พร้อมใช้งาน</small></span>
-            </div>
-            <small class="control-scene-caption">ปรับหัว–ปลายเตียงเพื่อความสบาย</small>
-            <div class="bed-control-grid bed-position-grid" aria-label="ปรับระดับเตียง">
-              <button class="bed-control-btn bed-action bed-foot-up" data-bed-command="foot_up" onclick="bedCommand('foot_up',this)" aria-label="ยกปลายเตียงขึ้น" title="ยกปลายเตียงขึ้น"><svg class="bed-command-symbol" viewBox="0 0 68 44" aria-hidden="true" focusable="false"><path class="bed-symbol-frame" d="M7 35h54M11 35v5m46-5v5"/><path class="bed-symbol-surface bed-symbol-active-segment" d="M10 17l21 15h27"/><path class="bed-symbol-headboard" d="M58 20v12"/><path class="bed-symbol-arrow" d="M17 24V7m-6 7 6-7 6 7"/></svg><span class="sr-only">ยกปลายเตียงขึ้น</span><small class="control-button-caption">ปลายขึ้น</small></button>
-              <button class="bed-control-btn bed-action bed-foot-down" data-bed-command="foot_down" onclick="bedCommand('foot_down',this)" aria-label="ลดปลายเตียงลง" title="ลดปลายเตียงลง"><svg class="bed-command-symbol" viewBox="0 0 68 44" aria-hidden="true" focusable="false"><path class="bed-symbol-frame" d="M7 35h54M11 35v5m46-5v5"/><path class="bed-symbol-surface bed-symbol-active-segment" d="M10 17l21 15h27"/><path class="bed-symbol-headboard" d="M58 20v12"/><path class="bed-symbol-arrow" d="M17 7v17m-6-7 6 7 6-7"/></svg><span class="sr-only">ลดปลายเตียงลง</span><small class="control-button-caption">ปลายลง</small></button>
-              <button id="bedMotionMap" class="bed-control-btn bed-action bed-motion-map bed-normal-button" data-bed-command="flat" onclick="bedCommand('flat',this)" aria-label="ปรับเตียงปกติ" title="ปรับเตียงปกติ">
-                <svg viewBox="0 0 120 74" aria-hidden="true" focusable="false">
-                  <!-- มุมมองเดียวกับภาพ ZEEP: ปลายเตียงอยู่ซ้ายและหัวเตียงอยู่ขวา -->
-                  <g transform="translate(120 0) scale(-1 1)">
-                    <path class="bed-frame" d="M8 58h104M14 58v9M106 58v9"/>
-                    <g id="bedMapHead" class="bed-motion-region"><path d="M14 53L24 26Q27 21 33 25L58 50Z"/><path d="M20 24q8-9 16 0"/></g>
-                    <g id="bedMapFoot" class="bed-motion-region"><path d="M57 50h48q7 0 7 8H57z"/><path d="M88 47h18"/></g>
-                  </g>
-                </svg>
-                <span id="bedMotionArrow" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-bed-flat"/></svg></span>
-                <b id="unifiedBedCommand" class="sr-only">เตียงปกติ</b>
-                <small class="control-button-caption">เตียงราบ</small>
-              </button>
-              <button class="bed-control-btn bed-action bed-head-up" data-bed-command="head_up" onclick="bedCommand('head_up',this)" aria-label="ยกหัวเตียงขึ้น" title="ยกหัวเตียงขึ้น"><svg class="bed-command-symbol" viewBox="0 0 68 44" aria-hidden="true" focusable="false"><path class="bed-symbol-frame" d="M7 35h54M11 35v5m46-5v5"/><path class="bed-symbol-surface bed-symbol-active-segment" d="M10 32h25l23-15"/><path class="bed-symbol-headboard" d="M58 17v15"/><path class="bed-symbol-arrow" d="M51 24V7m-6 7 6-7 6 7"/></svg><span class="sr-only">ยกหัวเตียงขึ้น</span><small class="control-button-caption">หัวขึ้น</small></button>
-              <button class="bed-control-btn bed-action bed-head-down" data-bed-command="head_down" onclick="bedCommand('head_down',this)" aria-label="ลดหัวเตียงลง" title="ลดหัวเตียงลง"><svg class="bed-command-symbol" viewBox="0 0 68 44" aria-hidden="true" focusable="false"><path class="bed-symbol-frame" d="M7 35h54M11 35v5m46-5v5"/><path class="bed-symbol-surface bed-symbol-active-segment" d="M10 32h25l23-15"/><path class="bed-symbol-headboard" d="M58 17v15"/><path class="bed-symbol-arrow" d="M51 7v17m-6-7 6 7 6-7"/></svg><span class="sr-only">ลดหัวเตียงลง</span><small class="control-button-caption">หัวลง</small></button>
-            </div>
           </div>
         </section>
 
@@ -1523,44 +1438,45 @@
           </div>
         </section>
 
-        <section class="device-zone audio-zone" data-controller="PI 5 CORE">
-          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon device-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 14v-2a8 8 0 0 1 16 0v2M4 14h3v6H5q-1 0-1-1Zm16 0h-3v6h2q1 0 1-1Z"/></svg></span>เสียงใน ZEEP</div><span class="device-zone-status" id="unifiedAudioStatus">พร้อมเล่น</span></div>
-          <div class="zone-sensor-grid single-sensor-grid" aria-label="ระดับเสียงภายใน ZEEP">
-            <div class="zone-sensor" id="zoneSensorSound"><span title="ระดับเสียงปัจจุบัน"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-volume-on"/></svg></span><b id="unifiedSound">--</b><small id="unifiedSoundState">ระดับเสียง · dBA</small></div>
+        <section class="device-zone wide air-zone" data-controller="ESP32 AIRCON">
+          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon device-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9.5 5.5 12 8l2.5-2.5M9.5 18.5 12 16l2.5 2.5"/></svg></span>อากาศและอุณหภูมิ</div><span class="device-zone-status" id="unifiedAirconStatus">กำลังเชื่อมต่อแอร์</span></div>
+          <div class="zone-sensor-grid air-sensor-grid" aria-label="ค่าตรวจวัดอากาศภายใน ZEEP">
+            <div class="zone-sensor" id="zoneSensorTemp"><span title="อุณหภูมิ"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-thermometer"/></svg></span><b id="unifiedTemp">--</b><small>อุณหภูมิ · °C</small></div>
+            <div class="zone-sensor quality-unknown" id="zoneSensorAirQuality"><span title="สภาพอากาศ"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-air-quality"/></svg></span><b id="unifiedAirQuality">รอข้อมูล</b><small id="unifiedAirQualityDetail">ข้อมูลอากาศ 0/3</small></div>
           </div>
-          <div class="audio-control-panel" aria-label="ภาพเสียงภายใน ZEEP และเครื่องเล่นเสียงบรรยากาศ">
-            <div id="audioPodMap" class="audio-pod-map unified-pod-device-map" role="img" aria-label="ระบบเสียงภายใน ZEEP พร้อมเล่น">
+          <div class="aircon-comfort-panel" aria-label="ควบคุมเครื่องปรับอากาศและอุณหภูมิ">
+            <div id="airconComfortMap" class="aircon-comfort-map" role="img" aria-label="เครื่องปรับอากาศปิดอยู่">
               <svg viewBox="0 0 260 168" aria-hidden="true" focusable="false">
-                <defs><linearGradient id="audioPodShellGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#17364a"/><stop offset=".58" stop-color="#0b2032"/><stop offset="1" stop-color="#061321"/></linearGradient><linearGradient id="audioPodInnerGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#071a2b"/><stop offset="1" stop-color="#020a13"/></linearGradient></defs>
-                <path class="pod-door-view-shell audio-pod-shell" fill="url(#audioPodShellGradient)" d="M20 144Q14 129 23 93Q34 43 86 24Q123 10 178 16Q219 20 238 57Q250 80 244 144Z"/>
-                <path class="pod-door-view-opening audio-pod-inner" fill="url(#audioPodInnerGradient)" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124Z"/>
-                <path class="pod-door-view-aperture" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124"/><path class="pod-door-view-floor" d="M25 144Q112 126 244 144"/>
-                <g class="pod-audio-speakers"><g><circle cx="78" cy="65" r="9"/><circle cx="78" cy="65" r="3"/></g><g><circle cx="193" cy="65" r="9"/><circle cx="193" cy="65" r="3"/></g></g>
-                <g class="pod-audio-waves"><path d="M91 69Q134 45 180 69"/><path d="M96 78Q135 58 175 78"/><path d="M104 87Q135 73 167 87"/></g>
-                <g class="pod-door-view-bed audio-pod-bed"><path class="pod-door-view-bed-base" d="M43 124H222L239 144H25Z"/><path class="pod-door-view-mattress" d="M49 110H207Q214 110 216 118L219 131H46V118Q46 112 49 110Z"/><path class="pod-door-view-headboard" d="M180 78Q197 66 213 81L216 111H180Z"/><path class="pod-door-view-pillow" d="M179 102Q194 85 210 97L212 110H184Z"/><path class="pod-door-view-seams" d="M106 111v20m55-20v20"/></g>
+                <defs>
+                  <linearGradient id="airDoorPodShellGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#18354a"/><stop offset=".58" stop-color="#0b2032"/><stop offset="1" stop-color="#061321"/></linearGradient>
+                  <linearGradient id="airDoorPodInnerGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#071a2b"/><stop offset="1" stop-color="#020a13"/></linearGradient>
+                </defs>
+                <path class="pod-door-view-shell" fill="url(#airDoorPodShellGradient)" d="M20 144Q14 129 23 93Q34 43 86 24Q123 10 178 16Q219 20 238 57Q250 80 244 144Z"/>
+                <path class="pod-door-view-opening" fill="url(#airDoorPodInnerGradient)" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124Z"/>
+                <path class="pod-door-view-aperture" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124"/>
+                <path class="pod-door-view-floor" d="M25 144Q112 126 244 144"/>
+                <g class="pod-door-view-static-lamp"><path d="M109 40h35l-5 9h-25Z"/><path d="m110 53-5 6m22-6v8m17-8 5 6"/></g>
+                <g class="aircon-unit pod-head-end-aircon"><rect x="168" y="49" width="40" height="17" rx="5"/><path d="M173 60h30m-23-6h17"/></g>
+                <g class="cool-air-flow pod-flow-head-to-foot"><path d="M166 70c-18 0-20 12-37 12s-20 13-36 13-19 10-33 10"/><path d="M167 78c-16 0-20 11-34 11s-18 12-33 12-17 8-29 8"/><path d="m72 101-12 4 9 8"/></g>
+                <g class="fresh-air-spark"><path d="M148 64v10m-5-5h10m-29 14v8m-4-4h8"/></g>
+                <g class="pod-door-view-bed air-pod-bed">
+                  <path class="pod-door-view-bed-base" d="M43 124H222L239 144H25Z"/>
+                  <path class="pod-door-view-mattress" d="M49 110H207Q214 110 216 118L219 131H46V118Q46 112 49 110Z"/>
+                  <path class="pod-door-view-headboard" d="M180 78Q197 66 213 81L216 111H180Z"/>
+                  <path class="pod-door-view-pillow" d="M179 102Q194 85 210 97L212 110H184Z"/>
+                  <path class="pod-door-view-seams" d="M106 111v20m55-20v20"/>
+                </g>
               </svg>
-              <span><b>เสียง ZEEP</b><small id="audioPodState">พร้อมเล่น</small></span>
+              <span><b>แอร์ ZEEP</b><small id="airconComfortCaption">แอร์ปิดอยู่</small></span>
             </div>
-            <small class="control-scene-caption">เลือกเสียงและโหมดเล่นเพื่อผ่อนคลาย</small>
-            <div class="stream-player" aria-label="เครื่องเล่นเสียงบรรยากาศ">
-              <div class="stream-now-playing">
-                <div id="unifiedAlbumArt" class="stream-cover" data-tone="0" aria-hidden="true"><span>♪</span><i></i><div class="stream-equalizer"><i></i><i></i><i></i><i></i></div></div>
-                <div class="stream-track-copy" aria-live="polite"><span id="unifiedPlayerMode">เลือกเสียง</span><b id="unifiedTrackTitle">กำลังโหลดเสียง</b><small id="unifiedTrackHint">ไฟล์ในเครื่อง</small></div>
-                <svg class="stream-ambient-wave" viewBox="0 0 300 90" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 48c18 0 18-25 36-25s18 42 36 42 18-51 36-51 18 39 36 39 18-29 36-29 18 41 36 41 18-35 36-35 18 18 48 18"/><path d="M0 58c24 0 24-17 48-17s24 28 48 28 24-35 48-35 24 23 48 23 24-18 48-18 24 19 60 19"/><path d="M0 70h300"/></svg>
+            <small class="control-scene-caption">ทำความเย็นและกระจายลมทั่ว ZEEP</small>
+            <div class="aircon-control-stack">
+              <div class="aircon-power-pair" role="group" aria-label="เปิดหรือปิดเครื่องปรับอากาศ">
+                <button id="unifiedAirconPowerBtn" class="smart-switch action-toggle visual-power-toggle stateful-content aircon-action aircon-power-toggle state-unknown" data-control-label="เปิดหรือปิดแอร์" data-aircon-command="on" onclick="unifiedAirconPowerToggle(this)" aria-pressed="false" aria-label="เปิดเครื่องปรับอากาศ" title="เปิดเครื่องปรับอากาศ"><span class="toggle-status-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-power"/></svg></span><span class="toggle-state-copy"><b data-action-label>เปิด</b><small data-state-label>ยังไม่ทราบ</small></span><small class="control-button-caption">แอร์</small></button>
               </div>
-              <div class="stream-queue-row">
-                <span aria-hidden="true">≡</span>
-                <select id="unifiedTrackSelect" aria-label="เลือกเสียงบรรยากาศ" onchange="unifiedSelectTrack(this.value,this)"><option value="">กำลังโหลด…</option></select>
-                <span class="stream-volume-icon" aria-hidden="true">◖</span>
-                <input id="unifiedVolume" type="range" min="0" max="100" value="60" aria-label="ระดับเสียง" aria-valuetext="60%" oninput="setVolume(this.value)">
-                <b id="unifiedVolumeText">60%</b>
-              </div>
-              <div class="stream-controls" aria-label="ควบคุมการเล่นเพลง">
-                <button id="unifiedAudioPrev" class="stream-control ui-transport-button" onclick="unifiedStepTrack(-1,this)" aria-label="เพลงก่อนหน้า" title="เพลงก่อนหน้า"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-previous"/></svg><small>ก่อนหน้า</small></button>
-                <button id="unifiedAudioBtn" class="stream-control stream-play ui-transport-button" onclick="unifiedAudioToggle(this)" aria-label="เล่นเสียงใน ZEEP" title="เล่นเสียงใน ZEEP"><svg id="unifiedAudioPlayIcon" class="ui-icon" aria-hidden="true"><use href="#ui-icon-play"/></svg><small id="unifiedAudioPlayLabel">เล่น</small></button>
-                <button id="unifiedAudioNext" class="stream-control ui-transport-button" onclick="unifiedStepTrack(1,this)" aria-label="เพลงถัดไป" title="เพลงถัดไป"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-next"/></svg><small>ถัดไป</small></button>
-                <button id="unifiedAudioModeToggle" class="stream-control stream-loop ui-transport-button on" data-mode="repeat_one" type="button" onclick="toggleUnifiedAudioMode(this)" aria-pressed="true" aria-label="Loop เปิดอยู่ กดเพื่อเปลี่ยนเป็นเล่นตามคิว" title="Loop · เล่นซ้ำ"><svg id="unifiedAudioModeIcon" class="ui-icon" aria-hidden="true"><use href="#ui-icon-repeat-one"/></svg><small id="unifiedAudioModeLabel">เล่นซ้ำ</small></button>
-              </div>
+              <button id="unifiedSwingBtn" class="smart-switch action-toggle visual-power-toggle stateful-content aircon-action state-unknown" data-control-label="สวิงพัดลม" data-aircon-command="swing_on" onclick="unifiedSwingToggle(this)" aria-label="เปิดสวิงพัดลม" title="เปิดสวิงพัดลม"><span class="toggle-status-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-swing"/></svg></span><span class="toggle-state-copy"><b data-action-label>เปิด</b><small data-state-label>ยังไม่ทราบ</small></span><small class="control-button-caption">สวิง</small></button>
+              <button id="unifiedFanLevelBtn" class="smart-switch action-toggle visual-power-toggle stateful-content aircon-action fan-level-control state-unknown" data-control-label="แรงลม" data-aircon-command="fan" onclick="unifiedFanLevelCycle(this)" aria-label="ปรับแรงลมแอร์" title="กดเพื่อปรับแรงลมแอร์"><span class="toggle-status-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-fan"/></svg></span><span class="toggle-state-copy"><b data-action-label>ปรับแรงลม</b><small data-state-label>กดเพื่อปรับ</small></span><small class="control-button-caption">แรงลม</small></button>
+              <div class="temperature-quick-control"><div class="temperature-quick-copy"><b>อุณหภูมิ</b><small>15–28°C</small></div><div class="device-inline temperature-auto-control" id="unifiedAirconTempControl" data-state="ready"><select id="unifiedAirconTemp" aria-label="เลือกอุณหภูมิภายใน ZEEP ระหว่าง 15 ถึง 28 องศา และปรับทันที" onchange="applyUnifiedAirconTemperature(this)"><option value="15">15°C</option><option value="16">16°C</option><option value="17">17°C</option><option value="18" selected>18°C</option><option value="19">19°C</option><option value="20">20°C</option><option value="21">21°C</option><option value="22">22°C</option><option value="23">23°C</option><option value="24">24°C</option><option value="25">25°C</option><option value="26">26°C</option><option value="27">27°C</option><option value="28">28°C</option></select><span class="temperature-auto-state" id="unifiedAirconTempState" aria-live="polite"></span></div></div>
             </div>
           </div>
         </section>
@@ -1607,6 +1523,95 @@
           </div>
         </section>
 
+        <section class="device-zone wide bed-zone priority-health" data-controller="ESP32 BED">
+          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon device-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M3 18h18M5 18v3m14-3v3M5 16V9m0 5h14v4M7 11h4q2 0 2 3H7Z"/></svg></span>เตียงและผู้ใช้งาน</div><span class="device-zone-status" id="unifiedBedStatus">กำลังเชื่อมต่อ</span></div>
+          <div class="zone-sensor-grid bed-sensor-grid" aria-label="ค่าตรวจวัดผู้ใช้งานบนเตียง">
+            <div class="zone-sensor" id="zoneSensorHeart"><span title="ชีพจร"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-heart"/></svg></span><b id="unifiedHeartRate">--</b><small>ชีพจร · bpm</small></div>
+            <div class="zone-sensor" id="zoneSensorRespiration"><span title="อัตราหายใจ"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-lungs"/></svg></span><b id="unifiedRespiration">--</b><small>หายใจ/นาที</small></div>
+            <div class="zone-sensor" id="zoneSensorBed"><span title="สถานะบนเตียง"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-bed-flat"/></svg></span><b id="unifiedBedPresence">--</b><small>สถานะเตียง</small></div>
+          </div>
+          <div class="bed-motion-panel">
+            <div id="bedPodMap" class="bed-pod-scene unified-pod-device-map" role="img" aria-label="เตียงภายใน ZEEP พร้อมใช้งาน">
+              <svg viewBox="0 0 260 168" aria-hidden="true" focusable="false">
+                <defs><linearGradient id="bedPodShellGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#18354a"/><stop offset=".58" stop-color="#0b2032"/><stop offset="1" stop-color="#061321"/></linearGradient><linearGradient id="bedPodInnerGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#071a2b"/><stop offset="1" stop-color="#020a13"/></linearGradient></defs>
+                <path class="pod-door-view-shell" fill="url(#bedPodShellGradient)" d="M20 144Q14 129 23 93Q34 43 86 24Q123 10 178 16Q219 20 238 57Q250 80 244 144Z"/>
+                <path class="pod-door-view-opening" fill="url(#bedPodInnerGradient)" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124Z"/>
+                <path class="pod-door-view-aperture" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124"/><path class="pod-door-view-floor" d="M25 144Q112 126 244 144"/>
+                <g class="pod-door-view-bed">
+                  <path class="pod-door-view-bed-base" d="M43 130H222L239 144H25Z"/>
+                  <g id="bedSceneFoot" class="bed-device-region bed-device-foot bed-tilt-segment"><path class="bed-segment-surface" d="M47 111h59v19H47Z"/><path class="bed-device-arrow" d="M75 103V82m-6 7 6-7 6 7"/></g>
+                  <path class="bed-segment-surface bed-device-middle" d="M106 111h55v19h-55Z"/>
+                  <g id="bedSceneHead" class="bed-device-region bed-device-head bed-tilt-segment"><path class="bed-segment-surface" d="M161 111h54v19h-54Z"/><path class="pod-door-view-headboard" d="M181 79Q197 68 212 82L215 110H181Z"/><path class="pod-door-view-pillow" d="M179 102Q194 85 210 97L212 110H184Z"/><path class="bed-device-arrow" d="M195 73V52m-6 7 6-7 6 7"/></g>
+                  <path class="pod-door-view-seams" d="M106 111v20m55-20v20"/>
+                </g>
+              </svg>
+              <span><b>เตียง ZEEP</b><small id="bedPodSceneState">พร้อมใช้งาน</small></span>
+            </div>
+            <small class="control-scene-caption">ปรับหัว–ปลายเตียงเพื่อความสบาย</small>
+            <div class="bed-control-grid bed-position-grid" aria-label="ปรับระดับเตียง">
+              <button class="bed-control-btn bed-action bed-foot-up" data-bed-command="foot_up" onclick="bedCommand('foot_up',this)" aria-label="ยกปลายเตียงขึ้น" title="ยกปลายเตียงขึ้น"><svg class="bed-command-symbol" viewBox="0 0 68 44" aria-hidden="true" focusable="false"><path class="bed-symbol-frame" d="M7 35h54M11 35v5m46-5v5"/><path class="bed-symbol-surface bed-symbol-active-segment" d="M10 17l21 15h27"/><path class="bed-symbol-headboard" d="M58 20v12"/><path class="bed-symbol-arrow" d="M17 24V7m-6 7 6-7 6 7"/></svg><span class="sr-only">ยกปลายเตียงขึ้น</span><small class="control-button-caption">ปลายขึ้น</small></button>
+              <button class="bed-control-btn bed-action bed-foot-down" data-bed-command="foot_down" onclick="bedCommand('foot_down',this)" aria-label="ลดปลายเตียงลง" title="ลดปลายเตียงลง"><svg class="bed-command-symbol" viewBox="0 0 68 44" aria-hidden="true" focusable="false"><path class="bed-symbol-frame" d="M7 35h54M11 35v5m46-5v5"/><path class="bed-symbol-surface bed-symbol-active-segment" d="M10 17l21 15h27"/><path class="bed-symbol-headboard" d="M58 20v12"/><path class="bed-symbol-arrow" d="M17 7v17m-6-7 6 7 6-7"/></svg><span class="sr-only">ลดปลายเตียงลง</span><small class="control-button-caption">ปลายลง</small></button>
+              <button id="bedMotionMap" class="bed-control-btn bed-action bed-motion-map bed-normal-button" data-bed-command="flat" onclick="bedCommand('flat',this)" aria-label="ปรับเตียงปกติ" title="ปรับเตียงปกติ">
+                <svg viewBox="0 0 120 74" aria-hidden="true" focusable="false">
+                  <!-- มุมมองเดียวกับภาพ ZEEP: ปลายเตียงอยู่ซ้ายและหัวเตียงอยู่ขวา -->
+                  <g transform="translate(120 0) scale(-1 1)">
+                    <path class="bed-frame" d="M8 58h104M14 58v9M106 58v9"/>
+                    <g id="bedMapHead" class="bed-motion-region"><path d="M14 53L24 26Q27 21 33 25L58 50Z"/><path d="M20 24q8-9 16 0"/></g>
+                    <g id="bedMapFoot" class="bed-motion-region"><path d="M57 50h48q7 0 7 8H57z"/><path d="M88 47h18"/></g>
+                  </g>
+                </svg>
+                <span id="bedMotionArrow" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-bed-flat"/></svg></span>
+                <b id="unifiedBedCommand" class="sr-only">เตียงปกติ</b>
+                <small class="control-button-caption">เตียงราบ</small>
+              </button>
+              <button class="bed-control-btn bed-action bed-head-up" data-bed-command="head_up" onclick="bedCommand('head_up',this)" aria-label="ยกหัวเตียงขึ้น" title="ยกหัวเตียงขึ้น"><svg class="bed-command-symbol" viewBox="0 0 68 44" aria-hidden="true" focusable="false"><path class="bed-symbol-frame" d="M7 35h54M11 35v5m46-5v5"/><path class="bed-symbol-surface bed-symbol-active-segment" d="M10 32h25l23-15"/><path class="bed-symbol-headboard" d="M58 17v15"/><path class="bed-symbol-arrow" d="M51 24V7m-6 7 6-7 6 7"/></svg><span class="sr-only">ยกหัวเตียงขึ้น</span><small class="control-button-caption">หัวขึ้น</small></button>
+              <button class="bed-control-btn bed-action bed-head-down" data-bed-command="head_down" onclick="bedCommand('head_down',this)" aria-label="ลดหัวเตียงลง" title="ลดหัวเตียงลง"><svg class="bed-command-symbol" viewBox="0 0 68 44" aria-hidden="true" focusable="false"><path class="bed-symbol-frame" d="M7 35h54M11 35v5m46-5v5"/><path class="bed-symbol-surface bed-symbol-active-segment" d="M10 32h25l23-15"/><path class="bed-symbol-headboard" d="M58 17v15"/><path class="bed-symbol-arrow" d="M51 7v17m-6-7 6 7 6-7"/></svg><span class="sr-only">ลดหัวเตียงลง</span><small class="control-button-caption">หัวลง</small></button>
+            </div>
+          </div>
+        </section>
+
+        <section class="device-zone audio-zone" data-controller="PI 5 CORE">
+          <div class="device-zone-head"><div class="device-zone-title"><span class="device-zone-icon device-line-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 14v-2a8 8 0 0 1 16 0v2M4 14h3v6H5q-1 0-1-1Zm16 0h-3v6h2q1 0 1-1Z"/></svg></span>เสียงใน ZEEP</div><span class="device-zone-status" id="unifiedAudioStatus">พร้อมเล่น</span></div>
+          <div class="zone-sensor-grid single-sensor-grid" aria-label="ระดับเสียงภายใน ZEEP">
+            <div class="zone-sensor" id="zoneSensorSound"><span title="ระดับเสียงปัจจุบัน"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-volume-on"/></svg></span><b id="unifiedSound">--</b><small id="unifiedSoundState">ระดับเสียง · dBA</small></div>
+          </div>
+          <div class="audio-control-panel" aria-label="ภาพเสียงภายใน ZEEP และเครื่องเล่นเสียงบรรยากาศ">
+            <div id="audioPodMap" class="audio-pod-map unified-pod-device-map" role="img" aria-label="ระบบเสียงภายใน ZEEP พร้อมเล่น">
+              <svg viewBox="0 0 260 168" aria-hidden="true" focusable="false">
+                <defs><linearGradient id="audioPodShellGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#17364a"/><stop offset=".58" stop-color="#0b2032"/><stop offset="1" stop-color="#061321"/></linearGradient><linearGradient id="audioPodInnerGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#071a2b"/><stop offset="1" stop-color="#020a13"/></linearGradient></defs>
+                <path class="pod-door-view-shell audio-pod-shell" fill="url(#audioPodShellGradient)" d="M20 144Q14 129 23 93Q34 43 86 24Q123 10 178 16Q219 20 238 57Q250 80 244 144Z"/>
+                <path class="pod-door-view-opening audio-pod-inner" fill="url(#audioPodInnerGradient)" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124Z"/>
+                <path class="pod-door-view-aperture" d="M46 125Q37 110 51 76Q64 45 101 36Q142 26 187 35Q210 41 220 69L224 124"/><path class="pod-door-view-floor" d="M25 144Q112 126 244 144"/>
+                <g class="pod-audio-speakers"><g><circle cx="78" cy="65" r="9"/><circle cx="78" cy="65" r="3"/></g><g><circle cx="193" cy="65" r="9"/><circle cx="193" cy="65" r="3"/></g></g>
+                <g class="pod-audio-waves"><path d="M91 69Q134 45 180 69"/><path d="M96 78Q135 58 175 78"/><path d="M104 87Q135 73 167 87"/></g>
+                <g class="pod-door-view-bed audio-pod-bed"><path class="pod-door-view-bed-base" d="M43 124H222L239 144H25Z"/><path class="pod-door-view-mattress" d="M49 110H207Q214 110 216 118L219 131H46V118Q46 112 49 110Z"/><path class="pod-door-view-headboard" d="M180 78Q197 66 213 81L216 111H180Z"/><path class="pod-door-view-pillow" d="M179 102Q194 85 210 97L212 110H184Z"/><path class="pod-door-view-seams" d="M106 111v20m55-20v20"/></g>
+              </svg>
+              <span><b>เสียง ZEEP</b><small id="audioPodState">พร้อมเล่น</small></span>
+            </div>
+            <small class="control-scene-caption">เลือกเสียงและโหมดเล่นเพื่อผ่อนคลาย</small>
+            <div class="stream-player" aria-label="เครื่องเล่นเสียงบรรยากาศ">
+              <div class="stream-now-playing">
+                <div id="unifiedAlbumArt" class="stream-cover" data-tone="0" aria-hidden="true"><span>♪</span><i></i><div class="stream-equalizer"><i></i><i></i><i></i><i></i></div></div>
+                <div class="stream-track-copy" aria-live="polite"><span id="unifiedPlayerMode">เลือกเสียง</span><b id="unifiedTrackTitle">กำลังโหลดเสียง</b><small id="unifiedTrackHint">ไฟล์ในเครื่อง</small></div>
+                <svg class="stream-ambient-wave" viewBox="0 0 300 90" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 48c18 0 18-25 36-25s18 42 36 42 18-51 36-51 18 39 36 39 18-29 36-29 18 41 36 41 18-35 36-35 18 18 48 18"/><path d="M0 58c24 0 24-17 48-17s24 28 48 28 24-35 48-35 24 23 48 23 24-18 48-18 24 19 60 19"/><path d="M0 70h300"/></svg>
+              </div>
+              <div class="stream-queue-row">
+                <span aria-hidden="true">≡</span>
+                <select id="unifiedTrackSelect" aria-label="เลือกเสียงบรรยากาศ" onchange="unifiedSelectTrack(this.value,this)"><option value="">กำลังโหลด…</option></select>
+                <span class="stream-volume-icon" aria-hidden="true">◖</span>
+                <input id="unifiedVolume" type="range" min="0" max="100" value="60" aria-label="ระดับเสียง" aria-valuetext="60%" oninput="setVolume(this.value)">
+                <b id="unifiedVolumeText">60%</b>
+              </div>
+              <div class="stream-controls" aria-label="ควบคุมการเล่นเพลง">
+                <button id="unifiedAudioPrev" class="stream-control ui-transport-button" onclick="unifiedStepTrack(-1,this)" aria-label="เพลงก่อนหน้า" title="เพลงก่อนหน้า"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-previous"/></svg><small>ก่อนหน้า</small></button>
+                <button id="unifiedAudioBtn" class="stream-control stream-play ui-transport-button" onclick="unifiedAudioToggle(this)" aria-label="เล่นเสียงใน ZEEP" title="เล่นเสียงใน ZEEP"><svg id="unifiedAudioPlayIcon" class="ui-icon" aria-hidden="true"><use href="#ui-icon-play"/></svg><small id="unifiedAudioPlayLabel">เล่น</small></button>
+                <button id="unifiedAudioNext" class="stream-control ui-transport-button" onclick="unifiedStepTrack(1,this)" aria-label="เพลงถัดไป" title="เพลงถัดไป"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-next"/></svg><small>ถัดไป</small></button>
+                <button id="unifiedAudioModeToggle" class="stream-control stream-loop ui-transport-button on" data-mode="repeat_one" type="button" onclick="toggleUnifiedAudioMode(this)" aria-pressed="true" aria-label="Loop เปิดอยู่ กดเพื่อเปลี่ยนเป็นเล่นตามคิว" title="Loop · เล่นซ้ำ"><svg id="unifiedAudioModeIcon" class="ui-icon" aria-hidden="true"><use href="#ui-icon-repeat-one"/></svg><small id="unifiedAudioModeLabel">เล่นซ้ำ</small></button>
+              </div>
+            </div>
+          </div>
+        </section>
+
       </div>
     </section>
 
@@ -1615,7 +1620,7 @@
         <div><span>ADMIN · HARDWARE TEST</span><h3>Control Debug</h3><p>ส่งคำสั่งทดสอบและตรวจ Request, Payload, ACK และ Response จริงจากอุปกรณ์</p></div>
         <a href="/control" class="debug-back-link ui-label-button"><svg class="ui-icon ui-icon-back" aria-hidden="true"><use href="#ui-icon-sign-out"/></svg><span>กลับหน้า Control</span></a>
       </div>
-      <div class="debug-safety-banner"><span>!</span><div><b>คำสั่งในหน้านี้ควบคุมอุปกรณ์จริง</b><small>ตรวจผู้ใช้งานและพื้นที่รอบ ZEEP ก่อนกดทุกครั้ง · ระบบ Safety ยังคงมีผล</small></div></div>
+      <div class="debug-safety-banner"><span aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-alert"/></svg></span><div><b>คำสั่งในหน้านี้ควบคุมอุปกรณ์จริง</b><small>ตรวจผู้ใช้งานและพื้นที่รอบ ZEEP ก่อนกดทุกครั้ง · ระบบ Safety ยังคงมีผล</small></div></div>
       <div class="debug-controller-strip" aria-label="สถานะ Controller">
         <div><span>PI GPIO</span><b id="debugPiState">--</b></div>
         <div><span>ESP32 AIRCON</span><b id="debugAirconState">--</b></div>
@@ -2280,7 +2285,7 @@
   </div>
 </div>
 
-<script src="/static/app-shell.js?v=20260915-3"></script>
+<script src="/static/app-shell.js?v=20260916-4"></script>
 <script>
 const names = {led:'Lighting Room', star_light:'ไฟดาวบนท้องฟ้า', aroma1:'ลาเวนเดอร์', aroma2:'ยูคาลิปตัส', aroma3:'ส้ม', aroma4:'อากาศสดชื่น', steam:'ไอน้ำ'};
 const outputIcons = {led:'lamp', star_light:'star', aroma1:'flower', aroma2:'leaf', aroma3:'orange', aroma4:'air', steam:'steam'};
@@ -2745,8 +2750,11 @@ function renderSystemHealth(sys={}){
   const level=!connected?0:dbm>=-55?4:dbm>=-65?3:dbm>=-75?2:1;
   const qualityTh=quality==='good'?'แรง':quality==='warn'?'ปานกลาง':connected?'อ่อน':'ไม่เชื่อมต่อ';
   wifi.className=`pill health ${quality}`;
-  wifi.innerHTML=`<span class="wifi-signal level-${level}" aria-label="สัญญาณ ${qualityTh}"><i></i><i></i><i></i><i></i></span><span>${connected?`${h.wifi_ssid||'Wi‑Fi'} · ${qualityTh} · ${dbm} dBm`:'Wi‑Fi ไม่เชื่อมต่อ'}</span>`;
-  ip.textContent=`⇄ ${h.ip_address||'IP N/A'} · uptime ${fmtUptime(h.host_uptime_s)}`;
+  const wifiSignal=wifi.querySelector('.wifi-signal'),wifiText=wifi.querySelector(':scope > span:last-child');
+  if(wifiSignal){wifiSignal.className=`wifi-signal level-${level}`;wifiSignal.setAttribute('aria-label',`สัญญาณ ${qualityTh}`);}
+  if(wifiText)wifiText.textContent=connected?`${h.wifi_ssid||'Wi‑Fi'} · ${qualityTh} · ${dbm} dBm`:'Wi‑Fi ไม่เชื่อมต่อ';
+  const ipText=ip.querySelector('span');
+  if(ipText)ipText.textContent=`${h.ip_address||'IP N/A'} · uptime ${fmtUptime(h.host_uptime_s)}`;
 }
 async function loadAgeBaselines(){
   try {
@@ -5924,7 +5932,7 @@ async function loadUsers(){
     allUsers.value='';allUsers.textContent='ผู้ใช้งานทุกคน';sel.appendChild(allUsers);
     const orderedUsers=sortHistoryUsersNewestFirst(d.users);
     orderedUsers.forEach(u=>{
-      const c = document.createElement('button'); c.className = 'chip';
+      const c = document.createElement('button'); c.type = 'button'; c.className = 'chip';
       c.textContent = `${identityLabel(u)} · ${genderTh(u.gender)}`;
       c.onclick = ()=>{
         document.querySelectorAll('.chip').forEach(x=>x.classList.remove('sel'));

@@ -179,6 +179,124 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn(".history-filter-actions {", sessions_css)
         self.assertIn("grid-column: 1 / -1;", sessions_css)
 
+    def test_interface_consistency_layer_covers_touch_and_responsive_contract(self):
+        template = ui_composer.render()
+        css = (
+            ui_composer.STATIC / "styles" / "interface-consistency.css"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(
+            "/static/styles/interface-consistency.css?v=20260916-1",
+            template,
+        )
+        self.assertIn("--zeep-touch-target: 44px;", css)
+        self.assertIn('@media (max-width: 620px)', css)
+        self.assertIn(
+            'body[data-view="control"] .device-zone-grid {\n'
+            '    grid-template-columns: minmax(0, 1fr);',
+            css,
+        )
+        self.assertIn('@media (min-width: 1100px)', css)
+        self.assertIn(
+            'grid-template-columns: repeat(3, minmax(0, 1fr));',
+            css,
+        )
+        self.assertIn('body[data-view="control_debug"]', css)
+        self.assertIn('body[data-view="monitor"]', css)
+        self.assertIn('body[data-view="sessions"]', css)
+
+    def test_login_is_labeled_zoomable_and_keyboard_submittable(self):
+        template = ui_composer.render()
+
+        self.assertIn(
+            '<meta name="viewport" content="width=device-width,initial-scale=1"',
+            template,
+        )
+        self.assertNotIn("user-scalable=no", template)
+        self.assertIn(
+            '<form class="login-card" onsubmit="event.preventDefault();'
+            "submitLogin(document.getElementById('loginStartBtn'))\">",
+            template,
+        )
+        for control_id in (
+            "loginIdentifier",
+            "loginPassword",
+            "loginName",
+            "loginAgeGroup",
+            "loginRestMode",
+        ):
+            self.assertIn(f'for="{control_id}"', template)
+        self.assertIn(
+            'type="submit" class="btn primary" id="loginStartBtn"',
+            template,
+        )
+        self.assertIn(
+            "document.createElement('button'); c.type = 'button';",
+            template,
+        )
+
+    def test_control_dom_order_matches_visual_and_navigation_is_accessible(self):
+        template = ui_composer.TEMPLATE.read_text(encoding="utf-8")
+        css = (
+            ui_composer.STATIC / "styles" / "interface-consistency.css"
+        ).read_text(encoding="utf-8")
+        expected = (
+            "door.html",
+            "light.html",
+            "air.html",
+            "aroma.html",
+            "bed.html",
+            "audio.html",
+        )
+        positions = [
+            template.index(ui_composer.MARKER.format(name=name))
+            for name in expected
+        ]
+
+        self.assertEqual(positions, sorted(positions))
+        for order, class_name in enumerate(
+            ("door", "light", "air", "aroma", "bed", "audio"),
+            start=1,
+        ):
+            self.assertIn(
+                f'body[data-view="control"] .{class_name}-zone {{ order: {order}; }}',
+                css,
+            )
+
+        shell = (ui_composer.STATIC / "app-shell.js").read_text(encoding="utf-8")
+        self.assertIn("view === 'control_debug' ? 'location' : 'page'", shell)
+        self.assertIn("anchor.removeAttribute('aria-current')", shell)
+        self.assertIn("rawTarget === 'control-debug' ? 'control_debug'", shell)
+        self.assertIn(
+            "'dashboard', 'control', 'control_debug', 'monitor', 'sessions'",
+            shell,
+        )
+
+    def test_dashboard_prioritises_live_values_before_personal_reference(self):
+        template = ui_composer.render()
+        live = template.index('class="dashboard-zone-grid"')
+        baseline = template.index('id="dashPersonalRestBaseline"')
+        profile = template.index('id="dashProfileReference"')
+        footer = template.index('class="dash-foot"')
+
+        self.assertLess(live, baseline)
+        self.assertLess(baseline, profile)
+        self.assertLess(profile, footer)
+
+    def test_system_health_copy_does_not_interpolate_sensor_text_as_html(self):
+        runtime = (
+            ui_composer.STATIC
+            / "partials"
+            / "app"
+            / "scripts"
+            / "01-runtime-safety.js"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("wifi.innerHTML", runtime)
+        self.assertNotIn("ip.innerHTML", runtime)
+        self.assertIn("wifiText.textContent", runtime)
+        self.assertIn("ipText.textContent", runtime)
+
     def test_dashboard_personal_rest_window_starts_on_second_visit(self):
         template = ui_composer.render()
         css = (ui_composer.STATIC / "theme-modern.css").read_text(encoding="utf-8")

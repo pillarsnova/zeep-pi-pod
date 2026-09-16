@@ -14,7 +14,7 @@
 
   const USER_APP_VIEWS = new Set(['dashboard', 'control', 'sessions']);
   const FULLSCREEN_APP_VIEWS = new Set([
-    'dashboard', 'control', 'monitor', 'sessions',
+    'dashboard', 'control', 'control_debug', 'monitor', 'sessions',
   ]);
   const PAGE_DEFINITIONS = Object.freeze({
     dashboard: {
@@ -122,7 +122,15 @@
     });
     const navView = view === 'control_debug' ? 'control' : view;
     document.querySelectorAll('.main-nav a').forEach((anchor) => {
-      anchor.classList.toggle('active', anchor.dataset.view === navView);
+      const active = anchor.dataset.view === navView;
+      anchor.classList.toggle('active', active);
+      if (active) {
+        anchor.setAttribute(
+          'aria-current',
+          view === 'control_debug' ? 'location' : 'page',
+        );
+      }
+      else anchor.removeAttribute('aria-current');
     });
     const page = PAGE_DEFINITIONS[view];
     document.title = `${page.document} · ZEEP`;
@@ -136,10 +144,12 @@
   }
 
   function switchAppView(path, {replace = false} = {}) {
-    const target = String(path || '').replace(/^\/+|\/+$/g, '') || 'dashboard';
+    const rawTarget = String(path || '').replace(/^\/+|\/+$/g, '') || 'dashboard';
+    const target = rawTarget === 'control-debug' ? 'control_debug' : rawTarget;
     if (!FULLSCREEN_APP_VIEWS.has(target)) return false;
     const method = replace ? 'replaceState' : 'pushState';
-    window.history[method]({zeepView: target}, '', `/${target}`);
+    const route = target === 'control_debug' ? 'control-debug' : target;
+    window.history[method]({zeepView: target}, '', `/${route}`);
     applyPageView();
     if (target === 'sessions' && typeof window.refreshHistory === 'function') {
       window.refreshHistory();

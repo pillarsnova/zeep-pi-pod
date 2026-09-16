@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -19,6 +19,7 @@
   <link rel="stylesheet" href="/static/theme-modern.css?v=20260916-155" />
   <link rel="stylesheet" href="/static/styles/monitor.css?v=20260916-1" />
   <link rel="stylesheet" href="/static/styles/sessions.css?v=20260916-1" />
+  <link rel="stylesheet" href="/static/styles/interface-consistency.css?v=20260916-1" />
 </head>
 <body>
 <!-- Shared line-icon library: every interactive view reuses the same 24 px
@@ -37,6 +38,7 @@
   <symbol id="ui-icon-light" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/></symbol>
   <symbol id="ui-icon-droplet" viewBox="0 0 24 24"><path d="M12 3C9 8 6 11 6 15a6 6 0 0 0 12 0c0-4-3-7-6-12Z"/><path d="M9 16c.5 1.5 1.5 2 3 2"/></symbol>
   <symbol id="ui-icon-diagnostics" viewBox="0 0 24 24"><path d="M4 18v-5m4 5V9m4 9V5m4 13v-7m4 7V7"/><path d="M3 21h18"/></symbol>
+  <symbol id="ui-icon-network" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="19" cy="18" r="2"/><path d="m7 11 10-4M7 13l10 4"/></symbol>
   <symbol id="ui-icon-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M7 8a7 7 0 0 1 11 2m-1 6A7 7 0 0 1 6 14"/></symbol>
   <symbol id="ui-icon-history" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></symbol>
   <symbol id="ui-icon-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5"/></symbol>
@@ -78,7 +80,7 @@
   <div class="boot-sub">พื้นที่พักผ่อนของคุณ</div>
 </div>
 <div id="login" class="hide" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
-  <div class="login-card">
+  <form class="login-card" onsubmit="event.preventDefault();submitLogin(document.getElementById('loginStartBtn'))">
     <div class="section-title" id="loginTitle">เข้าสู่ระบบผู้ใช้งาน · ZEEP</div>
     <div class="login-route-badge" id="loginRouteBadge" aria-live="polite">
       <span class="login-route-icon" aria-hidden="true">Z</span>
@@ -88,8 +90,10 @@
     <!-- โหมดปกติ: บัญชี ZEEP (API ตัวเดียวกับแอปมือถือ) -->
     <div id="loginPaneZeep">
       <div class="muted" id="loginAudienceHelp">ใช้บัญชี ZEEP เดียวกับในแอปมือถือ · หนึ่งบัญชีใช้งานได้ครั้งละหนึ่งตู้</div>
+      <label class="login-field-label" for="loginIdentifier">อีเมลหรือชื่อผู้ใช้</label>
       <input id="loginIdentifier" type="text" placeholder="อีเมลหรือชื่อผู้ใช้" maxlength="120"
              autocomplete="username" autocapitalize="off" spellcheck="false">
+      <label class="login-field-label" for="loginPassword">รหัสผ่าน</label>
       <div class="pw-field">
         <input id="loginPassword" type="password" placeholder="รหัสผ่าน" maxlength="120" autocomplete="current-password">
         <button type="button" id="loginPwToggle" onclick="toggleLoginPassword()" aria-label="แสดงรหัสผ่าน">แสดง</button>
@@ -100,18 +104,19 @@
     <div id="loginPaneLocal" class="login-off">
       <div class="muted">ใช้งานแบบออฟไลน์ · ข้อมูลการพักบันทึกใน ZEEP เครื่องนี้</div>
       <div id="userChips" class="chips"></div>
+      <label class="login-field-label" for="loginName">ชื่อผู้ใช้งาน</label>
       <input id="loginName" type="text" placeholder="ชื่อผู้ใช้ (username)" maxlength="40" autocomplete="off">
       <div class="genders" id="genderSeg">
-        <button data-g="male" onclick="selectGender('male')">ชาย</button>
-        <button data-g="female" onclick="selectGender('female')">หญิง</button>
-        <button data-g="other" onclick="selectGender('other')">อื่น ๆ</button>
-        <button data-g="unspecified" onclick="selectGender('unspecified')">ไม่ระบุ</button>
+        <button type="button" data-g="male" onclick="selectGender('male')">ชาย</button>
+        <button type="button" data-g="female" onclick="selectGender('female')">หญิง</button>
+        <button type="button" data-g="other" onclick="selectGender('other')">อื่น ๆ</button>
+        <button type="button" data-g="unspecified" onclick="selectGender('unspecified')">ไม่ระบุ</button>
       </div>
     </div>
 
     <!-- ช่วงอายุ: โหมด Local ใช้ทุกครั้ง · โหมด ZEEP โชว์เฉพาะบัญชีที่ยังไม่ตั้งวันเกิด -->
     <div id="loginAgeBlock" class="login-off">
-      <div class="muted">เลือกช่วงอายุ</div>
+      <label class="login-field-label" for="loginAgeGroup">ช่วงอายุ</label>
       <select id="loginAgeGroup" onchange="renderLoginBaseline()">
         <option value="">— เลือกช่วงอายุ —</option>
         <option value="18-29">18–29 ปี</option>
@@ -124,7 +129,7 @@
 
     <div id="loginRestModeBlock">
       <div class="pilot-welcome"><b>ยินดีต้อนรับสู่การทดสอบใช้งาน ZEEP</b><span>เลือกรูปแบบการพัก 1 แบบก่อนเริ่ม</span></div>
-      <div class="muted">รูปแบบการทดสอบ</div>
+      <label class="login-field-label" for="loginRestMode">รูปแบบการพักครั้งนี้</label>
       <select id="loginRestMode" onchange="renderRestModeHint()">
         <option value="nap_recovery">Nap &amp; Refresh · พักระหว่างวัน</option>
         <option value="sleep">Overnight Recovery · พักค้างคืน</option>
@@ -163,11 +168,11 @@
 
     <div id="loginError" class="login-safety danger login-off" role="alert"></div>
     <div id="loginSafety" class="login-safety login-off" role="alert" aria-live="assertive"></div>
-    <button class="btn primary" id="loginStartBtn" style="width:100%;margin-top:14px" onclick="submitLogin(this)">เข้าสู่ระบบ</button>
+    <button type="submit" class="btn primary" id="loginStartBtn" style="width:100%;margin-top:14px">เข้าสู่ระบบ</button>
     <button type="button" class="login-mode-link login-off" id="loginModeLink" onclick="toggleLoginMode()"></button>
     <button type="button" class="login-mode-link login-off" id="loginQrLink" onclick="toggleQrLogin()"></button>
     <div class="mini">ข้อมูลการพักจะถูกบันทึกใน ZEEP เครื่องนี้</div>
-  </div>
+  </form>
 </div>
 <!-- ผลการพักหลังจบ Session: จอตู้เป็นจอรวม ผู้ใช้จึงต้องหยิบผลกลับไปเองด้วย QR -->
 <div id="sessionEndScreen" class="hide" role="dialog" aria-modal="true" aria-labelledby="sessionEndTitle">
@@ -291,7 +296,7 @@
       <button id="accountLogoutBtn" class="btn icon-only ui-icon-button" style="display:none" onclick="doAuthLogout(this)" aria-label="ออกจากบัญชี" title="ออกจากบัญชี"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-sign-out"/></svg><span class="sr-only">ออกจากบัญชี</span></button>
       <div class="system-health">
         <div id="wifiPill" class="pill health bad"><span class="wifi-signal level-0"><i></i><i></i><i></i><i></i></span><span>Wi‑Fi --</span></div>
-        <div id="ipPill" class="pill health">⇄ IP --</div>
+        <div id="ipPill" class="pill health"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-network"/></svg><span>IP --</span></div>
       </div>
     </div>
   </div>
@@ -315,7 +320,7 @@
   </section>
   <div id="pageMessage" class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังเชื่อมต่อระบบ</b><span>รอข้อมูลสถานะล่าสุดจาก ZEEP</span></div></div>
   <div id="safetyUserAlert" class="safety-user-alert" role="alert" aria-live="assertive" hidden>
-    <span class="safety-alert-icon" aria-hidden="true">!</span>
+    <span class="safety-alert-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-alert"/></svg></span>
     <div><b id="safetyUserAlertTitle"></b><span id="safetyUserAlertDetail"></span></div>
     <a id="safetyUserAlertAction" href="/control">เปิดหน้าควบคุมประตู</a>
   </div>
@@ -372,35 +377,6 @@
           <em id="dashClockZone">Timezone --</em>
         </div>
       </div>
-      <section class="dash-profile-reference idle" id="dashProfileReference" aria-label="ข้อมูลอ้างอิงสุขภาพของผู้ใช้งาน">
-        <div class="dash-profile-reference-head"><b>ข้อมูลสำหรับคำแนะนำของคุณ</b><small id="dashProfileSource">ข้อมูลจาก Profile ช่วยให้คำแนะนำเหมาะกับคุณมากขึ้น</small></div>
-        <div class="dash-profile-reference-grid">
-          <div class="dash-profile-fact" id="dashProfileGender"><span>เพศ</span><strong>—</strong></div>
-          <div class="dash-profile-fact" id="dashProfileAge"><span>อายุ</span><strong>—</strong></div>
-          <div class="dash-profile-fact" id="dashProfileHeight"><span>ส่วนสูง</span><strong>—</strong></div>
-          <div class="dash-profile-fact" id="dashProfileWeight"><span>น้ำหนัก</span><strong>—</strong></div>
-          <div class="dash-profile-fact" id="dashProfileBlood"><span>กรุ๊ปเลือด</span><strong>—</strong></div>
-        </div>
-      </section>
-      <section class="dash-personal-rest-baseline idle" id="dashPersonalRestBaseline" aria-label="Baseline ช่วงเวลาพักส่วนบุคคล" aria-live="polite">
-        <div class="dash-personal-rest-head">
-          <span class="dash-personal-rest-icon" aria-hidden="true"><svg class="ui-icon" focusable="false"><use href="#ui-icon-diagnostics"/></svg></span>
-          <div><b id="dashPersonalRestTitle">Baseline ช่วงเวลาพักของคุณ</b><small id="dashPersonalRestEvidence">เข้าสู่ระบบเพื่อเริ่มเรียนรู้จากการพักของคุณ</small></div>
-          <span class="dash-personal-rest-status" id="dashPersonalRestStatus">รอเริ่ม</span>
-        </div>
-        <div class="dash-personal-rest-body">
-          <div class="dash-personal-rest-time">
-            <small id="dashPersonalRestMode">รูปแบบการพัก</small>
-            <strong id="dashPersonalRestTime">--:-- – --:--</strong>
-            <span id="dashPersonalRestDuration">ยังไม่มีข้อมูลช่วงเวลา</span>
-          </div>
-          <div class="dash-personal-rest-result">
-            <b id="dashPersonalRestScore">กำลังรอผลการพักครั้งแรก</b>
-            <p id="dashPersonalRestAdvice">เมื่อกลับมาใช้ครั้งที่ 2 ZEEP จะเริ่มแนะนำช่วงเวลาที่เหมาะกับคุณ</p>
-          </div>
-        </div>
-        <small class="dash-personal-rest-guardrail" id="dashPersonalRestGuardrail">คำแนะนำส่วนบุคคล · คุณยืนยันก่อนปรับอุปกรณ์</small>
-      </section>
       <div class="dashboard-zone-grid">
         <section class="dashboard-zone dashboard-health-zone" aria-label="สุขภาพผู้ใช้งาน">
           <div class="dashboard-zone-head"><div><span class="dashboard-zone-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M3 12h4l2-4 4 9 2-5h6"/><path d="M12 21C5 17 3 13 3 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 9 2.5c0 3.5-2 7.5-9 11.5Z"/></svg></span>สุขภาพผู้ใช้งาน</div><span>ข้อมูลระหว่างพัก</span></div>
@@ -430,6 +406,35 @@
           </div>
         </section>
       </div>
+      <section class="dash-personal-rest-baseline idle" id="dashPersonalRestBaseline" aria-label="Baseline ช่วงเวลาพักส่วนบุคคล" aria-live="polite">
+        <div class="dash-personal-rest-head">
+          <span class="dash-personal-rest-icon" aria-hidden="true"><svg class="ui-icon" focusable="false"><use href="#ui-icon-diagnostics"/></svg></span>
+          <div><b id="dashPersonalRestTitle">Baseline ช่วงเวลาพักของคุณ</b><small id="dashPersonalRestEvidence">เข้าสู่ระบบเพื่อเริ่มเรียนรู้จากการพักของคุณ</small></div>
+          <span class="dash-personal-rest-status" id="dashPersonalRestStatus">รอเริ่ม</span>
+        </div>
+        <div class="dash-personal-rest-body">
+          <div class="dash-personal-rest-time">
+            <small id="dashPersonalRestMode">รูปแบบการพัก</small>
+            <strong id="dashPersonalRestTime">--:-- – --:--</strong>
+            <span id="dashPersonalRestDuration">ยังไม่มีข้อมูลช่วงเวลา</span>
+          </div>
+          <div class="dash-personal-rest-result">
+            <b id="dashPersonalRestScore">กำลังรอผลการพักครั้งแรก</b>
+            <p id="dashPersonalRestAdvice">เมื่อกลับมาใช้ครั้งที่ 2 ZEEP จะเริ่มแนะนำช่วงเวลาที่เหมาะกับคุณ</p>
+          </div>
+        </div>
+        <small class="dash-personal-rest-guardrail" id="dashPersonalRestGuardrail">คำแนะนำส่วนบุคคล · คุณยืนยันก่อนปรับอุปกรณ์</small>
+      </section>
+      <section class="dash-profile-reference idle" id="dashProfileReference" aria-label="ข้อมูลอ้างอิงสุขภาพของผู้ใช้งาน">
+        <div class="dash-profile-reference-head"><b>ข้อมูลสำหรับคำแนะนำของคุณ</b><small id="dashProfileSource">ข้อมูลจาก Profile ช่วยให้คำแนะนำเหมาะกับคุณมากขึ้น</small></div>
+        <div class="dash-profile-reference-grid">
+          <div class="dash-profile-fact" id="dashProfileGender"><span>เพศ</span><strong>—</strong></div>
+          <div class="dash-profile-fact" id="dashProfileAge"><span>อายุ</span><strong>—</strong></div>
+          <div class="dash-profile-fact" id="dashProfileHeight"><span>ส่วนสูง</span><strong>—</strong></div>
+          <div class="dash-profile-fact" id="dashProfileWeight"><span>น้ำหนัก</span><strong>—</strong></div>
+          <div class="dash-profile-fact" id="dashProfileBlood"><span>กรุ๊ปเลือด</span><strong>—</strong></div>
+        </div>
+      </section>
       <div class="dash-foot"><span class="dash-foot-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></svg></span><span id="dashHealthNote">ข้อมูลช่วยดูแนวโน้มระหว่างพัก · ไม่ใช่การวินิจฉัย</span></div>
     </section>
 
@@ -464,7 +469,7 @@
     <section class="card unified-control" id="unifiedControlCard" data-pages="control" aria-label="ศูนย์ควบคุมอุปกรณ์ทั้งหมด">
       <div class="unified-head">
         <div><h3>ควบคุมสภาพแวดล้อมภายใน ZEEP</h3></div>
-        <div class="control-head-actions"><a class="control-debug-link admin-only" href="/control-debug" aria-label="เปิดหน้า Control Debug"><span aria-hidden="true">⌘</span> Debug</a><div class="unified-room-state" id="unifiedRoomState">กำลังตรวจระบบ</div></div>
+        <div class="control-head-actions"><a class="control-debug-link admin-only" href="/control-debug" aria-label="เปิดหน้า Control Debug"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-diagnostics"/></svg><span>Debug</span></a><div class="unified-room-state" id="unifiedRoomState">กำลังตรวจระบบ</div></div>
       </div>
 
       <div class="device-zone-grid">
@@ -472,15 +477,15 @@
              can compare the live condition before sending a command. -->
         <!-- ZEEP_PARTIAL:control/door.html -->
 
+        <!-- ZEEP_PARTIAL:control/light.html -->
+
         <!-- ZEEP_PARTIAL:control/air.html -->
+
+        <!-- ZEEP_PARTIAL:control/aroma.html -->
 
         <!-- ZEEP_PARTIAL:control/bed.html -->
 
-        <!-- ZEEP_PARTIAL:control/light.html -->
-
         <!-- ZEEP_PARTIAL:control/audio.html -->
-
-        <!-- ZEEP_PARTIAL:control/aroma.html -->
 
       </div>
     </section>
@@ -490,7 +495,7 @@
         <div><span>ADMIN · HARDWARE TEST</span><h3>Control Debug</h3><p>ส่งคำสั่งทดสอบและตรวจ Request, Payload, ACK และ Response จริงจากอุปกรณ์</p></div>
         <a href="/control" class="debug-back-link ui-label-button"><svg class="ui-icon ui-icon-back" aria-hidden="true"><use href="#ui-icon-sign-out"/></svg><span>กลับหน้า Control</span></a>
       </div>
-      <div class="debug-safety-banner"><span>!</span><div><b>คำสั่งในหน้านี้ควบคุมอุปกรณ์จริง</b><small>ตรวจผู้ใช้งานและพื้นที่รอบ ZEEP ก่อนกดทุกครั้ง · ระบบ Safety ยังคงมีผล</small></div></div>
+      <div class="debug-safety-banner"><span aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-alert"/></svg></span><div><b>คำสั่งในหน้านี้ควบคุมอุปกรณ์จริง</b><small>ตรวจผู้ใช้งานและพื้นที่รอบ ZEEP ก่อนกดทุกครั้ง · ระบบ Safety ยังคงมีผล</small></div></div>
       <div class="debug-controller-strip" aria-label="สถานะ Controller">
         <div><span>PI GPIO</span><b id="debugPiState">--</b></div>
         <div><span>ESP32 AIRCON</span><b id="debugAirconState">--</b></div>
@@ -1155,7 +1160,7 @@
   </div>
 </div>
 
-<script src="/static/app-shell.js?v=20260915-3"></script>
+<script src="/static/app-shell.js?v=20260916-4"></script>
 <script>
 /* ZEEP_PARTIAL:app/scripts/00-product-copy-alerts.js */
 /* ZEEP_PARTIAL:app/scripts/01-runtime-safety.js */

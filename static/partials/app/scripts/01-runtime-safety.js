@@ -323,8 +323,11 @@ function renderSystemHealth(sys={}){
   const level=!connected?0:dbm>=-55?4:dbm>=-65?3:dbm>=-75?2:1;
   const qualityTh=quality==='good'?'แรง':quality==='warn'?'ปานกลาง':connected?'อ่อน':'ไม่เชื่อมต่อ';
   wifi.className=`pill health ${quality}`;
-  wifi.innerHTML=`<span class="wifi-signal level-${level}" aria-label="สัญญาณ ${qualityTh}"><i></i><i></i><i></i><i></i></span><span>${connected?`${h.wifi_ssid||'Wi‑Fi'} · ${qualityTh} · ${dbm} dBm`:'Wi‑Fi ไม่เชื่อมต่อ'}</span>`;
-  ip.textContent=`⇄ ${h.ip_address||'IP N/A'} · uptime ${fmtUptime(h.host_uptime_s)}`;
+  const wifiSignal=wifi.querySelector('.wifi-signal'),wifiText=wifi.querySelector(':scope > span:last-child');
+  if(wifiSignal){wifiSignal.className=`wifi-signal level-${level}`;wifiSignal.setAttribute('aria-label',`สัญญาณ ${qualityTh}`);}
+  if(wifiText)wifiText.textContent=connected?`${h.wifi_ssid||'Wi‑Fi'} · ${qualityTh} · ${dbm} dBm`:'Wi‑Fi ไม่เชื่อมต่อ';
+  const ipText=ip.querySelector('span');
+  if(ipText)ipText.textContent=`${h.ip_address||'IP N/A'} · uptime ${fmtUptime(h.host_uptime_s)}`;
 }
 async function loadAgeBaselines(){
   try {

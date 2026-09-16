@@ -46,6 +46,7 @@
 | Sensor interface | [Sensor Interface Contract v1.2](zeep-sensor-interface-contract-v1.2.md) | ESP32/BCG field, validity และ provenance |
 | Respiratory wellness | [Respiratory Wellness v1.1](zeep-respiratory-wellness-v1.md) | การสรุป HR/RR เชิง Wellness |
 | Product language | [Product Language Guideline v1](zeep-product-language-guideline-v1.md) | คำสั้น กระชับ เป็นมิตร และไม่วินิจฉัย |
+| Interface map และ UI | [Interface Map & UI Standard v1](zeep-interface-map-and-ui-standard-v1.md) | หน้าที่ทุกหน้า ลำดับข้อมูล Touch/Type/Icon และ viewport QA |
 | Pilot สองโหมด | [Pilot Two-Mode Protocol](zeep-pilot-two-mode-protocol.md) | Overnight Recovery และ Nap & Refresh |
 | Evidence library | [Research Evidence Library](../research/evidence-library/README.md) | แหล่งอ้างอิง, checksum และ verification |
 

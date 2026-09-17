@@ -102,6 +102,13 @@ class SensorHub1ReaderTests(unittest.TestCase):
             ["sound_dba", "sound_dbfs", "sound_window_sequence"],
         )
         self.assertEqual(contract_events[0][1]["feature_fields"], [])
+        self.assertEqual(
+            contract_events[0][1]["window_summary"],
+            {
+                "sound_dba": 42.5,
+                "sound_dbfs": -55.0,
+            },
+        )
 
     def test_sound_contract_is_logged_again_only_when_fields_change(self) -> None:
         packet = canonical_packet()

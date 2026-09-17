@@ -184,6 +184,7 @@ class SensorHub1Reader:
             "sph0645",
             "telemetry_fields_observed",
             fields=list(field_names),
+            window_summary=self._sound_window_summary(values),
             feature_fields=[
                 key
                 for key in field_names
@@ -198,6 +199,35 @@ class SensorHub1Reader:
                 }
             ],
         )
+
+    @staticmethod
+    def _sound_window_summary(values: Mapping[str, Any]) -> dict[str, float]:
+        """Return only finite, non-audio engineering summaries for diagnosis."""
+        keys = (
+            "sound_dba",
+            "sound_dbfs",
+            "sound_dbfs_a",
+            "sound_rms",
+            "sound_rms_a",
+            "sound_peak",
+            "sound_peak_a",
+            "sound_laeq_dba",
+            "sound_sample_rate_hz",
+            "sound_samples",
+            "sound_window_ms",
+        )
+        summary: dict[str, float] = {}
+        for key in keys:
+            value = values.get(key)
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                continue
+            try:
+                number = float(value)
+            except (OverflowError, ValueError):
+                continue
+            if math.isfinite(number):
+                summary[key] = number
+        return summary
 
     def _publish_sound_state(self, payload: Mapping[str, Any]) -> None:
         status = (

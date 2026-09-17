@@ -37,8 +37,9 @@ Target board ที่ตรวจจากอุปกรณ์จริงค�
 ## Sound pipeline
 
 1. รับ SPH0645 ที่ 48 kHz/32-bit I²S slot และเลือก LEFT channel
-2. ใช้ ESP-IDF Philips standard format สำหรับ one-bit delay; SPH0645 มีข้อมูล
-   18-bit ใน 24-bit word จึงตรวจ padding และแปลง DMA slot ด้วย `>> 14`
+2. ใช้ ESP-IDF Philips standard format สำหรับ one-bit delay และรับ transport
+   word 24-bit ที่อยู่ใน DMA bits 31..8 ด้วย `>> 8`; แม้ SPH0645 มี acoustic
+   precision 18-bit แต่ผล Production ยืนยันว่าห้ามตัดเพิ่มอีก 6 bit
 3. ตัด DC และผ่าน A-weighting IIR ที่สร้างจาก analogue pole/zero definition
    ด้วย bilinear transform จากนั้น normalize ที่ 1 kHz
 4. Sound Meter สะสม 48,000 samples เป็น LAeq(A) 1 วินาที

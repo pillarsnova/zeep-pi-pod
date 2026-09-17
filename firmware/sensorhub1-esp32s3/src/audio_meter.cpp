@@ -15,12 +15,13 @@ constexpr uint32_t kSampleRateHz = 48000;
 constexpr uint32_t kMeterWindowSamples = kSampleRateHz;
 constexpr uint32_t kAcousticWindowSamples = kSampleRateHz * 10;
 constexpr size_t kReadSamples = 1024;
-// SPH0645 sends an 18-bit two's-complement result in a 24-bit I2S word.
-// ESP32-S3 receives that word MSB-aligned in a 32-bit DMA slot, leaving
-// fourteen padding bits. Normalize against the signed 18-bit full scale.
-constexpr uint8_t kPcmPaddingBits = 14;
-constexpr uint32_t kPcmPaddingMask = (1UL << kPcmPaddingBits) - 1;
-constexpr float kFullScale18 = 131071.0F;
+// The ESP32-S3 legacy I2S driver exposes the microphone's complete signed
+// 24-bit word MSB-aligned in its 32-bit DMA slot. The SPH0645 has 18-bit
+// acoustic precision, but discarding another six bits here destroys quiet
+// signal resolution on the Production board. Preserve the transport word and
+// normalize against signed 24-bit full scale.
+constexpr uint8_t kPcmTransportPaddingBits = 8;
+constexpr float kFullScale24 = 8388607.0F;
 constexpr float kReferenceSplDb = 94.0F;
 constexpr float kSensitivityDbfs = -26.0F;
 constexpr float kSineRmsCorrectionDb = 3.0102999566F;
@@ -314,15 +315,13 @@ void AudioMeter::readTask() {
       if (accumulated_samples == 0) {
         window_started_ms = millis();
       }
-      // Philips mode resolves the one-bit I2S delay. SPH0645 provides
-      // 18 significant bits inside its 24-bit word; the 32-bit DMA slot is
-      // therefore reduced by fourteen padding bits.
+      // Philips mode resolves the one-bit I2S delay. Production capture shows
+      // that the legacy ESP32-S3 driver returns the complete 24-bit transport
+      // word in bits 31..8; the low six acoustic-precision bits must not be
+      // treated as DMA padding.
       const int32_t raw_sample = samples[index];
-      if ((static_cast<uint32_t>(raw_sample) & kPcmPaddingMask) != 0) {
-        ++alignment_errors;
-      }
-      const int32_t sample_18 = raw_sample >> kPcmPaddingBits;
-      const double normalized = static_cast<double>(sample_18) / kFullScale18;
+      const int32_t sample_24 = raw_sample >> kPcmTransportPaddingBits;
+      const double normalized = static_cast<double>(sample_24) / kFullScale24;
       const double unweighted = dcBlock(normalized);
       acoustic_classifier_.addSample(
           static_cast<float>(normalized),
@@ -348,13 +347,13 @@ void AudioMeter::readTask() {
       if (std::abs(normalized) >= kClipThreshold) {
         ++clipped_samples;
       }
-      if (sample_18 == 0) {
+      if (sample_24 == 0) {
         ++zero_samples;
       }
-      if (has_previous_sample && sample_18 == previous_sample_18) {
+      if (has_previous_sample && sample_24 == previous_sample_18) {
         ++repeated_samples;
       }
-      previous_sample_18 = sample_18;
+      previous_sample_18 = sample_24;
       has_previous_sample = true;
       ++accumulated_samples;
 
@@ -410,8 +409,6 @@ void AudioMeter::publishAccumulator() {
     window.invalid_reason = "i2s_read_error";
   } else if (window.wall_window_ms < 900 || window.wall_window_ms > 1100) {
     window.invalid_reason = "sample_clock_mismatch";
-  } else if (alignment_errors > 0) {
-    window.invalid_reason = "pcm_alignment_error";
   } else if (clip_ratio > kMaxClipRatio) {
     window.invalid_reason = "clipping";
   } else if (zero_ratio > kMaxZeroRatio) {

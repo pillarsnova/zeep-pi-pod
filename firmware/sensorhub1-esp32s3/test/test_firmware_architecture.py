@@ -68,6 +68,14 @@ class FirmwareArchitectureTests(unittest.TestCase):
         ):
             self.assertIn(field, source)
 
+    def test_production_dma_preserves_complete_24_bit_word(self) -> None:
+        source = (FIRMWARE_ROOT / "src" / "audio_meter.cpp").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("raw_sample >> kPcmTransportPaddingBits", source)
+        self.assertIn("kPcmTransportPaddingBits = 8", source)
+        self.assertNotIn('invalid_reason = "pcm_alignment_error"', source)
+
 
 if __name__ == "__main__":
     unittest.main()

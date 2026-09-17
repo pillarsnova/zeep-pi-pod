@@ -37,14 +37,26 @@ def _clear_legacy_sound_fields(result: dict[str, Any]) -> None:
         "sound_dba_firmware_est",
         "sound_preview_evidence_count",
         "sound_dba",
-        "sound_laeq_dba",
         "sound_invalid_value",
     ):
         result.pop(key, None)
 
 
 def _sanitize_sound_diagnostics(result: dict[str, Any]) -> None:
-    for key in ("sound_dbfs", "sound_rms", "sound_peak"):
+    for key in (
+        "sound_dbfs",
+        "sound_dbfs_a",
+        "sound_rms",
+        "sound_rms_a",
+        "sound_peak",
+        "sound_peak_a",
+        "sound_sample_rate_hz",
+        "sound_samples",
+        "sound_window_ms",
+        "sound_calibration_offset_db",
+        "sound_dba_calibrated",
+        "sound_laeq_dba",
+    ):
         value = result.get(key)
         if not isinstance(value, (int, float)) or isinstance(value, bool):
             result.pop(key, None)

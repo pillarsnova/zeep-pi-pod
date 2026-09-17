@@ -123,6 +123,22 @@ def _reason_codes(context: Mapping[str, Any]) -> list[str]:
     return reasons
 
 
+def _missing_features(
+    features: Mapping[str, Any],
+    required: list[str] | tuple[str, ...],
+) -> list[str]:
+    """Report absent classifier evidence without hiding available summaries."""
+    aliases = {
+        "spectral_centroid": "spectral_centroid_hz",
+        "periodicity": "breathing_periodicity",
+    }
+    return [
+        key
+        for key in required
+        if key not in features and aliases.get(key) not in features
+    ]
+
+
 def _observed_at(context: Mapping[str, Any], generated_at: datetime | None) -> str:
     observed_at = context["analysis"].get("window_end")
     if isinstance(observed_at, str) and observed_at.strip():
@@ -141,6 +157,7 @@ def build_acoustic_monitor_snapshot(
     context = _level_context(snapshot)
     level_status = context["status"]
     acoustic = context.get("acoustic") or {}
+    features = dict(acoustic.get("features") or {})
     classification_active = (
         acoustic.get("state") == "provisional"
         and acoustic.get("label") in LABELS
@@ -207,9 +224,14 @@ def build_acoustic_monitor_snapshot(
         "reason_codes": _reason_codes(context),
         "evidence": {
             "quality": "firmware_dsp_shadow" if classification_active else "level_only",
-            "feature_telemetry_available": classification_active,
-            "missing": [] if classification_active else list(contract["required_features"]),
-            "features": dict(acoustic.get("features") or {}),
+            "feature_telemetry_available": bool(features),
+            "classification_feature_set_complete": classification_active,
+            "feature_source": acoustic.get("feature_source") or "unavailable",
+            "missing": _missing_features(
+                features,
+                contract["required_features"],
+            ),
+            "features": features,
             "bcg_snoring_flag_is_microphone_evidence": False,
         },
         "provenance": {

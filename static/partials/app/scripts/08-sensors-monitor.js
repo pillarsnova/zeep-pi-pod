@@ -352,6 +352,7 @@ let acousticLiveState={};
 
 function renderAcousticLiveObservation(data={}){
   const level=data.level||{},shape=Array.isArray(data.results?.shapes)?data.results.shapes[0]:null;
+  const evidence=data.evidence||{},features=evidence.features||{};
   const currentLevel=acousticFinite(level.sound_dba),confidence=acousticFinite(shape?.confidence);
   document.getElementById('acousticStatusBadge').textContent=data.status==='dsp_shadow'?'SMART EAR · REALTIME':'SOUND · REALTIME';
   document.getElementById('acousticAverage').textContent=currentLevel==null?'-- dBA':`${acousticFixed(currentLevel)} dBA`;
@@ -361,7 +362,9 @@ function renderAcousticLiveObservation(data={}){
   document.getElementById('acousticPattern').textContent=shape?.label||'กำลังตรวจสอบเสียง';
   document.getElementById('acousticPatternMeta').textContent=shape
     ?'ป้ายทดลองจาก DSP ณ เวลาปัจจุบัน'
-    :'ระบบทำงานต่อเนื่องและรอ DSP feature จาก ESP32';
+    :evidence.feature_telemetry_available
+      ?'RMS / Peak พร้อม · ยังรอ spectral และจังหวะเสียง'
+      :'ระบบทำงานต่อเนื่องและรอ DSP feature จาก ESP32';
   document.getElementById('acousticLatestLabel').textContent=shape?.label||'ยังไม่มีป้ายเสียง';
   document.getElementById('acousticLatestLabelMeta').textContent=shape
     ?`ผลทดลอง · ความเชื่อมั่น ${Math.round((confidence||0)*100)}%`
@@ -376,6 +379,16 @@ function renderAcousticIntelligence(data={}){
   document.getElementById('acousticSoundSource').textContent=provenance.sound_source||'ESP32 sound_dba direct';
   document.getElementById('acousticFirmware').textContent=provenance.firmware_version||'ยังไม่ยืนยัน';
   document.getElementById('acousticContractVersion').textContent=data.contract_version||'contract --';
+  const evidence=data.evidence||{},features=evidence.features||{};
+  const rms=acousticFinite(features.rms),peak=acousticFinite(features.peak),crest=acousticFinite(features.crest_factor);
+  document.getElementById('acousticWindowFeatures').textContent=rms==null&&peak==null
+    ?'รอค่า RMS / Peak'
+    :`RMS ${rms==null?'--':rms.toFixed(4)} · Peak ${peak==null?'--':peak.toFixed(4)} · Crest ${crest==null?'--':crest.toFixed(1)}`;
+  document.getElementById('acousticDspStatus').textContent=data.classification_state==='provisional'
+    ?'ป้ายทดลองพร้อมใช้งาน'
+    :evidence.feature_telemetry_available
+      ?'รับ Window summary แล้ว · ยังไม่พอแยกกรน/พูด'
+      :'รอ feature สำหรับจำแนกเสียง';
   document.getElementById('acousticGuardrail').textContent='Pi ตรวจเหตุการณ์จากระดับ dBA ได้ทันที · ป้าย DSP เป็นข้อมูลเสริม · ไม่บันทึก Raw audio';
   if(!current?.session?.active)renderAcousticLiveObservation(data);
 }

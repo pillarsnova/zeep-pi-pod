@@ -226,6 +226,37 @@ class EnvironmentContractTests(unittest.TestCase):
         }, expected_hub="sensorhub1")
         self.assertNotIn("sound_dba", wrong_owner_only)
 
+    def test_nested_sph0645_window_summary_fields_are_preserved(self):
+        decoded = contracts.decode_hub_payload({
+            "schema": contracts.TELEMETRY_SCHEMA,
+            "version": contracts.TELEMETRY_SCHEMA_VERSION,
+            "event": "environment",
+            "hub_id": "sensorhub1",
+            "sensors": {
+                "sph0645": {
+                    "status": "live",
+                    "values": {
+                        "sound_dba": 45.2,
+                        "sound_dbfs": -51.1,
+                        "sound_dbfs_a": -56.4,
+                        "sound_rms": 0.01,
+                        "sound_rms_a": 0.006,
+                        "sound_peak": 0.12,
+                        "sound_peak_a": 0.08,
+                        "sound_laeq_dba": 45.0,
+                        "sound_sample_rate_hz": 48_000,
+                        "sound_samples": 48_000,
+                        "sound_window_ms": 1_000,
+                    },
+                },
+            },
+        }, expected_hub="sensorhub1")
+
+        self.assertEqual(decoded["sound_rms"], 0.01)
+        self.assertEqual(decoded["sound_peak"], 0.12)
+        self.assertEqual(decoded["sound_sample_rate_hz"], 48_000)
+        self.assertEqual(decoded["sound_laeq_dba"], 45.0)
+
     def test_valid_direct_value_wins_legacy_firmware_status_consistently(self):
         decoded = contracts.decode_hub_payload({
             "schema": contracts.TELEMETRY_SCHEMA,

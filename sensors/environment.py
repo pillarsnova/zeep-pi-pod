@@ -59,6 +59,38 @@ def _acoustic_projection(
         key.removeprefix("sound_"): first_numeric(hub1, (key,))
         for key in numeric_fields
     }
+    rms = first_numeric(hub1, ("sound_rms",))
+    peak = first_numeric(hub1, ("sound_peak",))
+    crest_factor = (
+        peak / rms
+        if rms is not None and rms > 0 and peak is not None
+        else None
+    )
+    window_features = {
+        "rms": rms,
+        "rms_a": first_numeric(hub1, ("sound_rms_a",)),
+        "peak": peak,
+        "peak_a": first_numeric(hub1, ("sound_peak_a",)),
+        "crest_factor": crest_factor,
+        "dbfs_a": first_numeric(hub1, ("sound_dbfs_a",)),
+        "sample_rate_hz": first_numeric(hub1, ("sound_sample_rate_hz",)),
+        "sample_count": first_numeric(hub1, ("sound_samples",)),
+        "window_ms": first_numeric(hub1, ("sound_window_ms",)),
+        "laeq_dba_reported": first_numeric(hub1, ("sound_laeq_dba",)),
+        "calibrated_dba_reported": first_numeric(
+            hub1,
+            ("sound_dba_calibrated",),
+        ),
+        "calibration_offset_db": first_numeric(
+            hub1,
+            ("sound_calibration_offset_db",),
+        ),
+    }
+    window_features = {
+        key: round(value, 6) if isinstance(value, float) else value
+        for key, value in window_features.items()
+        if value is not None
+    }
     return {
         "label": label if valid else "unknown",
         "state": "provisional" if valid else "insufficient_input",
@@ -68,7 +100,11 @@ def _acoustic_projection(
             hub1.get("sound_classifier_version") or "unavailable"
         ),
         "window_sequence": first_numeric(hub1, ("sound_window_sequence",)),
-        "features": features if valid else {},
+        "features": {**window_features, **features} if valid else window_features,
+        "feature_source": (
+            "firmware_dsp" if valid else "esp32_window_summary"
+            if window_features else "unavailable"
+        ),
         "raw_audio_transmitted": False,
     }
 

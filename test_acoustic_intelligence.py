@@ -89,6 +89,34 @@ class AcousticContractTests(unittest.TestCase):
             "recording_session_only",
         )
 
+    def test_window_summary_is_visible_without_manufacturing_a_label(self) -> None:
+        snapshot = live_snapshot()
+        snapshot["sensor"]["environment"]["acoustic"] = {
+            "label": "unknown",
+            "state": "insufficient_input",
+            "feature_source": "esp32_window_summary",
+            "features": {
+                "rms": 0.01,
+                "peak": 0.12,
+                "crest_factor": 12.0,
+                "sample_rate_hz": 48_000,
+            },
+        }
+
+        result = build_acoustic_monitor_snapshot(snapshot)
+
+        self.assertEqual(result["classification_state"], "not_evaluated")
+        self.assertEqual(result["results"]["shapes"], [])
+        self.assertTrue(result["evidence"]["feature_telemetry_available"])
+        self.assertFalse(
+            result["evidence"]["classification_feature_set_complete"]
+        )
+        self.assertEqual(
+            result["evidence"]["feature_source"],
+            "esp32_window_summary",
+        )
+        self.assertIn("spectral_centroid", result["evidence"]["missing"])
+
     def test_invalid_or_stale_level_fails_soft(self) -> None:
         snapshot = live_snapshot(-41.2)
         snapshot["sensor"]["environment"]["devices"]["sph0645"]["status"] = "stale"

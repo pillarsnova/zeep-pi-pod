@@ -240,7 +240,7 @@ void addSoundTelemetry(
   detail["i2s_bclk_gpio"] = static_cast<int>(zeep::board::kMicBclk);
   detail["i2s_ws_gpio"] = static_cast<int>(zeep::board::kMicWordSelect);
   detail["i2s_data_gpio"] = static_cast<int>(zeep::board::kMicData);
-  detail["i2s_slot"] = "left_from_stereo_frame";
+  detail["i2s_slot"] = "left_timing_corrected";
   JsonObject inline_diagnostics = sensor["diagnostics"].to<JsonObject>();
   for (JsonPair pair : detail) {
     inline_diagnostics[pair.key()] = pair.value();

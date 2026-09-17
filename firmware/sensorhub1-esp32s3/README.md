@@ -11,7 +11,7 @@ Firmware นี้ใช้กับ Sensor Hub 1 ที่ต่อกับ Pi
 
 | Device | Interface | Pin/address |
 | --- | --- | --- |
-| SPH0645LM4H-B | I²S Philips, LEFT word จาก stereo DMA frame | BCLK GPIO 11, WS GPIO 12, DOUT GPIO 13 |
+| SPH0645LM4H-B | I²S Philips, LEFT + ESP32-S3 SD timing correction | BCLK GPIO 11, WS GPIO 12, DOUT GPIO 13 |
 | SHT3x-DIS | I²C | SDA GPIO 8, SCL GPIO 9; ตรวจ `0x44/0x45` และยืนยันด้วย CRC |
 | OPT3001 | I²C | SDA GPIO 8, SCL GPIO 9; ตรวจ `0x44–0x47` และยืนยัน TI ID |
 | Pi transport | Native USB CDC JSONL | 115200 baud |

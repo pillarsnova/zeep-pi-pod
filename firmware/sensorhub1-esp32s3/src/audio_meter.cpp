@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include <soc/i2s_struct.h>
+
 #include "board_config.h"
 
 namespace zeep {
@@ -141,10 +143,7 @@ bool AudioMeter::begin() {
   i2s_config.mode = static_cast<i2s_mode_t>(I2S_MODE_MASTER | I2S_MODE_RX);
   i2s_config.sample_rate = kSampleRateHz;
   i2s_config.bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT;
-  // Receive explicit stereo frames and consume the LEFT word below. On the
-  // ESP32-S3 legacy driver, mono LEFT capture still exposed empty companion
-  // words in the DMA stream; treating them as audio produced ~48% zeros.
-  i2s_config.channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT;
+  i2s_config.channel_format = I2S_CHANNEL_FMT_ONLY_LEFT;
   i2s_config.communication_format = I2S_COMM_FORMAT_STAND_I2S;
   i2s_config.intr_alloc_flags = ESP_INTR_FLAG_LEVEL1;
   i2s_config.dma_buf_count = 8;
@@ -166,6 +165,12 @@ bool AudioMeter::begin() {
     i2s_driver_uninstall(I2S_NUM_0);
     return false;
   }
+  // SPH0645 changes SD close to the sampling edge. The classic ESP32 SLM
+  // workaround sets RX_SD_IN_DELAY mode 2; ESP32-S3 exposes the equivalent as
+  // rx_sd_in_dm. Keep Philips MSB shift enabled and sample SD on the delayed
+  // edge to prevent long zero runs and full-scale glitches.
+  I2S0.rx_conf1.rx_msb_shift = 1;
+  I2S0.rx_timing.rx_sd_in_dm = 2;
 
   resetWindowAccumulator();
   resetSignalState();
@@ -314,9 +319,7 @@ void AudioMeter::readTask() {
     portEXIT_CRITICAL(&result_lock_);
 
     const size_t sample_count = bytes_read / sizeof(int32_t);
-    // Philips frames are LEFT then RIGHT. The installed SPH0645 uses LEFT;
-    // skip the empty RIGHT companion word and count actual microphone samples.
-    for (size_t index = 0; index + 1 < sample_count; index += 2) {
+    for (size_t index = 0; index < sample_count; ++index) {
       if (accumulated_samples == 0) {
         window_started_ms = millis();
       }

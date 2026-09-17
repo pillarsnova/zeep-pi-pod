@@ -14,11 +14,12 @@ Admin live observability สำหรับเตรียม Adaptive Control �
 (`automatic_actuation=false`) ตาม
 [Adaptive Control Data Foundation v1](adaptive-control-data-foundation-v1.md)
 
-Admin Acoustic Intelligence P0.5 ใช้
+Admin Acoustic Intelligence P0.6 ใช้
 `GET /api/v1/admin/contracts/acoustics` และ
-`GET /api/v1/admin/acoustics/live` เพื่อดู capability registry, validation gates
-และระดับเสียงแบบ level-only ผลจำแนกยังเป็น `not_evaluated`, ไม่มี Raw audio และ
-ไม่กระทบ Sleep State, คะแนน หรือ Control ตาม
+`GET /api/v1/admin/acoustics/live` เพื่อดู capability กับระดับปัจจุบัน และใช้
+`GET /api/v1/admin/acoustics/timeline` ดูกราฟกับกฎตรวจค่าระดับเสียงราย Session
+ผลจำแนกแหล่งเสียงยังเป็น `not_evaluated`, ไม่มี Raw audio และไม่กระทบ Sleep State,
+คะแนน หรือ Control ตาม
 [Acoustic Intelligence DSP Plan](onboarding/smart-ear-dsp-plan.md)
 
 ## TL;DR

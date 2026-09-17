@@ -120,7 +120,7 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("metric.delta==null?Number.NaN:Number(metric.delta)", template)
         self.assertIn("function adaptiveReferenceScope(scope)", template)
 
-    def test_acoustic_monitor_is_level_only_and_validation_first(self):
+    def test_acoustic_monitor_prioritizes_the_session_level_timeline(self):
         template = ui_composer.render()
         monitor_css = (
             ui_composer.STATIC / "styles" / "monitor.css"
@@ -129,21 +129,28 @@ class UiComposerTests(unittest.TestCase):
         for element_id in (
             "acousticIntelligenceCard",
             "acousticStatusBadge",
-            "acousticCandidateGroups",
-            "acousticDspInspector",
-            "acousticPipelineRows",
-            "acousticMissingFeatures",
+            "acousticTimelineSvg",
+            "acousticTimelineMeta",
+            "acousticEventList",
+            "acousticTechnicalDetails",
         ):
             self.assertIn(f'id="{element_id}"', template)
-        self.assertIn("LEVEL ONLY · SHADOW", template)
-        self.assertIn("ยังไม่ประเมินประเภทเสียง", template)
+        self.assertIn("ภาพระดับเสียงตลอด Session", template)
+        self.assertIn("ยังไม่ระบุว่าเป็นเสียงอะไร", template)
         self.assertIn("function renderAcousticIntelligence(data={})", template)
+        self.assertIn("function renderAcousticTimeline(data={})", template)
+        self.assertIn("/api/v1/admin/acoustics/timeline", template)
         self.assertIn(
             "renderAcousticIntelligence(s.acoustic_intelligence||{})",
             template,
         )
-        self.assertIn("ไม่ส่งหรือเก็บ Raw audio", template)
-        self.assertIn("#acousticDspInspector", monitor_css)
+        self.assertIn("ไม่บันทึก Raw audio", template)
+        self.assertIn("data.event_summary?.counts", template)
+        self.assertIn("acousticTimelineUnavailable", template)
+        self.assertNotIn('id="acousticLevel"', template)
+        self.assertNotIn('id="acousticCandidateGroups"', template)
+        self.assertNotIn('id="acousticDspInspector"', template)
+        self.assertIn(".acoustic-timeline-layout", monitor_css)
         self.assertIn(
             'body[data-view="monitor"] #acousticIntelligenceCard',
             monitor_css,

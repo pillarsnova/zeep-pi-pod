@@ -160,9 +160,10 @@ source/weighting/window metadata ยังไม่ได้อยู่ใน r
 เป็นเสียงคอมเพรสเซอร์ พัดลม ประตู เพลง หรือเสียงจากภายนอก แผนเพิ่มความสามารถอยู่ที่
 [หูอัจฉริยะ · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md)
 
-P0.5 มี `acoustics/` สำหรับ versioned capability contract และ Admin
-level-only projection พร้อม endpoint `/api/v1/admin/contracts/acoustics` และ
-`/api/v1/admin/acoustics/live` แล้ว Candidate เช่น `snore_like`/`speech_like`
+P0.6 มี `acoustics/` สำหรับ versioned capability contract, Admin level-only
+projection และ Session Level Timeline ผ่าน `/api/v1/admin/contracts/acoustics`,
+`/api/v1/admin/acoustics/live` และ `/api/v1/admin/acoustics/timeline` Candidate
+เช่น `snore_like`/`speech_like`
 แสดงเป็น `planned/not_evaluated` เท่านั้น ยังไม่มี feature parser หรือ classifier
 
 ## เครื่องมือพัฒนา ทดสอบ และส่งมอบ

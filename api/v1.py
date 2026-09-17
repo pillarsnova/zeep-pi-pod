@@ -32,6 +32,7 @@ def _api_index_data() -> dict[str, Any]:
             "adaptive_learning_live": "/api/v1/admin/adaptive/live",
             "acoustic_contract": "/api/v1/admin/contracts/acoustics",
             "acoustic_live": "/api/v1/admin/acoustics/live",
+            "acoustic_timeline": "/api/v1/admin/acoustics/timeline",
             "usage_sessions": "/api/v1/usage-sessions",
             "usage_users": "/api/v1/usage-sessions/users",
             "user_ai_context": "/api/v1/usage-sessions/longitudinal/ai-context",
@@ -54,6 +55,7 @@ def create_api_v1_router(
     sensor_contract_snapshot: Callable[[], dict[str, Any]],
     sleep_policy_snapshot: Callable[[], dict[str, Any]],
     maintenance_contract_snapshot: Callable[[], dict[str, Any]],
+    acoustic_timeline_snapshot: Callable[[], dict[str, Any]],
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1", tags=["ZEEP API v1"])
     pod_operator = Depends(require_pod_operator)
@@ -108,5 +110,13 @@ def create_api_v1_router(
         response.headers["Cache-Control"] = "private, no-store"
         data = snapshot_for(principal).get("acoustic_intelligence") or {}
         return _response(data, kind="acoustic_intelligence_live")
+
+    @router.get("/admin/acoustics/timeline")
+    def acoustic_timeline(response: Response, _: Any = admin):
+        response.headers["Cache-Control"] = "private, no-store"
+        return _response(
+            acoustic_timeline_snapshot(),
+            kind="acoustic_level_timeline",
+        )
 
     return router

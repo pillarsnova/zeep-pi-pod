@@ -5,7 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-CONTRACT_VERSION = "zeep-acoustic-shadow-v0.1"
+CONTRACT_VERSION = "zeep-acoustic-shadow-v0.2"
 LIVE_SCHEMA = "zeep.acoustic.shadow.live"
 LIVE_SCHEMA_VERSION = "0.1"
 VALIDATION_PROTOCOL_ID = "ZEEP-ACOUSTIC-SHADOW-001"
@@ -189,11 +189,13 @@ def acoustic_contract_snapshot() -> dict[str, Any]:
         "contract_version": CONTRACT_VERSION,
         "live_schema": LIVE_SCHEMA,
         "live_schema_version": LIVE_SCHEMA_VERSION,
-        "phase": "P0.5",
+        "phase": "P0.6",
         "mode": "admin_shadow_level_only",
         "current_capability": {
             "sound_level": True,
             "packet_energy_aggregation": True,
+            "session_level_timeline": True,
+            "level_pattern_events": True,
             "dsp_feature_telemetry": False,
             "acoustic_classification": False,
         },

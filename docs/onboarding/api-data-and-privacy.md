@@ -42,6 +42,7 @@ ingest, report share, snapshot sync หรือ tunnel ต้องระบุ
 | `GET /api/v1/admin/adaptive/live` | Admin | Shadow observability; `automatic_actuation=false` |
 | `GET /api/v1/admin/contracts/acoustics` | Admin | Smart Ear capability registry, candidate labels และ validation gates |
 | `GET /api/v1/admin/acoustics/live` | Admin | Level-only shadow projection; classifier เป็น `not_evaluated` |
+| `GET /api/v1/admin/acoustics/timeline` | Admin | Timeline ระดับเสียงและ rule-based review events ของ Active Session; ไม่มี Raw audio |
 
 ### Usage Session API — เส้นทางใหม่สำหรับ App
 
@@ -151,7 +152,7 @@ privacy-first boundary ดังนี้:
 - ก่อน persist acoustic features ต้องรวมข้อมูลนั้นใน backup/snapshot/retention/
   account-erasure contract และทดสอบ public redaction
 
-Smart Ear P0.5 อยู่ใน API v1 แบบ Admin-only level-only แล้ว แต่ classifier,
+Smart Ear P0.6 อยู่ใน API v1 แบบ Admin-only level-only แล้ว แต่ classifier,
 event storage และ user-facing summary ยังเป็น `ROADMAP/SHADOW` Client ต้องตรวจ
 `contract_version`, `classification_state` และห้ามเปลี่ยน candidate เป็นผลตรวจ
 

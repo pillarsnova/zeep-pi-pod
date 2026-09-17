@@ -55,7 +55,10 @@ function render(s, source='ws'){
   renderSafety(s.safety || {});
   renderAdaptiveLearning(s.adaptive_learning||{});
   renderAcousticIntelligence(s.acoustic_intelligence||{});
-  if(document.body.dataset.view==='monitor')evaluateMonitorAlerts(e,h2,environment,b,sys);
+  if(document.body.dataset.view==='monitor'){
+    evaluateMonitorAlerts(e,h2,environment,b,sys);
+    fetchAcousticTimeline();
+  }
 
   // ---- per-person session: overlay, user pill, logout button ----
   const se = s.session || {};

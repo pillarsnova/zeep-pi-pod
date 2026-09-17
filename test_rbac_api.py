@@ -550,6 +550,10 @@ class RbacApiTests(unittest.TestCase):
             anonymous.get("/api/v1/admin/acoustics/live").status_code,
             401,
         )
+        self.assertEqual(
+            anonymous.get("/api/v1/admin/acoustics/timeline").status_code,
+            401,
+        )
         self.assertEqual(anonymous.get("/api/bcg/trend").status_code, 401)
 
         user = TestClient(pod_app.app)
@@ -571,6 +575,10 @@ class RbacApiTests(unittest.TestCase):
             )
             self.assertEqual(
                 user.get("/api/v1/admin/acoustics/live").status_code,
+                403,
+            )
+            self.assertEqual(
+                user.get("/api/v1/admin/acoustics/timeline").status_code,
                 403,
             )
             self.assertNotIn(
@@ -625,6 +633,20 @@ class RbacApiTests(unittest.TestCase):
         )
         self.assertFalse(
             acoustic_live.json()["data"]["automatic_actuation"],
+        )
+        acoustic_timeline = admin.get("/api/v1/admin/acoustics/timeline")
+        self.assertEqual(acoustic_timeline.status_code, 200)
+        self.assertEqual(
+            acoustic_timeline.headers.get("cache-control"),
+            "private, no-store",
+        )
+        self.assertEqual(
+            acoustic_timeline.json()["kind"],
+            "acoustic_level_timeline",
+        )
+        self.assertEqual(
+            acoustic_timeline.json()["data"]["analysis_scope"],
+            "sound_level_pattern_only",
         )
         admin_state = admin.get("/api/v1/state")
         self.assertIn("acoustic_intelligence", admin_state.json()["data"])

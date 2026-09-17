@@ -237,7 +237,7 @@ Audio boundary ใช้รูปแบบเดียวกันโดยไ�
 6. ลด `app.py` ให้เหลือ configuration, dependency wiring, lifespan และ router wiring
 
 Acoustic Intelligence ที่เสนอใน
-[DSP Plan](onboarding/smart-ear-dsp-plan.md) มี `acoustics/` เฉพาะ P0.5
+[DSP Plan](onboarding/smart-ear-dsp-plan.md) มี `acoustics/` รุ่น P0.6
 contract และ Admin level-only projection แล้ว ส่วน feature parser, classifier,
 event tracker และ persistence ยังเป็น ROADMAP และห้ามเพิ่มก่อนผ่าน Gate ที่กำหนด
 

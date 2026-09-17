@@ -348,48 +348,185 @@ function renderAdaptiveLearning(data={}){
   renderAdaptiveFeatures(data);renderAdaptiveDecision(data);renderAdaptiveDevices(data);renderAdaptiveVersions(data);
 }
 
-function acousticPhaseStatus(status='planned'){
-  return ({in_progress:'กำลังทำ',planned:'วางแผน',approved:'ผ่านแล้ว',blocked:'ติดเงื่อนไข'})[status]||status;
-}
-
-function acousticFeatureLabel(key=''){
-  return ({feature_coverage:'Coverage',clip_ratio:'Clipping',crest_factor:'Crest factor',transient_count:'Transient',spectral_bands:'Spectral bands',spectral_centroid:'Centroid',spectral_flatness:'Flatness',periodicity:'Periodicity',modulation_index:'Modulation'})[key]||key.replaceAll('_',' ');
-}
-
 function renderAcousticIntelligence(data={}){
   const root=document.getElementById('acousticIntelligenceCard');if(!root)return;
-  const level=data.level||{},aggregation=data.aggregation||{},validation=data.validation||{};
-  const value=level.sound_dba==null?Number.NaN:Number(level.sound_dba);
-  const packetAverage=aggregation.packet_energy_average_dba==null?Number.NaN:Number(aggregation.packet_energy_average_dba);
-  const valid=Number.isFinite(value)&&level.status==='valid';
-  root.classList.toggle('level-unavailable',!valid);
-  document.getElementById('acousticStatusBadge').textContent='LEVEL ONLY · SHADOW';
-  document.getElementById('acousticLevel').textContent=valid?`${value.toFixed(1)} dBA`:'-- dBA';
-  document.getElementById('acousticLevelMeta').textContent=valid
-    ?`ESP32 direct${Number.isFinite(packetAverage)?` · เฉลี่ย packet ${packetAverage.toFixed(1)} dBA`:''} · ${aggregation.sample_count||0} จุด`
-    :`ยังไม่มีระดับเสียงที่ใช้ได้ · ${level.status||data.status||'unavailable'}`;
-  document.getElementById('acousticClassification').textContent='ยังไม่ประเมินประเภทเสียง';
-  document.getElementById('acousticClassificationMeta').textContent='ต้องมี DSP feature ก่อน · ไม่เดาจาก dBA ค่าเดียว';
-
-  const phases=Array.isArray(validation.phases)?validation.phases:[];
-  const active=phases.find(item=>item.status==='in_progress')||phases[0]||{};
-  document.getElementById('acousticProofPhase').textContent=active.phase?`${active.phase} · ${acousticPhaseStatus(active.status)}`:'รอ Validation Plan';
-  document.getElementById('acousticProofMeta').textContent=active.title||'ยังไม่มีข้อมูลแผนพิสูจน์';
-
-  const groups=Array.isArray(data.candidate_label_groups)?data.candidate_label_groups:[];
-  const candidateRoot=document.getElementById('acousticCandidateGroups');
-  candidateRoot.innerHTML=groups.length?groups.map(group=>`<section><h4>${escapeMarkup(group.display_name||group.key)}</h4><div>${(group.labels||[]).map(label=>`<span title="สถานะ: ${escapeMarkup(label.proof_status||'planned')}">${escapeMarkup(label.display_name||label.key)}<small>กำลังพิสูจน์</small></span>`).join('')}</div></section>`).join(''):'<div class="acoustic-empty">ยังไม่มี Candidate Registry</div>';
-
-  document.getElementById('acousticValidationSteps').innerHTML=phases.slice(0,4).map(item=>`<span class="${escapeMarkup(item.status||'planned')}"><b>${escapeMarkup(item.phase)}</b>${escapeMarkup(item.title)}<small>${escapeMarkup(acousticPhaseStatus(item.status))}</small></span>`).join('');
-  document.getElementById('acousticGuardrail').textContent='ไม่ส่งหรือเก็บ Raw audio · ไม่ถอดคำ/ระบุตัวบุคคล · ไม่เปลี่ยน Sleep State, Sleep Score, Recovery Score หรือ Control';
-
-  const pipeline=document.getElementById('acousticPipelineRows');
-  pipeline.innerHTML=phases.map(item=>`<article class="${escapeMarkup(item.status||'planned')}"><b>${escapeMarkup(item.phase)}</b><div><strong>${escapeMarkup(item.title)}</strong><span>${escapeMarkup(item.exit_gate||'รอเกณฑ์ผ่าน')}</span></div><em>${escapeMarkup(acousticPhaseStatus(item.status))}</em></article>`).join('')||'<div class="acoustic-empty">ยังไม่มี Pipeline</div>';
-  const missing=Array.isArray(data.evidence?.missing)?data.evidence.missing:[];
-  document.getElementById('acousticMissingFeatures').innerHTML=missing.map(item=>`<span>${escapeMarkup(acousticFeatureLabel(item))}</span>`).join('')||'<span>รอ Feature Contract</span>';
   const provenance=data.provenance||{};
-  document.getElementById('acousticProvenance').innerHTML=`<div><span>Sound source</span><b>${escapeMarkup(provenance.sound_source||'--')}</b></div><div><span>Firmware</span><b>${escapeMarkup(provenance.firmware_version||'ยังไม่ยืนยัน')}</b></div><div><span>Feature schema</span><b>${escapeMarkup(provenance.feature_schema_version||'ยังไม่มี')}</b></div><div><span>Classifier</span><b>${escapeMarkup(provenance.classifier_version||'ยังไม่มี')}</b></div><div><span>Protocol</span><b>${escapeMarkup(validation.protocol_id||'--')}</b></div><div><span>BCG Snoring flag</span><b>หลักฐานแยก · ไม่ใช่ไมค์</b></div>`;
+  document.getElementById('acousticSoundSource').textContent=provenance.sound_source||'ESP32 sound_dba direct';
+  document.getElementById('acousticFirmware').textContent=provenance.firmware_version||'ยังไม่ยืนยัน';
   document.getElementById('acousticContractVersion').textContent=data.contract_version||'contract --';
+  document.getElementById('acousticGuardrail').textContent='วิเคราะห์รูปแบบระดับเสียงเท่านั้น · ยังไม่ระบุว่าเป็นเสียงอะไร · ไม่บันทึก Raw audio';
+}
+
+let acousticTimelineFetchedAt=0;
+let acousticTimelineLoading=false;
+let acousticTimelineSessionId='';
+let acousticTimelineLastSuccessAt=0;
+
+function acousticFinite(value){
+  if(value==null)return null;
+  const number=Number(value);return Number.isFinite(number)?number:null;
+}
+
+function acousticFixed(value,digits=1){
+  const number=acousticFinite(value);return number==null?'--':number.toFixed(digits);
+}
+
+function acousticClock(epochSeconds,{seconds=false}={}){
+  const value=Number(epochSeconds);if(!Number.isFinite(value))return '--:--';
+  return new Date(value*1000).toLocaleTimeString('th-TH',{
+    hour:'2-digit',minute:'2-digit',second:seconds?'2-digit':undefined,hour12:false,
+  });
+}
+
+function acousticDuration(seconds){
+  const value=Math.max(0,Math.round(Number(seconds)||0));
+  if(value<60)return `${value} วินาที`;
+  const minutes=Math.floor(value/60),remain=value%60;
+  return remain?`${minutes} นาที ${remain} วินาที`:`${minutes} นาที`;
+}
+
+function acousticEventDetail(event={}){
+  if(event.key==='rapid_change'){
+    const delta=acousticFinite(event.delta_db);
+    return `${acousticFixed(event.from_dba)} → ${acousticFixed(event.to_dba)} dBA${delta==null?'':` · ${delta>0?'+':''}${delta.toFixed(1)} dB`}`;
+  }
+  if(event.key==='sustained_high'){
+    return `${acousticFixed(event.minimum_dba)}–${acousticFixed(event.peak_dba)} dBA · ${acousticDuration(event.duration_s)}`;
+  }
+  return `${acousticDuration(event.duration_s)} · Sensor ไม่ส่งค่าตามรอบ`;
+}
+
+function acousticChartSize(svg){
+  const width=Math.max(320,Math.round(svg.clientWidth||900)),height=280;
+  svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
+  return {width,height};
+}
+
+function acousticEmptyChart(svg,message){
+  const {width,height}=acousticChartSize(svg),left=52,right=18;
+  svg.setAttribute('aria-label',message);
+  svg.innerHTML=`<title>กราฟระดับเสียงใน ZEEP</title><desc>${escapeMarkup(message)}</desc><g aria-hidden="true"><line x1="${left}" y1="230" x2="${width-right}" y2="230" stroke="#173b4b"/><text x="${width/2}" y="${height/2}" text-anchor="middle" fill="#78949f" font-size="13">${escapeMarkup(message)}</text></g>`;
+}
+
+function drawAcousticTimeline(data={}){
+  const svg=document.getElementById('acousticTimelineSvg');if(!svg)return;
+  const timeline=data.timeline||{},points=Array.isArray(timeline.points)?timeline.points:[];
+  const valid=points.filter(point=>point.dba!=null&&Number.isFinite(Number(point.dba)));
+  if(data.status!=='ready'||valid.length<2){acousticEmptyChart(svg,data.message||'กำลังรอข้อมูลระดับเสียง');return;}
+  const {width,height}=acousticChartSize(svg),left=52,right=18,top=18,bottom=38;
+  const plotWidth=width-left-right,plotHeight=height-top-bottom;
+  const start=Number(timeline.start_epoch_s),end=Math.max(start+1,Number(timeline.end_epoch_s));
+  const range=Array.isArray(timeline.chart_range_dba)?timeline.chart_range_dba:[30,60];
+  const low=Number(range[0]),high=Math.max(low+1,Number(range[1]));
+  const x=value=>left+((Number(value)-start)/(end-start))*plotWidth;
+  const y=value=>top+(1-(Number(value)-low)/(high-low))*plotHeight;
+  const grid=[];
+  for(let index=0;index<=4;index+=1){
+    const value=low+(high-low)*(index/4),position=y(value);
+    grid.push(`<line x1="${left}" y1="${position.toFixed(1)}" x2="${width-right}" y2="${position.toFixed(1)}" stroke="#163747" stroke-width="1"/><text x="${left-8}" y="${(position+3).toFixed(1)}" text-anchor="end" fill="#6f8e99" font-size="9">${value.toFixed(0)}</text>`);
+  }
+  const timeTicks=width<520?2:4;
+  for(let index=0;index<=timeTicks;index+=1){
+    const time=start+(end-start)*(index/timeTicks),position=x(time);
+    grid.push(`<text x="${position.toFixed(1)}" y="${height-12}" text-anchor="middle" fill="#6f8e99" font-size="10">${escapeMarkup(acousticClock(time))}</text>`);
+  }
+  const eventBands=[];
+  const eventMarkers=[];
+  (data.events||[]).forEach(event=>{
+    const eventStart=Math.max(start,Number(event.start_epoch_s)),eventEnd=Math.min(end,Number(event.end_epoch_s));
+    if(!Number.isFinite(eventStart)||!Number.isFinite(eventEnd)||eventEnd<start||eventStart>end)return;
+    const bandX=x(eventStart),bandWidth=Math.max(3,x(eventEnd)-bandX);
+    if(event.key==='missing_data'){
+      eventBands.push(`<rect x="${bandX.toFixed(1)}" y="${top}" width="${bandWidth.toFixed(1)}" height="${plotHeight}" fill="#708793" opacity=".13"/><line x1="${bandX.toFixed(1)}" y1="${top}" x2="${bandX.toFixed(1)}" y2="${height-bottom}" stroke="#8096a0" stroke-dasharray="4 4"/>`);
+    }else if(event.key==='sustained_high'){
+      eventBands.push(`<rect x="${bandX.toFixed(1)}" y="${top}" width="${bandWidth.toFixed(1)}" height="${plotHeight}" rx="4" fill="#e8af47" opacity=".1"/>`);
+    }else if(event.key==='rapid_change'){
+      const level=Number(event.to_dba),markerX=x(event.end_epoch_s),markerY=y(level);
+      if(Number.isFinite(level))eventMarkers.push(`<circle cx="${markerX.toFixed(1)}" cy="${markerY.toFixed(1)}" r="5" fill="#f1bc55" stroke="#071923" stroke-width="2"><title>${escapeMarkup(event.label||'ระดับเสียงเปลี่ยน')}</title></circle>`);
+    }
+  });
+  const reference=(timeline.reference_lines||[]).map(line=>{
+    const value=Number(line.value_dba);if(!Number.isFinite(value)||value<low||value>high)return '';
+    const position=y(value);
+    return `<line x1="${left}" y1="${position.toFixed(1)}" x2="${width-right}" y2="${position.toFixed(1)}" stroke="#d59b39" stroke-dasharray="5 5" opacity=".7"/><text x="${width-right-4}" y="${(position-5).toFixed(1)}" text-anchor="end" fill="#d9ae60" font-size="8">${escapeMarkup(line.label||'')}</text>`;
+  }).join('');
+  const segments=[];let active=[];
+  points.forEach(point=>{
+    const level=point.dba==null?Number.NaN:Number(point.dba);
+    if(point.gap_before||!Number.isFinite(level)){if(active.length)segments.push(active);active=[];return;}
+    active.push(`${x(point.t).toFixed(1)},${y(level).toFixed(1)}`);
+  });
+  if(active.length)segments.push(active);
+  const lines=segments.map(segment=>segment.length>1
+    ?`<polyline points="${segment.join(' ')}" fill="none" stroke="#45d9e8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`
+    :`<circle cx="${segment[0].split(',')[0]}" cy="${segment[0].split(',')[1]}" r="3" fill="#45d9e8"/>`).join('');
+  const description=`กราฟระดับเสียงตั้งแต่ ${acousticClock(start)} ถึง ${acousticClock(end)} พบช่วงที่ควรย้อนดู ${data.summary?.observed_event_count||0} ช่วง`;
+  svg.setAttribute('aria-label',description);
+  svg.innerHTML=`<title>กราฟระดับเสียงใน ZEEP</title><desc>${escapeMarkup(description)}</desc><g aria-hidden="true">${grid.join('')}${eventBands.join('')}${reference}${lines}${eventMarkers.join('')}</g>`;
+}
+
+function renderAcousticTimeline(data={}){
+  const root=document.getElementById('acousticIntelligenceCard');if(!root)return;
+  const summary=data.summary||{},pattern=summary.pattern||{},events=Array.isArray(data.events)?data.events:[];
+  const ready=data.status==='ready';
+  const badgeLabels={ready:'LEVEL TIMELINE · LIVE',no_session:'รอ SESSION',waiting_for_recording:'รอเริ่มบันทึก',collecting:'กำลังสะสมข้อมูล',no_data:'ไม่มี SOUND DATA',stale:'ข้อมูลไม่อัปเดต'};
+  document.getElementById('acousticStatusBadge').textContent=badgeLabels[data.status]||'LEVEL TIMELINE';
+  document.getElementById('acousticAverage').textContent=summary.average_dba==null?'-- dBA':`${acousticFixed(summary.average_dba)} dBA`;
+  document.getElementById('acousticAverageMeta').textContent=ready?`${summary.valid_sample_count||0} จุดที่ใช้ได้`:'ยังไม่มีข้อมูล Session';
+  document.getElementById('acousticPeak').textContent=summary.peak_dba==null?'-- dBA':`${acousticFixed(summary.peak_dba)} dBA`;
+  document.getElementById('acousticPeakMeta').textContent=ready&&summary.minimum_dba!=null?`ต่ำสุด ${acousticFixed(summary.minimum_dba)} dBA`:'ยังไม่มีข้อมูล Session';
+  document.getElementById('acousticPattern').textContent=pattern.label||'กำลังรอข้อมูล';
+  document.getElementById('acousticPatternMeta').textContent=pattern.detail||data.message||'เริ่ม Session เพื่อวิเคราะห์';
+  document.getElementById('acousticCoverage').textContent=`Coverage ${acousticFixed(summary.coverage_pct||0,0)}%`;
+  const start=data.timeline?.start_epoch_s,end=data.timeline?.end_epoch_s;
+  const cadences=Array.isArray(data.timeline?.cadences_s)?data.timeline.cadences_s:[];
+  const cadenceLabel=cadences.length?cadences.map(value=>acousticFixed(value,0)).join('/'):`${acousticFixed(data.timeline?.cadence_s||10,0)}`;
+  document.getElementById('acousticTimelineMeta').textContent=ready
+    ?`${acousticClock(start)}–${acousticClock(end)} · รอบ ${cadenceLabel} วินาที`
+    :data.message||'ยังไม่มี Session ที่กำลังบันทึก';
+  const counts=data.event_summary?.counts||{};
+  const observed=Number(counts.rapid_change||0)+Number(counts.sustained_high||0);
+  const gaps=Number(counts.missing_data||0);
+  const truncated=data.event_summary?.truncated?' · แสดงรายการล่าสุดบางส่วน':'';
+  document.getElementById('acousticEventSummary').textContent=observed
+    ?`${observed} ช่วง${gaps?` · ข้อมูลขาด ${gaps} ช่วง`:''}${truncated}`
+    :gaps?`ยังไม่พบการเปลี่ยนระดับเสียงเด่น · ข้อมูลขาด ${gaps} ช่วง`:'ยังไม่พบช่วงที่เด่นชัด';
+  const eventRoot=document.getElementById('acousticEventList');
+  eventRoot.innerHTML=events.length?events.slice().reverse().map(event=>`<article class="${escapeMarkup(event.key||'unknown')}"><div><time>${escapeMarkup(acousticClock(event.start_epoch_s,{seconds:true}))}${Number(event.end_epoch_s)>Number(event.start_epoch_s)?`–${escapeMarkup(acousticClock(event.end_epoch_s,{seconds:true}))}`:''}</time><b>${escapeMarkup(event.label||'เหตุการณ์ระดับเสียง')}</b><span>${escapeMarkup(acousticEventDetail(event))}</span></div></article>`).join(''):`<div class="acoustic-empty">${escapeMarkup(data.message||'ยังไม่มีเหตุการณ์ระดับเสียง')}</div>`;
+  document.getElementById('acousticDetectorVersion').textContent=data.detector?.version||'rule --';
+  drawAcousticTimeline(data);
+}
+
+function acousticTimelineUnavailable(message){
+  const last=acousticTimelineLastSuccessAt
+    ?` · ล่าสุด ${new Date(acousticTimelineLastSuccessAt).toLocaleTimeString('th-TH',{hour12:false})}`:'';
+  renderAcousticTimeline({status:'stale',message:`${message}${last}`,summary:{},timeline:{points:[]},events:[],event_summary:{counts:{}}});
+}
+
+async function fetchAcousticTimeline({force=false}={}){
+  if(currentPrincipal?.role!=='admin'||document.body.dataset.view!=='monitor')return;
+  const liveSessionId=current?.session?.active?String(current.session.session_id||''):'';
+  if(liveSessionId!==acousticTimelineSessionId){
+    acousticTimelineSessionId=liveSessionId;
+    acousticTimelineFetchedAt=0;
+    acousticTimelineLastSuccessAt=0;
+    renderAcousticTimeline({status:liveSessionId?'collecting':'no_session',message:liveSessionId?'กำลังโหลด Timeline ของ Session นี้':'ยังไม่มี Session ที่กำลังบันทึก',summary:{},timeline:{points:[]},events:[],event_summary:{counts:{}}});
+    force=true;
+  }
+  const now=Date.now();
+  if(acousticTimelineLoading||(!force&&now-acousticTimelineFetchedAt<9000))return;
+  acousticTimelineFetchedAt=now;
+  acousticTimelineLoading=true;
+  try{
+    const response=await fetch('/api/v1/admin/acoustics/timeline',{cache:'no-store',headers:authenticatedHeaders()});
+    if(!response.ok)throw new Error(`HTTP ${response.status}`);
+    const payload=await response.json();
+    const data=payload.data||{},returned=data.session?.active?String(data.session.session_id||''):'';
+    if(returned!==acousticTimelineSessionId)throw new Error('session_mismatch');
+    renderAcousticTimeline(data);
+    acousticTimelineLastSuccessAt=Date.now();
+  }catch{acousticTimelineUnavailable('โหลด Timeline ล่าสุดไม่ได้');}
+  finally{acousticTimelineLoading=false;}
 }
 
 function renderCalibrationInspector(data,{force=false}={}){
@@ -557,6 +694,7 @@ async function fetchRawPackets(btn){
 }
 setInterval(()=>{
   if(currentPrincipal?.role==='admin'&&document.body.dataset.view==='monitor'){
+    fetchAcousticTimeline();
     fetchCalibrationInspector();
     fetchRawPackets();
   }

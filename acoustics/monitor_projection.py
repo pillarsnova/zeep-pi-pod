@@ -142,7 +142,7 @@ def build_acoustic_monitor_snapshot(
         "schema": LIVE_SCHEMA,
         "schema_version": LIVE_SCHEMA_VERSION,
         "contract_version": contract["contract_version"],
-        "phase": "P0.5",
+        "phase": "P0.6",
         "status": "level_only" if level_status == "valid" else level_status,
         "classification_state": "not_evaluated",
         "confidence_band": "unavailable",
@@ -168,8 +168,6 @@ def build_acoustic_monitor_snapshot(
             "missing": list(contract["required_features"]),
             "bcg_snoring_flag_is_microphone_evidence": False,
         },
-        "candidate_label_groups": contract["candidate_label_groups"],
-        "validation": contract["validation"],
         "provenance": {
             "sound_source": "esp32_sound_dba_direct",
             "feature_schema_version": None,

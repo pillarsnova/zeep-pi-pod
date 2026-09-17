@@ -1,6 +1,6 @@
 # ZEEP หูอัจฉริยะ — Acoustic Intelligence DSP Plan
 
-สถานะ: **P0.5 ADMIN SHADOW SHELL LIVE · CLASSIFIER NOT LIVE**
+สถานะ: **P0.6 ADMIN LEVEL TIMELINE LIVE · DSP CLASSIFIER NOT LIVE**
 
 ขอบเขต: จำแนกลักษณะและบริบทของเสียงเพื่อช่วยทีมดูแล Pod
 
@@ -17,18 +17,21 @@ confidence, provenance และทางเลือก `unknown`
 
 แยกการแสดงผลเป็นสองระดับ:
 
-1. **Monitor · สภาพแวดล้อม** — การ์ด “หูอัจฉริยะ · Sound Intelligence” แสดง
-   ระดับเสียง แนวโน้ม ลักษณะเสียงที่เป็นไปได้ ความมั่นใจ และเหตุการณ์ล่าสุด
-2. **Monitor · Advanced Diagnostics** — “Acoustic DSP Inspector” แสดง coverage,
-   band/temporal features, classifier/firmware version, invalid reason และ
-   device context สำหรับทีมวิศวกรรม
+1. **Monitor · SMART EAR** — แสดงกราฟระดับเสียงตลอด Session, ค่าเฉลี่ย/สูงสุด,
+   Coverage และช่วงที่ตรวจสอบย้อนกลับได้ เช่น ค่าระดับเปลี่ยนระหว่างจุดวัด
+   ค่าสูงหลายจุดติดกัน
+   หรือข้อมูลขาดช่วง
+2. **ข้อมูลวิศวกรรมแบบพับเก็บ** — แสดง Version, Source และขอบเขตความสามารถ
+   เท่าที่จำเป็น Candidate Registry, Release Gates และ Missing-feature list ไม่อยู่
+   ในหน้าหลักเพราะยังไม่ใช่ผลตรวจของ Session
 
 Packet Inspector ยังคงทำหน้าที่ตรวจค่าดิบและ Sensor contract ส่วน Smart Ear
 ตีความ feature ที่ผ่าน contract แล้ว จึงไม่ควรรวมสองหน้าที่ไว้ในการ์ดเดียวกัน
 
-รุ่น P0.5 เพิ่มเฉพาะ Admin capability registry, level-only projection, API contract
-และแผนพิสูจน์ บนหน้าจอทุก candidate แสดงว่า `กำลังพิสูจน์` และผลจำแนกเป็น
-`not_evaluated` เสมอจนมี feature telemetry และ classifier ที่ผ่าน Gate
+รุ่น P0.6 เพิ่ม Admin-only Level Timeline จากข้อมูลจริงทุก 10 วินาที โดย API
+`GET /api/v1/admin/acoustics/timeline` ส่งข้อมูลแบบย่อ ไม่ส่งกราฟทั้งคืนซ้ำผ่าน
+WebSocket และไม่แก้ Raw timeline ผลจำแนกแหล่ง/ชนิดเสียงยังเป็น `not_evaluated`
+จนมี feature telemetry และ classifier ที่ผ่าน Gate
 
 ## 1. ปัจจุบันระบบรู้อะไร
 
@@ -40,6 +43,8 @@ Packet Inspector ยังคงทำหน้าที่ตรวจค่า
   min, max, span, sample count และธงการเปลี่ยนระดับมาก
 - Timeline บันทึกระดับเสียงตาม cadence ของ Session; ฝั่ง Pi/runtime ใน repository
   ปัจจุบันไม่มีฐาน Raw audio/PCM
+- Level Timeline ตรวจได้เฉพาะ `ระดับเปลี่ยนระหว่างจุดวัด`, `ค่าสูงหลายจุด` และ
+  `ข้อมูลขาดช่วง` พร้อมเวลา/ระยะเวลา/ระดับเสียง โดยไม่ตั้งชื่อแหล่งเสียง
 - Sleep model ใช้เสียงเป็นเพียง bounded corroboration เมื่อ BCG/movement สนับสนุน
   ไม่สร้าง Sleep State จากเสียงเพียงอย่างเดียว
 
@@ -54,10 +59,21 @@ Packet Inspector ยังคงทำหน้าที่ตรวจค่า
 
 ### สิ่งที่ยังไม่มี
 
-ไม่มี PCM/spectrum บน Pi, FFT/MFCC, acoustic event classifier, confidence/abstain
-หรือ event-bout tracker รุ่น P0.5 มี Smart Ear API/UI แบบ level-only แล้ว แต่ scalar
-dBA เพียงค่าเดียวยังไม่อาจแยก compressor, airflow, door, music หรือ external noise
-ได้อย่างน่าเชื่อถือ
+ไม่มี PCM/spectrum บน Pi, FFT/MFCC หรือ acoustic source classifier รุ่น P0.6 มี
+event detector สำหรับ **รูปแบบระดับเสียง** และ event-bout แบบ deterministic แล้ว
+แต่ scalar dBA เพียงค่าเดียวยังไม่อาจแยก compressor, airflow, door, music หรือ
+external noise ได้อย่างน่าเชื่อถือ
+
+### กฎ Level Timeline ที่ LIVE
+
+| เหตุการณ์ | หลักฐานที่ใช้ | สิ่งที่ห้ามสรุป |
+|---|---|---|
+| ระดับเสียงเปลี่ยนระหว่างจุดวัด | ต่างอย่างน้อย 6 dB ระหว่างจุดตาม cadence | ไม่บอกว่าเกิดจากอะไรหรือเกิดเร็วกว่า cadence เพียงใด |
+| ค่าระดับเสียงสูงหลายจุดติดกัน | อย่างน้อย 50 dBA และช่วงระหว่างจุดแรกถึงจุดท้ายอย่างน้อย 30 วินาที | ไม่อ้างว่าเป็น continuous LAeq(A) หรือทำให้ผู้ใช้ตื่น |
+| ข้อมูลเสียงขาดช่วง | ไม่มีค่าที่ใช้ได้อย่างน้อย 2 รอบ Sensor | ไม่ตีความเป็นความเงียบ |
+
+ค่า threshold เหล่านี้เป็น Engineering review trigger สำหรับทีม ไม่ใช่การวินิจฉัย
+หรือเกณฑ์คะแนน และถูก Version ไว้ในโมดูล `acoustics/level_events.py`
 
 BCG vendor status `5` ที่ UI เรียกว่า `Snoring flag` เป็น flag จากอุปกรณ์ BCG
 คนละแหล่งกับ microphone และไม่ใช่ Smart Ear classifier หรือการวินิจฉัยการกรน
@@ -115,7 +131,7 @@ BCG vendor status `5` ที่ UI เรียกว่า `Snoring flag` เ�
 
 ### Purpose-gated human-sound research
 
-| Key | ป้าย Admin ใน P0.5 | สถานะ |
+| Key | ป้าย Candidate สำหรับงานวิจัย | สถานะ |
 |---|---|---|
 | `speech_like` | คล้ายเสียงพูด · ไม่ถอดคำ | Research Candidate · กำลังพิสูจน์ |
 | `snore_like` | คล้ายรูปแบบเสียงกรน · ไม่ใช่การวินิจฉัย | Research Candidate · กำลังพิสูจน์ |
@@ -273,17 +289,19 @@ API, log หรือ database
 
 ### Admin transport และ API
 
-P0.5 ใช้ **Admin WebSocket projection ที่มีอยู่เป็น canonical live transport**
-และเพิ่ม REST แบบ read-only สำหรับตรวจ contract/สถานะเดียวกัน:
+P0.6 ใช้ **Admin WebSocket projection** สำหรับค่าปัจจุบัน และ REST แบบ read-only
+สำหรับ contract กับ Timeline ของ Session:
 
 - `GET /api/v1/admin/contracts/acoustics`
 - `GET /api/v1/admin/acoustics/live`
+- `GET /api/v1/admin/acoustics/timeline`
 
-ทั้งสองทางต้องอ่าน projection service เดียวกัน ใช้ positive allowlist และ
+ทุกเส้นทางต้องอ่าน projection service เดียวกัน ใช้ positive allowlist และ
 `Cache-Control: private, no-store` สำหรับ HTTP response
 
-ยังไม่มี events endpoint หรือ acoustic persistence ใน P0.5 เพราะยังไม่มี approved
-feature/event retention contract ห้าม client ตีความ candidate registry เป็น event
+Timeline endpoint สร้าง level-pattern event แบบ deterministic จาก Session samples
+เมื่อเรียกใช้งานและไม่สร้าง acoustic persistence แยก Candidate Registry อยู่เฉพาะ
+contract endpoint และห้ามตีความเป็นผลจำแนกเสียง
 
 ตัวอย่าง classification response:
 
@@ -472,14 +490,15 @@ Automatic actuation ต้องมี safety proposal และ validation แ�
 - [ ] อนุมัติ feature schema/taxonomy/unknown behavior และ test vectors
 - [ ] อนุมัติ no-raw-audio default, consent, retention, access และ erasure boundary
 - [ ] ระบุ test matrix, metric, sample count และ acceptance ก่อนเก็บผล
-- [ ] ยืนยัน Admin WebSocket เป็น live transport, REST เป็น event/contract transport,
+- [ ] ยืนยัน Admin WebSocket เป็น current-level transport, REST เป็น
+      level-timeline/contract transport,
       projection service เดียว และ public positive allowlist
 - [ ] ยืนยันว่า Sleep State/Score/Control ไม่อ่าน classifier output
 - [ ] มี rollback ที่ปิด Smart Ear ได้โดยไม่ปิด Sensor Hub 1 หรือ Session
 
-จนกว่ารายการนี้ครบ ให้ถือ **การจำแนกเสียง** เป็น ROADMAP ส่วน P0.5 Monitor/API
-ดูได้เฉพาะ `sound_dba`, freshness, level aggregation และ Candidate Registry ที่มี
-สถานะ `not_evaluated/กำลังพิสูจน์`
+จนกว่ารายการนี้ครบ ให้ถือ **การจำแนกเสียง** เป็น ROADMAP ส่วน P0.6 Monitor/API
+ดูได้เฉพาะ `sound_dba`, freshness, level aggregation และ deterministic Level
+Timeline ส่วน Candidate Registry อยู่ใน contract และมีสถานะ `planned` เท่านั้น
 
 ## 12. เอกสารและทะเบียนที่เกี่ยวข้อง
 

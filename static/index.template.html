@@ -17,7 +17,7 @@
     reuse a cached stylesheet.
   -->
   <link rel="stylesheet" href="/static/theme-modern.css?v=20260916-155" />
-  <link rel="stylesheet" href="/static/styles/monitor.css?v=20260916-1" />
+  <link rel="stylesheet" href="/static/styles/monitor.css?v=20260917-1" />
   <link rel="stylesheet" href="/static/styles/interface-consistency.css?v=20260916-2" />
   <link rel="stylesheet" href="/static/styles/sessions.css?v=20260917-1" />
 </head>
@@ -714,28 +714,42 @@
     </section>
     <section class="card acoustic-shadow-card" id="acousticIntelligenceCard" data-pages="monitor" data-admin-panel aria-labelledby="acousticIntelligenceTitle">
       <div class="acoustic-card-head">
-        <div class="acoustic-card-title"><span class="acoustic-orb" aria-hidden="true">◌</span><div><em>SMART EAR</em><h3 id="acousticIntelligenceTitle">ความเป็นไปได้ของรูปแบบเสียง</h3><p>แยกสิ่งที่วัดได้จริง ออกจากความสามารถที่กำลังพิสูจน์</p></div></div>
-        <span class="acoustic-status-badge" id="acousticStatusBadge">LEVEL ONLY · SHADOW</span>
+        <div class="acoustic-card-title"><span class="acoustic-orb" aria-hidden="true">⌁</span><div><em>SMART EAR</em><h3 id="acousticIntelligenceTitle">ภาพระดับเสียงตลอด Session</h3><p>เห็นช่วงเวลาที่ค่าระดับเสียงเด่นขึ้น เพื่อย้อนดูว่าเกิดอะไรใน ZEEP</p></div></div>
+        <span class="acoustic-status-badge" id="acousticStatusBadge">รอ SESSION</span>
       </div>
-      <div class="acoustic-current-grid" aria-live="polite">
-        <article><small>ยืนยันได้ตอนนี้</small><b id="acousticLevel">-- dBA</b><span id="acousticLevelMeta">รอ sound_dba จาก ESP32</span></article>
-        <article><small>การจำแนกเสียง</small><b id="acousticClassification">ยังไม่ประเมิน</b><span id="acousticClassificationMeta">dBA ค่าเดียวใช้บอกแหล่งเสียงไม่ได้</span></article>
-        <article><small>ขั้นพิสูจน์ปัจจุบัน</small><b id="acousticProofPhase">P0 · Contract</b><span id="acousticProofMeta">ยืนยัน Firmware และเส้นทางข้อมูล</span></article>
+      <div class="acoustic-summary-grid" aria-live="polite">
+        <article><small>เฉลี่ยช่วงบันทึก</small><b id="acousticAverage">-- dBA</b><span id="acousticAverageMeta">ยังไม่มีข้อมูล</span></article>
+        <article><small>สูงสุด</small><b id="acousticPeak">-- dBA</b><span id="acousticPeakMeta">ยังไม่มีข้อมูล</span></article>
+        <article><small>ลักษณะโดยรวม</small><b id="acousticPattern">กำลังรอข้อมูล</b><span id="acousticPatternMeta">เริ่ม Session เพื่อวิเคราะห์</span></article>
       </div>
-      <div class="acoustic-candidate-groups" id="acousticCandidateGroups"><div class="acoustic-empty">กำลังโหลดทะเบียนความสามารถ</div></div>
-      <div class="acoustic-validation-strip" id="acousticValidationSteps"></div>
-      <div class="acoustic-guardrail" id="acousticGuardrail">ไม่บันทึกเสียงพูด · ไม่วินิจฉัย · ไม่เปลี่ยน Sleep State, คะแนน หรือการควบคุม</div>
-    </section>
-    <section class="card acoustic-dsp-inspector" id="acousticDspInspector" data-pages="monitor" data-admin-panel aria-labelledby="acousticDspInspectorTitle">
-      <div class="acoustic-inspector-head">
-        <div><em>ACOUSTIC DSP INSPECTOR</em><h3 id="acousticDspInspectorTitle">หลักฐานและแผนพิสูจน์</h3><p>ส่วนนี้แสดงความพร้อมของข้อมูล ไม่ใช่ผลตรวจผู้ใช้งาน</p></div>
-        <span id="acousticContractVersion">contract --</span>
+      <div class="acoustic-timeline-layout">
+        <section class="acoustic-chart-panel" aria-labelledby="acousticTimelineHeading">
+          <header><div><b id="acousticTimelineHeading">ระดับเสียงตามเวลา · dBA</b><span id="acousticTimelineMeta">ยังไม่มี Session ที่กำลังบันทึก</span></div><span id="acousticCoverage">Coverage --</span></header>
+          <svg id="acousticTimelineSvg" viewBox="0 0 900 280" preserveAspectRatio="xMidYMid meet" role="img" aria-label="กราฟระดับเสียงใน ZEEP">
+            <title>กราฟระดับเสียงใน ZEEP</title>
+            <desc>เริ่ม Session เพื่อดูระดับเสียงตามเวลา</desc>
+          </svg>
+          <div class="acoustic-chart-legend"><span><i class="level-line"></i>ค่าจาก Sensor</span><span><i class="event-mark"></i>ค่าระดับเสียงเด่น</span><span><i class="gap-mark"></i>ข้อมูลขาดช่วง</span></div>
+        </section>
+        <section class="acoustic-event-panel" aria-labelledby="acousticEventHeading">
+          <header><div><b id="acousticEventHeading">ช่วงเสียงที่เด่น</b><span id="acousticEventSummary">ยังไม่พบเหตุการณ์</span></div></header>
+          <div class="acoustic-event-list" id="acousticEventList"><div class="acoustic-empty" id="acousticEventEmpty">เริ่ม Session เพื่อดูเหตุการณ์ตามเวลา</div></div>
+        </section>
       </div>
-      <div class="acoustic-inspector-grid">
-        <section><h4>Pipeline &amp; Release Gates</h4><div class="acoustic-pipeline" id="acousticPipelineRows"></div></section>
-        <section><h4>Feature ที่ยังขาด</h4><div class="acoustic-feature-list" id="acousticMissingFeatures"></div><div class="acoustic-provenance" id="acousticProvenance"></div></section>
-      </div>
-      <div class="acoustic-inspector-note">`snore_like`, `speech_like` และ label อื่นเป็น Research Candidate จนกว่าจะผ่าน Controlled Dataset, class-specific metrics, Privacy และ Safety gates</div>
+      <div class="acoustic-guardrail" id="acousticGuardrail">วิเคราะห์รูปแบบระดับเสียงเท่านั้น · ยังไม่ระบุว่าเป็นเสียงอะไร · ไม่บันทึก Raw audio</div>
+      <details class="acoustic-technical" id="acousticTechnicalDetails">
+        <summary><span>ข้อมูลวิศวกรรม</span><small>Version, ขอบเขต และที่มาของข้อมูล</small><i aria-hidden="true">⌄</i></summary>
+        <div class="acoustic-technical-grid">
+          <div><span>ขอบเขต</span><b>Sound level pattern only</b></div>
+          <div><span>Sound source</span><b id="acousticSoundSource">ESP32 sound_dba direct</b></div>
+          <div><span>Firmware</span><b id="acousticFirmware">ยังไม่ยืนยัน</b></div>
+          <div><span>Contract</span><b id="acousticContractVersion">contract --</b></div>
+          <div><span>Level detector</span><b id="acousticDetectorVersion">rule --</b></div>
+          <div><span>DSP classifier</span><b>ยังไม่เปิดใช้งาน</b></div>
+          <div><span>ผลต่อคะแนน/Control</span><b>ไม่มี</b></div>
+        </div>
+        <p class="acoustic-metrology-note">ค่าเฉลี่ยคำนวณจากพลังงานของค่าที่ Sensor ส่งในแต่ละรอบ ไม่ใช่ค่า LAeq(A) จากเครื่องวัดที่ผ่านการรับรอง</p>
+      </details>
     </section>
     <section class="card environment-card" id="environmentCard" data-pages="dashboard">
       <div class="environment-head">

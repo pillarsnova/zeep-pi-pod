@@ -77,7 +77,7 @@ from control_protocol import (
 )
 from database import DatabaseManager
 from api.v1 import create_api_v1_router
-from acoustics import build_acoustic_monitor_snapshot
+from acoustics import build_acoustic_monitor_snapshot, live_timeline_reader
 from adaptive.learning import build_adaptive_learning_snapshot
 from api.state_projection import (
     LiveDeviceProjectionPolicy,
@@ -1299,6 +1299,7 @@ sleep_path_lock = threading.RLock()
 analysis_frame_lock = threading.Lock()
 # {"record": {...}, "samples": [...], "counters": {...}, "last_sample": float}
 _active_session: Optional[Dict[str, Any]] = None
+acoustic_timeline_snapshot = live_timeline_reader(session_lock, lambda: _active_session)
 _sleep_stage_path = {
     "session_id": None,
     "seen": [],
@@ -3810,13 +3811,10 @@ def build_smart_response(snap: Dict[str, Any], now: Optional[float] = None) -> D
     return evaluate_smart_response(snap, policy, now=now)
 
 
-def sound_energy_average_db(levels: List[float]) -> Optional[float]:
-    """Compatibility facade for the pure energy-domain average."""
-    return energy_average_db(
-        levels,
-        display_min=SOUND_DBA_DISPLAY_MIN,
-        display_max=SOUND_DBA_DISPLAY_MAX,
-    )
+sound_energy_average_db = partial(
+    energy_average_db, display_min=SOUND_DBA_DISPLAY_MIN,
+    display_max=SOUND_DBA_DISPLAY_MAX,
+)
 
 
 def sound_window_summary(start_s: float, end_s: float) -> Dict[str, Any]:
@@ -5732,6 +5730,7 @@ app.include_router(
         sensor_contract_snapshot=sensor_contract_snapshot,
         sleep_policy_snapshot=sleep_policy_snapshot,
         maintenance_contract_snapshot=maintenance_contract_snapshot,
+        acoustic_timeline_snapshot=acoustic_timeline_snapshot,
     )
 )
 app.include_router(

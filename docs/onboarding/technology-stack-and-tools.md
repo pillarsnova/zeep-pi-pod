@@ -193,8 +193,8 @@ backup, deploy, restart และ recovery ให้ยึด
 - ไม่มี Raw audio/PCM database และไม่มีระบบถอดคำพูด
 - ไม่มี ML model, MFCC หรือระบบยืนยันแหล่งเสียงระดับ Production; มีเพียง
   interpretable FFT/rule-based DSP shadow candidate ที่ยังไม่ผ่าน field validation
-- มี Firmware DSP candidate ของ Sensor Hub 1 ที่ build ได้ใน repository แต่ยังเป็น
-  `NOT INSTALLED / DO NOT FLASH WITHOUT HARDWARE GATE`
+- มี Firmware DSP candidate ของ Sensor Hub 1 สำหรับ Production test; สถานะติดตั้ง
+  ต้องดูจาก telemetry version และผล Flash log ไม่อนุมานจาก source ใน Git
 - ไม่มี automatic actuation จาก Sleep State, Adaptive recommendation หรือเสียง
 - ไม่มี clinical diagnosis, PSG equivalence, SpO2 หรือ whole-day readiness
 

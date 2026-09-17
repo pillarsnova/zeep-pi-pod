@@ -136,12 +136,10 @@ Code Freeze ต้องผ่าน Application release gate ด้านบน
 python research/evidence-library/update_research_library.py check
 ```
 
-`firmware/sensorhub1-esp32s3/` เป็น replacement candidate ที่ยกเลิกและระบุ
-`ARCHIVED / DO NOT FLASH` ตั้งแต่ 10 กันยายน 2569 จึงไม่ใช่ v1 Production
-runtime หรือ Code-Freeze gate การรับ `sound_dba` และความเป็นอิสระของ Sensor Hub 1
-ถูกตรวจใน root suite ที่ `test_sensor_contract.py`, `test_sensor_services.py` และ
-`test_sensorhub1_reader.py` อยู่แล้ว ห้ามนำ archived image ไป Flash เพียงเพราะ
-historical DSP tests หรือ PlatformIO build ผ่าน
+`firmware/sensorhub1-esp32s3/` เป็น Production test candidate แยกจาก Pi v1
+application gate การ Flash เพื่อเก็บหลักฐาน Hardware ทำได้เมื่อเจ้าของอนุมัติ,
+Pod ว่าง, มี Full-Flash backup และตรวจ identity/verify/rollback ครบ การ build ผ่าน
+เพียงอย่างเดียวยังไม่ใช่การรับรองให้ใช้งานถาวร
 
 บน GitHub ต้องยืนยันว่า workflows ต่อไปนี้ผ่าน:
 
@@ -171,5 +169,5 @@ format นั้นถูก retire ทั้งชุด หรือมี beh
 4. `static/index.html` ต้องตรงกับ template + Control partials
 5. Tests ต้องผ่านโดยใช้ temp data; ห้ามอ่าน/ล้าง production DB
 6. Evidence JSON Schema, Markdown↔JSON consistency, HTTPS/path containment และ checksum quarantine ต้องผ่าน CI
-7. Archived Firmware tests ไม่ใช่หลักฐานว่า Production Firmware ผ่าน
+7. Firmware unit tests เป็นหลักฐานระดับ source; ผล Hardware/CEM เป็นหลักฐานคนละชั้น
 8. Code Freeze ต้องอธิบายทุก skipped test ใน environment ที่ติดตั้ง dev dependencies ครบ

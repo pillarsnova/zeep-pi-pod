@@ -175,4 +175,5 @@ local tests ครอบคลุมอะไร, hardware/production ยัง�
 - Windows workstation, public remote access และ multi-Pod coordinator ต้องผ่าน
   control/test ของ deployment จริงก่อนเปิดใช้
 - v1 ไม่มี smoke/CO input หรือ alarm output ใน software contract; ห้ามอ้าง coverage
-- archived replacement firmware ไม่อยู่ใน v1 gate และห้าม Flash
+- Firmware test แยกจาก Pi v1 gate; Flash เพื่อทดสอบได้ตาม owner approval และ
+  workflow Pod ว่าง + backup + identity + verify + rollback

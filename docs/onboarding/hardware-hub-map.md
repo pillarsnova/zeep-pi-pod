@@ -124,10 +124,10 @@ Control Hub 1 ยืนยันเพียงว่า ESP32 เรียก�
 
 ### ขอบเขต Firmware
 
-`firmware/sensorhub1-esp32s3/` ระบุชัดว่า **ARCHIVED / DO NOT FLASH** และเป็น
-replacement candidate ที่ยกเลิกแล้ว จึงไม่ใช่หลักฐานว่า pin map, binary หรือ
-processing pipeline ภายในนั้นตรงกับ Production firmware ปัจจุบัน ห้ามใช้ source
-ชุดนี้ deploy หรือเติมรายละเอียด production ที่ runtime contract ไม่ได้ยืนยัน
+`firmware/sensorhub1-esp32s3/` เป็น Production test candidate สำหรับเรียนรู้
+Hardware จริง ไม่ใช่ source of truth ของ Firmware ที่ติดตั้งอยู่ การ Flash ทดสอบ
+ทำได้เมื่อ owner อนุมัติและมี backup/rollback ส่วนข้อสรุป pin map, binary และ
+processing pipeline ต้องมาจาก telemetry/การวัดจริงและบันทึก version ทุกครั้ง
 
 ## 2. Sensor Hub 2 — MQTT Environment Telemetry
 

@@ -93,7 +93,7 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 | API สำหรับ App | [ZEEP API v1](../zeep-api-v1.md), [Schema Reference](../zeep-api-schema-reference-v1.md), Pydantic models และ `/openapi.json` ของ release ที่ deploy |
 | Sensor field/range/provenance | [Sensor Interface Contract](../zeep-sensor-interface-contract-v1.2.md) และ [`sensors/contracts.py`](../../sensors/contracts.py) |
 | Tech stack, database และเครื่องมือ | [Technology Stack, Data และเครื่องมือ](technology-stack-and-tools.md) เป็น orientation; runtime ยึด requirements/config/service จริง |
-| แผนจำแนกเสียง/DSP | [หูอัจฉริยะ · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md) และ [Validation Protocol](../../research/evidence-library/ACOUSTIC_INTELLIGENCE_VALIDATION.md); P1-shadow รองรับ marker ฝั่ง Pi แล้ว ส่วน Firmware ยังต้องผ่าน physical gate |
+| แผนจำแนกเสียง/DSP | [หูอัจฉริยะ · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md) และ [Validation Protocol](../../research/evidence-library/ACOUSTIC_INTELLIGENCE_VALIDATION.md); P1-shadow รองรับ marker ฝั่ง Pi และ Firmware ใช้ Production Flash เพื่อเก็บหลักฐานจริงได้ตาม workflow ที่มี backup/rollback |
 | Test/release gate | [TESTING.md](../../TESTING.md) |
 | Pull, Sync, Deploy, Backup | [Pi 5 Operations Runbook](../pi5-operations-runbook.md) |
 | คำที่แสดงต่อผู้ใช้ | [Product Language Guideline](../zeep-product-language-guideline-v1.md) |
@@ -122,8 +122,8 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
   source, log, client bundle หรือไฟล์ที่ส่งให้ลูกค้า
 - ห้ามใช้ Pod snapshot เป็น `DATA_DIR`, ส่งต่อ snapshot หรือเก็บบนเครื่องส่วนตัว/
   เครื่องที่ไม่ได้เข้ารหัสดิสก์
-- ห้าม Flash `firmware/sensorhub1-esp32s3/`; เป็น replacement candidate ที่
-  archive แล้วและไม่ใช่ v1 Production firmware
+- การ Flash Sensor Hub ต้องทำตอน Pod ว่าง พร้อม Full-Flash backup, board identity,
+  verify และ rollback; ผลทดลองไม่เท่ากับการรับรองใช้งานถาวร
 - ห้ามให้ Sleep State หรือ Shadow recommendation สั่งอุปกรณ์อัตโนมัติ;
   v1 ต้องคง `automatic_actuation=false`
 - ห้ามสื่อว่า ZEEP วินิจฉัยโรค, เทียบเท่า PSG, วัด SpO2/True HRV หรือบอก

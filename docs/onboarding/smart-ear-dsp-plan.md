@@ -116,7 +116,8 @@ BCG vendor status `5` ที่ UI เรียกว่า `Snoring flag` เ�
   และ confidence; ห้ามสร้าง label `apnea` หรือแสดงเป็นผลตรวจสุขภาพ
 - ไม่เปลี่ยน Sleep State, Sleep Score หรือ Recovery Score
 - ไม่สั่งแอร์ เพลง พัดลม ประตู หรืออุปกรณ์ใดอัตโนมัติ
-- ไม่นำ archived firmware มา Flash หรือถือเป็น Production source of truth
+- ใช้ Firmware candidate เพื่อ Flash เก็บหลักฐานจริงได้ แต่ไม่ถือ source ใน Git
+  เป็น Production truth จนกว่าจะยืนยันจาก telemetry และผลทดสอบบนบอร์ด
 
 ## 3. Taxonomy รุ่นแรก
 
@@ -468,7 +469,7 @@ Automatic actuation ต้องมี safety proposal และ validation แ�
 | No-actuation/fail-safe | Safety + QA | Safety owner |
 | Deploy, smoke, rollback | Operations | Release owner |
 
-## 11. Definition of ready ก่อน Flash และเปิด Physical Pilot
+## 11. Workflow การ Flash ทดลองและเกณฑ์รับรองใช้งานถาวร
 
 - [ ] ได้ Production Sensor Hub 1 firmware source, version และ checksum ที่ตรวจได้
 - [ ] ระบุ sample rate, bit alignment, weighting, window และ calibration ของ level path
@@ -482,10 +483,11 @@ Automatic actuation ต้องมี safety proposal และ validation แ�
 - [ ] ยืนยันว่า Sleep State/Score/Control ไม่อ่าน classifier output
 - [ ] มี rollback ที่ปิด Smart Ear ได้โดยไม่ปิด Sensor Hub 1 หรือ Session
 
-จนกว่ารายการ Physical Pilot ครบ ให้ถือ label เป็น **P1-shadow candidate** หน้า
-Monitor/API รองรับ marker แล้ว แต่ Production ที่ยังไม่ส่ง DSP fields จะทำงานเป็น
-Level Timeline เดิมโดยอัตโนมัติ ห้าม Flash candidate โดยข้าม backup, identity,
-meter regression และ rollback gate
+การ Flash เป็นขั้นตอนสร้างหลักฐาน Physical Pilot ไม่ต้องรอ checklist ครบทั้งหมด
+ก่อนเริ่ม แต่ทุกครั้งต้อง Pod ว่าง, backup, identity, verify และ rollback พร้อม
+รายการที่ยังไม่ครบทำให้ label คงสถานะ **P1-shadow candidate** และยังไม่ถือเป็น
+ความสามารถที่รับรองแล้ว Meter regression ทำหลัง Flash และใช้ตัดสินว่าจะคงรุ่นนั้น
+หรือ rollback
 
 ## 12. เอกสารและทะเบียนที่เกี่ยวข้อง
 

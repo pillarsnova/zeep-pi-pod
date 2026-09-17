@@ -1,6 +1,6 @@
 # Sensor Hub 1 original-firmware compatibility baseline
 
-> Status: **Production baseline restored; replacement candidate blocked**  
+> Status: **Production baseline restored; replacement candidate under iterative test**
 > Captured: 2026-09-17 (Asia/Bangkok)  
 > Scope: ESP32-S3 Sensor Hub 1 on ZEEP Pod 01
 
@@ -125,8 +125,9 @@ drop-in replacement การทดลองถัดไปต้องใช้
 5. เพิ่ม DSP Tap แบบ read-only หลัง Legacy Core โดยไม่เปลี่ยน accumulator เดิม
 6. ส่ง feature เป็น nullable additive fields; ถ้าคำนวณไม่ทันให้ packet เดิมมาก่อน
 7. ปิด SDK debug บน USB JSONL (`CORE_DEBUG_LEVEL=0`)
-8. Flash เฉพาะ app slot หลังผ่าน bench; ไม่เขียน partition/NVS/FFat
-9. Canary บนบอร์ดทดสอบ แล้วเทียบ CEM และ Sensor ทั้งสามก่อน Production
+8. ระหว่าง iterative test ให้เขียนเฉพาะส่วนที่จำเป็น; ถ้าเปลี่ยน bootloader หรือ
+   partition ต้องบันทึกเหตุผลและมี Full-Flash rollback โดยไม่เขียน NVS/FFat ทับ
+9. Flash บนบอร์ดที่ owner อนุมัติ แล้วเทียบ CEM และ Sensor ทั้งสามจากผลจริง
 
 ## ลำดับตรวจเพื่อพัฒนาและรับรองผล
 

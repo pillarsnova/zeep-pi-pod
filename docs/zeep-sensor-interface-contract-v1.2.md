@@ -107,15 +107,15 @@ Sleep State, Sleep Score, Recovery Score หรือสั่ง Control อั
 หรือ classifier หาย ค่า temperature/humidity/lux และ `sound_dba` ต้องทำงานต่อได้
 ตามปกติ ป้ายจะเปลี่ยนเป็น `not_evaluated` โดยไม่สร้าง label จาก dBA เพียงค่าเดียว
 
-Firmware candidate ใน repository ผ่าน build gate แล้ว แต่ยังไม่ใช่หลักฐานว่า
-ติดตั้งอยู่บน Production Hub การเปิดใช้งานจริงต้องผ่าน backup, physical validation,
-privacy/consent และ field comparison ก่อน Flash
+Firmware candidate ใน repository ผ่าน build แล้ว แต่ยังไม่ใช่หลักฐานว่าติดตั้งอยู่
+บน Production Hub การ Flash เป็นขั้นตอนของ physical validation ได้เมื่อมี owner
+approval, Pod ว่าง, backup/rollback และ board identity ส่วน privacy/consent,
+field comparison และ CEM ใช้ตัดสินการรับรองหลังเก็บผลจริง
 
-## ภาคผนวกประวัติ Firmware ที่ยกเลิกแล้ว (ห้ามใช้กับ Production)
+## ภาคผนวกประวัติ Firmware ทดลอง
 
-ส่วนนี้เป็นหลักฐานย้อนหลังของ Firmware candidate ที่ถูก hard-disable แล้วเท่านั้น
-ห้าม Flash และห้ามนำขั้นตอนใดในส่วนนี้กลับมาเป็น Runtime gate ค่า Runtime ฝั่ง
-Pi ยึด `sound_dba` ตามกติกาด้านบนเพียงเส้นทางเดียว
+ส่วนนี้เป็นหลักฐานย้อนหลังของ Firmware candidate แต่ละรุ่น ไม่ใช่ Runtime gate
+ค่า Runtime ฝั่ง Pi ยึด `sound_dba` ตามกติกาด้านบนเพียงเส้นทางเดียว
 
 Firmware candidate เดิมทำงานตามลำดับนี้ก่อนสร้าง Packet:
 

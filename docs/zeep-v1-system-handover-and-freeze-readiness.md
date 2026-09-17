@@ -274,8 +274,8 @@ version; ห้ามลบเพียงเพื่อลดจำนวน�
 ใน Closure record
 
 ชุดทดสอบต้องครอบคลุม Auth/Privacy, Hardware/Control, Sleep/Baseline/Replay,
-Score/Report, Session/API, Storage, UI และ Evidence governance ส่วน Replacement
-Firmware ที่ประกาศ `ARCHIVED / DO NOT FLASH` ไม่อยู่ใน v1 Product Gate
+Score/Report, Session/API, Storage, UI และ Evidence governance ส่วน Firmware
+Hardware experiment แยก release record จาก v1 Pi Product Gate
 
 วิธีรันและลดความซับซ้อน:
 
@@ -283,7 +283,7 @@ Firmware ที่ประกาศ `ARCHIVED / DO NOT FLASH` ไม่อย�
 2. ให้ CI รัน Application release gate เต็มหนึ่งครั้งต่อ Git SHA; เมื่อผ่านแล้ว
    ไม่ต้องรันซ้ำบน Mac/Pi เว้นแต่งานข้ามระบบ ผลไม่แน่นอน หรือ CI ใช้งานไม่ได้
 3. ก่อน Code Freeze รัน Full Product Gate ของ Pi application รวม evidence/UI และ
-   Production smoke; replacement Firmware ที่ยกเลิกแล้วไม่อยู่ใน gate นี้
+   Production smoke; Firmware Hardware experiment ใช้ผล build/flash/telemetry แยก
 4. รวม fixture/helper ได้ แต่ลบ test ได้เมื่อ feature/route/data format ถูก retire และ
    มี regression ที่ครอบ behavior ทดแทนแล้ว
 5. แยก test inventory ตาม ownership แทนการลด assertion
@@ -332,8 +332,8 @@ Firmware ที่ประกาศ `ARCHIVED / DO NOT FLASH` ไม่อย�
 - แยก `classification_source` ออกจาก `baseline_candidate_source` ใน Replay
   และเปิดเผยเวอร์ชัน/ขีดจำกัด Personal Baseline ผ่าน Admin Policy snapshot
 - ปฏิเสธ Rest-window cache คนละเวอร์ชันทุก read path เพื่อให้ rebuild ก่อนแสดงผล
-- ตัด replacement Firmware ที่ถูกประกาศ `ARCHIVED / DO NOT FLASH` ออกจาก v1
-  Product Gate; Pi-side Sensor contract ยังอยู่ใน Application regression
+- แยก Firmware Hardware experiment ออกจาก v1 Product Gate; Pi-side Sensor
+  contract ยังอยู่ใน Application regression
 - เพิ่ม regression สำหรับประเด็นข้างต้น โดยไม่ลด coverage เดิม
 
 ## 10. ประเด็นที่ต้องตัดสินก่อนประกาศ Final Freeze
@@ -418,7 +418,7 @@ git diff --check
 | Candidate Git SHA | รอกรอกหลัง merge/push |
 | Policy/version snapshot | ตรวจจาก `GET /api/admin/sleep/policy` |
 | Application tests | รันที่ Candidate SHA แล้วกรอก Passed/Failed/Error/Skipped ตามผลจริง |
-| Archived replacement Firmware | ไม่อยู่ใน v1 gate · ห้าม Flash |
+| Sensor Hub Firmware experiment | บันทึก Git SHA, Flash verify, telemetry และ rollback แยกจาก Pi gate |
 | Evidence/UI/style | รอรันและบันทึกผลที่ Candidate SHA เดียวกับ Application tests |
 | Production smoke | รอช่วงไม่มีผู้ใช้งาน |
 | Replay/reference Sessions | ตรวจเฉพาะ reviewed manifest; ห้ามแก้ Raw |

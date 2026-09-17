@@ -26,7 +26,10 @@ constexpr uint8_t kPcmTransportPaddingBits = 8;
 constexpr float kFullScale24 = 8388607.0F;
 constexpr float kReferenceSplDb = 94.0F;
 constexpr float kSensitivityDbfs = -26.0F;
-constexpr float kSineRmsCorrectionDb = 3.0102999566F;
+// SPH0645LM4H-B sensitivity is already specified in dBFS at 94 dB SPL.
+// Therefore the datasheet conversion offset is 94 - (-26) = 120 dB.
+// Do not add a separate sine peak-to-RMS correction here.
+constexpr float kDatasheetOffsetDb = kReferenceSplDb - kSensitivityDbfs;
 constexpr float kClipThreshold = 0.98F;
 constexpr float kMaxClipRatio = 0.001F;
 constexpr float kMaxZeroRatio = 0.95F;
@@ -396,9 +399,7 @@ void AudioMeter::publishAccumulator() {
   window.rms = static_cast<float>(rms);
   window.dbfs = dbfsFromRms(rms);
   window.a_weighted_dbfs = dbfsFromRms(a_weighted_rms);
-  window.laeq_dba = kReferenceSplDb - kSensitivityDbfs +
-                    kSineRmsCorrectionDb +
-                    window.a_weighted_dbfs +
+  window.laeq_dba = kDatasheetOffsetDb + window.a_weighted_dbfs +
                     window.calibration_offset_db;
   window.acoustic = latest_acoustic_;
 
@@ -449,8 +450,8 @@ void AudioMeter::publishAcousticAccumulator() {
   const double a_weighted_rms = std::sqrt(
       acoustic_sum_square_a_ / acoustic_samples_);
   const float dbfs_a = dbfsFromRms(a_weighted_rms);
-  const float laeq_dba = kReferenceSplDb - kSensitivityDbfs +
-      kSineRmsCorrectionDb + dbfs_a + calibrationOffset();
+  const float laeq_dba =
+      kDatasheetOffsetDb + dbfs_a + calibrationOffset();
   AcousticFeatures features = acoustic_classifier_.finish(
       laeq_dba,
       static_cast<float>(rms),

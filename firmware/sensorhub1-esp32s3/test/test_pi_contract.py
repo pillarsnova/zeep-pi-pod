@@ -69,6 +69,10 @@ class PiContractTests(unittest.TestCase):
                         "sound_calibration_model": (
                             "sph0645-datasheet-plus-cem-v1"
                         ),
+                        "sound_reference_spl_db": 94.0,
+                        "sound_sensitivity_dbfs": -26.0,
+                        "sound_datasheet_offset_db": 120.0,
+                        "sound_rms_correction_db": 0.0,
                     },
                 },
             },

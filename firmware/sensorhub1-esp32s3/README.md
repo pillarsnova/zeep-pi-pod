@@ -43,8 +43,11 @@ Target board ที่ตรวจจากอุปกรณ์จริงค�
 3. ตัด DC และผ่าน A-weighting IIR ที่สร้างจาก analogue pole/zero definition
    ด้วย bilinear transform จากนั้น normalize ที่ 1 kHz
 4. Sound Meter สะสม 48,000 samples เป็น LAeq(A) 1 วินาที
-5. แปลงจาก SPH0645 sensitivity `-26 dBFS @ 94 dB SPL`; ระบุผลเป็น
-   datasheet estimate จนกว่าจะผ่าน CEM และเก็บ field offset/สถานะใน NVS
+5. แปลงจาก SPH0645 sensitivity `-26 dBFS @ 94 dB SPL` ด้วยค่าชดเชย
+   `94 - (-26) = +120 dB` ดังนั้น `dBA estimate = dBFS(A) + 120 +
+   CEM residual offset` โดยไม่บวก peak/RMS correction `+3.0103 dB` ซ้ำ;
+   ระบุผลเป็น datasheet estimate จนกว่าจะเทียบ CEM และเก็บเฉพาะ residual
+   offset/สถานะใน NVS
 6. DSP Tap สะสม 480,000 samples แยก 10 วินาทีแล้วคำนวณ feature โดยไม่
    เปลี่ยนหรือหน่วง Sound Meter
 7. ส่ง `sound_valid=true` เฉพาะเมื่อไม่มี clipping/digital silence และค่าอยู่ใน

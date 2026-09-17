@@ -108,7 +108,7 @@ drop-in replacement การทดลองถัดไปต้องใช้
 | ด้าน | เดิม | Candidate v0.2 | ผลที่พบ |
 | --- | --- | --- | --- |
 | Mic rate/window | 32 kHz / 1 s | 48 kHz / 10 s | ค่าและ timing ไม่เทียบตรง |
-| Calibration | embedded offset 111.93 dB (provenance ยังไม่ยืนยัน) | sensitivity-derived + NVS offset | แสดง ~88 dBA และ invalid |
+| Calibration | embedded offset 111.93 dB (provenance ยังไม่ยืนยัน) | datasheet offset `94 - (-26) = 120 dB` + CEM residual ใน NVS | แสดง ~88 dBA และ invalid |
 | PCM QA | zero/change QA ผ่าน | repeated/zero สูงผิดธรรมชาติ | `pcm_out_of_range` |
 | I²C | SHT31 ทำงาน | address/probe assumption ใหม่ | SHT และ OPT ไม่ตอบทั้งคู่ |
 | Serial | JSONL สะอาด | core debug เปิด | Wire error ปะปนใน JSONL |

@@ -56,6 +56,7 @@ def _sanitize_sound_diagnostics(result: dict[str, Any]) -> None:
         "sound_calibration_offset_db",
         "sound_reference_spl_db",
         "sound_sensitivity_dbfs",
+        "sound_datasheet_offset_db",
         "sound_rms_correction_db",
         "sound_laeq_dba",
         "sound_feature_window_ms",

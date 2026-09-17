@@ -72,6 +72,7 @@ SENSOR_VALUE_FIELDS: dict[str, frozenset[str]] = {
             "sound_calibration_model",
             "sound_reference_spl_db",
             "sound_sensitivity_dbfs",
+            "sound_datasheet_offset_db",
             "sound_rms_correction_db",
             "sound_laeq_dba",
             "sound_class",

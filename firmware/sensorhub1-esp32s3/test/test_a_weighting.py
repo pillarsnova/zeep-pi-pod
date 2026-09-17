@@ -64,11 +64,13 @@ class AWeightingTests(unittest.TestCase):
 
     def test_sph0645_reference_tone_maps_to_94_db_spl(self) -> None:
         sensitivity_dbfs = -26.0
-        sine_peak = 10 ** (sensitivity_dbfs / 20.0)
-        sine_rms = sine_peak / math.sqrt(2.0)
-        measured_dbfs = 20.0 * math.log10(sine_rms)
-        laeq_dba = 94.0 - sensitivity_dbfs + 3.0102999566 + measured_dbfs
+        measured_dbfs = sensitivity_dbfs
+        datasheet_offset_db = 94.0 - sensitivity_dbfs
+        laeq_dba = datasheet_offset_db + measured_dbfs
         self.assertAlmostEqual(laeq_dba, 94.0, places=6)
+
+    def test_sph0645_datasheet_offset_is_120_db(self) -> None:
+        self.assertEqual(94.0 - (-26.0), 120.0)
 
 
 if __name__ == "__main__":

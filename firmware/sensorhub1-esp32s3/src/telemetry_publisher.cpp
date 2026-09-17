@@ -152,7 +152,8 @@ void addSoundTelemetry(
   values["sound_calibration_model"] = "sph0645-datasheet-plus-cem-v1";
   values["sound_reference_spl_db"] = 94.0F;
   values["sound_sensitivity_dbfs"] = -26.0F;
-  values["sound_rms_correction_db"] = 3.0102999566F;
+  values["sound_datasheet_offset_db"] = 120.0F;
+  values["sound_rms_correction_db"] = 0.0F;
   values["sound_clipped_samples"] = sound.clipped_samples;
   values["sound_zero_samples"] = sound.zero_samples;
   values["sound_repeated_samples"] = sound.repeated_samples;

@@ -64,12 +64,12 @@ trap cleanup EXIT
 stop_service
 restart_required=true
 assert_device_identity
-"$ESPTOOL" --port "$PORT" write-flash \
+"$ESPTOOL" --port "$PORT" write_flash \
   0x0000 "$ARTIFACT_DIR/bootloader.bin" \
   0x8000 "$ARTIFACT_DIR/partitions.bin" \
   0xe000 "$ARTIFACT_DIR/boot_app0.bin" \
   0x10000 "$ARTIFACT_DIR/firmware.bin"
-"$ESPTOOL" --port "$PORT" verify-flash \
+"$ESPTOOL" --port "$PORT" verify_flash \
   0x0000 "$ARTIFACT_DIR/bootloader.bin" \
   0x8000 "$ARTIFACT_DIR/partitions.bin" \
   0xe000 "$ARTIFACT_DIR/boot_app0.bin" \

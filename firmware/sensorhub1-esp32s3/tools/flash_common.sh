@@ -8,7 +8,7 @@ readonly DEFAULT_EXPECTED_MAC="44:1b:f6:8c:0c:54"
 readonly DEFAULT_PORT=\
 "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_44:1B:F6:8C:0C:54-if00"
 
-ESPTOOL="${ESPTOOL:-/home/pod1/.venvs/esptool/bin/esptool}"
+ESPTOOL="${ESPTOOL:-/home/pod1/.venvs/esptool/bin/esptool.py}"
 PORT="${PORT:-$DEFAULT_PORT}"
 EXPECTED_MAC="${EXPECTED_MAC:-$DEFAULT_EXPECTED_MAC}"
 ZEEP_SERVICE="${ZEEP_SERVICE:-zeep-pod.service}"
@@ -30,7 +30,7 @@ assert_device_identity() {
     exit 3
   }
   local chip_output
-  chip_output="$($ESPTOOL --port "$PORT" chip-id 2>&1)"
+  chip_output="$($ESPTOOL --port "$PORT" chip_id 2>&1)"
   grep -q "$EXPECTED_CHIP" <<<"$chip_output" || {
     echo "ERROR: expected $EXPECTED_CHIP" >&2
     echo "$chip_output" >&2

@@ -32,6 +32,6 @@ trap cleanup EXIT
 stop_service
 restart_required=true
 assert_device_identity
-"$ESPTOOL" --port "$PORT" write-flash 0 "$IMAGE"
-"$ESPTOOL" --port "$PORT" verify-flash 0 "$IMAGE"
+"$ESPTOOL" --port "$PORT" write_flash 0 "$IMAGE"
+"$ESPTOOL" --port "$PORT" verify_flash 0 "$IMAGE"
 echo "RESTORE_VERIFIED=$IMAGE"

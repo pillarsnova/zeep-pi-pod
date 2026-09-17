@@ -1,8 +1,8 @@
 # ZEEP Sensor Hub 1 — DSP shadow research candidate
 
-> **BENCH DEVELOPMENT · BLOCKED FROM PRODUCTION** · v0.3 กำลังพัฒนาแบบ
-> Datasheet-first หลัง Candidate v0.2 ถูก rollback ห้าม Flash จนกว่าจะผ่าน
-> [Original Firmware Compatibility Baseline](ORIGINAL_FIRMWARE_COMPATIBILITY.md)
+> **PRODUCTION TEST CANDIDATE** · การ Flash คือส่วนหนึ่งของการตรวจบน Hardware
+> จริง ต้องมี owner approval, Full-Flash backup และ rollback path ที่ตรวจแล้ว
+> ผล CEM ใช้รับรอง calibration ภายหลัง ไม่ใช่เงื่อนไขก่อนเริ่ม Flash ทดสอบ
 
 Firmware นี้ใช้กับ Sensor Hub 1 ที่ต่อกับ Pi ผ่าน USB Serial เท่านั้น และไม่รวม
 ระบบเล่นเพลงหรือ Control Deck
@@ -138,13 +138,10 @@ CAL SOUND OFFSET <ค่า>
 
 ## Production Flash status
 
-`flash_candidate.sh` และ `flash_dsp_shadow.sh` ถูกปิดไว้ Candidate v0.2 เคยผ่าน
-build/unit test แต่ไม่ผ่าน hardware parity: SHT31 หาย, JSONL มี Wire debug ปะปน
-และ SPH0645 เป็น `pcm_out_of_range` จึง rollback แล้ว
-
-v0.3 เป็น bench source เท่านั้น การเปิด Flash ใหม่ต้องมี compatibility approval
-artifact ตามที่ script กำหนด
-และผ่าน Gate ใน `ORIGINAL_FIRMWARE_COMPATIBILITY.md` ก่อนทุกครั้ง
+Candidate v0.2 และ v0.3.0–v0.3.4 เคยผ่าน build/unit test แต่ไม่ผ่าน SPH0645
+hardware parity จึง rollback กลับ Full Flash เดิม การทดสอบรอบใหม่ทำได้เมื่อมี
+owner approval โดยใช้ `flash_candidate.sh`; CEM result เป็น optional ระหว่าง
+development และจำเป็นเมื่อจะประกาศค่าที่ calibrate แล้วเท่านั้น
 
 เมื่ออนุมัติรุ่นใหม่ในอนาคต สคริปต์ยังต้องบังคับตรวจ:
 

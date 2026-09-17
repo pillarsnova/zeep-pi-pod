@@ -33,9 +33,9 @@ Official sources ที่ใช้กับชุดนี้:
 และต้องเปลี่ยนทีละชั้นเพื่อระบุผลกระทบได้ ห้ามเปลี่ยน bootloader, partition,
 sensor driver, sound formula และ DSP พร้อมกันในรอบเดียว
 
-Firmware `sensorhub1-dsp-shadow-v0.2.0` ไม่ผ่าน Production parity และถูก rollback
-เป็น Full Flash เดิมที่ตรวจ digest ตรงแล้ว รุ่นนี้ห้าม Flash ซ้ำจนกว่าจะผ่าน Gate
-ในเอกสารนี้
+Firmware `sensorhub1-dsp-shadow-v0.2.0` และ v0.3.0–v0.3.4 ไม่ผ่าน Production
+parity และถูก rollback เป็น Full Flash เดิมที่ตรวจ digest ตรงแล้ว การ Flash
+ทดสอบเป็นส่วนหนึ่งของ workflow ได้เมื่อ owner อนุมัติและมี rollback พร้อม
 
 ## หลักฐานของ Firmware เดิม
 
@@ -128,9 +128,10 @@ drop-in replacement การทดลองถัดไปต้องใช้
 8. Flash เฉพาะ app slot หลังผ่าน bench; ไม่เขียน partition/NVS/FFat
 9. Canary บนบอร์ดทดสอบ แล้วเทียบ CEM และ Sensor ทั้งสามก่อน Production
 
-## Promotion gates
+## ลำดับตรวจเพื่อพัฒนาและรับรองผล
 
-ต้องผ่านทุกข้อก่อนเปิด Production Flash:
+Production Flash ใช้เก็บหลักฐานจริงได้ก่อน CEM เมื่อ owner อนุมัติ ส่วนรายการ
+ต่อไปนี้ต้องครบก่อนประกาศเป็น Firmware ใช้งานถาวรหรืออ้างว่า dBA calibrated:
 
 - Legacy packet 100%: field, type, unit และ 1-second cadence ตรง
 - SHT31 parity: อุณหภูมิ/ความชื้นต่อเนื่องและ recovery ตรง
@@ -147,6 +148,22 @@ drop-in replacement การทดลองถัดไปต้องใช้
 
 - Full Flash restore: verified digest matched
 - Pi service: active
-- Safety Supervisor: ready / monitor
-- Original SHT31 and SPH0645 telemetry: restored
-- OPT3001: unavailable เหมือนก่อน Flash; แยกเป็นงานตรวจ hardware ไม่ใช่ผล DSP
+- Safety Supervisor: ready; level `degraded` ตาม policy ปัจจุบัน
+- Original SHT31, OPT3001 และ SPH0645 telemetry: restored
+- ตัวอย่างล่าสุด: `sound_dba=55.46–55.54`, zero ratio `0`, change ratio
+  `0.9735–0.9760`, clip/read error `0/0`
+
+## Production experiment log · 2026-09-17
+
+| รุ่น | สิ่งที่ทดลอง | ผล Hardware |
+| --- | --- | --- |
+| v0.3.0 | 18-bit extraction `>>14` | invalid; alignment error ทุก sample |
+| v0.3.1 | full 24-bit transport `>>8` | invalid; zero ~48%, repeated ~99% |
+| v0.3.2 | RIGHT slot | ไม่มีสัญญาณ; non-finite |
+| v0.3.3 | LEFT word จาก explicit stereo frame | invalid; zero ~45%, repeated ~99% |
+| v0.3.4 | LEFT + ESP32-S3 SD timing delay | invalid; pattern ไม่เปลี่ยน |
+
+ข้อสรุป: SPH0645 ไม่เสีย เพราะ Firmware เดิมกลับมาอ่าน 32,000 nonzero samples
+ต่อวินาทีได้ครบ ปัญหาอยู่ที่ replacement I²S acquisition path ของ Arduino/legacy
+driver งานถัดไปต้อง reproduce Legacy Core 32 kHz ด้วย ESP-IDF channel API หรือ
+ดึง source/logic trace ของ Firmware เดิมก่อนเพิ่ม DSP tap

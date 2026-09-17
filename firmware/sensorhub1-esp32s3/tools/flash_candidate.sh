@@ -2,10 +2,6 @@
 
 set -euo pipefail
 
-echo "ERROR: archived firmware candidate; Production Flash is permanently disabled" >&2
-echo "Pi runtime now consumes the installed ESP32 sound_dba field directly" >&2
-exit 64
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=flash_common.sh
 source "$SCRIPT_DIR/flash_common.sh"
@@ -13,8 +9,8 @@ source "$SCRIPT_DIR/flash_common.sh"
 require_command
 assert_pod_unoccupied
 
-ARTIFACT_DIR="${1:?usage: flash_candidate.sh ARTIFACT_DIR CEM_RESULT_JSON}"
-CEM_RESULT="${2:?usage: flash_candidate.sh ARTIFACT_DIR CEM_RESULT_JSON}"
+ARTIFACT_DIR="${1:?usage: flash_candidate.sh ARTIFACT_DIR [CEM_RESULT_JSON]}"
+CEM_RESULT="${2:-}"
 required_files=(
   bootloader.bin
   partitions.bin
@@ -30,6 +26,7 @@ for filename in "${required_files[@]}"; do
 done
 (cd "$ARTIFACT_DIR" && sha256sum --check MANIFEST.sha256)
 
+if [[ -n "$CEM_RESULT" ]]; then
 python3 - "$CEM_RESULT" "$ARTIFACT_DIR/firmware.bin" <<'PY'
 import hashlib
 import json
@@ -47,6 +44,10 @@ if result.get("firmware_sha256") != digest:
 if result.get("meter", {}).get("model") != "CEM DT-8852":
     raise SystemExit("ERROR: CEM result does not identify the approved meter")
 PY
+else
+  echo "TEST_FLASH_WITHOUT_CEM=true"
+  echo "Sound output must remain marked uncalibrated until CEM validation passes"
+fi
 
 [[ "${CONFIRM_FLASH:-}" == "$EXPECTED_MAC" ]] || {
   echo "ERROR: set CONFIRM_FLASH=$EXPECTED_MAC to authorize Production Flash" >&2

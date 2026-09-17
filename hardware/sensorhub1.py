@@ -87,6 +87,7 @@ class SensorHub1Reader:
         self.clock = clock
         self.sleeper = sleeper
         self.last_sound_status: tuple[bool, Any] | None = None
+        self.last_sound_field_names: tuple[str, ...] | None = None
 
     def run_forever(self) -> None:
         """Reconnect indefinitely while keeping parse failures packet-local."""
@@ -140,6 +141,8 @@ class SensorHub1Reader:
             self.log_event("esp32", "payload_rejected", reason=reason)
             return False
 
+        self._publish_sound_contract(payload)
+
         try:
             normalized = decode_hub_payload(
                 payload,
@@ -161,6 +164,40 @@ class SensorHub1Reader:
         self.publish_payload(normalized)
         self._publish_sound_state(normalized)
         return True
+
+    def _publish_sound_contract(self, payload: Mapping[str, Any]) -> None:
+        """Log changing SPH0645 field names without logging audio or payloads."""
+        values: Mapping[str, Any] = payload
+        sensors = payload.get("sensors")
+        if isinstance(sensors, Mapping):
+            microphone = sensors.get("sph0645")
+            if isinstance(microphone, Mapping):
+                nested = microphone.get("values")
+                values = nested if isinstance(nested, Mapping) else microphone
+        field_names = tuple(
+            sorted(str(key) for key in values if str(key).startswith("sound_"))
+        )
+        if field_names == self.last_sound_field_names:
+            return
+        self.last_sound_field_names = field_names
+        self.log_event(
+            "sph0645",
+            "telemetry_fields_observed",
+            fields=list(field_names),
+            feature_fields=[
+                key
+                for key in field_names
+                if key.startswith("sound_spectral_")
+                or key.startswith("sound_breathing_")
+                or key in {
+                    "sound_crest_factor",
+                    "sound_syllabic_modulation",
+                    "sound_low_band_ratio",
+                    "sound_mid_band_ratio",
+                    "sound_high_band_ratio",
+                }
+            ],
+        )
 
     def _publish_sound_state(self, payload: Mapping[str, Any]) -> None:
         status = (

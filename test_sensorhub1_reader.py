@@ -91,6 +91,34 @@ class SensorHub1ReaderTests(unittest.TestCase):
         self.assertEqual(self.sounds, [{
             "t": 123.0, "dba": 42.5, "dbfs": -55.0,
         }])
+        contract_events = [
+            event
+            for event in self.events
+            if event[0][:2] == ("sph0645", "telemetry_fields_observed")
+        ]
+        self.assertEqual(len(contract_events), 1)
+        self.assertEqual(
+            contract_events[0][1]["fields"],
+            ["sound_dba", "sound_dbfs", "sound_window_sequence"],
+        )
+        self.assertEqual(contract_events[0][1]["feature_fields"], [])
+
+    def test_sound_contract_is_logged_again_only_when_fields_change(self) -> None:
+        packet = canonical_packet()
+        self.assertTrue(self.reader.process_line(self.wire(packet)))
+        self.assertTrue(self.reader.process_line(self.wire(packet)))
+        packet["sensors"]["sph0645"]["values"][
+            "sound_spectral_flux"
+        ] = 0.12
+        self.assertTrue(self.reader.process_line(self.wire(packet)))
+
+        observed = [
+            event[1]
+            for event in self.events
+            if event[0][:2] == ("sph0645", "telemetry_fields_observed")
+        ]
+        self.assertEqual(len(observed), 2)
+        self.assertEqual(observed[-1]["feature_fields"], ["sound_spectral_flux"])
 
     def test_released_golden_packet_without_hub_id_updates_state(self) -> None:
         packet = {

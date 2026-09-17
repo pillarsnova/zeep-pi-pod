@@ -141,10 +141,10 @@ bool AudioMeter::begin() {
   i2s_config.mode = static_cast<i2s_mode_t>(I2S_MODE_MASTER | I2S_MODE_RX);
   i2s_config.sample_rate = kSampleRateHz;
   i2s_config.bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT;
-  // Production captures on 2026-09-17 showed the LEFT selection returning
-  // almost entirely digital silence (about 48% zero and 99% repeated samples).
-  // The installed microphone's SEL wiring therefore exposes data in RIGHT.
-  i2s_config.channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT;
+  // Receive explicit stereo frames and consume the LEFT word below. On the
+  // ESP32-S3 legacy driver, mono LEFT capture still exposed empty companion
+  // words in the DMA stream; treating them as audio produced ~48% zeros.
+  i2s_config.channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT;
   i2s_config.communication_format = I2S_COMM_FORMAT_STAND_I2S;
   i2s_config.intr_alloc_flags = ESP_INTR_FLAG_LEVEL1;
   i2s_config.dma_buf_count = 8;
@@ -314,7 +314,9 @@ void AudioMeter::readTask() {
     portEXIT_CRITICAL(&result_lock_);
 
     const size_t sample_count = bytes_read / sizeof(int32_t);
-    for (size_t index = 0; index < sample_count; ++index) {
+    // Philips frames are LEFT then RIGHT. The installed SPH0645 uses LEFT;
+    // skip the empty RIGHT companion word and count actual microphone samples.
+    for (size_t index = 0; index + 1 < sample_count; index += 2) {
       if (accumulated_samples == 0) {
         window_started_ms = millis();
       }

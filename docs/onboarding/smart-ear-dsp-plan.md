@@ -49,6 +49,12 @@ marker ตามเวลาจะเริ่มเมื่อ Session อย�
 ### LIVE · Telemetry ที่ Runtime รับและตรวจได้
 
 - Sensor Hub 1 ส่ง `sound_dba` จาก SPH0645LM4H-B มาให้ Pi โดยตรง
+- Production packet ที่ตรวจจริงเมื่อ 17 ก.ย. 2026 ส่ง window summary เพิ่ม ได้แก่
+  `sound_dbfs`, `sound_dbfs_a`, `sound_rms`, `sound_rms_a`, `sound_peak`,
+  `sound_peak_a`, `sound_laeq_dba`, `sound_sample_rate_hz`, `sound_samples` และ
+  `sound_window_ms`; Pi รับเฉพาะ finite number และแสดงใน Admin engineering view
+- ตัวอย่างที่ตรวจบน Pod: 32 kHz, 32,000 samples, window 1,000 ms,
+  RMS 0.0027727, Peak 0.009334 และ Crest factor ที่ Pi คำนวณได้ประมาณ 3.37
 - Pi ตรวจ finite/range/freshness และไม่ทำ `abs`, bias หรือ recalibration ซ้ำ
 - ระบบสรุป valid dBA observations ในแต่ละ Sensor frame ด้วยค่าเฉลี่ยเชิงพลังงาน,
   min, max, span, sample count และธงการเปลี่ยนระดับมาก
@@ -64,12 +70,16 @@ marker ตามเวลาจะเริ่มเมื่อ Session อย�
 - แหล่งกำเนิดจริงของเสียงจาก microphone เดียว
 - ตำแหน่ง ทิศทาง ผู้พูด หรือเนื้อหาคำพูด
 - Production firmware ที่ติดตั้งอยู่ยังไม่มี DSP class/version ตาม contract ใหม่
+- Production firmware ยังไม่ส่ง spectral centroid/flatness/flux, band ratios,
+  syllabic modulation หรือ breathing periodicity จึงยังแยก `snore_like` กับ
+  `speech_like` ไม่ได้อย่างรับผิดชอบ
 - ค่าปัจจุบันเป็น certified LAeq(A) หรือผ่านมาตรฐานเครื่องวัด Class 1/2 หรือไม่
 - ACK ของแอร์/พัดลมหมายความว่าอุปกรณ์กายภาพกำลังสร้างเสียงจริงหรือไม่
 
 ### สิ่งที่ยังไม่มีใน Production
 
-ไม่มี PCM/spectrum บน Pi และจะไม่เพิ่ม PCM บน Pi รุ่น P0.6 มี
+ไม่มี PCM/spectrum บน Pi และจะไม่เพิ่ม PCM บน Pi ค่า RMS/Peak/Crest ที่มีแล้วใช้
+ตรวจคุณภาพและรูปทรง amplitude window แต่ไม่เพียงพอระบุแหล่งเสียง รุ่น P0.6 มี
 event detector สำหรับ **รูปแบบระดับเสียง** และ event-bout แบบ deterministic แล้ว
 แต่ scalar dBA เพียงค่าเดียวยังไม่อาจแยก compressor, airflow, door, music หรือ
 external noise ได้อย่างน่าเชื่อถือ ส่วน P1-shadow candidate คำนวณ FFT/features

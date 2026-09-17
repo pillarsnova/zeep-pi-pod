@@ -39,6 +39,11 @@ window sequence และ DSP features ตั้งแต่ Sensor contract →
 Firmware ที่ build ได้ยังเป็น **validation candidate และยังไม่ได้ Flash ลงอุปกรณ์**
 หน้า Monitor จึง fail-soft กลับเป็น Level Timeline เดิมจนได้รับ packet รุ่นใหม่จริง
 
+SMART EAR ตรวจและแสดงค่าปัจจุบันได้ตลอดเวลาที่ Sensor พร้อม แม้ไม่มีผู้ใช้หรือ
+Session แต่ข้อมูลนอก Session เป็น **ephemeral live observation** เท่านั้น: ไม่เพิ่ม
+Timeline row, ไม่สร้างประวัติ และไม่ persist ลงฐานข้อมูล การบันทึกระดับเสียงและ
+marker ตามเวลาจะเริ่มเมื่อ Session อยู่ใน phase `recording` เท่านั้น
+
 ## 1. ปัจจุบันระบบรู้อะไร
 
 ### LIVE · Telemetry ที่ Runtime รับและตรวจได้

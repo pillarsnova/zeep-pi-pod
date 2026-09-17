@@ -46,6 +46,8 @@ class AcousticContractTests(unittest.TestCase):
         self.assertEqual(contract["mode"], "admin_shadow_dsp_optional")
         self.assertTrue(contract["current_capability"]["sound_level"])
         self.assertTrue(contract["current_capability"]["acoustic_classification"])
+        self.assertTrue(contract["current_capability"]["continuous_live_monitoring"])
+        self.assertFalse(contract["current_capability"]["off_session_persistence"])
         for label in ("speech_like", "snore_like", "cough_like"):
             self.assertIn(label, encoded)
         self.assertNotIn("apnea", encoded.casefold())
@@ -80,6 +82,12 @@ class AcousticContractTests(unittest.TestCase):
         self.assertNotIn("candidate_label_groups", result)
         self.assertNotIn("validation", result)
         self.assertFalse(result["privacy"]["speaker_identity_processed"])
+        self.assertTrue(result["monitoring_policy"]["live_without_session"])
+        self.assertFalse(result["monitoring_policy"]["off_session_recording"])
+        self.assertEqual(
+            result["monitoring_policy"]["persistence"],
+            "recording_session_only",
+        )
 
     def test_invalid_or_stale_level_fails_soft(self) -> None:
         snapshot = live_snapshot(-41.2)

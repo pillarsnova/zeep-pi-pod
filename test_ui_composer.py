@@ -139,6 +139,8 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("ป้าย DSP เป็นผลทดลองสำหรับ Admin", template)
         self.assertIn('id="acousticLatestLabel"', template)
         self.assertIn("function renderAcousticIntelligence(data={})", template)
+        self.assertIn("function renderAcousticLiveObservation(data={})", template)
+        self.assertIn("Realtime · ไม่บันทึกเมื่อไม่มี Session", template)
         self.assertIn("function renderAcousticTimeline(data={})", template)
         self.assertIn("/api/v1/admin/acoustics/timeline", template)
         self.assertIn(

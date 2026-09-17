@@ -179,6 +179,11 @@ def build_acoustic_monitor_snapshot(
         "classification_state": (
             "provisional" if classification_active else "not_evaluated"
         ),
+        "monitoring_policy": {
+            "live_without_session": True,
+            "persistence": "recording_session_only",
+            "off_session_recording": False,
+        },
         "confidence_band": confidence_band,
         "observed_at": _observed_at(context, generated_at),
         "level": {

@@ -194,6 +194,8 @@ def acoustic_contract_snapshot() -> dict[str, Any]:
         "current_capability": {
             "sound_level": True,
             "packet_energy_aggregation": True,
+            "continuous_live_monitoring": True,
+            "off_session_persistence": False,
             "session_level_timeline": True,
             "level_pattern_events": True,
             "dsp_feature_telemetry": True,

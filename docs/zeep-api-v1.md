@@ -146,6 +146,12 @@ DSP event มี `start_epoch_s`, `end_epoch_s`, `confidence`, `confidence_band`
 หาก Firmware ยังไม่ส่ง DSP fields ระบบยังคืน Level Timeline ตามเดิมโดย
 `classification.state=insufficient_input`
 
+`GET /api/v1/admin/acoustics/live` คืนระดับเสียงและ optional DSP label ล่าสุดได้
+แม้ไม่มี Session สำหรับแสดง Real-time บน Monitor โดย `monitoring_policy` ระบุ
+`live_without_session=true`, `persistence=recording_session_only` และ
+`off_session_recording=false` ห้าม Client นำ Live observation นอก Session ไปสร้าง
+ประวัติเอง
+
 ## 1. รายการประวัติการใช้งาน
 
 `GET /api/v1/usage-sessions`

@@ -5762,13 +5762,36 @@ function renderAdaptiveLearning(data={}){
   renderAdaptiveFeatures(data);renderAdaptiveDecision(data);renderAdaptiveDevices(data);renderAdaptiveVersions(data);
 }
 
+let acousticLiveState={};
+
+function renderAcousticLiveObservation(data={}){
+  const level=data.level||{},shape=Array.isArray(data.results?.shapes)?data.results.shapes[0]:null;
+  const currentLevel=acousticFinite(level.sound_dba),confidence=acousticFinite(shape?.confidence);
+  document.getElementById('acousticStatusBadge').textContent=data.status==='dsp_shadow'?'SMART EAR · REALTIME':'SOUND · REALTIME';
+  document.getElementById('acousticAverage').textContent=currentLevel==null?'-- dBA':`${acousticFixed(currentLevel)} dBA`;
+  document.getElementById('acousticAverageMeta').textContent=currentLevel==null?'รอค่าจาก Sensor':'ค่าที่ตรวจได้ขณะนี้';
+  document.getElementById('acousticPeak').textContent='ไม่บันทึก';
+  document.getElementById('acousticPeakMeta').textContent='ZEEP ว่าง · แสดงผลสดเท่านั้น';
+  document.getElementById('acousticPattern').textContent=shape?.label||'กำลังตรวจสอบเสียง';
+  document.getElementById('acousticPatternMeta').textContent=shape
+    ?'ป้ายทดลองจาก DSP ณ เวลาปัจจุบัน'
+    :'ระบบทำงานต่อเนื่องและรอ DSP feature จาก ESP32';
+  document.getElementById('acousticLatestLabel').textContent=shape?.label||'ยังไม่มีป้ายเสียง';
+  document.getElementById('acousticLatestLabelMeta').textContent=shape
+    ?`ผลทดลอง · ความเชื่อมั่น ${Math.round((confidence||0)*100)}%`
+    :'Realtime · ไม่บันทึกเมื่อไม่มี Session';
+  document.getElementById('acousticCoverage').textContent='LIVE · ไม่บันทึก';
+}
+
 function renderAcousticIntelligence(data={}){
   const root=document.getElementById('acousticIntelligenceCard');if(!root)return;
+  acousticLiveState=data;
   const provenance=data.provenance||{};
   document.getElementById('acousticSoundSource').textContent=provenance.sound_source||'ESP32 sound_dba direct';
   document.getElementById('acousticFirmware').textContent=provenance.firmware_version||'ยังไม่ยืนยัน';
   document.getElementById('acousticContractVersion').textContent=data.contract_version||'contract --';
   document.getElementById('acousticGuardrail').textContent='ป้าย DSP เป็นผลทดลองสำหรับ Admin · ไม่บันทึก Raw audio · ไม่เปลี่ยน Sleep State หรือคะแนน';
+  if(!current?.session?.active)renderAcousticLiveObservation(data);
 }
 
 let acousticTimelineFetchedAt=0;
@@ -5893,6 +5916,7 @@ function renderAcousticTimeline(data={}){
   const summary=data.summary||{},pattern=summary.pattern||{},events=Array.isArray(data.events)?data.events:[];
   const classification=data.classification||{};
   const ready=data.status==='ready';
+  const sessionActive=Boolean(data.session?.active);
   const badgeLabels={ready:'LEVEL TIMELINE · LIVE',no_session:'รอ SESSION',waiting_for_recording:'รอเริ่มบันทึก',collecting:'กำลังสะสมข้อมูล',no_data:'ไม่มี SOUND DATA',stale:'ข้อมูลไม่อัปเดต'};
   document.getElementById('acousticStatusBadge').textContent=badgeLabels[data.status]||'LEVEL TIMELINE';
   document.getElementById('acousticAverage').textContent=summary.average_dba==null?'-- dBA':`${acousticFixed(summary.average_dba)} dBA`;
@@ -5924,6 +5948,7 @@ function renderAcousticTimeline(data={}){
   eventRoot.innerHTML=events.length?events.slice().reverse().map(event=>`<article class="${escapeMarkup(event.key||'unknown')}"><div><time>${escapeMarkup(acousticClock(event.start_epoch_s,{seconds:true}))}${Number(event.end_epoch_s)>Number(event.start_epoch_s)?`–${escapeMarkup(acousticClock(event.end_epoch_s,{seconds:true}))}`:''}</time><b>${escapeMarkup(event.label||'เหตุการณ์ระดับเสียง')}</b><span>${escapeMarkup(acousticEventDetail(event))}</span></div></article>`).join(''):`<div class="acoustic-empty">${escapeMarkup(data.message||'ยังไม่มีเหตุการณ์ระดับเสียง')}</div>`;
   document.getElementById('acousticDetectorVersion').textContent=data.detector?.version||'rule --';
   drawAcousticTimeline(data);
+  if(!sessionActive)renderAcousticLiveObservation(acousticLiveState);
 }
 
 function acousticTimelineUnavailable(message){
@@ -5939,7 +5964,7 @@ async function fetchAcousticTimeline({force=false}={}){
     acousticTimelineSessionId=liveSessionId;
     acousticTimelineFetchedAt=0;
     acousticTimelineLastSuccessAt=0;
-    renderAcousticTimeline({status:liveSessionId?'collecting':'no_session',message:liveSessionId?'กำลังโหลด Timeline ของ Session นี้':'ยังไม่มี Session ที่กำลังบันทึก',summary:{},timeline:{points:[]},events:[],event_summary:{counts:{}}});
+    renderAcousticTimeline({status:liveSessionId?'collecting':'no_session',message:liveSessionId?'กำลังโหลด Timeline ของ Session นี้':'Realtime ทำงานอยู่ · ไม่บันทึกเมื่อไม่มี Session',session:{active:Boolean(liveSessionId)},summary:{},timeline:{points:[]},events:[],event_summary:{counts:{}}});
     force=true;
   }
   const now=Date.now();

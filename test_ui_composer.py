@@ -136,11 +136,13 @@ class UiComposerTests(unittest.TestCase):
         ):
             self.assertIn(f'id="{element_id}"', template)
         self.assertIn("เหตุการณ์เสียงตลอด Session", template)
-        self.assertIn("ป้าย DSP เป็นผลทดลองสำหรับ Admin", template)
+        self.assertIn("Pi ตรวจเหตุการณ์จากระดับ dBA ได้ทันที", template)
         self.assertIn('id="acousticLatestLabel"', template)
         self.assertIn("function renderAcousticIntelligence(data={})", template)
         self.assertIn("function renderAcousticLiveObservation(data={})", template)
         self.assertIn("Realtime · ไม่บันทึกเมื่อไม่มี Session", template)
+        self.assertIn("const eventIcons={rapid_change:'↕'", template)
+        self.assertIn("เหตุการณ์จากระดับเสียง", template)
         self.assertIn("function renderAcousticTimeline(data={})", template)
         self.assertIn("/api/v1/admin/acoustics/timeline", template)
         self.assertIn(

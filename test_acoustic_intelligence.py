@@ -205,6 +205,10 @@ class AcousticTimelineTests(unittest.TestCase):
         keys = {event["key"] for event in result["events"]}
         self.assertIn("sustained_high", keys)
         self.assertIn("rapid_change", keys)
+        for event in result["events"]:
+            if event["category"] == "observed_level":
+                self.assertIn(event["marker"], {"↕", "≈"})
+                self.assertFalse(event["source_inference"])
         self.assertEqual(result["classification"]["sound_source"], "unknown")
         self.assertEqual(result["classification"]["human_sound"], "not_evaluated")
         self.assertFalse(any(result["impact"].values()))

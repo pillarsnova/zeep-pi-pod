@@ -1839,7 +1839,7 @@
     </section>
     <section class="card acoustic-shadow-card" id="acousticIntelligenceCard" data-pages="monitor" data-admin-panel aria-labelledby="acousticIntelligenceTitle">
       <div class="acoustic-card-head">
-        <div class="acoustic-card-title"><span class="acoustic-orb" aria-hidden="true">⌁</span><div><em>SMART EAR</em><h3 id="acousticIntelligenceTitle">เหตุการณ์เสียงตลอด Session</h3><p>แสดงสัญลักษณ์บน Timeline เมื่อ DSP พบรูปแบบเสียงที่ควรย้อนดู</p></div></div>
+        <div class="acoustic-card-title"><span class="acoustic-orb" aria-hidden="true">⌁</span><div><em>SMART EAR</em><h3 id="acousticIntelligenceTitle">เหตุการณ์เสียงตลอด Session</h3><p>วางป้ายตามเวลาเมื่อระดับเสียงเปลี่ยนเด่น ดังต่อเนื่อง หรือข้อมูลขาดช่วง</p></div></div>
         <span class="acoustic-status-badge" id="acousticStatusBadge">รอ SESSION</span>
       </div>
       <div class="acoustic-summary-grid" aria-live="polite">
@@ -1855,14 +1855,14 @@
             <title>กราฟระดับเสียงใน ZEEP</title>
             <desc>เริ่ม Session เพื่อดูระดับเสียงตามเวลา</desc>
           </svg>
-          <div class="acoustic-chart-legend"><span><i class="level-line"></i>ค่าจาก Sensor</span><span><i class="event-mark"></i>DSP event label</span><span><i class="gap-mark"></i>ข้อมูลขาดช่วง</span></div>
+          <div class="acoustic-chart-legend"><span><i class="level-line"></i>ค่าจาก Sensor</span><span><i class="event-mark"></i>เหตุการณ์จากระดับเสียง</span><span><i class="gap-mark"></i>ข้อมูลขาดช่วง</span></div>
         </section>
         <section class="acoustic-event-panel" aria-labelledby="acousticEventHeading">
           <header><div><b id="acousticEventHeading">ช่วงเสียงที่เด่น</b><span id="acousticEventSummary">ยังไม่พบเหตุการณ์</span></div></header>
           <div class="acoustic-event-list" id="acousticEventList"><div class="acoustic-empty" id="acousticEventEmpty">เริ่ม Session เพื่อดูเหตุการณ์ตามเวลา</div></div>
         </section>
       </div>
-      <div class="acoustic-guardrail" id="acousticGuardrail">ป้าย DSP เป็นผลทดลองสำหรับ Admin · ไม่บันทึก Raw audio · ไม่เปลี่ยน Sleep State หรือคะแนน</div>
+      <div class="acoustic-guardrail" id="acousticGuardrail">Pi ตรวจเหตุการณ์จากระดับ dBA ได้ทันที · ป้าย DSP เป็นข้อมูลเสริม · ไม่บันทึก Raw audio</div>
       <details class="acoustic-technical" id="acousticTechnicalDetails">
         <summary><span>ข้อมูลวิศวกรรม</span><small>Version, ขอบเขต และที่มาของข้อมูล</small><i aria-hidden="true">⌄</i></summary>
         <div class="acoustic-technical-grid">
@@ -1871,7 +1871,7 @@
           <div><span>Firmware</span><b id="acousticFirmware">ยังไม่ยืนยัน</b></div>
           <div><span>Contract</span><b id="acousticContractVersion">contract --</b></div>
           <div><span>Level detector</span><b id="acousticDetectorVersion">rule --</b></div>
-          <div><span>DSP classifier</span><b>ยังไม่เปิดใช้งาน</b></div>
+          <div><span>DSP classifier</span><b>ข้อมูลเสริมเมื่อ Firmware รองรับ</b></div>
           <div><span>ผลต่อคะแนน/Control</span><b>ไม่มี</b></div>
         </div>
         <p class="acoustic-metrology-note">ค่าเฉลี่ยคำนวณจากพลังงานของค่าที่ Sensor ส่งในแต่ละรอบ ไม่ใช่ค่า LAeq(A) จากเครื่องวัดที่ผ่านการรับรอง</p>
@@ -5790,7 +5790,7 @@ function renderAcousticIntelligence(data={}){
   document.getElementById('acousticSoundSource').textContent=provenance.sound_source||'ESP32 sound_dba direct';
   document.getElementById('acousticFirmware').textContent=provenance.firmware_version||'ยังไม่ยืนยัน';
   document.getElementById('acousticContractVersion').textContent=data.contract_version||'contract --';
-  document.getElementById('acousticGuardrail').textContent='ป้าย DSP เป็นผลทดลองสำหรับ Admin · ไม่บันทึก Raw audio · ไม่เปลี่ยน Sleep State หรือคะแนน';
+  document.getElementById('acousticGuardrail').textContent='Pi ตรวจเหตุการณ์จากระดับ dBA ได้ทันที · ป้าย DSP เป็นข้อมูลเสริม · ไม่บันทึก Raw audio';
   if(!current?.session?.active)renderAcousticLiveObservation(data);
 }
 
@@ -5884,11 +5884,13 @@ function drawAcousticTimeline(data={}){
       eventMarkers.push(`<g><circle cx="${markerX.toFixed(1)}" cy="${markerY}" r="10" fill="${color}" stroke="#071923" stroke-width="2"><title>${escapeMarkup(event.label||'DSP event')}</title></circle><text x="${markerX.toFixed(1)}" y="${markerY+3}" text-anchor="middle" fill="#06151d" font-size="${symbol.length>1?7:10}" font-weight="800">${escapeMarkup(symbol)}</text></g>`);
     }else if(event.key==='missing_data'){
       eventBands.push(`<rect x="${bandX.toFixed(1)}" y="${top}" width="${bandWidth.toFixed(1)}" height="${plotHeight}" fill="#708793" opacity=".13"/><line x1="${bandX.toFixed(1)}" y1="${top}" x2="${bandX.toFixed(1)}" y2="${height-bottom}" stroke="#8096a0" stroke-dasharray="4 4"/>`);
+      eventMarkers.push(`<g><circle cx="${bandX.toFixed(1)}" cy="${top+14}" r="10" fill="#718b96" stroke="#071923" stroke-width="2"/><text x="${bandX.toFixed(1)}" y="${top+17}" text-anchor="middle" fill="#06151d" font-size="10" font-weight="800">?</text></g>`);
     }else if(event.key==='sustained_high'){
       eventBands.push(`<rect x="${bandX.toFixed(1)}" y="${top}" width="${bandWidth.toFixed(1)}" height="${plotHeight}" rx="4" fill="#e8af47" opacity=".1"/>`);
+      eventMarkers.push(`<g><circle cx="${bandX.toFixed(1)}" cy="${top+14}" r="10" fill="#e8af47" stroke="#071923" stroke-width="2"/><text x="${bandX.toFixed(1)}" y="${top+17}" text-anchor="middle" fill="#06151d" font-size="11" font-weight="800">≈</text></g>`);
     }else if(event.key==='rapid_change'){
       const level=Number(event.to_dba),markerX=x(event.end_epoch_s),markerY=y(level);
-      if(Number.isFinite(level))eventMarkers.push(`<circle cx="${markerX.toFixed(1)}" cy="${markerY.toFixed(1)}" r="5" fill="#f1bc55" stroke="#071923" stroke-width="2"><title>${escapeMarkup(event.label||'ระดับเสียงเปลี่ยน')}</title></circle>`);
+      if(Number.isFinite(level))eventMarkers.push(`<g><circle cx="${markerX.toFixed(1)}" cy="${markerY.toFixed(1)}" r="10" fill="#f1bc55" stroke="#071923" stroke-width="2"><title>${escapeMarkup(event.label||'ระดับเสียงเปลี่ยน')}</title></circle><text x="${markerX.toFixed(1)}" y="${(markerY+3).toFixed(1)}" text-anchor="middle" fill="#06151d" font-size="10" font-weight="800">↕</text></g>`);
     }
   });
   const reference=(timeline.reference_lines||[]).map(line=>{
@@ -5945,7 +5947,8 @@ function renderAcousticTimeline(data={}){
     ?`${observed} ช่วง${dsp?` · DSP label ${dsp}`:''}${gaps?` · ข้อมูลขาด ${gaps} ช่วง`:''}${truncated}`
     :gaps?`ยังไม่พบการเปลี่ยนระดับเสียงเด่น · ข้อมูลขาด ${gaps} ช่วง`:'ยังไม่พบช่วงที่เด่นชัด';
   const eventRoot=document.getElementById('acousticEventList');
-  eventRoot.innerHTML=events.length?events.slice().reverse().map(event=>`<article class="${escapeMarkup(event.key||'unknown')}"><div><time>${escapeMarkup(acousticClock(event.start_epoch_s,{seconds:true}))}${Number(event.end_epoch_s)>Number(event.start_epoch_s)?`–${escapeMarkup(acousticClock(event.end_epoch_s,{seconds:true}))}`:''}</time><b>${escapeMarkup(event.label||'เหตุการณ์ระดับเสียง')}</b><span>${escapeMarkup(acousticEventDetail(event))}</span></div></article>`).join(''):`<div class="acoustic-empty">${escapeMarkup(data.message||'ยังไม่มีเหตุการณ์ระดับเสียง')}</div>`;
+  const eventIcons={rapid_change:'↕',sustained_high:'≈',missing_data:'?',snore_like:'Z',speech_like:'พูด',impact_like:'!',steady_equipment_like:'≈'};
+  eventRoot.innerHTML=events.length?events.slice().reverse().map(event=>`<article class="${escapeMarkup(event.key||'unknown')}"><i class="acoustic-event-icon" aria-hidden="true">${escapeMarkup(event.marker||eventIcons[event.key]||'•')}</i><div><time>${escapeMarkup(acousticClock(event.start_epoch_s,{seconds:true}))}${Number(event.end_epoch_s)>Number(event.start_epoch_s)?`–${escapeMarkup(acousticClock(event.end_epoch_s,{seconds:true}))}`:''}</time><b>${escapeMarkup(event.label||'เหตุการณ์ระดับเสียง')}</b><span>${escapeMarkup(acousticEventDetail(event))}</span></div></article>`).join(''):`<div class="acoustic-empty">${escapeMarkup(data.message||'ยังไม่มีเหตุการณ์ระดับเสียง')}</div>`;
   document.getElementById('acousticDetectorVersion').textContent=data.detector?.version||'rule --';
   drawAcousticTimeline(data);
   if(!sessionActive)renderAcousticLiveObservation(acousticLiveState);

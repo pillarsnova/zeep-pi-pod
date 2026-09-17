@@ -376,7 +376,7 @@ function renderAcousticIntelligence(data={}){
   document.getElementById('acousticSoundSource').textContent=provenance.sound_source||'ESP32 sound_dba direct';
   document.getElementById('acousticFirmware').textContent=provenance.firmware_version||'ยังไม่ยืนยัน';
   document.getElementById('acousticContractVersion').textContent=data.contract_version||'contract --';
-  document.getElementById('acousticGuardrail').textContent='ป้าย DSP เป็นผลทดลองสำหรับ Admin · ไม่บันทึก Raw audio · ไม่เปลี่ยน Sleep State หรือคะแนน';
+  document.getElementById('acousticGuardrail').textContent='Pi ตรวจเหตุการณ์จากระดับ dBA ได้ทันที · ป้าย DSP เป็นข้อมูลเสริม · ไม่บันทึก Raw audio';
   if(!current?.session?.active)renderAcousticLiveObservation(data);
 }
 
@@ -470,11 +470,13 @@ function drawAcousticTimeline(data={}){
       eventMarkers.push(`<g><circle cx="${markerX.toFixed(1)}" cy="${markerY}" r="10" fill="${color}" stroke="#071923" stroke-width="2"><title>${escapeMarkup(event.label||'DSP event')}</title></circle><text x="${markerX.toFixed(1)}" y="${markerY+3}" text-anchor="middle" fill="#06151d" font-size="${symbol.length>1?7:10}" font-weight="800">${escapeMarkup(symbol)}</text></g>`);
     }else if(event.key==='missing_data'){
       eventBands.push(`<rect x="${bandX.toFixed(1)}" y="${top}" width="${bandWidth.toFixed(1)}" height="${plotHeight}" fill="#708793" opacity=".13"/><line x1="${bandX.toFixed(1)}" y1="${top}" x2="${bandX.toFixed(1)}" y2="${height-bottom}" stroke="#8096a0" stroke-dasharray="4 4"/>`);
+      eventMarkers.push(`<g><circle cx="${bandX.toFixed(1)}" cy="${top+14}" r="10" fill="#718b96" stroke="#071923" stroke-width="2"/><text x="${bandX.toFixed(1)}" y="${top+17}" text-anchor="middle" fill="#06151d" font-size="10" font-weight="800">?</text></g>`);
     }else if(event.key==='sustained_high'){
       eventBands.push(`<rect x="${bandX.toFixed(1)}" y="${top}" width="${bandWidth.toFixed(1)}" height="${plotHeight}" rx="4" fill="#e8af47" opacity=".1"/>`);
+      eventMarkers.push(`<g><circle cx="${bandX.toFixed(1)}" cy="${top+14}" r="10" fill="#e8af47" stroke="#071923" stroke-width="2"/><text x="${bandX.toFixed(1)}" y="${top+17}" text-anchor="middle" fill="#06151d" font-size="11" font-weight="800">≈</text></g>`);
     }else if(event.key==='rapid_change'){
       const level=Number(event.to_dba),markerX=x(event.end_epoch_s),markerY=y(level);
-      if(Number.isFinite(level))eventMarkers.push(`<circle cx="${markerX.toFixed(1)}" cy="${markerY.toFixed(1)}" r="5" fill="#f1bc55" stroke="#071923" stroke-width="2"><title>${escapeMarkup(event.label||'ระดับเสียงเปลี่ยน')}</title></circle>`);
+      if(Number.isFinite(level))eventMarkers.push(`<g><circle cx="${markerX.toFixed(1)}" cy="${markerY.toFixed(1)}" r="10" fill="#f1bc55" stroke="#071923" stroke-width="2"><title>${escapeMarkup(event.label||'ระดับเสียงเปลี่ยน')}</title></circle><text x="${markerX.toFixed(1)}" y="${(markerY+3).toFixed(1)}" text-anchor="middle" fill="#06151d" font-size="10" font-weight="800">↕</text></g>`);
     }
   });
   const reference=(timeline.reference_lines||[]).map(line=>{
@@ -531,7 +533,8 @@ function renderAcousticTimeline(data={}){
     ?`${observed} ช่วง${dsp?` · DSP label ${dsp}`:''}${gaps?` · ข้อมูลขาด ${gaps} ช่วง`:''}${truncated}`
     :gaps?`ยังไม่พบการเปลี่ยนระดับเสียงเด่น · ข้อมูลขาด ${gaps} ช่วง`:'ยังไม่พบช่วงที่เด่นชัด';
   const eventRoot=document.getElementById('acousticEventList');
-  eventRoot.innerHTML=events.length?events.slice().reverse().map(event=>`<article class="${escapeMarkup(event.key||'unknown')}"><div><time>${escapeMarkup(acousticClock(event.start_epoch_s,{seconds:true}))}${Number(event.end_epoch_s)>Number(event.start_epoch_s)?`–${escapeMarkup(acousticClock(event.end_epoch_s,{seconds:true}))}`:''}</time><b>${escapeMarkup(event.label||'เหตุการณ์ระดับเสียง')}</b><span>${escapeMarkup(acousticEventDetail(event))}</span></div></article>`).join(''):`<div class="acoustic-empty">${escapeMarkup(data.message||'ยังไม่มีเหตุการณ์ระดับเสียง')}</div>`;
+  const eventIcons={rapid_change:'↕',sustained_high:'≈',missing_data:'?',snore_like:'Z',speech_like:'พูด',impact_like:'!',steady_equipment_like:'≈'};
+  eventRoot.innerHTML=events.length?events.slice().reverse().map(event=>`<article class="${escapeMarkup(event.key||'unknown')}"><i class="acoustic-event-icon" aria-hidden="true">${escapeMarkup(event.marker||eventIcons[event.key]||'•')}</i><div><time>${escapeMarkup(acousticClock(event.start_epoch_s,{seconds:true}))}${Number(event.end_epoch_s)>Number(event.start_epoch_s)?`–${escapeMarkup(acousticClock(event.end_epoch_s,{seconds:true}))}`:''}</time><b>${escapeMarkup(event.label||'เหตุการณ์ระดับเสียง')}</b><span>${escapeMarkup(acousticEventDetail(event))}</span></div></article>`).join(''):`<div class="acoustic-empty">${escapeMarkup(data.message||'ยังไม่มีเหตุการณ์ระดับเสียง')}</div>`;
   document.getElementById('acousticDetectorVersion').textContent=data.detector?.version||'rule --';
   drawAcousticTimeline(data);
   if(!sessionActive)renderAcousticLiveObservation(acousticLiveState);

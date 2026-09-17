@@ -26,7 +26,7 @@ stop_service
 restart_required=true
 assert_device_identity
 
-"$ESPTOOL" --port "$PORT" read_flash \
+"$ESPTOOL" --port "$PORT" --baud "$ESPTOOL_BAUD" read_flash \
   0 "$EXPECTED_FLASH_BYTES" "$IMAGE" \
   >"$OUTPUT_DIR/read-flash.log" 2>&1
 
@@ -37,7 +37,7 @@ actual_size="$(stat --format='%s' "$IMAGE")"
 }
 
 (cd "$OUTPUT_DIR" && sha256sum "$(basename "$IMAGE")" >SHA256SUMS)
-"$ESPTOOL" --port "$PORT" verify_flash 0 "$IMAGE" \
+"$ESPTOOL" --port "$PORT" --baud "$ESPTOOL_BAUD" verify_flash 0 "$IMAGE" \
   >"$OUTPUT_DIR/verify-flash.log" 2>&1
 
 {

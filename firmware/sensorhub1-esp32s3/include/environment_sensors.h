@@ -58,6 +58,7 @@ class EnvironmentSensors {
 
  private:
   struct SensorRuntime {
+    uint8_t address = 0;
     bool present = false;
     bool configured = false;
     bool has_measurement = false;
@@ -82,10 +83,10 @@ class EnvironmentSensors {
       uint32_t now_ms);
   SensorHealthSnapshot healthSnapshot(
       const SensorRuntime& runtime,
-      uint8_t address,
       uint32_t now_ms) const;
   bool writeCommand(uint8_t address, uint16_t command);
   bool readSht3x(
+      uint8_t address,
       float* temperature_c,
       float* humidity_rh,
       const char** reason);

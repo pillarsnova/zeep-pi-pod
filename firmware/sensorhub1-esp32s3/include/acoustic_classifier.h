@@ -22,8 +22,11 @@ struct AcousticFeatures {
   uint16_t spectral_frames = 0;
   uint16_t envelope_frames = 0;
   uint16_t transient_count = 0;
+  uint32_t window_ms = 10000;
+  uint32_t completed_ms = 0;
+  uint32_t sequence = 0;
   bool event_detected = false;
-  const char* model_version = "zeep-dsp-rule-v0.1-shadow";
+  const char* model_version = "zeep-dsp-rule-v0.2-bench";
 };
 
 class AcousticClassifier {

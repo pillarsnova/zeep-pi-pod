@@ -12,9 +12,15 @@ namespace zeep {
 namespace {
 
 constexpr uint32_t kSampleRateHz = 48000;
-constexpr uint32_t kWindowSamples = kSampleRateHz * 10;
+constexpr uint32_t kMeterWindowSamples = kSampleRateHz;
+constexpr uint32_t kAcousticWindowSamples = kSampleRateHz * 10;
 constexpr size_t kReadSamples = 1024;
-constexpr float kFullScale24 = 8388607.0F;
+// SPH0645 sends an 18-bit two's-complement result in a 24-bit I2S word.
+// ESP32-S3 receives that word MSB-aligned in a 32-bit DMA slot, leaving
+// fourteen padding bits. Normalize against the signed 18-bit full scale.
+constexpr uint8_t kPcmPaddingBits = 14;
+constexpr uint32_t kPcmPaddingMask = (1UL << kPcmPaddingBits) - 1;
+constexpr float kFullScale18 = 131071.0F;
 constexpr float kReferenceSplDb = 94.0F;
 constexpr float kSensitivityDbfs = -26.0F;
 constexpr float kSineRmsCorrectionDb = 3.0102999566F;
@@ -95,9 +101,10 @@ uint32_t accumulated_samples = 0;
 uint32_t clipped_samples = 0;
 uint32_t zero_samples = 0;
 uint32_t repeated_samples = 0;
+uint32_t alignment_errors = 0;
 uint32_t read_errors = 0;
 uint32_t window_started_ms = 0;
-int32_t previous_sample_24 = 0;
+int32_t previous_sample_18 = 0;
 bool has_previous_sample = false;
 
 double dcBlock(double input) {
@@ -121,10 +128,12 @@ float dbfsFromRms(double rms) {
 bool AudioMeter::begin() {
   preferences.begin("zeep-sound", false);
   calibration_offset_db_ = preferences.getFloat("offset-db", 0.0F);
+  calibration_valid_ = preferences.getBool("calibrated", false);
   if (!isfinite(calibration_offset_db_) ||
       calibration_offset_db_ < -30.0F ||
       calibration_offset_db_ > 30.0F) {
     calibration_offset_db_ = 0.0F;
+    calibration_valid_ = false;
   }
 
   i2s_config_t i2s_config = {};
@@ -191,11 +200,35 @@ bool AudioMeter::setCalibrationOffset(float offset_db) {
   if (!isfinite(offset_db) || offset_db < -30.0F || offset_db > 30.0F) {
     return false;
   }
+  // Mark the record uncalibrated before changing the value. If power is lost
+  // between writes, the next boot will expose the reading as uncalibrated
+  // instead of trusting a partially committed pair.
+  if (preferences.putBool("calibrated", false) == 0) {
+    return false;
+  }
   if (preferences.putFloat("offset-db", offset_db) != sizeof(float)) {
+    return false;
+  }
+  if (preferences.putBool("calibrated", true) == 0) {
     return false;
   }
   portENTER_CRITICAL(&result_lock_);
   calibration_offset_db_ = offset_db;
+  calibration_valid_ = true;
+  portEXIT_CRITICAL(&result_lock_);
+  return true;
+}
+
+bool AudioMeter::resetCalibration() {
+  const bool state_saved = preferences.putBool("calibrated", false) != 0;
+  const bool offset_saved = state_saved &&
+      preferences.putFloat("offset-db", 0.0F) == sizeof(float);
+  if (!offset_saved || !state_saved) {
+    return false;
+  }
+  portENTER_CRITICAL(&result_lock_);
+  calibration_offset_db_ = 0.0F;
+  calibration_valid_ = false;
   portEXIT_CRITICAL(&result_lock_);
   return true;
 }
@@ -203,6 +236,13 @@ bool AudioMeter::setCalibrationOffset(float offset_db) {
 float AudioMeter::calibrationOffset() const {
   portENTER_CRITICAL(&result_lock_);
   const float value = calibration_offset_db_;
+  portEXIT_CRITICAL(&result_lock_);
+  return value;
+}
+
+bool AudioMeter::isCalibrated() const {
+  portENTER_CRITICAL(&result_lock_);
+  const bool value = calibration_valid_;
   portEXIT_CRITICAL(&result_lock_);
   return value;
 }
@@ -274,10 +314,15 @@ void AudioMeter::readTask() {
       if (accumulated_samples == 0) {
         window_started_ms = millis();
       }
-      // ESP-IDF Philips standard format resolves the one-bit I2S delay. The
-      // SPH0645 24-bit word is MSB-aligned in the 32-bit DMA slot.
-      const int32_t sample_24 = samples[index] >> 8;
-      const double normalized = static_cast<double>(sample_24) / kFullScale24;
+      // Philips mode resolves the one-bit I2S delay. SPH0645 provides
+      // 18 significant bits inside its 24-bit word; the 32-bit DMA slot is
+      // therefore reduced by fourteen padding bits.
+      const int32_t raw_sample = samples[index];
+      if ((static_cast<uint32_t>(raw_sample) & kPcmPaddingMask) != 0) {
+        ++alignment_errors;
+      }
+      const int32_t sample_18 = raw_sample >> kPcmPaddingBits;
+      const double normalized = static_cast<double>(sample_18) / kFullScale18;
       const double unweighted = dcBlock(normalized);
       acoustic_classifier_.addSample(
           static_cast<float>(normalized),
@@ -285,6 +330,15 @@ void AudioMeter::readTask() {
       double weighted = a_weighting_1.process(unweighted);
       weighted = a_weighting_2.process(weighted);
       weighted = a_weighting_3.process(weighted);
+
+      acoustic_sum_square_ += unweighted * unweighted;
+      acoustic_sum_square_a_ += weighted * weighted;
+      acoustic_peak_ = std::max(
+          acoustic_peak_,
+          static_cast<float>(std::abs(normalized)));
+      if (++acoustic_samples_ >= kAcousticWindowSamples) {
+        publishAcousticAccumulator();
+      }
 
       sum_square_unweighted += unweighted * unweighted;
       sum_square_a_weighted += weighted * weighted;
@@ -294,17 +348,17 @@ void AudioMeter::readTask() {
       if (std::abs(normalized) >= kClipThreshold) {
         ++clipped_samples;
       }
-      if (sample_24 == 0) {
+      if (sample_18 == 0) {
         ++zero_samples;
       }
-      if (has_previous_sample && sample_24 == previous_sample_24) {
+      if (has_previous_sample && sample_18 == previous_sample_18) {
         ++repeated_samples;
       }
-      previous_sample_24 = sample_24;
+      previous_sample_18 = sample_18;
       has_previous_sample = true;
       ++accumulated_samples;
 
-      if (accumulated_samples >= kWindowSamples) {
+      if (accumulated_samples >= kMeterWindowSamples) {
         publishAccumulator();
       }
     }
@@ -322,8 +376,10 @@ void AudioMeter::publishAccumulator() {
   window.zero_samples = zero_samples;
   window.read_errors = read_errors;
   window.repeated_samples = repeated_samples;
+  window.alignment_errors = alignment_errors;
   window.peak = peak_normalized;
   window.calibration_offset_db = calibrationOffset();
+  window.dba_calibrated = isCalibrated();
   window.completed_ms = millis();
 
   const double rms = std::sqrt(
@@ -337,10 +393,7 @@ void AudioMeter::publishAccumulator() {
                     kSineRmsCorrectionDb +
                     window.a_weighted_dbfs +
                     window.calibration_offset_db;
-  window.acoustic = acoustic_classifier_.finish(
-      window.laeq_dba,
-      window.rms,
-      window.peak);
+  window.acoustic = latest_acoustic_;
 
   const float clip_ratio = static_cast<float>(clipped_samples) /
                            accumulated_samples;
@@ -355,8 +408,10 @@ void AudioMeter::publishAccumulator() {
     window.invalid_reason = "non_finite";
   } else if (read_errors > 0) {
     window.invalid_reason = "i2s_read_error";
-  } else if (window.wall_window_ms < 9000 || window.wall_window_ms > 11000) {
+  } else if (window.wall_window_ms < 900 || window.wall_window_ms > 1100) {
     window.invalid_reason = "sample_clock_mismatch";
+  } else if (alignment_errors > 0) {
+    window.invalid_reason = "pcm_alignment_error";
   } else if (clip_ratio > kMaxClipRatio) {
     window.invalid_reason = "clipping";
   } else if (zero_ratio > kMaxZeroRatio) {
@@ -378,9 +433,28 @@ void AudioMeter::publishAccumulator() {
   last_measurement_valid_ = window.valid;
   portEXIT_CRITICAL(&result_lock_);
 
-  // Keep DC-blocker and A-weighting history across adjacent windows. Resetting
-  // the IIR state every 10 seconds creates an artificial filter transient.
+  // Keep DC-blocker, A-weighting and DSP history across adjacent one-second
+  // meter windows. Resetting filter state creates artificial transients.
   resetWindowAccumulator();
+}
+
+void AudioMeter::publishAcousticAccumulator() {
+  const double rms = std::sqrt(
+      acoustic_sum_square_ / acoustic_samples_);
+  const double a_weighted_rms = std::sqrt(
+      acoustic_sum_square_a_ / acoustic_samples_);
+  const float dbfs_a = dbfsFromRms(a_weighted_rms);
+  const float laeq_dba = kReferenceSplDb - kSensitivityDbfs +
+      kSineRmsCorrectionDb + dbfs_a + calibrationOffset();
+  AcousticFeatures features = acoustic_classifier_.finish(
+      laeq_dba,
+      static_cast<float>(rms),
+      acoustic_peak_);
+  features.window_ms = 1000ULL * acoustic_samples_ / kSampleRateHz;
+  features.completed_ms = millis();
+  features.sequence = ++acoustic_sequence_;
+  latest_acoustic_ = features;
+  resetAcousticAccumulator();
 }
 
 void AudioMeter::resetWindowAccumulator() {
@@ -391,19 +465,29 @@ void AudioMeter::resetWindowAccumulator() {
   clipped_samples = 0;
   zero_samples = 0;
   repeated_samples = 0;
+  alignment_errors = 0;
   read_errors = 0;
   window_started_ms = 0;
+}
+
+void AudioMeter::resetAcousticAccumulator() {
+  acoustic_samples_ = 0;
+  acoustic_sum_square_ = 0.0;
+  acoustic_sum_square_a_ = 0.0;
+  acoustic_peak_ = 0.0F;
   acoustic_classifier_.reset();
 }
 
 void AudioMeter::resetSignalState() {
-  previous_sample_24 = 0;
+  previous_sample_18 = 0;
   has_previous_sample = false;
   dc_previous_input = 0.0;
   dc_previous_output = 0.0;
   a_weighting_1.reset();
   a_weighting_2.reset();
   a_weighting_3.reset();
+  latest_acoustic_ = AcousticFeatures{};
+  resetAcousticAccumulator();
 }
 
 void AudioMeter::recoverStream() {

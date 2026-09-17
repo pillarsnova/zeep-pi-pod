@@ -49,8 +49,10 @@ bool EnvironmentSensors::begin() {
   }
   Wire.setTimeOut(board::kI2cTransactionTimeoutMs);
 
-  probeSht3x(now_ms);
-  probeOpt3001(millis());
+  // Identify OPT first by its TI manufacturer/device registers. SHT3x shares
+  // possible addresses 0x44/0x45, so protocol identity must disambiguate it.
+  probeOpt3001(now_ms);
+  probeSht3x(millis());
   last_poll_ms_ = millis();
   poll_started_ = true;
 
@@ -86,10 +88,8 @@ EnvironmentSnapshot EnvironmentSensors::snapshot(uint32_t now_ms) const {
   result.captured_ms = now_ms;
   result.i2c_bus_ready = bus_ready_;
   result.i2c_recovery_count = i2c_recovery_count_;
-  result.sht3x.health = healthSnapshot(
-      sht3x_runtime_, board::kSht3xAddress, now_ms);
-  result.opt3001.health = healthSnapshot(
-      opt3001_runtime_, board::kOpt3001Address, now_ms);
+  result.sht3x.health = healthSnapshot(sht3x_runtime_, now_ms);
+  result.opt3001.health = healthSnapshot(opt3001_runtime_, now_ms);
 
   if (result.sht3x.health.measurement_valid &&
       result.sht3x.health.fresh) {
@@ -120,24 +120,33 @@ EnvironmentReading EnvironmentSensors::read() {
 
 void EnvironmentSensors::probeSht3x(uint32_t now_ms) {
   sht3x_runtime_.last_attempt_ok = false;
-  if (!writeCommand(board::kSht3xAddress, 0x30A2)) {
-    sht3x_runtime_.present = false;
-    sht3x_runtime_.configured = false;
-    recordFailure(&sht3x_runtime_, "sht_probe_failed", now_ms);
-    return;
-  }
-
-  delay(3);
+  uint8_t detected_address = 0;
   float temperature_c = NAN;
   float humidity_rh = NAN;
-  const char* reason = "sht_read_failed";
-  if (!readSht3x(&temperature_c, &humidity_rh, &reason)) {
+  const char* reason = "sht_probe_failed";
+  for (const uint8_t address : board::kSht3xAddresses) {
+    if (address == opt3001_runtime_.address) {
+      continue;
+    }
+    if (!writeCommand(address, 0x30A2)) {
+      continue;
+    }
+    delay(3);
+    if (readSht3x(
+            address, &temperature_c, &humidity_rh, &reason)) {
+      detected_address = address;
+      break;
+    }
+  }
+  if (detected_address == 0) {
     sht3x_runtime_.present = false;
     sht3x_runtime_.configured = false;
-    recordFailure(&sht3x_runtime_, reason, millis());
+    sht3x_runtime_.address = 0;
+    recordFailure(&sht3x_runtime_, reason, now_ms);
     return;
   }
 
+  sht3x_runtime_.address = detected_address;
   sht3x_runtime_.present = true;
   sht3x_runtime_.configured = true;
   temperature_c_ = temperature_c;
@@ -149,36 +158,34 @@ void EnvironmentSensors::probeOpt3001(uint32_t now_ms) {
   opt3001_runtime_.last_attempt_ok = false;
   uint16_t manufacturer_id = 0;
   uint16_t device_id = 0;
-  if (!readRegister(
-          board::kOpt3001Address,
-          kOptManufacturerRegister,
-          &manufacturer_id) ||
-      !readRegister(
-          board::kOpt3001Address,
-          kOptDeviceIdRegister,
-          &device_id)) {
+  uint8_t detected_address = 0;
+  for (const uint8_t address : board::kOpt3001Addresses) {
+    if (readRegister(address, kOptManufacturerRegister, &manufacturer_id) &&
+        readRegister(address, kOptDeviceIdRegister, &device_id) &&
+        manufacturer_id == kOptManufacturerId &&
+        device_id == kOptDeviceId) {
+      detected_address = address;
+      break;
+    }
+  }
+  if (detected_address == 0) {
     opt3001_runtime_.present = false;
     opt3001_runtime_.configured = false;
+    opt3001_runtime_.address = 0;
     recordFailure(
         &opt3001_runtime_, "opt_identity_read_failed", now_ms);
     return;
   }
-  if (manufacturer_id != kOptManufacturerId || device_id != kOptDeviceId) {
-    opt3001_runtime_.present = false;
-    opt3001_runtime_.configured = false;
-    recordFailure(
-        &opt3001_runtime_, "opt_identity_mismatch", now_ms);
-    return;
-  }
 
   opt3001_runtime_.present = true;
+  opt3001_runtime_.address = detected_address;
   uint16_t config_readback = 0;
   const bool configured = writeRegister(
-      board::kOpt3001Address,
+      detected_address,
       kOptConfigurationRegister,
       kOptContinuousAutomatic800Ms);
   const bool readback_ok = configured && readRegister(
-      board::kOpt3001Address,
+      detected_address,
       kOptConfigurationRegister,
       &config_readback);
   const bool config_matches = readback_ok &&
@@ -208,7 +215,11 @@ void EnvironmentSensors::pollSht3x(uint32_t now_ms) {
   float temperature_c = NAN;
   float humidity_rh = NAN;
   const char* reason = "sht_read_failed";
-  if (!readSht3x(&temperature_c, &humidity_rh, &reason)) {
+  if (!readSht3x(
+          sht3x_runtime_.address,
+          &temperature_c,
+          &humidity_rh,
+          &reason)) {
     recordFailure(&sht3x_runtime_, reason, now_ms);
     return;
   }
@@ -300,10 +311,9 @@ void EnvironmentSensors::recordFailure(
 
 SensorHealthSnapshot EnvironmentSensors::healthSnapshot(
     const SensorRuntime& runtime,
-    uint8_t address,
     uint32_t now_ms) const {
   SensorHealthSnapshot health;
-  health.address = address;
+  health.address = runtime.address;
   health.present = runtime.present;
   health.measurement_valid = runtime.has_measurement &&
                              runtime.present &&
@@ -349,17 +359,18 @@ bool EnvironmentSensors::writeCommand(uint8_t address, uint16_t command) {
 }
 
 bool EnvironmentSensors::readSht3x(
+    uint8_t address,
     float* temperature_c,
     float* humidity_rh,
     const char** reason) {
-  if (!writeCommand(board::kSht3xAddress, kShtSingleShotHighRepeatability)) {
+  if (!writeCommand(address, kShtSingleShotHighRepeatability)) {
     *reason = "sht_command_failed";
     return false;
   }
   delay(20);
   constexpr size_t kResponseBytes = 6;
   const size_t received = Wire.requestFrom(
-      static_cast<int>(board::kSht3xAddress),
+      static_cast<int>(address),
       static_cast<int>(kResponseBytes));
   if (received != kResponseBytes) {
     while (Wire.available()) {
@@ -397,7 +408,7 @@ bool EnvironmentSensors::readSht3x(
 bool EnvironmentSensors::readOpt3001(float* lux, const char** reason) {
   uint16_t configuration = 0;
   if (!readRegister(
-          board::kOpt3001Address,
+          opt3001_runtime_.address,
           kOptConfigurationRegister,
           &configuration)) {
     *reason = "opt_config_read_failed";
@@ -414,7 +425,7 @@ bool EnvironmentSensors::readOpt3001(float* lux, const char** reason) {
   }
 
   uint16_t raw = 0;
-  if (!readRegister(board::kOpt3001Address, kOptResultRegister, &raw)) {
+  if (!readRegister(opt3001_runtime_.address, kOptResultRegister, &raw)) {
     *reason = "opt_result_read_failed";
     return false;
   }

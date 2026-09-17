@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import math
 import pathlib
 import unittest
 
@@ -13,9 +15,29 @@ SPEC.loader.exec_module(MODULE)
 
 
 class CemCalibrationTests(unittest.TestCase):
-    def test_cli_workflow_is_retired(self) -> None:
-        with self.assertRaisesRegex(SystemExit, "archived firmware calibration"):
-            MODULE.main()
+    def test_ten_one_second_windows_are_energy_averaged(self) -> None:
+        class Port:
+            packets = [
+                {
+                    "event": "environment",
+                    "sequence": sequence,
+                    "sound_window_ms": 1000,
+                    "sound_valid": True,
+                    "sound_weighting": "A",
+                    "sound_metric": "LAeq",
+                    "sound_laeq_dba": level,
+                }
+                for sequence, level in enumerate([40.0] * 5 + [50.0] * 5)
+            ]
+
+            def readline(self) -> bytes:
+                return (json.dumps(self.packets.pop(0)) + "\n").encode()
+
+        result = MODULE.read_firmware_window(Port())
+        expected = 10.0 * math.log10((10.0**4 + 10.0**5) / 2.0)
+        self.assertAlmostEqual(result["sound_laeq_dba"], expected)
+        self.assertEqual(result["source_window_count"], 10)
+        self.assertEqual(result["aggregate_window_ms"], 10_000)
 
     def test_consistent_offset_passes(self) -> None:
         pairs = []

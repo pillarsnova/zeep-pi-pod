@@ -15,7 +15,8 @@ namespace {
 
 constexpr const char* kTelemetrySchema = "zeep.sensor.telemetry";
 constexpr const char* kTelemetryVersion = "1.0";
-constexpr uint32_t kSoundWindowFreshMs = 15000;
+constexpr uint32_t kSoundWindowFreshMs = 2500;
+constexpr uint32_t kAcousticWindowFreshMs = 15000;
 
 bool deadlineElapsed(
     uint32_t now_ms,
@@ -147,15 +148,24 @@ void addSoundTelemetry(
   values["sound_samples"] = sound.sample_count;
   values["sound_sample_rate_hz"] = 48000;
   values["sound_calibration_offset_db"] = sound.calibration_offset_db;
+  values["sound_dba_calibrated"] = sound.dba_calibrated;
+  values["sound_calibration_model"] = "sph0645-datasheet-plus-cem-v1";
+  values["sound_reference_spl_db"] = 94.0F;
+  values["sound_sensitivity_dbfs"] = -26.0F;
+  values["sound_rms_correction_db"] = 3.0102999566F;
   values["sound_clipped_samples"] = sound.clipped_samples;
   values["sound_zero_samples"] = sound.zero_samples;
   values["sound_repeated_samples"] = sound.repeated_samples;
+  values["sound_alignment_errors"] = sound.alignment_errors;
   values["sound_read_errors"] = sound.read_errors;
   addNumberOrNull(values, "sound_clip_ratio", sound.clip_ratio);
   addNumberOrNull(values, "sound_zero_ratio", sound.zero_ratio);
   addNumberOrNull(values, "sound_repeated_ratio", sound.repeated_ratio);
   values["sound_window_sequence"] = sound.sequence;
-  const bool acoustic_valid = measurement_live && sound.acoustic.valid;
+  const bool acoustic_fresh = sound.acoustic.completed_ms != 0 &&
+      now_ms - sound.acoustic.completed_ms <= kAcousticWindowFreshMs;
+  const bool acoustic_valid = measurement_live && acoustic_fresh &&
+      sound.acoustic.valid;
   values["sound_class"] = acoustic_valid ? sound.acoustic.label : "unknown";
   values["sound_class_state"] = acoustic_valid ? "provisional" :
       "insufficient_input";
@@ -187,6 +197,14 @@ void addSoundTelemetry(
   values["sound_spectral_frames"] = sound.acoustic.spectral_frames;
   values["sound_envelope_frames"] = sound.acoustic.envelope_frames;
   values["sound_transient_count"] = sound.acoustic.transient_count;
+  values["sound_feature_window_ms"] = sound.acoustic.window_ms;
+  values["sound_feature_sequence"] = sound.acoustic.sequence;
+  if (sound.acoustic.completed_ms == 0) {
+    values["sound_feature_age_ms"] = nullptr;
+  } else {
+    values["sound_feature_age_ms"] =
+        now_ms - sound.acoustic.completed_ms;
+  }
   values["sound_feature_coverage"] = acoustic_valid ? 1.0F : 0.0F;
   const char* invalid_reason =
       sound.invalid_reason == nullptr ? "unknown" : sound.invalid_reason;
@@ -233,7 +251,8 @@ void addLegacyFields(
     JsonObject document,
     const zeep::EnvironmentSnapshot& environment,
     const zeep::SoundWindow& sound,
-    bool sound_live) {
+    bool sound_live,
+    uint32_t now_ms) {
   const bool sht_usable = environmentUsable(environment.sht3x.health);
   const bool opt_usable = environmentUsable(environment.opt3001.health);
   addNumberOrNull(
@@ -252,10 +271,14 @@ void addLegacyFields(
   addNumberOrNull(document, "sound_laeq_dba", sound.laeq_dba);
   addNumberOrNull(document, "sound_dba", sound.laeq_dba);
   document["sound_valid"] = sound.valid;
+  document["sound_dba_calibrated"] = sound.dba_calibrated;
   document["sound_weighting"] = "A";
   document["sound_metric"] = "LAeq";
   document["sound_window_ms"] = sound.window_ms;
-  const bool acoustic_valid = sound.valid && sound.acoustic.valid;
+  const bool acoustic_fresh = sound.acoustic.completed_ms != 0 &&
+      now_ms - sound.acoustic.completed_ms <= kAcousticWindowFreshMs;
+  const bool acoustic_valid = sound.valid && acoustic_fresh &&
+      sound.acoustic.valid;
   document["sound_class"] = acoustic_valid ? sound.acoustic.label : "unknown";
   document["sound_class_state"] = acoustic_valid ? "provisional" :
       "insufficient_input";
@@ -279,11 +302,12 @@ zeep::SoundWindow currentSoundWindow(
     bool has_sound_window,
     uint32_t now_ms,
     const zeep::AudioHealth& audio_health,
-    float calibration_offset_db) {
+    float calibration_offset_db,
+    bool dba_calibrated) {
   if (has_sound_window &&
       now_ms - latest_sound.completed_ms <= kSoundWindowFreshMs) {
-    // A completed 10-second window remains current for 15 seconds. Reusing it
-    // once around a scheduler boundary avoids a false invalid pulse when the
+    // A completed one-second meter window remains current briefly. Reusing it
+    // around a scheduler boundary avoids a false invalid pulse when the
     // audio task completes a few milliseconds after the telemetry deadline.
     return latest_sound;
   }
@@ -293,6 +317,7 @@ zeep::SoundWindow currentSoundWindow(
   unavailable.window_ms = zeep::board::kPublishPeriodMs;
   unavailable.wall_window_ms = zeep::board::kPublishPeriodMs;
   unavailable.calibration_offset_db = calibration_offset_db;
+  unavailable.dba_calibrated = dba_calibrated;
   if (!audio_health.driver_ready) {
     unavailable.invalid_reason = "i2s_driver_unavailable";
   } else if (!audio_health.task_running) {
@@ -333,7 +358,8 @@ void TelemetryPublisher::publishTelemetry(uint32_t now_ms) {
       has_sound_window_,
       now_ms,
       audio_health,
-      audio_meter_.calibrationOffset());
+      audio_meter_.calibrationOffset(),
+      audio_meter_.isCalibrated());
 
   JsonDocument document;
   document["schema"] = kTelemetrySchema;
@@ -378,7 +404,7 @@ void TelemetryPublisher::publishTelemetry(uint32_t now_ms) {
   hub_diagnostics["i2c_bus_ready"] = environment.i2c_bus_ready;
   hub_diagnostics["i2c_recovery_count"] = environment.i2c_recovery_count;
   addLegacyFields(
-      document.as<JsonObject>(), environment, sound, sound_ready);
+      document.as<JsonObject>(), environment, sound, sound_ready, now_ms);
 
   serializeJson(document, Serial);
   Serial.println();
@@ -402,14 +428,27 @@ void TelemetryPublisher::publishBootStatus(const char* event) {
   document["publish_period_ms"] = board::kPublishPeriodMs;
   document["sound_calibration_offset_db"] =
       audio_meter_.calibrationOffset();
+  document["sound_dba_calibrated"] = audio_meter_.isCalibrated();
 
   JsonObject inventory = document["inventory"].to<JsonObject>();
   JsonObject sht = inventory["sht3x_dis"].to<JsonObject>();
-  sht["address"] = "0x45";
+  char sht_address[5];
+  snprintf(
+      sht_address,
+      sizeof(sht_address),
+      "0x%02X",
+      environment.sht3x.health.address);
+  sht["address"] = sht_address;
   sht["present"] = environment.sht3x.health.present;
   sht["reason"] = environment.sht3x.health.reason;
   JsonObject opt = inventory["opt3001"].to<JsonObject>();
-  opt["address"] = "0x44";
+  char opt_address[5];
+  snprintf(
+      opt_address,
+      sizeof(opt_address),
+      "0x%02X",
+      environment.opt3001.health.address);
+  opt["address"] = opt_address;
   opt["present"] = environment.opt3001.health.present;
   opt["reason"] = environment.opt3001.health.reason;
   JsonObject mic = inventory["sph0645"].to<JsonObject>();
@@ -461,7 +500,7 @@ void TelemetryPublisher::handleCommand(String command) {
     return;
   }
   if (command == "CAL SOUND RESET") {
-    publishCalibrationResponse(audio_meter_.setCalibrationOffset(0.0F));
+    publishCalibrationResponse(audio_meter_.resetCalibration());
     return;
   }
 

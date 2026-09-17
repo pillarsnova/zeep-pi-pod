@@ -54,8 +54,14 @@ def _sanitize_sound_diagnostics(result: dict[str, Any]) -> None:
         "sound_samples",
         "sound_window_ms",
         "sound_calibration_offset_db",
-        "sound_dba_calibrated",
+        "sound_reference_spl_db",
+        "sound_sensitivity_dbfs",
+        "sound_rms_correction_db",
         "sound_laeq_dba",
+        "sound_feature_window_ms",
+        "sound_feature_sequence",
+        "sound_feature_age_ms",
+        "sound_alignment_errors",
     ):
         value = result.get(key)
         if not isinstance(value, (int, float)) or isinstance(value, bool):

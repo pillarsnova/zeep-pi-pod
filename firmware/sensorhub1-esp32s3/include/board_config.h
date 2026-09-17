@@ -13,8 +13,10 @@ constexpr gpio_num_t kMicData = GPIO_NUM_13;
 constexpr gpio_num_t kI2cSda = GPIO_NUM_8;
 constexpr gpio_num_t kI2cScl = GPIO_NUM_9;
 
-constexpr uint8_t kSht3xAddress = 0x45;
-constexpr uint8_t kOpt3001Address = 0x44;
+// Both devices have strap-selectable addresses. Runtime identification must
+// use the manufacturer protocol (OPT IDs / SHT CRC), not assume defaults.
+constexpr uint8_t kSht3xAddresses[] = {0x44, 0x45};
+constexpr uint8_t kOpt3001Addresses[] = {0x44, 0x45, 0x46, 0x47};
 constexpr uint32_t kI2cClockHz = 400000;
 constexpr uint16_t kI2cTransactionTimeoutMs = 50;
 
@@ -28,6 +30,9 @@ constexpr uint32_t kI2cBusRecoveryPeriodMs = 30000;
 constexpr uint8_t kEnvironmentFailuresBeforeReprobe = 3;
 
 constexpr uint32_t kSerialBaud = 115200;
-constexpr uint32_t kPublishPeriodMs = 10000;
+// The hub remains visibly alive at one packet per second. Pi-side health and
+// session aggregation may downsample independently; DSP features keep their
+// own ten-second window metadata.
+constexpr uint32_t kPublishPeriodMs = 1000;
 
 }  // namespace zeep::board

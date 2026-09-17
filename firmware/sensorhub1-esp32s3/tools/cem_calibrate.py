@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Collect paired 10-second SPH0645/CEM readings and issue a gate result."""
+"""Collect paired SPH0645/CEM readings and issue a bench gate result."""
 
 from __future__ import annotations
 
@@ -15,15 +15,13 @@ from typing import Any
 
 
 TARGET_LEVELS = (35, 45, 55, 65)
-RETIRED_REASON = (
-    "archived firmware calibration workflow: Pi now consumes the installed "
-    "ESP32 sound_dba field directly"
-)
+FIRMWARE_WINDOWS_PER_PAIR = 10
 
 
 def read_firmware_window(port: Any) -> dict:
     deadline = time.monotonic() + 45.0
     last_invalid_reason = "no_packet"
+    accepted: list[dict[str, Any]] = []
     while time.monotonic() < deadline:
         raw = port.readline().decode("utf-8", errors="replace").strip()
         if not raw:
@@ -34,26 +32,46 @@ def read_firmware_window(port: Any) -> dict:
             continue
         if packet.get("event") != "environment":
             continue
-        if packet.get("sound_window_ms") != 10_000:
-            last_invalid_reason = "window_is_not_10_seconds"
+        values = packet
+        sensors = packet.get("sensors")
+        if isinstance(sensors, dict):
+            microphone = sensors.get("sph0645")
+            if isinstance(microphone, dict) and isinstance(
+                microphone.get("values"), dict
+            ):
+                values = microphone["values"]
+        if values.get("sound_window_ms") != 1_000:
+            last_invalid_reason = "window_is_not_one_second"
             continue
-        if packet.get("sound_valid") is not True:
+        if values.get("sound_valid") is not True:
             last_invalid_reason = str(
-                packet.get("sound_invalid_reason", "firmware_invalid")
+                values.get("sound_invalid_reason", "firmware_invalid")
             )
             continue
-        if packet.get("sound_weighting") != "A":
+        if values.get("sound_weighting") != "A":
             last_invalid_reason = "weighting_is_not_A"
             continue
-        if str(packet.get("sound_metric", "")).upper() != "LAEQ":
+        if str(values.get("sound_metric", "")).upper() != "LAEQ":
             last_invalid_reason = "metric_is_not_LAeq"
             continue
-        if not isinstance(packet.get("sound_laeq_dba"), (int, float)):
+        if not isinstance(values.get("sound_laeq_dba"), (int, float)):
             last_invalid_reason = "missing_LAeq"
             continue
-        return packet
+        accepted.append({**values, "sequence": packet.get("sequence")})
+        if len(accepted) < FIRMWARE_WINDOWS_PER_PAIR:
+            continue
+        levels = [float(item["sound_laeq_dba"]) for item in accepted]
+        energy_mean = statistics.fmean(10.0 ** (level / 10.0) for level in levels)
+        return {
+            **accepted[-1],
+            "sound_laeq_dba": 10.0 * math.log10(energy_mean),
+            "aggregate_window_ms": 10_000,
+            "source_window_count": len(accepted),
+            "source_sequence_start": accepted[0].get("sequence"),
+            "source_sequence_end": accepted[-1].get("sequence"),
+        }
     raise TimeoutError(
-        "no valid 10-second LAeq(A) packet within 45 seconds; "
+        "fewer than ten valid one-second LAeq(A) packets within 45 seconds; "
         f"last reason: {last_invalid_reason}"
     )
 
@@ -141,7 +159,6 @@ def evaluate(pairs: list[dict], firmware_sha256: str) -> dict:
 
 
 def main() -> None:
-    raise SystemExit(RETIRED_REASON)
     try:
         import serial
     except ImportError as error:
@@ -171,7 +188,7 @@ def main() -> None:
             for index in range(args.pairs_per_level):
                 packet = read_firmware_window(port)
                 print(
-                    "Firmware 10 s LAeq(A): "
+                    "Firmware energy-average 10 s LAeq(A): "
                     f"{packet['sound_laeq_dba']:.2f} dBA"
                 )
                 raw = input(
@@ -188,6 +205,13 @@ def main() -> None:
                     "firmware_sequence": packet.get("sequence"),
                     "sound_dbfs": packet.get("sound_dbfs"),
                     "sound_samples": packet.get("sound_samples"),
+                    "source_window_count": packet.get("source_window_count"),
+                    "source_sequence_start": packet.get(
+                        "source_sequence_start"
+                    ),
+                    "source_sequence_end": packet.get(
+                        "source_sequence_end"
+                    ),
                     "firmware_offset_db": packet.get(
                         "sound_calibration_offset_db", 0.0
                     ),

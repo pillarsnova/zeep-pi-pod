@@ -61,6 +61,14 @@ class PiContractTests(unittest.TestCase):
                         "sound_syllabic_modulation": 0.08 if sph_live else None,
                         "sound_breathing_periodicity": 0.31 if sph_live else None,
                         "sound_feature_coverage": 1.0 if sph_live else 0.0,
+                        "sound_feature_window_ms": 10_000,
+                        "sound_feature_sequence": 4,
+                        "sound_feature_age_ms": 750,
+                        "sound_alignment_errors": 0,
+                        "sound_dba_calibrated": False,
+                        "sound_calibration_model": (
+                            "sph0645-datasheet-plus-cem-v1"
+                        ),
                     },
                 },
             },
@@ -151,6 +159,10 @@ class PiContractTests(unittest.TestCase):
                         decoded["sound_spectral_centroid_hz"],
                         610.0,
                     )
+                    self.assertEqual(decoded["sound_feature_window_ms"], 10_000)
+                    self.assertEqual(decoded["sound_feature_sequence"], 4)
+                    self.assertEqual(decoded["sound_feature_age_ms"], 750)
+                    self.assertFalse(decoded["sound_dba_calibrated"])
                 self.assertEqual(decoded["sensor_status"], live)
                 self.assertEqual(
                     set(decoded["sensor_diagnostics"]), set(live))

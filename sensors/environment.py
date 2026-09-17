@@ -55,7 +55,11 @@ def _acoustic_projection(
         "sound_breathing_periodicity",
         "sound_breathing_period_s",
         "sound_feature_coverage",
+        "sound_feature_window_ms",
+        "sound_feature_sequence",
+        "sound_feature_age_ms",
         "sound_clip_ratio",
+        "sound_alignment_errors",
         "sound_transient_count",
         "sound_spectral_frames",
         "sound_envelope_frames",
@@ -87,10 +91,7 @@ def _acoustic_projection(
         "sample_count": first_numeric(hub1, ("sound_samples",)),
         "window_ms": first_numeric(hub1, ("sound_window_ms",)),
         "laeq_dba_reported": first_numeric(hub1, ("sound_laeq_dba",)),
-        "calibrated_dba_reported": first_numeric(
-            hub1,
-            ("sound_dba_calibrated",),
-        ),
+        "field_calibrated": hub1.get("sound_dba_calibrated") is True,
         "calibration_offset_db": first_numeric(
             hub1,
             ("sound_calibration_offset_db",),

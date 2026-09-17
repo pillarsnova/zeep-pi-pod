@@ -1,19 +1,19 @@
 # ZEEP Sensor Hub 1 — DSP shadow research candidate
 
-> **BLOCKED FROM PRODUCTION** · Candidate v0.2 ไม่ผ่าน parity กับ Firmware เดิม
-> และถูก rollback แล้ว ห้าม Flash ซ้ำจนกว่าจะผ่าน
+> **BENCH DEVELOPMENT · BLOCKED FROM PRODUCTION** · v0.3 กำลังพัฒนาแบบ
+> Datasheet-first หลัง Candidate v0.2 ถูก rollback ห้าม Flash จนกว่าจะผ่าน
 > [Original Firmware Compatibility Baseline](ORIGINAL_FIRMWARE_COMPATIBILITY.md)
 
 Firmware นี้ใช้กับ Sensor Hub 1 ที่ต่อกับ Pi ผ่าน USB Serial เท่านั้น และไม่รวม
 ระบบเล่นเพลงหรือ Control Deck
 
-## Candidate assumptions — ยังไม่ใช่ Production contract
+## Hardware contract under verification
 
 | Device | Interface | Pin/address |
 | --- | --- | --- |
 | SPH0645LM4H-B | I²S Philips, LEFT (`SEL=GND`) | BCLK GPIO 11, WS GPIO 12, DOUT GPIO 13 |
-| SHT3x-DIS | I²C | SDA GPIO 8, SCL GPIO 9; address ต้องยืนยันจากบอร์ดเดิม |
-| OPT3001 | I²C | SDA GPIO 8, SCL GPIO 9; address/สถานะต้องยืนยันจากบอร์ดเดิม |
+| SHT3x-DIS | I²C | SDA GPIO 8, SCL GPIO 9; ตรวจ `0x44/0x45` และยืนยันด้วย CRC |
+| OPT3001 | I²C | SDA GPIO 8, SCL GPIO 9; ตรวจ `0x44–0x47` และยืนยัน TI ID |
 | Pi transport | Native USB CDC JSONL | 115200 baud |
 
 Target board ที่ตรวจจากอุปกรณ์จริงคือ ESP32-S3, Flash 16 MB, OPI PSRAM 8 MB
@@ -23,8 +23,9 @@ Target board ที่ตรวจจากอุปกรณ์จริงค�
 ## Integrated runtime
 
 - SHT3x-DIS และ OPT3001 poll แยกกันทุก 2 วินาที; cache สดไม่เกิน 6 วินาที
-- SPH0645 ประมวลผลหน้าต่างเสียง 10 วินาทีใน FreeRTOS task แยก
-- Telemetry รวมถูกส่งตาม clock คงที่ทุก 10 วินาที แม้ไมโครโฟนไม่ส่งข้อมูล
+- SPH0645 Sound Meter สรุปหน้าต่าง 1 วินาทีใน FreeRTOS task แยก
+- DSP สะสมหน้าต่าง 10 วินาทีโดยไม่ reset filter/หยุด Sound Meter
+- Telemetry ส่งทุก 1 วินาที แม้ DSP หรือ Sensor บางตัวไม่พร้อม
 - ทุก Sensor มี `status`, `reason`, `age_ms`, failure และ recovery counter แยกกัน
 - Sensor หนึ่งตัวเสียแล้วอีกสองตัวต้องยังทำงาน; I²C bus reset เฉพาะเมื่ออุปกรณ์
   I²C ทั้งคู่ใช้งานไม่ได้
@@ -36,14 +37,16 @@ Target board ที่ตรวจจากอุปกรณ์จริงค�
 ## Sound pipeline
 
 1. รับ SPH0645 ที่ 48 kHz/32-bit I²S slot และเลือก LEFT channel
-2. ใช้ ESP-IDF Philips standard format เพื่อจัด one-bit I²S delay แล้วเลื่อน
-   `>> 8` เพื่อนำ 24-bit word ที่ MSB-aligned ออกจาก DMA slot
+2. ใช้ ESP-IDF Philips standard format สำหรับ one-bit delay; SPH0645 มีข้อมูล
+   18-bit ใน 24-bit word จึงตรวจ padding และแปลง DMA slot ด้วย `>> 14`
 3. ตัด DC และผ่าน A-weighting IIR ที่สร้างจาก analogue pole/zero definition
    ด้วย bilinear transform จากนั้น normalize ที่ 1 kHz
-4. สะสมพลังงาน 480,000 samples เป็น LAeq(A) 10 วินาที
-5. แปลงจาก SPH0645 sensitivity `-26 dBFS @ 94 dB SPL` และเก็บ field
-   calibration offset แยกใน NVS
-6. ส่ง `sound_valid=true` เฉพาะเมื่อไม่มี clipping/digital silence และค่าอยู่ใน
+4. Sound Meter สะสม 48,000 samples เป็น LAeq(A) 1 วินาที
+5. แปลงจาก SPH0645 sensitivity `-26 dBFS @ 94 dB SPL`; ระบุผลเป็น
+   datasheet estimate จนกว่าจะผ่าน CEM และเก็บ field offset/สถานะใน NVS
+6. DSP Tap สะสม 480,000 samples แยก 10 วินาทีแล้วคำนวณ feature โดยไม่
+   เปลี่ยนหรือหน่วง Sound Meter
+7. ส่ง `sound_valid=true` เฉพาะเมื่อไม่มี clipping/digital silence และค่าอยู่ใน
    reference range ของ CEM 30–130 dBA ค่า signed `sound_dbfs` คงไว้เป็น
    diagnostics และไม่ถูก `abs()` หรือใช้แทน dBA
 
@@ -51,10 +54,10 @@ Target board ที่ตรวจจากอุปกรณ์จริงค�
 window metadata ไว้ แต่ Pi Runtime ปัจจุบันไม่อ่านเงื่อนไขเหล่านั้นและยึด
 `sound_dba` ตาม Sensor Interface Contract v1.2 เท่านั้น
 
-## DSP shadow label candidate
+## DSP shadow label candidate v0.3
 
-โมดูล `acoustic_classifier` เพิ่มการคำนวณภายใน ESP32 จากหน้าต่างเดียวกับเสียง
-10 วินาที ได้แก่ band-energy ratio, spectral centroid/flatness/flux, crest factor,
+โมดูล `acoustic_classifier` คำนวณจากหน้าต่าง DSP แยก 10 วินาที ได้แก่
+band-energy ratio, spectral centroid/flatness/flux, crest factor,
 syllabic modulation 3–8 Hz และ breathing periodicity 2–6 วินาที แล้วส่งเฉพาะ:
 
 - `sound_class` — `quiet`, `steady_equipment_like`, `speech_like`,
@@ -97,10 +100,10 @@ SHA256 e05a7f648d5873467d55f88518824db8baa9eb86f0e862d1e13c8085604c68a1
 
 ห้ามนำ full-Flash image เข้า Git เพราะอาจมี credential จาก Firmware เดิม
 
-## Historical CEM protocol (ยกเลิกแล้ว)
+## CEM bench protocol
 
-ส่วนนี้เก็บเพื่อ Audit เท่านั้น `tools/cem_calibrate.py` จะปฏิเสธการทำงานจาก CLI
-และไม่สามารถสร้างผลเพื่ออนุมัติ Firmware ได้อีก
+`tools/cem_calibrate.py` รวม LAeq(A) 1 วินาทีจำนวน 10 ค่าแบบ energy average
+ต่อหนึ่งคู่ CEM และผูกผลกับ SHA-256 ของ Firmware binary
 
 ใช้บอร์ด/ไมค์ชุดทดสอบที่ wiring เดียวกับ Production และ Firmware binary เดียวกัน:
 
@@ -109,7 +112,8 @@ SHA256 e05a7f648d5873467d55f88518824db8baa9eb86f0e862d1e13c8085604c68a1
 2. วาง capsule ของ CEM และ SPH0645 ห่างกัน 2–5 ซม. ทิศเดียวกัน ห่างผนัง,
    ช่องแอร์, tablet และผู้ปฏิบัติงาน
 3. ใช้ broadband/pink noise ที่นิ่งใกล้ 35, 45, 55 และ 65 dBA
-4. เก็บอย่างน้อย 3 คู่ต่อระดับ โดยแต่ละค่า Firmware เป็น LAeq(A) 10 วินาที
+4. เก็บอย่างน้อย 3 คู่ต่อระดับ โดยแต่ละค่า Firmware รวมจากหน้าต่าง 1 วินาที
+   ต่อเนื่อง 10 ค่า
 5. รันเครื่องมือ:
 
 ```bash
@@ -137,7 +141,8 @@ CAL SOUND OFFSET <ค่า>
 build/unit test แต่ไม่ผ่าน hardware parity: SHT31 หาย, JSONL มี Wire debug ปะปน
 และ SPH0645 เป็น `pcm_out_of_range` จึง rollback แล้ว
 
-การเปิด Flash ใหม่ต้องมี compatibility approval artifact ตามที่ script กำหนด
+v0.3 เป็น bench source เท่านั้น การเปิด Flash ใหม่ต้องมี compatibility approval
+artifact ตามที่ script กำหนด
 และผ่าน Gate ใน `ORIGINAL_FIRMWARE_COMPATIBILITY.md` ก่อนทุกครั้ง
 
 เมื่ออนุมัติรุ่นใหม่ในอนาคต สคริปต์ยังต้องบังคับตรวจ:

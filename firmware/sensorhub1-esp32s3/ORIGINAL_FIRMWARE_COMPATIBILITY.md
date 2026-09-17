@@ -28,7 +28,7 @@ Firmware `sensorhub1-dsp-shadow-v0.2.0` ไม่ผ่าน Production parity 
 | Telemetry cadence | 1 packet/วินาที |
 | SPH0645 | 32,000 Hz, 32,000 samples, window 1,000 ms |
 | Sound output | signed dBFS + A-weighted dBFS + `sound_dba`/LAeq |
-| Sound reference | `sound_dba = sound_dbfs_a + 111.93`; packet ระบุ calibrated |
+| Embedded sound offset | Firmware เดิมส่ง `111.93 dB` และคำนวณ `sound_dba = sound_dbfs_a + 111.93`; ที่มาของเลขนี้ยังไม่มี calibration record ยืนยัน |
 | Sound QA | clip/read-error/zero/nonzero/raw-change counts และ stuck flags |
 | Environment | SHT31 temperature/humidity ทำงาน; OPT3001 ระบุ unavailable ก่อนเริ่มงานนี้แล้ว |
 | Safety after restore | `ready=true`, level `monitor`, ไม่มี fault |
@@ -85,7 +85,7 @@ drop-in replacement การทดลองถัดไปต้องใช้
 | ด้าน | เดิม | Candidate v0.2 | ผลที่พบ |
 | --- | --- | --- | --- |
 | Mic rate/window | 32 kHz / 1 s | 48 kHz / 10 s | ค่าและ timing ไม่เทียบตรง |
-| Calibration | reference 111.93 dB | sensitivity-derived + NVS offset | แสดง ~88 dBA และ invalid |
+| Calibration | embedded offset 111.93 dB (provenance ยังไม่ยืนยัน) | sensitivity-derived + NVS offset | แสดง ~88 dBA และ invalid |
 | PCM QA | zero/change QA ผ่าน | repeated/zero สูงผิดธรรมชาติ | `pcm_out_of_range` |
 | I²C | SHT31 ทำงาน | address/probe assumption ใหม่ | SHT และ OPT ไม่ตอบทั้งคู่ |
 | Serial | JSONL สะอาด | core debug เปิด | Wire error ปะปนใน JSONL |
@@ -127,4 +127,3 @@ drop-in replacement การทดลองถัดไปต้องใช้
 - Safety Supervisor: ready / monitor
 - Original SHT31 and SPH0645 telemetry: restored
 - OPT3001: unavailable เหมือนก่อน Flash; แยกเป็นงานตรวจ hardware ไม่ใช่ผล DSP
-

@@ -1,18 +1,19 @@
-# ZEEP Sensor Hub 1 — DSP shadow controlled release
+# ZEEP Sensor Hub 1 — DSP shadow research candidate
 
-> **ADMIN SHADOW · NON-CLINICAL · ROLLBACK REQUIRED** · รุ่น v0.2 ส่งเฉพาะ
-> feature/ป้ายทดลองให้ Admin และไม่มีผลต่อ Sleep State, Score หรือ Control
+> **BLOCKED FROM PRODUCTION** · Candidate v0.2 ไม่ผ่าน parity กับ Firmware เดิม
+> และถูก rollback แล้ว ห้าม Flash ซ้ำจนกว่าจะผ่าน
+> [Original Firmware Compatibility Baseline](ORIGINAL_FIRMWARE_COMPATIBILITY.md)
 
 Firmware นี้ใช้กับ Sensor Hub 1 ที่ต่อกับ Pi ผ่าน USB Serial เท่านั้น และไม่รวม
 ระบบเล่นเพลงหรือ Control Deck
 
-## Hardware contract
+## Candidate assumptions — ยังไม่ใช่ Production contract
 
 | Device | Interface | Pin/address |
 | --- | --- | --- |
 | SPH0645LM4H-B | I²S Philips, LEFT (`SEL=GND`) | BCLK GPIO 11, WS GPIO 12, DOUT GPIO 13 |
-| SHT3x-DIS | I²C | SDA GPIO 8, SCL GPIO 9, address `0x45` |
-| OPT3001 | I²C | SDA GPIO 8, SCL GPIO 9, address `0x44` |
+| SHT3x-DIS | I²C | SDA GPIO 8, SCL GPIO 9; address ต้องยืนยันจากบอร์ดเดิม |
+| OPT3001 | I²C | SDA GPIO 8, SCL GPIO 9; address/สถานะต้องยืนยันจากบอร์ดเดิม |
 | Pi transport | Native USB CDC JSONL | 115200 baud |
 
 Target board ที่ตรวจจากอุปกรณ์จริงคือ ESP32-S3, Flash 16 MB, OPI PSRAM 8 MB
@@ -130,23 +131,24 @@ CAL SOUND OFFSET <ค่า>
 
 แล้วทำ CEM validation ซ้ำเพื่อสร้างผล PASS ที่ผูกกับ SHA-256 ของ binary
 
-## Controlled DSP shadow Flash
+## Production Flash status
 
-`flash_candidate.sh` เดิมยังถูกปิดเพื่อกันการใช้ artifact เก่า รุ่น v0.2 ใช้
-`flash_dsp_shadow.sh` ซึ่งบังคับตรวจ artifact และ full-Flash rollback image ก่อน:
+`flash_candidate.sh` และ `flash_dsp_shadow.sh` ถูกปิดไว้ Candidate v0.2 เคยผ่าน
+build/unit test แต่ไม่ผ่าน hardware parity: SHT31 หาย, JSONL มี Wire debug ปะปน
+และ SPH0645 เป็น `pcm_out_of_range` จึง rollback แล้ว
+
+การเปิด Flash ใหม่ต้องมี compatibility approval artifact ตามที่ script กำหนด
+และผ่าน Gate ใน `ORIGINAL_FIRMWARE_COMPATIBILITY.md` ก่อนทุกครั้ง
+
+เมื่ออนุมัติรุ่นใหม่ในอนาคต สคริปต์ยังต้องบังคับตรวจ:
 
 - Pod ว่างและ API ยืนยันได้
 - chip และ MAC ตรงกับเครื่องเป้าหมาย
 - artifact checksum ผ่าน
 - ผู้ดูแลตั้ง `CONFIRM_FLASH` เป็น MAC ของอุปกรณ์
 
-```bash
-CONFIRM_FLASH=44:1b:f6:8c:0c:54 \
-  ./tools/flash_dsp_shadow.sh dist/release /path/to/verified-backup
-```
-
-หลัง Flash ต้องยืนยันว่า SHT3x-DIS, OPT3001, SPH0645 และ `sound_dba` ยังทำงาน
-ก่อนตรวจ feature ทุกตัว ค่า label ยังคงเป็น provisional จนกว่าจะมี validation set
+ห้ามใช้ตัวอย่างคำสั่ง Flash จาก revision ก่อนหน้า เพราะ Candidate นั้นไม่ใช่
+drop-in replacement ของ Firmware Production
 
 หากต้อง rollback ให้ใช้ full-Flash backup ที่ checksum ผ่านเท่านั้น:
 

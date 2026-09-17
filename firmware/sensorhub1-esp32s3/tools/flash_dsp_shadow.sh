@@ -5,6 +5,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=flash_common.sh
 source "$SCRIPT_DIR/flash_common.sh"
 
+APPROVAL_FILE="$SCRIPT_DIR/../compatibility/PRODUCTION_APPROVED.sha256"
+if [[ ! -f "$APPROVAL_FILE" ]]; then
+  echo "ERROR: DSP shadow is blocked pending original-firmware parity review" >&2
+  echo "Read ORIGINAL_FIRMWARE_COMPATIBILITY.md before any new Flash" >&2
+  exit 4
+fi
+
 require_command
 assert_pod_unoccupied
 

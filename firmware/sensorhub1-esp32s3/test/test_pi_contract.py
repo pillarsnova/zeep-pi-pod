@@ -53,6 +53,14 @@ class PiContractTests(unittest.TestCase):
                         "sound_class_confidence": 0.82 if sph_live else 0.0,
                         "sound_event_detected": sph_live,
                         "sound_classifier_version": "zeep-dsp-rule-v0.1-shadow",
+                        "sound_spectral_flux": 0.04 if sph_live else None,
+                        "sound_spectral_centroid_hz": 610.0 if sph_live else None,
+                        "sound_low_band_ratio": 0.42 if sph_live else None,
+                        "sound_mid_band_ratio": 0.38 if sph_live else None,
+                        "sound_high_band_ratio": 0.20 if sph_live else None,
+                        "sound_syllabic_modulation": 0.08 if sph_live else None,
+                        "sound_breathing_periodicity": 0.31 if sph_live else None,
+                        "sound_feature_coverage": 1.0 if sph_live else 0.0,
                     },
                 },
             },
@@ -138,6 +146,11 @@ class PiContractTests(unittest.TestCase):
                     self.assertEqual(decoded["sound_window_sequence"], 7)
                     self.assertEqual(decoded["sound_class"], "speech_like")
                     self.assertTrue(decoded["sound_event_detected"])
+                    self.assertEqual(decoded["sound_spectral_flux"], 0.04)
+                    self.assertEqual(
+                        decoded["sound_spectral_centroid_hz"],
+                        610.0,
+                    )
                 self.assertEqual(decoded["sensor_status"], live)
                 self.assertEqual(
                     set(decoded["sensor_diagnostics"]), set(live))

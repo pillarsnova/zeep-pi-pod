@@ -349,12 +349,49 @@ function renderAdaptiveLearning(data={}){
 }
 
 let acousticLiveState={};
+let acousticLiveLevels=[];
+let acousticLastPacketKey='';
+
+function renderAcousticFeatureConsole(data={},currentLevel=null){
+  const root=document.getElementById('acousticLiveConsole'),bars=document.getElementById('acousticLiveBars');
+  if(!root||!bars)return;
+  const evidence=data.evidence||{},features=evidence.features||{},packetKey=String(data.observed_at||'');
+  if(currentLevel!=null&&packetKey&&packetKey!==acousticLastPacketKey){
+    acousticLastPacketKey=packetKey;
+    acousticLiveLevels.push(currentLevel);
+    acousticLiveLevels=acousticLiveLevels.slice(-24);
+    root.classList.remove('packet-arrived');void root.offsetWidth;root.classList.add('packet-arrived');
+  }
+  const padded=Array(Math.max(0,24-acousticLiveLevels.length)).fill(null).concat(acousticLiveLevels);
+  bars.innerHTML=padded.map(level=>{
+    const height=level==null?3:Math.max(5,Math.min(48,5+(level-30)*1.15));
+    return `<i style="height:${height.toFixed(1)}px;opacity:${level==null ? .18 : .95}"></i>`;
+  }).join('');
+  root.classList.toggle('no-data',currentLevel==null);
+  const observed=data.observed_at?new Date(data.observed_at):null;
+  document.getElementById('acousticPacketStatus').textContent=currentLevel==null
+    ?'ยังไม่มีข้อมูลสดจาก Sensor'
+    :`รับข้อมูล ${observed&&!Number.isNaN(observed.getTime())?observed.toLocaleTimeString('th-TH',{hour12:false}):'ล่าสุด'} · ${acousticLiveLevels.length}/24 windows`;
+  const value=(key,digits=3,suffix='')=>{
+    const number=acousticFinite(features[key]);return number==null?'--':`${number.toFixed(digits)}${suffix}`;
+  };
+  const bands=[features.low_band_ratio,features.mid_band_ratio,features.high_band_ratio]
+    .map(item=>acousticFinite(item)).map(item=>item==null?'--':item.toFixed(2)).join('/');
+  const featureRows=[
+    ['Centroid',value('spectral_centroid_hz',0,' Hz')],
+    ['Flux',value('spectral_flux',3)],
+    ['Bands L/M/H',bands],
+    ['Modulation',value('syllabic_modulation',3)],
+    ['Periodicity',value('breathing_periodicity',3)],
+  ];
+  document.getElementById('acousticFeatureGrid').innerHTML=featureRows.map(item=>`<span><em>${item[0]}</em><b>${item[1]}</b></span>`).join('');
+}
 
 function renderAcousticLiveObservation(data={}){
   const level=data.level||{},shape=Array.isArray(data.results?.shapes)?data.results.shapes[0]:null;
   const evidence=data.evidence||{},features=evidence.features||{};
   const currentLevel=acousticFinite(level.sound_dba),confidence=acousticFinite(shape?.confidence);
-  document.getElementById('acousticStatusBadge').textContent=data.status==='dsp_shadow'?'SMART EAR · REALTIME':'SOUND · REALTIME';
+  document.getElementById('acousticStatusBadge').textContent=data.status==='dsp_shadow'?'SMART EAR · DSP LIVE':evidence.feature_telemetry_available?'SMART EAR · FEATURE LIVE':'SOUND · REALTIME';
   document.getElementById('acousticAverage').textContent=currentLevel==null?'-- dBA':`${acousticFixed(currentLevel)} dBA`;
   document.getElementById('acousticAverageMeta').textContent=currentLevel==null?'รอค่าจาก Sensor':'ค่าที่ตรวจได้ขณะนี้';
   document.getElementById('acousticPeak').textContent='ไม่บันทึก';
@@ -370,6 +407,7 @@ function renderAcousticLiveObservation(data={}){
     ?`ผลทดลอง · ความเชื่อมั่น ${Math.round((confidence||0)*100)}%`
     :'Realtime · ไม่บันทึกเมื่อไม่มี Session';
   document.getElementById('acousticCoverage').textContent='LIVE · ไม่บันทึก';
+  renderAcousticFeatureConsole(data,currentLevel);
 }
 
 function renderAcousticIntelligence(data={}){
@@ -389,6 +427,7 @@ function renderAcousticIntelligence(data={}){
     :evidence.feature_telemetry_available
       ?'รับ Window summary แล้ว · ยังไม่พอแยกกรน/พูด'
       :'รอ feature สำหรับจำแนกเสียง';
+  renderAcousticFeatureConsole(data,acousticFinite(data.level?.sound_dba));
   document.getElementById('acousticGuardrail').textContent='Pi ตรวจเหตุการณ์จากระดับ dBA ได้ทันที · ป้าย DSP เป็นข้อมูลเสริม · ไม่บันทึก Raw audio';
   if(!current?.session?.active)renderAcousticLiveObservation(data);
 }

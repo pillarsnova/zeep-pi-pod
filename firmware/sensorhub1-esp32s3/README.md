@@ -1,9 +1,7 @@
-# ZEEP Sensor Hub 1 — DSP shadow validation candidate
+# ZEEP Sensor Hub 1 — DSP shadow controlled release
 
-> **BUILDABLE · NOT INSTALLED · DO NOT FLASH WITHOUT A NEW HARDWARE GATE** ·
-> โค้ดนี้ใช้พิสูจน์ integration ของ DSP label ตามเอกสาร Acoustic Design เท่านั้น
-> Runtime ปัจจุบันยังเชื่อ `sound_dba` จาก Firmware ที่ติดตั้งอยู่จริง การ build
-> ผ่านไม่ใช่หลักฐานว่าเส้นทาง dBA ของ candidate นี้แทน Production ได้
+> **ADMIN SHADOW · NON-CLINICAL · ROLLBACK REQUIRED** · รุ่น v0.2 ส่งเฉพาะ
+> feature/ป้ายทดลองให้ Admin และไม่มีผลต่อ Sleep State, Score หรือ Control
 
 Firmware นี้ใช้กับ Sensor Hub 1 ที่ต่อกับ Pi ผ่าน USB Serial เท่านั้น และไม่รวม
 ระบบเล่นเพลงหรือ Control Deck
@@ -66,7 +64,7 @@ syllabic modulation 3–8 Hz และ breathing periodicity 2–6 วินา�
 ไม่ส่ง PCM, ไม่ถอดคำพูด, ไม่ระบุตัวบุคคล และทุก label เป็น Admin shadow เท่านั้น
 ไม่เปลี่ยน Sleep State, Sleep Score, Recovery Score หรือ Control
 
-## Build โดยยังไม่ติดตั้ง
+## Build และทดสอบก่อนติดตั้ง
 
 ```bash
 cd firmware/sensorhub1-esp32s3
@@ -75,7 +73,8 @@ pio run -e release
 python3 -m unittest discover -s test -v
 ```
 
-การ build ไม่ได้ให้สิทธิ์ติดตั้ง Production โดยอัตโนมัติ
+การ build ผ่านไม่ใช่ผล validation ของป้ายเสียง ต้องตรวจ packet จริงและเก็บ
+controlled dataset แยกภายหลัง
 
 ## Backup/restore ที่ตู้
 
@@ -131,18 +130,23 @@ CAL SOUND OFFSET <ค่า>
 
 แล้วทำ CEM validation ซ้ำเพื่อสร้างผล PASS ที่ผูกกับ SHA-256 ของ binary
 
-## Production Flash (ปิดถาวร)
+## Controlled DSP shadow Flash
 
-`flash_candidate.sh` ปฏิเสธการทำงานทันทีเสมอ เนื่องจาก Candidate ถูก Archive
-ไว้เป็นหลักฐานเท่านั้น เงื่อนไขด้านล่างคือทะเบียนย้อนหลัง ไม่ใช่ Gate ที่เปิดใช้:
+`flash_candidate.sh` เดิมยังถูกปิดเพื่อกันการใช้ artifact เก่า รุ่น v0.2 ใช้
+`flash_dsp_shadow.sh` ซึ่งบังคับตรวจ artifact และ full-Flash rollback image ก่อน:
 
 - Pod ว่างและ API ยืนยันได้
 - chip และ MAC ตรงกับเครื่องเป้าหมาย
 - artifact checksum ผ่าน
-- CEM result เป็น PASS และอ้าง SHA-256 ของ `firmware.bin` เดียวกัน
 - ผู้ดูแลตั้ง `CONFIRM_FLASH` เป็น MAC ของอุปกรณ์
 
-ห้ามใช้ Binary ใน `dist/release` ติดตั้งทับ Firmware ปัจจุบัน
+```bash
+CONFIRM_FLASH=44:1b:f6:8c:0c:54 \
+  ./tools/flash_dsp_shadow.sh dist/release /path/to/verified-backup
+```
+
+หลัง Flash ต้องยืนยันว่า SHT3x-DIS, OPT3001, SPH0645 และ `sound_dba` ยังทำงาน
+ก่อนตรวจ feature ทุกตัว ค่า label ยังคงเป็น provisional จนกว่าจะมี validation set
 
 หากต้อง rollback ให้ใช้ full-Flash backup ที่ checksum ผ่านเท่านั้น:
 

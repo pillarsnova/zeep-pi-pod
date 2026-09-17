@@ -127,12 +127,14 @@ void AcousticClassifier::reset() {
   fft_index_ = 0;
   envelope_index_ = 0;
   decimation_counter_ = 0;
+  decimation_sum_ = 0.0;
   envelope_samples_ = 0;
   envelope_sum_square_ = 0.0;
   low_energy_ = mid_energy_ = high_energy_ = 0.0;
   centroid_weighted_ = centroid_energy_ = 0.0;
   flatness_sum_ = flux_sum_ = 0.0;
   spectral_frames_ = 0;
+  transient_count_ = 0;
   have_previous_spectrum_ = false;
   std::fill(
       previous_magnitude_,
@@ -143,9 +145,13 @@ void AcousticClassifier::reset() {
 void AcousticClassifier::addSample(float normalized_sample,
                                    float dc_blocked_sample) {
   addEnvelopeSample(normalized_sample);
+  decimation_sum_ += dc_blocked_sample;
   if (++decimation_counter_ >= 4) {
     decimation_counter_ = 0;
-    addSpectrumSample(dc_blocked_sample);
+    // A four-sample boxcar reduces high-frequency aliasing before the
+    // 48 kHz stream is decimated to the 12 kHz classifier stream.
+    addSpectrumSample(static_cast<float>(decimation_sum_ / 4.0));
+    decimation_sum_ = 0.0;
   }
 }
 
@@ -212,7 +218,11 @@ void AcousticClassifier::analyseSpectrumFrame() {
     flatness_sum_ += geometric / (arithmetic_power / bins);
   }
   if (have_previous_spectrum_ && frame_energy > kEpsilon) {
-    flux_sum_ += std::sqrt(frame_flux / frame_energy);
+    const float normalized_flux = std::sqrt(frame_flux / frame_energy);
+    flux_sum_ += normalized_flux;
+    if (normalized_flux >= 0.12F) {
+      ++transient_count_;
+    }
   }
   have_previous_spectrum_ = true;
   ++spectral_frames_;
@@ -224,6 +234,7 @@ AcousticFeatures AcousticClassifier::finish(float laeq_dba, float rms,
   result.ready = true;
   result.spectral_frames = spectral_frames_;
   result.envelope_frames = static_cast<uint16_t>(envelope_index_);
+  result.transient_count = transient_count_;
   const double total_energy = low_energy_ + mid_energy_ + high_energy_;
   if (spectral_frames_ < 10 || envelope_index_ < 120 ||
       !std::isfinite(laeq_dba) || total_energy <= kEpsilon) {

@@ -348,6 +348,9 @@ void AudioMeter::publishAccumulator() {
                            accumulated_samples;
   const float repeated_ratio = static_cast<float>(repeated_samples) /
                                accumulated_samples;
+  window.clip_ratio = clip_ratio;
+  window.zero_ratio = zero_ratio;
+  window.repeated_ratio = repeated_ratio;
   if (!isfinite(window.laeq_dba) || !isfinite(window.dbfs)) {
     window.invalid_reason = "non_finite";
   } else if (read_errors > 0) {

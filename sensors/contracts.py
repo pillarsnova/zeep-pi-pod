@@ -88,6 +88,11 @@ SENSOR_VALUE_FIELDS: dict[str, frozenset[str]] = {
             "sound_spectral_frames",
             "sound_envelope_frames",
             "sound_window_sequence",
+            "sound_feature_coverage",
+            "sound_clip_ratio",
+            "sound_zero_ratio",
+            "sound_repeated_ratio",
+            "sound_transient_count",
         }
     ),
     "mhz19c": frozenset({"co2_ppm"}),

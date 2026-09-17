@@ -133,7 +133,7 @@ void addSoundTelemetry(
   addNumberOrNull(values, "sound_dbfs", sound.dbfs);
   addNumberOrNull(
       values,
-      "sound_a_weighted_dbfs",
+      "sound_dbfs_a",
       sound.a_weighted_dbfs);
   addNumberOrNull(values, "sound_laeq_dba", sound.laeq_dba);
   // ``sound_dba`` remains the stable Pi contract. DSP labels are shadow
@@ -151,6 +151,9 @@ void addSoundTelemetry(
   values["sound_zero_samples"] = sound.zero_samples;
   values["sound_repeated_samples"] = sound.repeated_samples;
   values["sound_read_errors"] = sound.read_errors;
+  addNumberOrNull(values, "sound_clip_ratio", sound.clip_ratio);
+  addNumberOrNull(values, "sound_zero_ratio", sound.zero_ratio);
+  addNumberOrNull(values, "sound_repeated_ratio", sound.repeated_ratio);
   values["sound_window_sequence"] = sound.sequence;
   const bool acoustic_valid = measurement_live && sound.acoustic.valid;
   values["sound_class"] = acoustic_valid ? sound.acoustic.label : "unknown";
@@ -183,6 +186,8 @@ void addSoundTelemetry(
                   acoustic_valid ? sound.acoustic.breathing_period_s : NAN);
   values["sound_spectral_frames"] = sound.acoustic.spectral_frames;
   values["sound_envelope_frames"] = sound.acoustic.envelope_frames;
+  values["sound_transient_count"] = sound.acoustic.transient_count;
+  values["sound_feature_coverage"] = acoustic_valid ? 1.0F : 0.0F;
   const char* invalid_reason =
       sound.invalid_reason == nullptr ? "unknown" : sound.invalid_reason;
   const char* sensor_reason = measurement_live ? "ok" :

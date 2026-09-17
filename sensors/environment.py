@@ -54,10 +54,20 @@ def _acoustic_projection(
         "sound_syllabic_modulation",
         "sound_breathing_periodicity",
         "sound_breathing_period_s",
+        "sound_feature_coverage",
+        "sound_clip_ratio",
+        "sound_transient_count",
+        "sound_spectral_frames",
+        "sound_envelope_frames",
     )
     features = {
         key.removeprefix("sound_"): first_numeric(hub1, (key,))
         for key in numeric_fields
+    }
+    features = {
+        key: value
+        for key, value in features.items()
+        if value is not None and math.isfinite(value)
     }
     rms = first_numeric(hub1, ("sound_rms",))
     peak = first_numeric(hub1, ("sound_peak",))
@@ -89,7 +99,7 @@ def _acoustic_projection(
     window_features = {
         key: round(value, 6) if isinstance(value, float) else value
         for key, value in window_features.items()
-        if value is not None
+        if value is not None and math.isfinite(value)
     }
     return {
         "label": label if valid else "unknown",
@@ -100,9 +110,9 @@ def _acoustic_projection(
             hub1.get("sound_classifier_version") or "unavailable"
         ),
         "window_sequence": first_numeric(hub1, ("sound_window_sequence",)),
-        "features": {**window_features, **features} if valid else window_features,
+        "features": {**window_features, **features},
         "feature_source": (
-            "firmware_dsp" if valid else "esp32_window_summary"
+            "firmware_dsp" if features else "esp32_window_summary"
             if window_features else "unavailable"
         ),
         "raw_audio_transmitted": False,

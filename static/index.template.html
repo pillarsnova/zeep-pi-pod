@@ -723,6 +723,13 @@
         <article><small>ลักษณะโดยรวม</small><b id="acousticPattern">กำลังรอข้อมูล</b><span id="acousticPatternMeta">เริ่ม Session เพื่อวิเคราะห์</span></article>
         <article><small>ป้ายเสียงล่าสุด</small><b id="acousticLatestLabel">ยังไม่มีป้ายเสียง</b><span id="acousticLatestLabelMeta">รอ DSP จาก ESP32</span></article>
       </div>
+      <section class="acoustic-live-console" id="acousticLiveConsole" aria-label="สัญญาณเสียงสดจาก SPH0645">
+        <header><div><b>SPH0645 · LIVE WINDOW</b><span id="acousticPacketStatus">กำลังรอ packet</span></div><i aria-hidden="true"></i></header>
+        <div class="acoustic-live-bars" id="acousticLiveBars" aria-hidden="true"></div>
+        <div class="acoustic-feature-grid" id="acousticFeatureGrid">
+          <span><em>Centroid</em><b>-- Hz</b></span><span><em>Flux</em><b>--</b></span><span><em>Bands L/M/H</em><b>--</b></span><span><em>Modulation</em><b>--</b></span><span><em>Periodicity</em><b>--</b></span>
+        </div>
+      </section>
       <div class="acoustic-timeline-layout">
         <section class="acoustic-chart-panel" aria-labelledby="acousticTimelineHeading">
           <header><div><b id="acousticTimelineHeading">ระดับเสียงตามเวลา · dBA</b><span id="acousticTimelineMeta">ยังไม่มี Session ที่กำลังบันทึก</span></div><span id="acousticCoverage">Coverage --</span></header>

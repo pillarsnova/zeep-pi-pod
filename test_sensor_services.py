@@ -550,6 +550,52 @@ class SensorRuntimeTests(unittest.TestCase):
         self.assertEqual(acoustic["features"]["sample_rate_hz"], 48_000)
         self.assertEqual(acoustic["features"]["laeq_dba_reported"], 45.0)
 
+    def test_unknown_label_keeps_firmware_dsp_features_for_admin(self) -> None:
+        hub1 = normalize_hub1_sensor(
+            {
+                "connected": True,
+                "last_update": NOW,
+                "sound_dba": 44.0,
+                "sound_class": "unknown",
+                "sound_class_state": "insufficient_input",
+                "sound_spectral_flux": 0.04,
+                "sound_spectral_centroid_hz": 610.0,
+                "sound_low_band_ratio": 0.42,
+                "sound_mid_band_ratio": 0.38,
+                "sound_high_band_ratio": 0.20,
+                "sound_syllabic_modulation": 0.08,
+                "sound_breathing_periodicity": 0.31,
+                "sound_feature_coverage": 1.0,
+                "sensor_status": {"sph0645": True},
+            },
+            sound_display_min=SOUND_DBA_DISPLAY_MIN,
+            sound_display_max=SOUND_DBA_DISPLAY_MAX,
+        )
+        biases = {metric: 0.0 for metric in SENSOR_CALIBRATION_SPECS}
+        result = compose_environment_snapshot(
+            hub1,
+            {},
+            now=NOW,
+            hub1_stale_s=25.0,
+            hub2_stale_s=20.0,
+            device_specs=ENVIRONMENT_DEVICE_SPECS,
+            calibration_metrics=tuple(SENSOR_CALIBRATION_SPECS),
+            apply_bias=lambda metric, value: apply_additive_bias(
+                metric,
+                value,
+                biases=biases,
+            ),
+            bias_value=lambda metric: biases[metric],
+            bias_sources={metric: "default" for metric in biases},
+        )
+
+        acoustic = result["acoustic"]
+        self.assertEqual(acoustic["label"], "unknown")
+        self.assertEqual(acoustic["state"], "insufficient_input")
+        self.assertEqual(acoustic["feature_source"], "firmware_dsp")
+        self.assertEqual(acoustic["features"]["spectral_flux"], 0.04)
+        self.assertEqual(acoustic["features"]["spectral_centroid_hz"], 610.0)
+
     def test_fresh_cached_environment_value_is_explicitly_degraded(self) -> None:
         hub1 = {
             "connected": True,

@@ -21,6 +21,7 @@ struct AcousticFeatures {
   float breathing_period_s = NAN;
   uint16_t spectral_frames = 0;
   uint16_t envelope_frames = 0;
+  uint16_t transient_count = 0;
   bool event_detected = false;
   const char* model_version = "zeep-dsp-rule-v0.1-shadow";
 };
@@ -47,6 +48,7 @@ class AcousticClassifier {
   size_t fft_index_ = 0;
   size_t envelope_index_ = 0;
   uint32_t decimation_counter_ = 0;
+  double decimation_sum_ = 0.0;
   uint32_t envelope_samples_ = 0;
   double envelope_sum_square_ = 0.0;
   double low_energy_ = 0.0;
@@ -57,6 +59,7 @@ class AcousticClassifier {
   double flatness_sum_ = 0.0;
   double flux_sum_ = 0.0;
   uint16_t spectral_frames_ = 0;
+  uint16_t transient_count_ = 0;
   bool have_previous_spectrum_ = false;
 };
 

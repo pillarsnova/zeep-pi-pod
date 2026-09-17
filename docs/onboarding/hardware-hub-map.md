@@ -77,6 +77,11 @@ Control Hub 1 ยืนยันเพียงว่า ESP32 เรียก�
 
 ค่า transport มาจาก `ESP32_PORT` และ `ESP32_BAUD`; default คือ
 `/dev/ttyACM0` และ `115200`. Adapter ใช้ `serial.Serial(..., timeout=1)` และ
+รับ telemetry แบบ JSONL หนึ่ง object ต่อบรรทัด บรรทัด CR/LF ว่างหลังเชื่อมต่อใหม่
+จะถูกมองเป็นตัวคั่นของ Serial ไม่ใช่ packet เสีย ส่วนข้อความสถานะจาก ESP ROM/driver
+จะถูกแยกเป็น `serial_diagnostic_ignored` แบบรวมเหตุการณ์ซ้ำ โดยไม่แทนค่าจาก Sensor
+ล่าสุด หากบรรทัดเริ่มเป็น JSON แต่ parse ไม่สำเร็จจึงบันทึกเป็น
+`payload_rejected: invalid_json` เพื่อให้ความเสียหายของ telemetry จริงยังตรวจพบได้
 อ่านด้วย `readline()` ต่อเนื่อง
 
 ### Data ownership

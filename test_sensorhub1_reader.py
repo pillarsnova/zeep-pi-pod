@@ -78,9 +78,37 @@ class SensorHub1ReaderTests(unittest.TestCase):
             "event": "boot", "hub_id": "sensorhub1",
         })))
         self.assertEqual(self.payloads, [])
-        self.assertEqual(self.events[0][0][:2], ("esp32", "payload_rejected"))
+        self.assertEqual(
+            self.events[0][0][:2],
+            ("esp32", "serial_diagnostic_ignored"),
+        )
         self.assertEqual(
             self.events[1][0][:2], ("esp32", "control_event_ignored"))
+
+    def test_blank_serial_separators_are_ignored_without_false_errors(self) -> None:
+        self.assertFalse(self.reader.process_line(b"\n"))
+        self.assertFalse(self.reader.process_line(b"\r\n"))
+        self.assertFalse(self.reader.process_line(b"  \t\r\n"))
+        self.assertEqual(self.payloads, [])
+        self.assertEqual(self.events, [])
+
+    def test_malformed_json_object_remains_a_real_rejection(self) -> None:
+        self.assertFalse(self.reader.process_line(b'{"event":\n'))
+        self.assertEqual(self.events[0][0][:2], ("esp32", "payload_rejected"))
+        self.assertEqual(self.events[0][1]["reason"], "invalid_json")
+        self.assertEqual(self.events[0][1]["bytes"], 10)
+
+    def test_repeated_serial_diagnostics_are_coalesced_by_marker(self) -> None:
+        self.assertFalse(self.reader.process_line(b"E (100) i2c: timeout\n"))
+        self.assertFalse(self.reader.process_line(b"E (101) i2c: timeout\n"))
+        self.assertFalse(self.reader.process_line(b"ROM: boot message\n"))
+        diagnostics = [
+            event for event in self.events
+            if event[0][:2] == ("esp32", "serial_diagnostic_ignored")
+        ]
+        self.assertEqual(len(diagnostics), 2)
+        self.assertEqual(diagnostics[0][1]["marker"], "E (*) i2c")
+        self.assertEqual(diagnostics[1][1]["marker"], "ROM")
 
     def test_valid_packet_updates_state_and_sound_history(self) -> None:
         self.assertTrue(self.reader.process_line(self.wire(canonical_packet())))

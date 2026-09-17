@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import time
 from collections.abc import Callable, Mapping, MutableMapping, MutableSequence
 from typing import Any
@@ -88,6 +89,7 @@ class SensorHub1Reader:
         self.sleeper = sleeper
         self.last_sound_status: tuple[bool, Any] | None = None
         self.last_sound_field_names: tuple[str, ...] | None = None
+        self.last_serial_diagnostic: str | None = None
 
     def run_forever(self) -> None:
         """Reconnect indefinitely while keeping parse failures packet-local."""
@@ -120,13 +122,35 @@ class SensorHub1Reader:
     def process_line(self, raw: bytes) -> bool:
         """Validate and publish one JSONL packet; return whether it was used."""
         try:
-            payload = json.loads(raw.decode("utf-8", errors="strict").strip())
-        except (UnicodeError, json.JSONDecodeError) as exc:
+            text = raw.decode("utf-8", errors="strict").strip()
+        except UnicodeError as exc:
+            self.log_event(
+                "esp32",
+                "payload_rejected",
+                reason="invalid_utf8",
+                error=str(exc),
+            )
+            return False
+
+        # USB serial may contain empty CR/LF separators after a reconnect.  It
+        # can also carry ESP ROM/driver diagnostics before JSONL telemetry.
+        # Neither is a telemetry payload, so do not report it as corrupt JSON
+        # or let it replace the last valid Sensor state.
+        if not text:
+            return False
+        if text[0] not in "{[":
+            self._log_serial_diagnostic(text)
+            return False
+
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError as exc:
             self.log_event(
                 "esp32",
                 "payload_rejected",
                 reason="invalid_json",
                 error=str(exc),
+                bytes=len(raw),
             )
             return False
 
@@ -164,6 +188,20 @@ class SensorHub1Reader:
         self.publish_payload(normalized)
         self._publish_sound_state(normalized)
         return True
+
+    def _log_serial_diagnostic(self, text: str) -> None:
+        """Coalesce non-JSON serial diagnostics without exposing full lines."""
+        marker = text.split(":", 1)[0].strip()
+        marker = re.sub(r"\(\d+\)", "(*)", marker)[:48] or "serial_text"
+        if marker == self.last_serial_diagnostic:
+            return
+        self.last_serial_diagnostic = marker
+        self.log_event(
+            "esp32",
+            "serial_diagnostic_ignored",
+            marker=marker,
+            bytes=len(text.encode("utf-8")),
+        )
 
     def _publish_sound_contract(self, payload: Mapping[str, Any]) -> None:
         """Log changing SPH0645 field names without logging audio or payloads."""

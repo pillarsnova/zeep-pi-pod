@@ -866,9 +866,9 @@
     reuse a cached stylesheet.
   -->
   <link rel="stylesheet" href="/static/theme-modern.css?v=20260916-155" />
-  <link rel="stylesheet" href="/static/styles/monitor.css?v=20260917-1" />
+  <link rel="stylesheet" href="/static/styles/monitor.css?v=20260917-2" />
   <link rel="stylesheet" href="/static/styles/interface-consistency.css?v=20260916-2" />
-  <link rel="stylesheet" href="/static/styles/sessions.css?v=20260917-1" />
+  <link rel="stylesheet" href="/static/styles/sessions.css?v=20260917-2" />
 </head>
 <body>
 <!-- Shared line-icon library: every interactive view reuses the same 24 px
@@ -1176,45 +1176,45 @@
   <div class="monitor-alert-bar" data-pages="monitor">
     <span class="ui-section-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-bell"/></svg></span><div class="monitor-alert-status" id="monitorAlertStatus">ระบบแจ้งเตือนพร้อมทำงาน · ปิดเสียงอยู่</div>
     <button class="btn ui-label-button" id="alertSoundBtn" onclick="toggleAlertSound()"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-volume-off"/></svg><span class="ui-button-label">เปิดเสียงแจ้งเตือน</span></button>
-    <button class="btn monitor-advanced-btn ui-label-button" id="monitorAdvancedBtn" onclick="toggleAdvancedMonitor()" aria-expanded="false"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-diagnostics"/></svg><span class="ui-button-label">เปิด Advanced Diagnostics</span></button>
+    <button class="btn monitor-advanced-btn ui-label-button" id="monitorAdvancedBtn" onclick="toggleAdvancedMonitor()" aria-expanded="false"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-diagnostics"/></svg><span class="ui-button-label">เปิดข้อมูลเชิงเทคนิค</span></button>
   </div>
 
   <div class="grid">
     <details class="card monitor-provenance-card adaptive-version-panel" data-pages="monitor" data-admin-panel>
-      <summary><span><b>Version &amp; Provenance</b><small>รุ่นของข้อมูล Model และ Logic ที่กำลังทำงาน</small></span><em>เปิดรายละเอียด</em></summary>
+      <summary><span><b>รุ่นระบบและที่มาข้อมูล</b><small>Version &amp; Provenance · Model, Logic และแหล่งข้อมูลที่กำลังใช้งาน</small></span><em>เปิดรายละเอียด</em></summary>
       <div class="adaptive-version-grid" id="adaptiveVersionRows"></div>
       <div class="adaptive-guardrail" id="adaptiveGuardrails"></div>
     </details>
     <header class="monitor-section-heading monitor-section-now" id="monitorNowHeading" data-pages="monitor">
-      <span>01</span><div><h3>ต้องดูตอนนี้</h3><p>ความปลอดภัย Session และความพร้อมของ Sensor</p></div>
+      <span>01</span><div><h3>ความพร้อมของระบบ</h3><p>ความปลอดภัย Session และ Sensor ที่ต้องติดตามตอนนี้</p></div>
     </header>
     <header class="monitor-section-heading monitor-section-live" id="monitorLiveHeading" data-pages="monitor">
-      <span>02</span><div><h3>ผู้ใช้งานและสถานะสด</h3><p>ค่าปัจจุบัน แหล่ง Reference และสิ่งที่ Admin ควรติดตาม</p></div>
+      <span>02</span><div><h3>ผู้ใช้งานและข้อมูลสด</h3><p>สัญญาณชีพ สถานะการพัก และข้อมูลอ้างอิงที่กำลังใช้</p></div>
     </header>
     <header class="monitor-section-heading monitor-section-environment" id="monitorEnvironmentHeading" data-pages="monitor">
-      <span>03</span><div><h3>สภาพแวดล้อมและคำแนะนำ</h3><p>สิ่งที่ควรปรับ โดยแยกเกณฑ์ของโหมดออกจาก Reference รายบุคคล</p></div>
+      <span>03</span><div><h3>สภาพแวดล้อมและคำแนะนำ</h3><p>สิ่งที่ควรปรับตามรูปแบบการพักและข้อมูลอ้างอิงของผู้ใช้</p></div>
     </header>
     <header class="monitor-section-heading monitor-section-advanced" id="monitorAdvancedHeading" data-pages="monitor">
-      <span>04</span><div><h3>Advanced Diagnostics</h3><p>Model, BCG, System, Calibration, Packet และหลักฐานเชิงเทคนิค</p></div>
+      <span>04</span><div><h3>ข้อมูลเชิงเทคนิค</h3><p>Model, BCG, System, Calibration, Packet และหลักฐานสำหรับทีมพัฒนา</p></div>
     </header>
 
     <section class="card monitor-live-summary" id="monitorLiveSummary" data-pages="monitor" data-admin-panel aria-labelledby="monitorLiveSummaryTitle">
       <div class="monitor-live-summary-head">
         <div class="monitor-live-summary-identity">
           <span class="ui-section-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-heart"/></svg></span>
-          <div><em>LIVE PHYSIOLOGY</em><h3 id="monitorLiveSummaryTitle">ข้อมูลชีวภาพสด</h3><p id="monitorLiveIdentity">ยังไม่มีผู้ใช้งานใน Session</p></div>
+          <div><em>LIVE WELLNESS</em><h3 id="monitorLiveSummaryTitle">สัญญาณชีพขณะพัก</h3><p id="monitorLiveIdentity">ยังไม่มีผู้ใช้งานใน Session</p></div>
         </div>
-        <div class="monitor-live-summary-context"><span id="monitorLiveMode">รอ Mode</span><strong id="monitorLiveReference">Sleep State · Age + Gender</strong></div>
+        <div class="monitor-live-summary-context"><span id="monitorLiveMode">รอรูปแบบการพัก</span><strong id="monitorLiveReference">เกณฑ์สถานะ · อายุและเพศ</strong></div>
       </div>
       <div class="monitor-live-metrics" aria-live="polite">
         <article id="monitorLiveHrCard"><small>ชีพจร</small><b id="monitorLiveHr">--</b><span id="monitorLiveHrNote">รอ BCG</span></article>
         <article id="monitorLiveRrCard"><small>การหายใจ</small><b id="monitorLiveRr">--</b><span id="monitorLiveRrNote">รอ BCG</span></article>
         <article id="monitorLiveBedCard"><small>สถานะเตียง</small><b id="monitorLiveBed">--</b><span id="monitorLiveBedNote">รอข้อมูล</span></article>
-        <article id="monitorLiveStageCard"><small>Sleep State</small><b id="monitorLiveStage">--</b><span id="monitorLiveStageNote">รอยืนยัน</span></article>
-        <article id="monitorLiveQualityCard"><small>คุณภาพข้อมูล</small><b id="monitorLiveQuality">--</b><span id="monitorLiveQualityNote">รอตรวจ Gate</span></article>
-        <article id="monitorLivePersonalCard"><small>Personal Reference</small><b id="monitorLivePersonal">กำลังเรียนรู้</b><span id="monitorLivePersonalNote">ใช้เพื่อเทียบและแนะนำ</span></article>
+        <article id="monitorLiveStageCard"><small>สถานะการนอน</small><b id="monitorLiveStage">--</b><span id="monitorLiveStageNote">รอยืนยัน</span></article>
+        <article id="monitorLiveQualityCard"><small>ความพร้อมของข้อมูล</small><b id="monitorLiveQuality">--</b><span id="monitorLiveQualityNote">กำลังตรวจหลักฐาน</span></article>
+        <article id="monitorLivePersonalCard"><small>ข้อมูลอ้างอิงส่วนบุคคล</small><b id="monitorLivePersonal">กำลังเรียนรู้</b><span id="monitorLivePersonalNote">ใช้เพื่อเทียบและแนะนำ</span></article>
       </div>
-      <div class="monitor-live-summary-foot" id="monitorLivePolicy">Sleep State ใช้ Reference ที่ระบุด้านบน · Personal Reference ยังไม่เปลี่ยน State โดยตรง</div>
+      <div class="monitor-live-summary-foot" id="monitorLivePolicy">สถานะการนอนใช้เกณฑ์ที่ระบุด้านบน · ข้อมูลอ้างอิงส่วนบุคคลใช้เพื่อเปรียบเทียบและให้คำแนะนำ</div>
     </section>
 
     <section class="card dashboard-overview" id="dashboardOverview" data-pages="dashboard" aria-label="สุขภาพผู้ใช้งานและ Sensor">
@@ -1781,8 +1781,8 @@
     </div>
     <section class="card adaptive-monitor" id="adaptiveMonitorCard" data-pages="monitor" data-admin-panel aria-labelledby="adaptiveMonitorTitle">
       <div class="adaptive-monitor-head">
-        <div><div class="section-title" id="adaptiveMonitorTitle">Personal Reference · Live</div><p>เทียบข้อมูลสดของ Session นี้กับข้อมูลเดิมของผู้ใช้งาน โดยแสดงแหล่งอ้างอิงแยกรายค่า</p></div>
-        <div class="adaptive-shadow-badge">คำแนะนำเท่านั้น · ไม่สั่งอัตโนมัติ</div>
+        <div><div class="section-title" id="adaptiveMonitorTitle">ข้อมูลอ้างอิงส่วนบุคคล · สด</div><p>เทียบ Session นี้กับรูปแบบการพักเดิมของผู้ใช้ พร้อมแสดงที่มาของแต่ละคำแนะนำ</p></div>
+        <div class="adaptive-shadow-badge">คำแนะนำเท่านั้น · ไม่สั่งอัตโนมัติ · ยังไม่เปลี่ยน State โดยตรง</div>
       </div>
       <div class="adaptive-status-grid" aria-live="polite">
         <article><span>SESSION</span><b id="adaptiveSessionState">ยังไม่มี Session</b><small id="adaptiveSessionMeta">รอผู้ใช้งาน</small></article>
@@ -2284,14 +2284,13 @@
     </div>
 
     <div class="card history" id="historyCard" data-pages="sessions">
-      <div class="tablet-deck-head history-deck-head"><h3>ประวัติการใช้งาน</h3><span>USAGE HISTORY</span></div>
       <div class="history-self-context" id="historySelfContext" aria-live="polite">
         <span class="history-self-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-history"/></svg></span>
         <div><b id="historyOwnerTitle">ประวัติการใช้งานของฉัน</b><small>เลือก Overnight Recovery หรือ Nap & Refresh เพื่อดูผลย้อนหลัง</small></div>
       </div>
       <section class="history-section history-people-section admin-only" aria-labelledby="historyPeopleTitle">
         <div class="history-section-head history-people-head">
-          <div><h4 id="historyPeopleTitle">ผู้ใช้งานทั้งหมด</h4><small>รายการกะทัดรัด · รวมตามอีเมลตั้งแต่เริ่ม Pilot</small></div>
+          <div><span class="history-section-kicker">ผู้ดูแลระบบ</span><h4 id="historyPeopleTitle">ผู้ใช้งานทั้งหมด</h4><small>รวมตามอีเมล เพื่อดูจำนวนครั้งและรูปแบบการพักของแต่ละคน</small></div>
           <div class="history-directory-tools"><span class="history-sort-badge">อีเมล A–Z</span><button id="historyAllUsers" class="history-all-users-button" type="button" aria-pressed="true" onclick="openUsageUserHistory('')">ดูทุกคน</button></div>
           <label class="history-people-search"><span>ค้นหาผู้ใช้งาน</span><input id="historyPeopleSearch" type="search" placeholder="ชื่อหรืออีเมล" oninput="filterUsageUserDirectory()"></label>
         </div>
@@ -2299,7 +2298,7 @@
         <div id="historyPeopleGrid" class="history-people-grid" aria-live="polite"></div>
       </section>
       <section class="history-section history-filter-section" aria-labelledby="historyFilterTitle">
-        <div class="history-section-head"><div><h4 id="historyFilterTitle">เลือกช่วงเวลา</h4><small>เลือกวันและเวลาที่ต้องการดู</small></div></div>
+        <div class="history-section-head"><div><span class="history-section-kicker">ค้นหาข้อมูล</span><h4 id="historyFilterTitle">เลือกช่วงเวลา</h4><small>เลือกวันและเวลาที่ต้องการดู</small></div></div>
         <div id="historyToolbar" class="history-filter-panel" aria-label="ตัวกรองประวัติการใช้งาน">
           <div class="history-filter-group history-date-group">
             <button class="history-day-step" type="button" onclick="shiftHistoryRange(-1)" aria-label="เลื่อนช่วงวันย้อนหลัง"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-previous"/></svg></button>
@@ -2323,16 +2322,16 @@
         </div>
       </section>
       <section class="history-section history-summary-section" aria-labelledby="historySummaryTitle">
-        <div class="history-section-head"><div><h4 id="historySummaryTitle">สรุปช่วงที่เลือก</h4><small>แยก Sleep Score และ Recovery Score ตามรูปแบบการพัก</small></div></div>
+        <div class="history-section-head"><div><span class="history-section-kicker">ภาพรวม</span><h4 id="historySummaryTitle">สรุปช่วงที่เลือก</h4><small>Sleep Score สำหรับ Overnight · Recovery Score สำหรับ Nap &amp; Refresh</small></div></div>
         <div id="historySummary" class="history-summary" aria-live="polite"><div class="mini">กำลังสรุปข้อมูลวันนี้…</div></div>
       </section>
       <div class="history-results-workspace">
         <section class="history-section history-list-section" aria-labelledby="historyListTitle">
-          <div class="history-section-head"><div><h4 id="historyListTitle">รายการการพัก</h4><small>เลือกรายการเพื่อดูสรุปเชิงสุขภาพ</small></div></div>
+          <div class="history-section-head"><div><span class="history-section-kicker">รายการ</span><h4 id="historyListTitle">การพักแต่ละครั้ง</h4><small>เลือกรายการเพื่อดูผลสรุป</small></div></div>
           <div id="sessionList" class="hist-list"><div class="mini">กำลังโหลดประวัติการใช้งาน…</div></div>
         </section>
         <section class="history-section history-detail-section" aria-labelledby="historyDetailTitle">
-          <div class="history-section-head"><div><h4 id="historyDetailTitle">ผลรายการที่เลือก</h4><small>สรุปเชิงสุขภาพก่อน · รายละเอียดเปิดดูเมื่อจำเป็น</small></div></div>
+          <div class="history-section-head"><div><span class="history-section-kicker">ผลการพัก</span><h4 id="historyDetailTitle">สรุปการพักครั้งนี้</h4><small>อ่านภาพรวมก่อน แล้วเปิดรายละเอียดเมื่อจำเป็น</small></div></div>
           <div id="sessionDetail" aria-busy="false" tabindex="-1"><div class="history-empty"><b>เลือกรายการการพัก</b><span>ผลสรุปจะแสดงในส่วนนี้</span></div></div>
         </section>
       </div>
@@ -2344,7 +2343,7 @@
   </div>
 </div>
 
-<script src="/static/app-shell.js?v=20260916-4"></script>
+<script src="/static/app-shell.js?v=20260917-1"></script>
 <script>
 const names = {led:'Lighting Room', star_light:'ไฟดาวบนท้องฟ้า', aroma1:'ลาเวนเดอร์', aroma2:'ยูคาลิปตัส', aroma3:'ส้ม', aroma4:'อากาศสดชื่น', steam:'ไอน้ำ'};
 const outputIcons = {led:'lamp', star_light:'star', aroma1:'flower', aroma2:'leaf', aroma3:'orange', aroma4:'air', steam:'steam'};
@@ -2529,7 +2528,7 @@ function toggleAdvancedMonitor(){
   if(btn){
     btn.classList.toggle('active',monitorAdvancedVisible);
     const label=btn.querySelector('.ui-button-label');
-    if(label)label.textContent=monitorAdvancedVisible?'ซ่อน Advanced Diagnostics':'เปิด Advanced Diagnostics';
+    if(label)label.textContent=monitorAdvancedVisible?'ซ่อนข้อมูลเชิงเทคนิค':'เปิดข้อมูลเชิงเทคนิค';
     btn.setAttribute('aria-expanded',monitorAdvancedVisible?'true':'false');
   }
   if(monitorAdvancedVisible){fetchRawPackets();fetchBcgTrend();requestAnimationFrame(()=>drawBCG(current.sensor?.bcg?.samples||[]));}
@@ -3404,7 +3403,7 @@ function renderMonitorLiveSummary({bcg={},sleep={},session={},analysisEligible=f
   const stageKey=sleep.classification_active===true?(sleep.confirmed_state||sleep.state):null;
   const stage=SLEEP_TH[stageKey]||SLEEP_TH.no_data;
   const confidence=({high:'มั่นใจสูง',medium:'มั่นใจปานกลาง',low:'มั่นใจต่ำ'})[sleep.confidence]||'รอความมั่นใจ';
-  const source=sleep.classification_source==='personal'?'Personal Baseline':'Age + Gender Baseline';
+  const source=sleep.classification_source==='personal'?'ข้อมูลส่วนบุคคล':'อายุและเพศ';
   const bedLabel=BCG_STATUS_TH[bcg.status_code]||bcg.status_text||'รอสัญญาณ';
   const age=Number(bcg.analysis_data_age_s??bcg.data_age_s);
   const freshness=Number.isFinite(age)?`ข้อมูล ${age.toFixed(1)} วินาทีก่อน`:'ยังไม่มีเวลา Packet';
@@ -3414,26 +3413,26 @@ function renderMonitorLiveSummary({bcg={},sleep={},session={},analysisEligible=f
   const personalReady=personal.status==='active'||personal.status==='early'||personal.status==='mature';
   document.getElementById('monitorLiveIdentity').textContent=active?monitorMaskedAccount(session):'ยังไม่มีผู้ใช้งานใน Session';
   document.getElementById('monitorLiveMode').textContent=monitorRestModeLabel(session.rest_mode);
-  document.getElementById('monitorLiveReference').textContent=`Sleep State · ${source}`;
+  document.getElementById('monitorLiveReference').textContent=`เกณฑ์สถานะ · ${source}`;
   setMonitorLiveMetric('monitorLiveHrCard','monitorLiveHr','monitorLiveHrNote',{
-    value:hrValid?hr.toFixed(1):'--',note:hrValid?'ครั้ง/นาที · ใช้วิเคราะห์ได้':bcg.heart_rate_bpm!=null?'มีค่า แต่ Gate ยังไม่ครบ':'รอ BCG',tone:hrValid?'good':'muted',
+    value:hrValid?hr.toFixed(1):'--',note:hrValid?'ครั้ง/นาที · ข้อมูลพร้อม':bcg.heart_rate_bpm!=null?'ได้รับค่าแล้ว · กำลังตรวจหลักฐาน':'รอ BCG',tone:hrValid?'good':'muted',
   });
   setMonitorLiveMetric('monitorLiveRrCard','monitorLiveRr','monitorLiveRrNote',{
-    value:rrValid?rr.toFixed(1):'--',note:rrValid?'ครั้ง/นาที · ใช้วิเคราะห์ได้':bcg.respiration_rate!=null?'มีค่า แต่ Gate ยังไม่ครบ':'รอ BCG',tone:rrValid?'good':'muted',
+    value:rrValid?rr.toFixed(1):'--',note:rrValid?'ครั้ง/นาที · ข้อมูลพร้อม':bcg.respiration_rate!=null?'ได้รับค่าแล้ว · กำลังตรวจหลักฐาน':'รอ BCG',tone:rrValid?'good':'muted',
   });
   setMonitorLiveMetric('monitorLiveBedCard','monitorLiveBed','monitorLiveBedNote',{
     value:bedLabel,note:freshness,tone:active&&bcg.connected&&!bcg.stale?'good':'muted',
   });
   setMonitorLiveMetric('monitorLiveStageCard','monitorLiveStage','monitorLiveStageNote',{
-    value:stageKey?`${stage.code} · ${stage.label}`:'กำลังยืนยัน',note:stageKey?`${confidence} · Confirmed`:'ยังไม่สร้าง State แทนข้อมูลที่หาย',tone:stageKey?'good':'warning',
+    value:stageKey?`${stage.code} · ${stage.label}`:'กำลังยืนยัน',note:stageKey?`${confidence} · ยืนยันแล้ว`:'กำลังสะสมหลักฐานของสถานะ',tone:stageKey?'good':'warning',
   });
   setMonitorLiveMetric('monitorLiveQualityCard','monitorLiveQuality','monitorLiveQualityNote',{
     value:analysisEligible&&hrValid&&rrValid?'พร้อม':'กำลังตรวจ',note:Number.isFinite(coverage)?`HR/RR coverage ${Math.round(coverage*100)}% · ${freshness}`:freshness,tone:analysisEligible&&hrValid&&rrValid?'good':'warning',
   });
   setMonitorLiveMetric('monitorLivePersonalCard','monitorLivePersonal','monitorLivePersonalNote',{
-    value:personalReady?'พร้อมเทียบ':nights?'กำลังเรียนรู้':'ยังไม่มีข้อมูล',note:`${nights} คืน · ใช้เทียบและแนะนำเท่านั้น`,tone:personalReady?'good':'muted',
+    value:personalReady?'พร้อมเทียบ':nights?'กำลังเรียนรู้':'ยังไม่มีข้อมูล',note:`${nights} ครั้ง · ใช้เทียบและแนะนำ`,tone:personalReady?'good':'muted',
   });
-  document.getElementById('monitorLivePolicy').textContent=`Sleep State ใช้ ${source} · Personal Reference เป็นข้อมูลรายบัญชีสำหรับเปรียบเทียบและคำแนะนำ ยังไม่เปลี่ยน State โดยตรง`;
+  document.getElementById('monitorLivePolicy').textContent=`สถานะการนอนใช้เกณฑ์ ${source} · ข้อมูลอ้างอิงส่วนบุคคลใช้เพื่อเปรียบเทียบและให้คำแนะนำ`;
 }
 function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
   const bioRoot=document.getElementById('adminBioExplanation');
@@ -5723,7 +5722,7 @@ function renderAdaptiveDecision(data={}){
   const blockers=Array.isArray(data.blockers)?data.blockers:[];
   document.getElementById('adaptiveBlockers').innerHTML=blockers.map(item=>`<span>${escapeMarkup(item.message||item.code)}</span>`).join('');
   const sleep=data.sleep_estimator||{};
-  document.getElementById('adaptiveSleepContext').textContent=`Sleep State · ${String(sleep.confirmed_state||sleep.state||'--').toUpperCase()} · ${sleep.provisional?'Provisional':sleep.confidence||'รอหลักฐาน'}`;
+  document.getElementById('adaptiveSleepContext').textContent=`สถานะการนอน · ${String(sleep.confirmed_state||sleep.state||'--').toUpperCase()} · ${sleep.provisional?'กำลังยืนยัน':sleep.confidence||'รอหลักฐาน'}`;
 }
 
 function renderAdaptiveDevices(data={}){
@@ -5756,7 +5755,7 @@ function renderAdaptiveLearning(data={}){
   document.getElementById('adaptiveFrameMeta').textContent=`อายุ ${quality.sensor_frame_age_s==null?'--':adaptiveValue(quality.sensor_frame_age_s,1)}s · ทุก ${data.cadence?.sensor_frame_s||10}s`;
   const referenceCount=Number(baseline.reference_metrics)||0;
   document.getElementById('adaptiveBaselineState').textContent=referenceCount?`มี Reference ${referenceCount} ค่า`:baseline.status==='learning'?'กำลังเรียนรู้':'ยังไม่มี Reference';
-  document.getElementById('adaptiveBaselineMeta').textContent=`คำแนะนำ ${baseline.sessions_used||0}/${baseline.minimum_sessions||3} Sessions · Sleep State ${baseline.active_stage_source==='personal'?'Personal':'Age + Gender'}`;
+  document.getElementById('adaptiveBaselineMeta').textContent=`เรียนรู้ ${baseline.sessions_used||0}/${baseline.minimum_sessions||3} ครั้ง · เกณฑ์สถานะ ${baseline.active_stage_source==='personal'?'ข้อมูลส่วนบุคคล':'อายุและเพศ'}`;
   document.getElementById('adaptiveQualityState').textContent=quality.vital_pair_live?'HR/RR พร้อม':'HR/RR ไม่ครบ';
   document.getElementById('adaptiveQualityMeta').textContent=`Environment ${quality.environment_live||0}/${quality.environment_total||6} · Window ${quality.window_coverage_pct??0}%`;
   document.getElementById('adaptiveWindowMeta').textContent=`Rolling window · ${Math.round((data.cadence?.rolling_window_s||300)/60)} นาที · ${quality.window_samples||0} จุด`;

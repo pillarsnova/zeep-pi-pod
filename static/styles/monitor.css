@@ -40,14 +40,14 @@ body[data-view="monitor"] .monitor-section-heading p {
 
 body[data-view="monitor"] .monitor-section-heading h3 {
   color: #e9f8fb;
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.25;
 }
 
 body[data-view="monitor"] .monitor-section-heading p {
   margin-top: 2px;
   color: #79939f;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -70,6 +70,35 @@ body[data-view="monitor"] #dashSleepBaseline { order: 11; grid-column: span 8; }
 body[data-view="monitor"] #systemCard { order: 11; grid-column: span 4; align-self: stretch; }
 body[data-view="monitor"] #bcgCard { order: 12; grid-column: 1 / -1; }
 body[data-view="monitor"] #rawMonitorCard { order: 13; grid-column: 1 / -1; }
+
+body[data-view="monitor"] .monitor-live-summary,
+body[data-view="monitor"] #adminLiveExplanation,
+body[data-view="monitor"] #adaptiveMonitorCard,
+body[data-view="monitor"] #adminAtmosphereCard,
+body[data-view="monitor"] #acousticIntelligenceCard {
+  border-radius: 14px;
+  border-color: rgba(75, 132, 153, .24);
+}
+
+body[data-view="monitor"] .monitor-live-summary-foot {
+  color: #8aa6b2;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+body[data-view="monitor"] .monitor-live-metrics article {
+  min-width: 0;
+}
+
+body[data-view="monitor"] .monitor-live-metrics article small {
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+body[data-view="monitor"] .monitor-live-metrics article span {
+  font-size: 10px;
+  line-height: 1.4;
+}
 
 body[data-view="monitor"]:not(.show-advanced-monitor) :is(
   #dashSleepBaseline,

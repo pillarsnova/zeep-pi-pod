@@ -228,7 +228,7 @@ function renderMonitorLiveSummary({bcg={},sleep={},session={},analysisEligible=f
   const stageKey=sleep.classification_active===true?(sleep.confirmed_state||sleep.state):null;
   const stage=SLEEP_TH[stageKey]||SLEEP_TH.no_data;
   const confidence=({high:'มั่นใจสูง',medium:'มั่นใจปานกลาง',low:'มั่นใจต่ำ'})[sleep.confidence]||'รอความมั่นใจ';
-  const source=sleep.classification_source==='personal'?'Personal Baseline':'Age + Gender Baseline';
+  const source=sleep.classification_source==='personal'?'ข้อมูลส่วนบุคคล':'อายุและเพศ';
   const bedLabel=BCG_STATUS_TH[bcg.status_code]||bcg.status_text||'รอสัญญาณ';
   const age=Number(bcg.analysis_data_age_s??bcg.data_age_s);
   const freshness=Number.isFinite(age)?`ข้อมูล ${age.toFixed(1)} วินาทีก่อน`:'ยังไม่มีเวลา Packet';
@@ -238,26 +238,26 @@ function renderMonitorLiveSummary({bcg={},sleep={},session={},analysisEligible=f
   const personalReady=personal.status==='active'||personal.status==='early'||personal.status==='mature';
   document.getElementById('monitorLiveIdentity').textContent=active?monitorMaskedAccount(session):'ยังไม่มีผู้ใช้งานใน Session';
   document.getElementById('monitorLiveMode').textContent=monitorRestModeLabel(session.rest_mode);
-  document.getElementById('monitorLiveReference').textContent=`Sleep State · ${source}`;
+  document.getElementById('monitorLiveReference').textContent=`เกณฑ์สถานะ · ${source}`;
   setMonitorLiveMetric('monitorLiveHrCard','monitorLiveHr','monitorLiveHrNote',{
-    value:hrValid?hr.toFixed(1):'--',note:hrValid?'ครั้ง/นาที · ใช้วิเคราะห์ได้':bcg.heart_rate_bpm!=null?'มีค่า แต่ Gate ยังไม่ครบ':'รอ BCG',tone:hrValid?'good':'muted',
+    value:hrValid?hr.toFixed(1):'--',note:hrValid?'ครั้ง/นาที · ข้อมูลพร้อม':bcg.heart_rate_bpm!=null?'ได้รับค่าแล้ว · กำลังตรวจหลักฐาน':'รอ BCG',tone:hrValid?'good':'muted',
   });
   setMonitorLiveMetric('monitorLiveRrCard','monitorLiveRr','monitorLiveRrNote',{
-    value:rrValid?rr.toFixed(1):'--',note:rrValid?'ครั้ง/นาที · ใช้วิเคราะห์ได้':bcg.respiration_rate!=null?'มีค่า แต่ Gate ยังไม่ครบ':'รอ BCG',tone:rrValid?'good':'muted',
+    value:rrValid?rr.toFixed(1):'--',note:rrValid?'ครั้ง/นาที · ข้อมูลพร้อม':bcg.respiration_rate!=null?'ได้รับค่าแล้ว · กำลังตรวจหลักฐาน':'รอ BCG',tone:rrValid?'good':'muted',
   });
   setMonitorLiveMetric('monitorLiveBedCard','monitorLiveBed','monitorLiveBedNote',{
     value:bedLabel,note:freshness,tone:active&&bcg.connected&&!bcg.stale?'good':'muted',
   });
   setMonitorLiveMetric('monitorLiveStageCard','monitorLiveStage','monitorLiveStageNote',{
-    value:stageKey?`${stage.code} · ${stage.label}`:'กำลังยืนยัน',note:stageKey?`${confidence} · Confirmed`:'ยังไม่สร้าง State แทนข้อมูลที่หาย',tone:stageKey?'good':'warning',
+    value:stageKey?`${stage.code} · ${stage.label}`:'กำลังยืนยัน',note:stageKey?`${confidence} · ยืนยันแล้ว`:'กำลังสะสมหลักฐานของสถานะ',tone:stageKey?'good':'warning',
   });
   setMonitorLiveMetric('monitorLiveQualityCard','monitorLiveQuality','monitorLiveQualityNote',{
     value:analysisEligible&&hrValid&&rrValid?'พร้อม':'กำลังตรวจ',note:Number.isFinite(coverage)?`HR/RR coverage ${Math.round(coverage*100)}% · ${freshness}`:freshness,tone:analysisEligible&&hrValid&&rrValid?'good':'warning',
   });
   setMonitorLiveMetric('monitorLivePersonalCard','monitorLivePersonal','monitorLivePersonalNote',{
-    value:personalReady?'พร้อมเทียบ':nights?'กำลังเรียนรู้':'ยังไม่มีข้อมูล',note:`${nights} คืน · ใช้เทียบและแนะนำเท่านั้น`,tone:personalReady?'good':'muted',
+    value:personalReady?'พร้อมเทียบ':nights?'กำลังเรียนรู้':'ยังไม่มีข้อมูล',note:`${nights} ครั้ง · ใช้เทียบและแนะนำ`,tone:personalReady?'good':'muted',
   });
-  document.getElementById('monitorLivePolicy').textContent=`Sleep State ใช้ ${source} · Personal Reference เป็นข้อมูลรายบัญชีสำหรับเปรียบเทียบและคำแนะนำ ยังไม่เปลี่ยน State โดยตรง`;
+  document.getElementById('monitorLivePolicy').textContent=`สถานะการนอนใช้เกณฑ์ ${source} · ข้อมูลอ้างอิงส่วนบุคคลใช้เพื่อเปรียบเทียบและให้คำแนะนำ`;
 }
 function renderAdminLiveExplanation({bcg={},sleep={},session={},atmosphere}={}){
   const bioRoot=document.getElementById('adminBioExplanation');

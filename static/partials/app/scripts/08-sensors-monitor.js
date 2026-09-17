@@ -301,7 +301,7 @@ function renderAdaptiveDecision(data={}){
   const blockers=Array.isArray(data.blockers)?data.blockers:[];
   document.getElementById('adaptiveBlockers').innerHTML=blockers.map(item=>`<span>${escapeMarkup(item.message||item.code)}</span>`).join('');
   const sleep=data.sleep_estimator||{};
-  document.getElementById('adaptiveSleepContext').textContent=`Sleep State · ${String(sleep.confirmed_state||sleep.state||'--').toUpperCase()} · ${sleep.provisional?'Provisional':sleep.confidence||'รอหลักฐาน'}`;
+  document.getElementById('adaptiveSleepContext').textContent=`สถานะการนอน · ${String(sleep.confirmed_state||sleep.state||'--').toUpperCase()} · ${sleep.provisional?'กำลังยืนยัน':sleep.confidence||'รอหลักฐาน'}`;
 }
 
 function renderAdaptiveDevices(data={}){
@@ -334,7 +334,7 @@ function renderAdaptiveLearning(data={}){
   document.getElementById('adaptiveFrameMeta').textContent=`อายุ ${quality.sensor_frame_age_s==null?'--':adaptiveValue(quality.sensor_frame_age_s,1)}s · ทุก ${data.cadence?.sensor_frame_s||10}s`;
   const referenceCount=Number(baseline.reference_metrics)||0;
   document.getElementById('adaptiveBaselineState').textContent=referenceCount?`มี Reference ${referenceCount} ค่า`:baseline.status==='learning'?'กำลังเรียนรู้':'ยังไม่มี Reference';
-  document.getElementById('adaptiveBaselineMeta').textContent=`คำแนะนำ ${baseline.sessions_used||0}/${baseline.minimum_sessions||3} Sessions · Sleep State ${baseline.active_stage_source==='personal'?'Personal':'Age + Gender'}`;
+  document.getElementById('adaptiveBaselineMeta').textContent=`เรียนรู้ ${baseline.sessions_used||0}/${baseline.minimum_sessions||3} ครั้ง · เกณฑ์สถานะ ${baseline.active_stage_source==='personal'?'ข้อมูลส่วนบุคคล':'อายุและเพศ'}`;
   document.getElementById('adaptiveQualityState').textContent=quality.vital_pair_live?'HR/RR พร้อม':'HR/RR ไม่ครบ';
   document.getElementById('adaptiveQualityMeta').textContent=`Environment ${quality.environment_live||0}/${quality.environment_total||6} · Window ${quality.window_coverage_pct??0}%`;
   document.getElementById('adaptiveWindowMeta').textContent=`Rolling window · ${Math.round((data.cadence?.rolling_window_s||300)/60)} นาที · ${quality.window_samples||0} จุด`;

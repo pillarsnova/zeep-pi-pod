@@ -43,7 +43,7 @@ function toggleAdvancedMonitor(){
   if(btn){
     btn.classList.toggle('active',monitorAdvancedVisible);
     const label=btn.querySelector('.ui-button-label');
-    if(label)label.textContent=monitorAdvancedVisible?'ซ่อน Advanced Diagnostics':'เปิด Advanced Diagnostics';
+    if(label)label.textContent=monitorAdvancedVisible?'ซ่อนข้อมูลเชิงเทคนิค':'เปิดข้อมูลเชิงเทคนิค';
     btn.setAttribute('aria-expanded',monitorAdvancedVisible?'true':'false');
   }
   if(monitorAdvancedVisible){fetchRawPackets();fetchBcgTrend();requestAnimationFrame(()=>drawBCG(current.sensor?.bcg?.samples||[]));}

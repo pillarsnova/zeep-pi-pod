@@ -64,7 +64,7 @@ User และ Admin ใช้ Control deck เดียวกัน Admin เ�
 4. Personal Reference/Adaptive recommendation
 5. สภาพแวดล้อม
 6. Smart Ear · Level Only และ Candidate ที่กำลังพิสูจน์
-7. Advanced Diagnostics เมื่อผู้ดูแลเปิดดู
+7. ข้อมูลเชิงเทคนิค (Advanced Diagnostics) เมื่อผู้ดูแลเปิดดู
 
 Live strip เป็นแหล่งค่าปัจจุบันหลัก ส่วนคำอธิบายและ Reference ต้องไม่ทวนค่าชุดเดิม
 โดยไม่มีบริบทเพิ่ม
@@ -81,6 +81,11 @@ Advanced เป็น surface LIVE แบบ level-only ส่วน classifier/
 3. รายการการพัก
 4. แนวโน้มรายบุคคล
 5. ผลของ Session ที่เลือก โดยรายละเอียดเทคนิคอยู่ในส่วนพับได้
+
+ภาษาและลำดับภาพของ Monitor กับ Sessions ใช้หลักเดียวกัน: แสดงภาพรวมที่ตัดสินใจ
+ได้ก่อน ใช้คำไทยเป็นหัวข้อหลัก และเก็บคำวิศวกรรมหรือภาษาอังกฤษไว้เป็นคำรองหรือ
+ในส่วนที่เปิดดูเพิ่มเติม หน้า Sessions ไม่สร้างหัวข้อ “ประวัติการใช้งาน” ซ้ำภายใน
+Card เพราะ Page heading ของ Shell ทำหน้าที่นี้อยู่แล้ว
 
 ผู้ใช้เห็นเฉพาะข้อมูลของตน ผู้ดูแลจึงเห็นตัวกรองชื่อ/อีเมลและคำสั่งจัดการข้อมูล
 
@@ -126,6 +131,8 @@ Advanced เป็น surface LIVE แบบ level-only ส่วน classifier/
 - Dashboard แสดงข้อมูลสดก่อน Personal Baseline/Profile
 - Control Debug และ Advanced Monitor เพิ่มขนาดข้อความ/ปุ่มที่เล็กเกินไป
 - Sessions ลดหัวข้อ/กรอบซ้ำและใช้ตัวกรองสูง 44 px ทุก viewport
+- Monitor และ Sessions ใช้ลำดับ “ภาพรวมก่อน–รายละเอียดเมื่อเปิดดู” ร่วมกัน พร้อม
+  เปลี่ยน Gate/Personal Reference ที่อยู่ในพื้นที่สรุปให้เป็นภาษาที่อ่านได้ทันที
 - Login มี label ถาวร ส่งด้วย Enter ได้ และเปิดให้ผู้ใช้ซูมหน้าเว็บ
 - Icon ระบบ, Safety และ Debug ใช้ภาษาภาพเดียวกันมากขึ้น
 - Navigation ประกาศ `aria-current` และ Control Debug รองรับ Focus/fullscreen

@@ -115,7 +115,7 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("คำแนะนำเท่านั้น · ไม่สั่งอัตโนมัติ", template)
         self.assertIn("function renderAdaptiveLearning(data={})", template)
         self.assertIn("renderAdaptiveLearning(s.adaptive_learning||{})", template)
-        self.assertIn("Sleep State ${baseline.active_stage_source", template)
+        self.assertIn("เกณฑ์สถานะ ${baseline.active_stage_source", template)
         self.assertIn("ยังไม่เปลี่ยน State โดยตรง", template)
         self.assertIn("metric.delta==null?Number.NaN:Number(metric.delta)", template)
         self.assertIn("function adaptiveReferenceScope(scope)", template)
@@ -207,7 +207,7 @@ class UiComposerTests(unittest.TestCase):
             ui_composer.STATIC / "styles" / "sessions.css"
         ).read_text(encoding="utf-8")
 
-        self.assertIn('/static/styles/sessions.css?v=20260917-1', template)
+        self.assertIn('/static/styles/sessions.css?v=20260917-2', template)
         self.assertIn(
             'id="login" class="hide" role="dialog" aria-modal="true" '
             'aria-labelledby="loginTitle"',
@@ -568,10 +568,10 @@ class UiComposerTests(unittest.TestCase):
         shell = (ui_composer.STATIC / "app-shell.js").read_text(encoding="utf-8")
 
         self.assertIn("title: 'ประวัติการใช้งาน'", shell)
-        self.assertIn("เลือกช่วงเวลา แล้วดูผลการพักแต่ละครั้ง", shell)
+        self.assertIn("ดูภาพรวมก่อน แล้วเปิดผลการพักแต่ละครั้งเมื่อจำเป็น", shell)
         self.assertNotIn("ประวัติการนอน", shell)
-        self.assertIn("<h3>ประวัติการใช้งาน</h3>", template)
-        self.assertIn("USAGE HISTORY", template)
+        self.assertIn('id="historySelfContext"', template)
+        self.assertNotIn('class="tablet-deck-head history-deck-head"', template)
         self.assertNotIn("<h3>ประวัติการนอน</h3>", template)
         self.assertIn("u.available_usage_sessions??", template)
         self.assertIn("u.current_sessions_without_data??0", template)

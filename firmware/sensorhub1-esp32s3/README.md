@@ -11,7 +11,7 @@ Firmware นี้ใช้กับ Sensor Hub 1 ที่ต่อกับ Pi
 
 | Device | Interface | Pin/address |
 | --- | --- | --- |
-| SPH0645LM4H-B | I²S Philips, LEFT + ESP32-S3 SD timing correction | BCLK GPIO 11, WS GPIO 12, DOUT GPIO 13 |
+| SPH0645LM4H-B | I²S Philips, LEFT | DATA GPIO 11, BCLK GPIO 12, WS GPIO 13 |
 | SHT3x-DIS | I²C | SDA GPIO 8, SCL GPIO 9; ตรวจ `0x44/0x45` และยืนยันด้วย CRC |
 | OPT3001 | I²C | SDA GPIO 8, SCL GPIO 9; ตรวจ `0x44–0x47` และยืนยัน TI ID |
 | Pi transport | Native USB CDC JSONL | 115200 baud |
@@ -36,19 +36,19 @@ Target board ที่ตรวจจากอุปกรณ์จริงค�
 
 ## Sound pipeline
 
-1. รับ SPH0645 ที่ 48 kHz/32-bit I²S slot และเลือก LEFT channel
+1. รับ SPH0645 ที่ 32 kHz/32-bit I²S slot และเลือก LEFT channel
 2. ใช้ ESP-IDF Philips standard format สำหรับ one-bit delay และรับ transport
    word 24-bit ที่อยู่ใน DMA bits 31..8 ด้วย `>> 8`; แม้ SPH0645 มี acoustic
    precision 18-bit แต่ผล Production ยืนยันว่าห้ามตัดเพิ่มอีก 6 bit
 3. ตัด DC และผ่าน A-weighting IIR ที่สร้างจาก analogue pole/zero definition
    ด้วย bilinear transform จากนั้น normalize ที่ 1 kHz
-4. Sound Meter สะสม 48,000 samples เป็น LAeq(A) 1 วินาที
+4. Sound Meter สะสม 32,000 samples เป็น LAeq(A) 1 วินาที
 5. แปลงจาก SPH0645 sensitivity `-26 dBFS @ 94 dB SPL` ด้วยค่าชดเชย
    `94 - (-26) = +120 dB` ดังนั้น `dBA estimate = dBFS(A) + 120 +
    CEM residual offset` โดยไม่บวก peak/RMS correction `+3.0103 dB` ซ้ำ;
    ระบุผลเป็น datasheet estimate จนกว่าจะเทียบ CEM และเก็บเฉพาะ residual
    offset/สถานะใน NVS
-6. DSP Tap สะสม 480,000 samples แยก 10 วินาทีแล้วคำนวณ feature โดยไม่
+6. DSP Tap สะสม 320,000 samples แยก 10 วินาทีแล้วคำนวณ feature โดยไม่
    เปลี่ยนหรือหน่วง Sound Meter
 7. ส่ง `sound_valid=true` เฉพาะเมื่อไม่มี clipping/digital silence และค่าอยู่ใน
    reference range ของ CEM 30–130 dBA ค่า signed `sound_dbfs` คงไว้เป็น

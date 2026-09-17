@@ -146,7 +146,7 @@ void addSoundTelemetry(
   values["sound_window_ms"] = sound.window_ms;
   values["sound_wall_window_ms"] = sound.wall_window_ms;
   values["sound_samples"] = sound.sample_count;
-  values["sound_sample_rate_hz"] = 48000;
+  values["sound_sample_rate_hz"] = 32000;
   values["sound_calibration_offset_db"] = sound.calibration_offset_db;
   values["sound_dba_calibrated"] = sound.dba_calibrated;
   values["sound_calibration_model"] = "sph0645-datasheet-plus-cem-v1";
@@ -162,6 +162,22 @@ void addSoundTelemetry(
   addNumberOrNull(values, "sound_clip_ratio", sound.clip_ratio);
   addNumberOrNull(values, "sound_zero_ratio", sound.zero_ratio);
   addNumberOrNull(values, "sound_repeated_ratio", sound.repeated_ratio);
+  addNumberOrNull(
+      values,
+      "sound_debug_dbfs_right24",
+      sound.debug_dbfs_right24);
+  addNumberOrNull(
+      values,
+      "sound_debug_dbfs_high16",
+      sound.debug_dbfs_high16);
+  addNumberOrNull(
+      values,
+      "sound_debug_dbfs_low16",
+      sound.debug_dbfs_low16);
+  values["sound_debug_raw_min"] = sound.raw_min;
+  values["sound_debug_raw_max"] = sound.raw_max;
+  values["sound_debug_raw_changes"] = sound.raw_changes;
+  values["sound_debug_low_byte_nonzero"] = sound.raw_low_byte_nonzero;
   values["sound_window_sequence"] = sound.sequence;
   const bool acoustic_fresh = sound.acoustic.completed_ms != 0 &&
       now_ms - sound.acoustic.completed_ms <= kAcousticWindowFreshMs;
@@ -241,7 +257,12 @@ void addSoundTelemetry(
   detail["i2s_bclk_gpio"] = static_cast<int>(zeep::board::kMicBclk);
   detail["i2s_ws_gpio"] = static_cast<int>(zeep::board::kMicWordSelect);
   detail["i2s_data_gpio"] = static_cast<int>(zeep::board::kMicData);
-  detail["i2s_slot"] = "left_timing_corrected";
+  detail["i2s_driver"] = "idf5_std_channel";
+  detail["i2s_slot"] = "left_mono_32bit";
+  detail["i2s_bclk_inverted"] = false;
+  detail["i2s_bit_shift"] = true;
+  detail["i2s_sd_delay_mode"] = 0;
+  detail["pcm_probe"] = "left32-msb24-right24-high16-low16";
   JsonObject inline_diagnostics = sensor["diagnostics"].to<JsonObject>();
   for (JsonPair pair : detail) {
     inline_diagnostics[pair.key()] = pair.value();

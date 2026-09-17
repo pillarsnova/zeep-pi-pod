@@ -4,12 +4,12 @@
 
 namespace zeep::board {
 
-// Released Sensor Hub 1 harness contract. Logical pin mapping is verified in
-// software; Production still requires continuity and waveform acceptance on
-// the physical board before this candidate may be promoted.
-constexpr gpio_num_t kMicBclk = GPIO_NUM_11;
-constexpr gpio_num_t kMicWordSelect = GPIO_NUM_12;
-constexpr gpio_num_t kMicData = GPIO_NUM_13;
+// Production wiring recovered from the known-good firmware's live GPIO
+// matrix: SD=11, BCLK=12 and WS=13. The earlier replacement assigned the
+// right three pins to the wrong signals and sampled clock edges as PCM.
+constexpr gpio_num_t kMicData = GPIO_NUM_11;
+constexpr gpio_num_t kMicBclk = GPIO_NUM_12;
+constexpr gpio_num_t kMicWordSelect = GPIO_NUM_13;
 constexpr gpio_num_t kI2cSda = GPIO_NUM_8;
 constexpr gpio_num_t kI2cScl = GPIO_NUM_9;
 

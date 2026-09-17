@@ -100,6 +100,13 @@ SENSOR_VALUE_FIELDS: dict[str, frozenset[str]] = {
             "sound_clip_ratio",
             "sound_zero_ratio",
             "sound_repeated_ratio",
+            "sound_debug_dbfs_right24",
+            "sound_debug_dbfs_high16",
+            "sound_debug_dbfs_low16",
+            "sound_debug_raw_min",
+            "sound_debug_raw_max",
+            "sound_debug_raw_changes",
+            "sound_debug_low_byte_nonzero",
             "sound_alignment_errors",
             "sound_transient_count",
         }

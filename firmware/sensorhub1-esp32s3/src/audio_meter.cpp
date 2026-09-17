@@ -3,9 +3,8 @@
 #include <Preferences.h>
 
 #include <algorithm>
+#include <climits>
 #include <cmath>
-
-#include <soc/i2s_struct.h>
 
 #include "board_config.h"
 
@@ -13,16 +12,11 @@ namespace zeep {
 
 namespace {
 
-constexpr uint32_t kSampleRateHz = 48000;
+constexpr uint32_t kSampleRateHz = 32000;
 constexpr uint32_t kMeterWindowSamples = kSampleRateHz;
 constexpr uint32_t kAcousticWindowSamples = kSampleRateHz * 10;
 constexpr size_t kReadSamples = 1024;
-// The ESP32-S3 legacy I2S driver exposes the microphone's complete signed
-// 24-bit word MSB-aligned in its 32-bit DMA slot. The SPH0645 has 18-bit
-// acoustic precision, but discarding another six bits here destroys quiet
-// signal resolution on the Production board. Preserve the transport word and
-// normalize against signed 24-bit full scale.
-constexpr uint8_t kPcmTransportPaddingBits = 8;
+constexpr size_t kBytesPerSample = sizeof(int32_t);
 constexpr float kFullScale24 = 8388607.0F;
 constexpr float kReferenceSplDb = 94.0F;
 constexpr float kSensitivityDbfs = -26.0F;
@@ -33,7 +27,9 @@ constexpr float kDatasheetOffsetDb = kReferenceSplDb - kSensitivityDbfs;
 constexpr float kClipThreshold = 0.98F;
 constexpr float kMaxClipRatio = 0.001F;
 constexpr float kMaxZeroRatio = 0.95F;
-constexpr float kMaxRepeatedRatio = 0.995F;
+// A healthy Production capture changes on about 97% of adjacent samples.
+// A permissive 99.5% threshold let broken DMA buffers appear as real sound.
+constexpr float kMaxRepeatedRatio = 0.20F;
 constexpr uint32_t kStreamStaleMs = 1500;
 constexpr uint32_t kReadErrorsBeforeRecovery = 20;
 constexpr uint32_t kRecoveryPauseMs = 50;
@@ -73,35 +69,38 @@ class Biquad {
   double delay_2_ = 0.0;
 };
 
-// A-weighting at 48 kHz. Coefficients are generated from the IEC analogue
+// A-weighting at 32 kHz. Coefficients are generated from the IEC analogue
 // pole/zero definition with a bilinear transform and normalized at 1 kHz.
 // The host regression test independently verifies the frequency response.
 Biquad a_weighting_1({
-    0.23418304260355596,
-    -0.46836608520711193,
-    0.23418304260355596,
-    -1.9946144559930215,
-    0.99462170701408426,
+    0.3430690102281953,
+    -0.6861380204563906,
+    0.3430690102281953,
+    -1.9919271185967897,
+    0.9919434114503273,
 });
 Biquad a_weighting_2({
     1.0,
     -2.0,
     1.0,
-    -1.8938704947230707,
-    0.89515976909466166,
+    -1.843990656105489,
+    0.8468163240645945,
 });
 Biquad a_weighting_3({
     1.0,
     2.0,
     1.0,
-    -0.22455845805977914,
-    0.012606625271546396,
+    0.1794717314686119,
+    0.008052525599085385,
 });
 
 double dc_previous_input = 0.0;
 double dc_previous_output = 0.0;
 double sum_square_unweighted = 0.0;
 double sum_square_a_weighted = 0.0;
+double sum_square_right24 = 0.0;
+double sum_square_high16 = 0.0;
+double sum_square_low16 = 0.0;
 float peak_normalized = 0.0F;
 uint32_t accumulated_samples = 0;
 uint32_t clipped_samples = 0;
@@ -109,9 +108,22 @@ uint32_t zero_samples = 0;
 uint32_t repeated_samples = 0;
 uint32_t alignment_errors = 0;
 uint32_t read_errors = 0;
+uint32_t raw_changes = 0;
+uint32_t raw_low_byte_nonzero = 0;
 uint32_t window_started_ms = 0;
 int32_t previous_sample_18 = 0;
+int32_t previous_raw_sample = 0;
+int32_t raw_min = INT32_MAX;
+int32_t raw_max = INT32_MIN;
 bool has_previous_sample = false;
+
+int32_t signExtend24(uint32_t value) {
+  value &= 0x00FFFFFFU;
+  if ((value & 0x00800000U) != 0U) {
+    value |= 0xFF000000U;
+  }
+  return static_cast<int32_t>(value);
+}
 
 double dcBlock(double input) {
   constexpr double kPole = 0.9992;
@@ -142,39 +154,38 @@ bool AudioMeter::begin() {
     calibration_valid_ = false;
   }
 
-  i2s_config_t i2s_config = {};
-  i2s_config.mode = static_cast<i2s_mode_t>(I2S_MODE_MASTER | I2S_MODE_RX);
-  i2s_config.sample_rate = kSampleRateHz;
-  i2s_config.bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT;
-  i2s_config.channel_format = I2S_CHANNEL_FMT_ONLY_LEFT;
-  i2s_config.communication_format = I2S_COMM_FORMAT_STAND_I2S;
-  i2s_config.intr_alloc_flags = ESP_INTR_FLAG_LEVEL1;
-  i2s_config.dma_buf_count = 8;
-  i2s_config.dma_buf_len = 512;
-  i2s_config.use_apll = true;
-  i2s_config.tx_desc_auto_clear = false;
-  i2s_config.fixed_mclk = 0;
-  if (i2s_driver_install(I2S_NUM_0, &i2s_config, 0, nullptr) != ESP_OK) {
+  i2s_chan_config_t channel_config =
+      I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
+  channel_config.dma_desc_num = 8;
+  channel_config.dma_frame_num = 512;
+  if (i2s_new_channel(&channel_config, nullptr, &rx_channel_) != ESP_OK) {
     return false;
   }
 
-  i2s_pin_config_t pin_config = {};
-  pin_config.mck_io_num = I2S_PIN_NO_CHANGE;
-  pin_config.bck_io_num = board::kMicBclk;
-  pin_config.ws_io_num = board::kMicWordSelect;
-  pin_config.data_out_num = I2S_PIN_NO_CHANGE;
-  pin_config.data_in_num = board::kMicData;
-  if (i2s_set_pin(I2S_NUM_0, &pin_config) != ESP_OK) {
-    i2s_driver_uninstall(I2S_NUM_0);
+  i2s_std_config_t stream_config = {};
+  stream_config.clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(kSampleRateHz);
+  stream_config.slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(
+      I2S_DATA_BIT_WIDTH_32BIT,
+      I2S_SLOT_MODE_MONO);
+  stream_config.slot_cfg.slot_mask = I2S_STD_SLOT_LEFT;
+  stream_config.gpio_cfg.mclk = I2S_GPIO_UNUSED;
+  stream_config.gpio_cfg.bclk = board::kMicBclk;
+  stream_config.gpio_cfg.ws = board::kMicWordSelect;
+  stream_config.gpio_cfg.dout = I2S_GPIO_UNUSED;
+  stream_config.gpio_cfg.din = board::kMicData;
+  stream_config.gpio_cfg.invert_flags.mclk_inv = false;
+  stream_config.gpio_cfg.invert_flags.bclk_inv = false;
+  stream_config.gpio_cfg.invert_flags.ws_inv = false;
+  if (i2s_channel_init_std_mode(rx_channel_, &stream_config) != ESP_OK) {
+    i2s_del_channel(rx_channel_);
+    rx_channel_ = nullptr;
     return false;
   }
-  // SPH0645 changes SD close to the sampling edge. The classic ESP32 SLM
-  // workaround sets RX_SD_IN_DELAY mode 2; ESP32-S3 exposes the equivalent as
-  // rx_sd_in_dm. Keep Philips MSB shift enabled and sample SD on the delayed
-  // edge to prevent long zero runs and full-scale glitches.
-  I2S0.rx_conf1.rx_msb_shift = 1;
-  I2S0.rx_timing.rx_sd_in_dm = 2;
-
+  if (i2s_channel_enable(rx_channel_) != ESP_OK) {
+    i2s_del_channel(rx_channel_);
+    rx_channel_ = nullptr;
+    return false;
+  }
   resetWindowAccumulator();
   resetSignalState();
   driver_ready_ = true;
@@ -187,7 +198,9 @@ bool AudioMeter::begin() {
       &task_handle_,
       0) == pdPASS;
   if (!task_running_) {
-    i2s_driver_uninstall(I2S_NUM_0);
+    i2s_channel_disable(rx_channel_);
+    i2s_del_channel(rx_channel_);
+    rx_channel_ = nullptr;
     driver_ready_ = false;
   }
   return task_running_;
@@ -296,8 +309,8 @@ void AudioMeter::readTask() {
   int32_t samples[kReadSamples];
   while (true) {
     size_t bytes_read = 0;
-    const esp_err_t result = i2s_read(
-        I2S_NUM_0,
+    const esp_err_t result = i2s_channel_read(
+        rx_channel_,
         samples,
         sizeof(samples),
         &bytes_read,
@@ -321,17 +334,39 @@ void AudioMeter::readTask() {
     consecutive_read_errors_ = 0;
     portEXIT_CRITICAL(&result_lock_);
 
-    const size_t sample_count = bytes_read / sizeof(int32_t);
+    const size_t sample_count = bytes_read / kBytesPerSample;
     for (size_t index = 0; index < sample_count; ++index) {
       if (accumulated_samples == 0) {
         window_started_ms = millis();
       }
-      // Philips mode resolves the one-bit I2S delay. Production capture shows
-      // that the legacy ESP32-S3 driver returns the complete 24-bit transport
-      // word in bits 31..8; the low six acoustic-precision bits must not be
-      // treated as DMA padding.
+      // SPH0645 puts its signed 24-bit transport word in bits 31..8 of the
+      // 32-bit Philips slot. Preserve all transport bits for quiet signals.
       const int32_t raw_sample = samples[index];
-      const int32_t sample_24 = raw_sample >> kPcmTransportPaddingBits;
+      const uint32_t packed = static_cast<uint32_t>(raw_sample >> 8);
+      const int32_t sample_24 = signExtend24(packed);
+      const int32_t right24 = sample_24;
+      const int16_t high16 = static_cast<int16_t>(
+          static_cast<uint32_t>(packed) >> 8);
+      const int16_t low16 = static_cast<int16_t>(
+          static_cast<uint32_t>(packed) & 0xFFFFU);
+      const double normalized_right24 =
+          static_cast<double>(right24) / kFullScale24;
+      const double normalized_high16 =
+          static_cast<double>(high16) / INT16_MAX;
+      const double normalized_low16 =
+          static_cast<double>(low16) / INT16_MAX;
+      sum_square_right24 += normalized_right24 * normalized_right24;
+      sum_square_high16 += normalized_high16 * normalized_high16;
+      sum_square_low16 += normalized_low16 * normalized_low16;
+      raw_min = std::min(raw_min, sample_24);
+      raw_max = std::max(raw_max, sample_24);
+      if ((packed & 0xFFU) != 0U) {
+        ++raw_low_byte_nonzero;
+      }
+      if (has_previous_sample && sample_24 != previous_raw_sample) {
+        ++raw_changes;
+      }
+      previous_raw_sample = sample_24;
       const double normalized = static_cast<double>(sample_24) / kFullScale24;
       const double unweighted = dcBlock(normalized);
       acoustic_classifier_.addSample(
@@ -412,6 +447,16 @@ void AudioMeter::publishAccumulator() {
   window.clip_ratio = clip_ratio;
   window.zero_ratio = zero_ratio;
   window.repeated_ratio = repeated_ratio;
+  window.debug_dbfs_right24 = dbfsFromRms(std::sqrt(
+      sum_square_right24 / accumulated_samples));
+  window.debug_dbfs_high16 = dbfsFromRms(std::sqrt(
+      sum_square_high16 / accumulated_samples));
+  window.debug_dbfs_low16 = dbfsFromRms(std::sqrt(
+      sum_square_low16 / accumulated_samples));
+  window.raw_min = raw_min;
+  window.raw_max = raw_max;
+  window.raw_changes = raw_changes;
+  window.raw_low_byte_nonzero = raw_low_byte_nonzero;
   if (!isfinite(window.laeq_dba) || !isfinite(window.dbfs)) {
     window.invalid_reason = "non_finite";
   } else if (read_errors > 0) {
@@ -466,6 +511,9 @@ void AudioMeter::publishAcousticAccumulator() {
 void AudioMeter::resetWindowAccumulator() {
   sum_square_unweighted = 0.0;
   sum_square_a_weighted = 0.0;
+  sum_square_right24 = 0.0;
+  sum_square_high16 = 0.0;
+  sum_square_low16 = 0.0;
   peak_normalized = 0.0F;
   accumulated_samples = 0;
   clipped_samples = 0;
@@ -473,6 +521,10 @@ void AudioMeter::resetWindowAccumulator() {
   repeated_samples = 0;
   alignment_errors = 0;
   read_errors = 0;
+  raw_changes = 0;
+  raw_low_byte_nonzero = 0;
+  raw_min = INT32_MAX;
+  raw_max = INT32_MIN;
   window_started_ms = 0;
 }
 
@@ -486,6 +538,7 @@ void AudioMeter::resetAcousticAccumulator() {
 
 void AudioMeter::resetSignalState() {
   previous_sample_18 = 0;
+  previous_raw_sample = 0;
   has_previous_sample = false;
   dc_previous_input = 0.0;
   dc_previous_output = 0.0;
@@ -497,9 +550,9 @@ void AudioMeter::resetSignalState() {
 }
 
 void AudioMeter::recoverStream() {
-  i2s_stop(I2S_NUM_0);
+  i2s_channel_disable(rx_channel_);
   delay(kRecoveryPauseMs);
-  const bool recovered = i2s_start(I2S_NUM_0) == ESP_OK;
+  const bool recovered = i2s_channel_enable(rx_channel_) == ESP_OK;
   resetWindowAccumulator();
   resetSignalState();
   portENTER_CRITICAL(&result_lock_);

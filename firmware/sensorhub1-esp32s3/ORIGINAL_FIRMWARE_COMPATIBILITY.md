@@ -145,14 +145,17 @@ Production Flash ใช้เก็บหลักฐานจริงได้
 - Admin UI: แสดง heartbeat จาก packet จริง; feature ไม่มีให้ขึ้น “กำลังรอข้อมูล”
   ไม่สร้าง animation ที่ทำให้เข้าใจว่ามี event ปลอม
 
-## Production state หลัง rollback
+## Production state ล่าสุด
 
-- Full Flash restore: verified digest matched
-- Pi service: active
-- Safety Supervisor: ready; level `degraded` ตาม policy ปัจจุบัน
-- Original SHT31, OPT3001 และ SPH0645 telemetry: restored
-- ตัวอย่างล่าสุด: `sound_dba=55.46–55.54`, zero ratio `0`, change ratio
-  `0.9735–0.9760`, clip/read error `0/0`
+- ติดตั้ง `sensorhub1-smart-ear-v0.5.3-debug` เฉพาะ app partition และ verify
+  digest สำเร็จ; NVS, partition table และ FFat ไม่ถูกเขียนทับ
+- Pi service: active และ Sensor ทั้งสามส่งสถานะแยกกันตาม contract
+- SPH0645: `sound_valid=true`, zero ratio `0`, repeated ratio ประมาณ `1.2–1.3%`,
+  raw change ประมาณ `98.7%`, clip/read error `0/0`
+- ตัวอย่างหลังแก้ A-weighting 32 kHz: `sound_dba=63.55–63.76 dBA est.` ตามสูตร
+  datasheet `dBFS(A) + 120`; ยังต้องเทียบ CEM ในสภาพเดียวกันเพื่อหา residual
+  calibration และห้ามเรียกค่าปัจจุบันว่า calibrated
+- Full Flash เดิมยังเก็บเป็น Golden rollback และ digest ไม่เปลี่ยน
 
 ## Production experiment log · 2026-09-17
 
@@ -163,8 +166,12 @@ Production Flash ใช้เก็บหลักฐานจริงได้
 | v0.3.2 | RIGHT slot | ไม่มีสัญญาณ; non-finite |
 | v0.3.3 | LEFT word จาก explicit stereo frame | invalid; zero ~45%, repeated ~99% |
 | v0.3.4 | LEFT + ESP32-S3 SD timing delay | invalid; pattern ไม่เปลี่ยน |
+| v0.4.1 | ESP-IDF channel API, 32 kHz, LEFT mono | register ตรง Golden แต่ PCM ยังอ่าน clock/data ผิดเพราะ pin role สลับ |
+| v0.4.2–v0.5.1 | ทดลอง width, slot, timing และ pinned runtime พร้อม raw probe | ตัดสมมติฐาน bit shift/runtime; พบ zero ~48% และ repeated ~99% เหมือนเดิม |
+| v0.5.2 | เทียบ live GPIO matrix กับ Golden แล้วแก้ `DATA=11`, `BCLK=12`, `WS=13` | PCM กลับมาปกติทันที; zero 0%, change ~98.7%, error 0 |
+| v0.5.3-debug | A-weighting 32 kHz + QA gate + DSP/debug telemetry ครบ | Production live; 3 packet ตรวจผ่าน, Sensor ทั้งสาม live |
 
-ข้อสรุป: SPH0645 ไม่เสีย เพราะ Firmware เดิมกลับมาอ่าน 32,000 nonzero samples
-ต่อวินาทีได้ครบ ปัญหาอยู่ที่ replacement I²S acquisition path ของ Arduino/legacy
-driver งานถัดไปต้อง reproduce Legacy Core 32 kHz ด้วย ESP-IDF channel API หรือ
-ดึง source/logic trace ของ Firmware เดิมก่อนเพิ่ม DSP tap
+ข้อสรุป: SPH0645 ไม่เสีย ต้นเหตุคือเอกสารเดิมระบุเพียงชุด GPIO `11/12/13`
+แต่ผูกบทบาทสัญญาณผิด การอ่าน live GPIO matrix จาก Golden Firmware พิสูจน์ mapping
+จริงเป็น `DATA=11`, `BCLK=12`, `WS=13` เมื่อแก้ mapping โดยไม่เพิ่ม timing hack
+สัญญาณกลับมามีสุขภาพเทียบ Golden และ DSP tap ทำงานแบบ additive ได้

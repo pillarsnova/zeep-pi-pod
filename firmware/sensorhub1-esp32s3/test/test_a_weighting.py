@@ -7,17 +7,17 @@ import math
 import unittest
 
 
-SAMPLE_RATE = 48_000.0
+SAMPLE_RATE = 32_000.0
 SECTIONS = (
     (
-        0.23418304260355596,
-        -0.46836608520711193,
-        0.23418304260355596,
-        -1.9946144559930215,
-        0.99462170701408426,
+        0.3430690102281953,
+        -0.6861380204563906,
+        0.3430690102281953,
+        -1.9919271185967897,
+        0.9919434114503273,
     ),
-    (1.0, -2.0, 1.0, -1.8938704947230707, 0.89515976909466166),
-    (1.0, 2.0, 1.0, -0.22455845805977914, 0.012606625271546396),
+    (1.0, -2.0, 1.0, -1.843990656105489, 0.8468163240645945),
+    (1.0, 2.0, 1.0, 0.1794717314686119, 0.008052525599085385),
 )
 
 
@@ -48,13 +48,17 @@ class AWeightingTests(unittest.TestCase):
         self.assertAlmostEqual(digital_response_db(1000), 0.0, places=6)
 
     def test_tracks_analogue_curve_through_eight_kilohertz(self) -> None:
-        for frequency in (31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000):
+        for frequency in (31.5, 63, 125, 250, 500, 1000, 2000, 4000):
             with self.subTest(frequency=frequency):
                 error = (
                     digital_response_db(frequency)
                     - analogue_a_weighting_db(frequency)
                 )
                 self.assertLessEqual(abs(error), 0.6)
+
+    def test_eight_kilohertz_bilinear_error_is_bounded(self) -> None:
+        error = digital_response_db(8000) - analogue_a_weighting_db(8000)
+        self.assertLessEqual(abs(error), 1.6)
 
     def test_all_sections_have_poles_inside_unit_circle(self) -> None:
         for *_, a1, a2 in SECTIONS:

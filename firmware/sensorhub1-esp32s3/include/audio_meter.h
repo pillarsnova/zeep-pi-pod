@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
-#include <driver/i2s.h>
+#include <driver/i2s_std.h>
 
 #include "acoustic_classifier.h"
 
@@ -28,6 +28,13 @@ struct SoundWindow {
   float clip_ratio = NAN;
   float zero_ratio = NAN;
   float repeated_ratio = NAN;
+  float debug_dbfs_right24 = NAN;
+  float debug_dbfs_high16 = NAN;
+  float debug_dbfs_low16 = NAN;
+  int32_t raw_min = 0;
+  int32_t raw_max = 0;
+  uint32_t raw_changes = 0;
+  uint32_t raw_low_byte_nonzero = 0;
   uint32_t completed_ms = 0;
   uint32_t sequence = 0;
   const char* invalid_reason = nullptr;
@@ -68,6 +75,7 @@ class AudioMeter {
   void recoverStream();
 
   TaskHandle_t task_handle_ = nullptr;
+  i2s_chan_handle_t rx_channel_ = nullptr;
   mutable portMUX_TYPE result_lock_ = portMUX_INITIALIZER_UNLOCKED;
   SoundWindow pending_;
   AcousticClassifier acoustic_classifier_;

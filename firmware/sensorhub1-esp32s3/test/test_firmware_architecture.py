@@ -72,22 +72,31 @@ class FirmwareArchitectureTests(unittest.TestCase):
         source = (FIRMWARE_ROOT / "src" / "audio_meter.cpp").read_text(
             encoding="utf-8"
         )
-        self.assertIn("raw_sample >> kPcmTransportPaddingBits", source)
-        self.assertIn("kPcmTransportPaddingBits = 8", source)
+        self.assertIn("raw_sample >> 8", source)
+        self.assertIn("signExtend24(packed)", source)
         self.assertNotIn('invalid_reason = "pcm_alignment_error"', source)
 
-    def test_production_microphone_applies_sph0645_timing_fix(self) -> None:
+    def test_production_microphone_pin_mapping_matches_oracle(self) -> None:
+        board = (FIRMWARE_ROOT / "include" / "board_config.h").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("kMicData = GPIO_NUM_11", board)
+        self.assertIn("kMicBclk = GPIO_NUM_12", board)
+        self.assertIn("kMicWordSelect = GPIO_NUM_13", board)
+
+    def test_production_microphone_uses_idf5_standard_channel(self) -> None:
         meter = (FIRMWARE_ROOT / "src" / "audio_meter.cpp").read_text(
             encoding="utf-8"
         )
         telemetry = (
             FIRMWARE_ROOT / "src" / "telemetry_publisher.cpp"
         ).read_text(encoding="utf-8")
-        self.assertIn("I2S_CHANNEL_FMT_ONLY_LEFT", meter)
-        self.assertIn("I2S0.rx_conf1.rx_msb_shift = 1", meter)
-        self.assertIn("I2S0.rx_timing.rx_sd_in_dm = 2", meter)
+        self.assertIn("i2s_new_channel", meter)
+        self.assertIn("i2s_channel_init_std_mode", meter)
+        self.assertIn("I2S_STD_SLOT_LEFT", meter)
+        self.assertIn("i2s_channel_read", meter)
         self.assertIn(
-            'detail["i2s_slot"] = "left_timing_corrected"', telemetry
+            'detail["i2s_driver"] = "idf5_std_channel"', telemetry
         )
 
 

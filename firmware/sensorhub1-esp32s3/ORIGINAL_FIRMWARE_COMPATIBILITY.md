@@ -6,9 +6,32 @@
 
 ## Decision
 
-การพัฒนา DSP ต้องเริ่มจากพฤติกรรมของ Firmware เดิมและเพิ่ม feature แบบ
-**additive** เท่านั้น ห้ามเปลี่ยน bootloader, partition table, NVS, cadence,
-สูตรเสียง หรือการอ่าน Sensor พร้อมกันในรอบเดียว
+การพัฒนาต้องยึด Datasheet, Technical Reference Manual, errata และ application
+note ของผู้ผลิตเป็นหลัก Firmware เดิมใช้เป็นหลักฐานของการต่อบอร์ดและพฤติกรรม
+Production เท่านั้น ไม่ใช่มาตรฐานที่ต้องคัดลอกทั้งหมด
+
+## Evidence hierarchy
+
+1. **Authoritative specification:** Datasheet/TRM/errata จากผู้ผลิต
+2. **Board-specific truth:** schematic, BOM, strap/address wiring และการวัดบนบอร์ดจริง
+3. **Compatibility evidence:** packet และพฤติกรรมของ Firmware เดิม
+4. **Implementation:** source/test ของ ZEEP รุ่นใหม่ ต้องอธิบายความสอดคล้องกับข้อ 1–3
+
+หากข้อมูลขัดกัน ให้ Datasheet ตัดสิน electrical/protocol limits ส่วน address และ
+GPIO ที่เลือกได้ต้องตัดสินจาก schematic/การวัดบอร์ดจริง ค่า calibration ภาคสนาม
+ใช้ได้เมื่อมีเครื่องมือ วิธีทดสอบ วันที่ และ artifact checksum ตรวจย้อนกลับได้เท่านั้น
+
+Official sources ที่ใช้กับชุดนี้:
+
+- [ESP32-S3 Series Datasheet](https://documentation.espressif.com/esp32_s3_datasheet_en.pdf)
+- [ESP32-S3 Hardware Design Guidelines](https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32s3/)
+- [Knowles SPH0645LM4H-B Datasheet](https://www.knowles.com/docs/default-source/model-downloads/sph0645lm4h-b-datasheet-rev-c.pdf)
+- [Sensirion SHT3x-DIS Datasheet](https://sensirion.com/media/documents/213E6A3B/63A5A569/Datasheet_SHT3x_DIS.pdf)
+- [TI OPT3001 Datasheet and product documentation](https://www.ti.com/product/OPT3001)
+
+การเพิ่ม DSP ต้องเป็นแบบ **additive** ต่อ measurement pipeline ที่พิสูจน์แล้ว
+และต้องเปลี่ยนทีละชั้นเพื่อระบุผลกระทบได้ ห้ามเปลี่ยน bootloader, partition,
+sensor driver, sound formula และ DSP พร้อมกันในรอบเดียว
 
 Firmware `sensorhub1-dsp-shadow-v0.2.0` ไม่ผ่าน Production parity และถูก rollback
 เป็น Full Flash เดิมที่ตรวจ digest ตรงแล้ว รุ่นนี้ห้าม Flash ซ้ำจนกว่าจะผ่าน Gate

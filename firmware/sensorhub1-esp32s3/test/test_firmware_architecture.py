@@ -76,6 +76,16 @@ class FirmwareArchitectureTests(unittest.TestCase):
         self.assertIn("kPcmTransportPaddingBits = 8", source)
         self.assertNotIn('invalid_reason = "pcm_alignment_error"', source)
 
+    def test_production_microphone_uses_observed_right_slot(self) -> None:
+        meter = (FIRMWARE_ROOT / "src" / "audio_meter.cpp").read_text(
+            encoding="utf-8"
+        )
+        telemetry = (
+            FIRMWARE_ROOT / "src" / "telemetry_publisher.cpp"
+        ).read_text(encoding="utf-8")
+        self.assertIn("I2S_CHANNEL_FMT_ONLY_RIGHT", meter)
+        self.assertIn('detail["i2s_slot"] = "right"', telemetry)
+
 
 if __name__ == "__main__":
     unittest.main()

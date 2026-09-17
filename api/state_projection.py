@@ -166,7 +166,12 @@ def project_consumer_snapshot(
     result.pop("acoustic_intelligence", None)
     system = result.get("system") or {}
     result["system"] = {key: system.get(key) for key in CONSUMER_SYSTEM_FIELDS}
-    sanitize_consumer_sound(result.get("sensor") or {})
+    sensor = result.get("sensor") or {}
+    sanitize_consumer_sound(sensor)
+    # Firmware DSP labels and features are an Admin-only shadow capability.
+    # Keep the public projection fail-closed even when new Sensor fields arrive.
+    environment = sensor.get("environment") or {}
+    environment.pop("acoustic", None)
     sleep = result.get("sleep") or {}
     # The User Dashboard gets a bounded, source-field-minimized Session copy.
     # Keep internal cohort rows/Session IDs on the Admin surface only.

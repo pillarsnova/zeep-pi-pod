@@ -1,8 +1,9 @@
-# ZEEP Sensor Hub 1 — ESP32-S3 replacement firmware (ARCHIVED)
+# ZEEP Sensor Hub 1 — DSP shadow validation candidate
 
-> **DO NOT FLASH** · งานทดลองทดแทนนี้ถูกยกเลิกเมื่อ 2026-09-10 และไม่ใช่
-> Runtime contract ปัจจุบัน Pi รับ `sound_dba` จาก ESP32 โดยตรงโดยไม่ใช้
-> LAeq/CEM/profile/3-packet gate เอกสารและ Source ด้านล่างเก็บเพื่อ Audit เท่านั้น
+> **BUILDABLE · NOT INSTALLED · DO NOT FLASH WITHOUT A NEW HARDWARE GATE** ·
+> โค้ดนี้ใช้พิสูจน์ integration ของ DSP label ตามเอกสาร Acoustic Design เท่านั้น
+> Runtime ปัจจุบันยังเชื่อ `sound_dba` จาก Firmware ที่ติดตั้งอยู่จริง การ build
+> ผ่านไม่ใช่หลักฐานว่าเส้นทาง dBA ของ candidate นี้แทน Production ได้
 
 Firmware นี้ใช้กับ Sensor Hub 1 ที่ต่อกับ Pi ผ่าน USB Serial เท่านั้น และไม่รวม
 ระบบเล่นเพลงหรือ Control Deck
@@ -50,6 +51,20 @@ Target board ที่ตรวจจากอุปกรณ์จริงค�
 ใน Candidate ที่ยกเลิกนี้เคยกำหนด `sound_laeq_dba`, weighting, metric และ
 window metadata ไว้ แต่ Pi Runtime ปัจจุบันไม่อ่านเงื่อนไขเหล่านั้นและยึด
 `sound_dba` ตาม Sensor Interface Contract v1.2 เท่านั้น
+
+## DSP shadow label candidate
+
+โมดูล `acoustic_classifier` เพิ่มการคำนวณภายใน ESP32 จากหน้าต่างเดียวกับเสียง
+10 วินาที ได้แก่ band-energy ratio, spectral centroid/flatness/flux, crest factor,
+syllabic modulation 3–8 Hz และ breathing periodicity 2–6 วินาที แล้วส่งเฉพาะ:
+
+- `sound_class` — `quiet`, `steady_equipment_like`, `speech_like`,
+  `snore_like`, `impact_like` หรือ `unknown`
+- `sound_class_state=provisional` และ `sound_class_confidence`
+- feature เชิงตัวเลข, classifier version และ window sequence
+
+ไม่ส่ง PCM, ไม่ถอดคำพูด, ไม่ระบุตัวบุคคล และทุก label เป็น Admin shadow เท่านั้น
+ไม่เปลี่ยน Sleep State, Sleep Score, Recovery Score หรือ Control
 
 ## Build โดยยังไม่ติดตั้ง
 

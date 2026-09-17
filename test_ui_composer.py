@@ -135,8 +135,9 @@ class UiComposerTests(unittest.TestCase):
             "acousticTechnicalDetails",
         ):
             self.assertIn(f'id="{element_id}"', template)
-        self.assertIn("ภาพระดับเสียงตลอด Session", template)
-        self.assertIn("ยังไม่ระบุว่าเป็นเสียงอะไร", template)
+        self.assertIn("เหตุการณ์เสียงตลอด Session", template)
+        self.assertIn("ป้าย DSP เป็นผลทดลองสำหรับ Admin", template)
+        self.assertIn('id="acousticLatestLabel"', template)
         self.assertIn("function renderAcousticIntelligence(data={})", template)
         self.assertIn("function renderAcousticTimeline(data={})", template)
         self.assertIn("/api/v1/admin/acoustics/timeline", template)

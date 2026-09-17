@@ -164,6 +164,9 @@ class RespiratoryEvidenceTimelineTests(unittest.TestCase):
             inspect.close()
             self.assertIn("respiratory_evidence_valid", columns)
             self.assertIn("respiratory_evidence_reason", columns)
+            self.assertIn("acoustic_label", columns)
+            self.assertIn("acoustic_confidence", columns)
+            self.assertIn("acoustic_features_json", columns)
 
             manager.start()
             manager.enqueue("sessions", "timeline", {
@@ -184,6 +187,48 @@ class RespiratoryEvidenceTimelineTests(unittest.TestCase):
             ).fetchone()
             verify.close()
             self.assertEqual(stored, (14.2, 1, "direct_current_rr"))
+
+    def test_acoustic_shadow_label_round_trips_with_timeline_row(self):
+        with tempfile.TemporaryDirectory() as root:
+            manager = DatabaseManager(Path(root))
+            manager.initialize()
+            manager.start()
+            try:
+                manager.enqueue(
+                    "sessions",
+                    "session_start",
+                    _session_start_payload("session-acoustic-1"),
+                )
+                manager.enqueue(
+                    "sessions",
+                    "timeline",
+                    {
+                        "session_id": "session-acoustic-1",
+                        "timestamp": "2026-09-17T00:00:10+00:00",
+                        "sound": 45.2,
+                        "acoustic_label": "impact_like",
+                        "acoustic_state": "provisional",
+                        "acoustic_confidence": 0.91,
+                        "acoustic_event_detected": True,
+                        "acoustic_classifier_version": "zeep-dsp-rule-v0.1-shadow",
+                        "acoustic_window_sequence": 12,
+                        "acoustic_features_json": '{"crest_factor":18.2}',
+                    },
+                )
+                self.assertTrue(manager.flush())
+            finally:
+                manager.stop()
+
+            row = manager.read_sessions(
+                "SELECT acoustic_label,acoustic_confidence,"
+                "acoustic_event_detected,acoustic_window_sequence,"
+                "acoustic_features_json FROM timeline"
+            )[0]
+            self.assertEqual(row["acoustic_label"], "impact_like")
+            self.assertEqual(row["acoustic_confidence"], 0.91)
+            self.assertEqual(row["acoustic_event_detected"], 1)
+            self.assertEqual(row["acoustic_window_sequence"], 12)
+            self.assertEqual(json.loads(row["acoustic_features_json"])["crest_factor"], 18.2)
 
 
 if __name__ == "__main__":

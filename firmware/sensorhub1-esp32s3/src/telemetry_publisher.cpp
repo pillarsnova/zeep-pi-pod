@@ -136,6 +136,9 @@ void addSoundTelemetry(
       "sound_a_weighted_dbfs",
       sound.a_weighted_dbfs);
   addNumberOrNull(values, "sound_laeq_dba", sound.laeq_dba);
+  // ``sound_dba`` remains the stable Pi contract. DSP labels are shadow
+  // metadata from the same 10-second window and never replace this value.
+  addNumberOrNull(values, "sound_dba", sound.laeq_dba);
   values["sound_valid"] = sound.valid;
   values["sound_weighting"] = "A";
   values["sound_metric"] = "LAeq";
@@ -149,6 +152,37 @@ void addSoundTelemetry(
   values["sound_repeated_samples"] = sound.repeated_samples;
   values["sound_read_errors"] = sound.read_errors;
   values["sound_window_sequence"] = sound.sequence;
+  const bool acoustic_valid = measurement_live && sound.acoustic.valid;
+  values["sound_class"] = acoustic_valid ? sound.acoustic.label : "unknown";
+  values["sound_class_state"] = acoustic_valid ? "provisional" :
+      "insufficient_input";
+  values["sound_class_confidence"] = acoustic_valid
+      ? sound.acoustic.confidence : 0.0F;
+  values["sound_event_detected"] = acoustic_valid &&
+      sound.acoustic.event_detected;
+  values["sound_classifier_version"] = sound.acoustic.model_version;
+  addNumberOrNull(values, "sound_low_band_ratio",
+                  acoustic_valid ? sound.acoustic.low_band_ratio : NAN);
+  addNumberOrNull(values, "sound_mid_band_ratio",
+                  acoustic_valid ? sound.acoustic.mid_band_ratio : NAN);
+  addNumberOrNull(values, "sound_high_band_ratio",
+                  acoustic_valid ? sound.acoustic.high_band_ratio : NAN);
+  addNumberOrNull(values, "sound_spectral_centroid_hz",
+                  acoustic_valid ? sound.acoustic.spectral_centroid_hz : NAN);
+  addNumberOrNull(values, "sound_spectral_flatness",
+                  acoustic_valid ? sound.acoustic.spectral_flatness : NAN);
+  addNumberOrNull(values, "sound_spectral_flux",
+                  acoustic_valid ? sound.acoustic.spectral_flux : NAN);
+  addNumberOrNull(values, "sound_crest_factor",
+                  acoustic_valid ? sound.acoustic.crest_factor : NAN);
+  addNumberOrNull(values, "sound_syllabic_modulation",
+                  acoustic_valid ? sound.acoustic.syllabic_modulation : NAN);
+  addNumberOrNull(values, "sound_breathing_periodicity",
+                  acoustic_valid ? sound.acoustic.breathing_periodicity : NAN);
+  addNumberOrNull(values, "sound_breathing_period_s",
+                  acoustic_valid ? sound.acoustic.breathing_period_s : NAN);
+  values["sound_spectral_frames"] = sound.acoustic.spectral_frames;
+  values["sound_envelope_frames"] = sound.acoustic.envelope_frames;
   const char* invalid_reason =
       sound.invalid_reason == nullptr ? "unknown" : sound.invalid_reason;
   const char* sensor_reason = measurement_live ? "ok" :
@@ -211,10 +245,20 @@ void addLegacyFields(
       opt_usable ? environment.opt3001.lux : NAN);
   addNumberOrNull(document, "sound_dbfs", sound.dbfs);
   addNumberOrNull(document, "sound_laeq_dba", sound.laeq_dba);
+  addNumberOrNull(document, "sound_dba", sound.laeq_dba);
   document["sound_valid"] = sound.valid;
   document["sound_weighting"] = "A";
   document["sound_metric"] = "LAeq";
   document["sound_window_ms"] = sound.window_ms;
+  const bool acoustic_valid = sound.valid && sound.acoustic.valid;
+  document["sound_class"] = acoustic_valid ? sound.acoustic.label : "unknown";
+  document["sound_class_state"] = acoustic_valid ? "provisional" :
+      "insufficient_input";
+  document["sound_class_confidence"] = acoustic_valid
+      ? sound.acoustic.confidence : 0.0F;
+  document["sound_event_detected"] = acoustic_valid &&
+      sound.acoustic.event_detected;
+  document["sound_classifier_version"] = sound.acoustic.model_version;
   if (!sound.valid) {
     document["sound_invalid_reason"] =
         sound.invalid_reason == nullptr ? "unknown" : sound.invalid_reason;

@@ -279,6 +279,9 @@ void AudioMeter::readTask() {
       const int32_t sample_24 = samples[index] >> 8;
       const double normalized = static_cast<double>(sample_24) / kFullScale24;
       const double unweighted = dcBlock(normalized);
+      acoustic_classifier_.addSample(
+          static_cast<float>(normalized),
+          static_cast<float>(unweighted));
       double weighted = a_weighting_1.process(unweighted);
       weighted = a_weighting_2.process(weighted);
       weighted = a_weighting_3.process(weighted);
@@ -334,6 +337,10 @@ void AudioMeter::publishAccumulator() {
                     kSineRmsCorrectionDb +
                     window.a_weighted_dbfs +
                     window.calibration_offset_db;
+  window.acoustic = acoustic_classifier_.finish(
+      window.laeq_dba,
+      window.rms,
+      window.peak);
 
   const float clip_ratio = static_cast<float>(clipped_samples) /
                            accumulated_samples;
@@ -383,6 +390,7 @@ void AudioMeter::resetWindowAccumulator() {
   repeated_samples = 0;
   read_errors = 0;
   window_started_ms = 0;
+  acoustic_classifier_.reset();
 }
 
 void AudioMeter::resetSignalState() {

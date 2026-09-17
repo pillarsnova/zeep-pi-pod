@@ -41,8 +41,8 @@ ingest, report share, snapshot sync หรือ tunnel ต้องระบุ
 | `GET /api/v1/admin/maintenance` | Admin | maintenance contract |
 | `GET /api/v1/admin/adaptive/live` | Admin | Shadow observability; `automatic_actuation=false` |
 | `GET /api/v1/admin/contracts/acoustics` | Admin | Smart Ear capability registry, candidate labels และ validation gates |
-| `GET /api/v1/admin/acoustics/live` | Admin | Level-only shadow projection; classifier เป็น `not_evaluated` |
-| `GET /api/v1/admin/acoustics/timeline` | Admin | Timeline ระดับเสียงและ rule-based review events ของ Active Session; ไม่มี Raw audio |
+| `GET /api/v1/admin/acoustics/live` | Admin | Level + optional DSP shadow label; ไม่มี feature แล้วเป็น `not_evaluated` |
+| `GET /api/v1/admin/acoustics/timeline` | Admin | Timeline ระดับเสียง, review event และ provisional DSP marker ของ Active Session; ไม่มี Raw audio |
 
 ### Usage Session API — เส้นทางใหม่สำหรับ App
 
@@ -135,25 +135,29 @@ canonical identifier เมื่อมีข้อมูล แต่ยัง�
 
 ### Acoustic Intelligence / เสียง
 
-Current runtime ไม่มี Raw audio/PCM store และไม่มีการจำแนกคำพูดหรือแหล่งเสียง
-ระบบเก็บเพียงระดับ `sound_dba` ที่ผ่าน contract และ derived level aggregation ตาม
-Sensor frame ทุก 10 วินาที โดย persist ลง Timeline เฉพาะขณะ Recording
+Current runtime ไม่มี Raw audio/PCM store; รองรับเฉพาะ provisional DSP label
+จาก ESP32 โดยไม่ถอดเนื้อหาคำพูดหรือระบุตัวบุคคล ระบบเก็บระดับ `sound_dba`
+และ label/features ที่ผ่าน positive allowlist ตาม Sensor frame ทุก 10 วินาที
+โดย persist ลง Timeline เฉพาะขณะ Recording
 
 แผน [หูอัจฉริยะ · Acoustic Intelligence DSP](smart-ear-dsp-plan.md) ต้องใช้
 privacy-first boundary ดังนี้:
 
 - ไม่ส่งหรือเก็บ PCM ต่อเนื่องเป็นค่าเริ่มต้น; ESP32 ส่งเฉพาะ versioned features
-- Candidate registry, level-only shadow และ feature diagnostics เป็น Admin-only positive allowlist
+- Candidate registry, DSP shadow label และ feature diagnostics เป็น Admin-only positive allowlist
 - User/App ยังเห็นเพียงระดับเสียงหรือข้อความสรุปที่ Product/Privacy อนุมัติ
-- P0.5 แสดง `speech_like`, `snore_like`, `cough_like` ได้เฉพาะเป็น Research
-  Candidate ที่ `not_evaluated`; ห้ามถอดคำ ระบุตัวบุคคล หรือแสดงเป็นผลสุขภาพ
+- P1-shadow รับ `speech_like`, `snore_like`, `impact_like` และ
+  `steady_equipment_like` เป็นป้ายชั่วคราวจาก Firmware ที่ผ่าน allowlist เท่านั้น;
+  `cough_like` และ label อื่นยังเป็น Research Candidate ที่ `not_evaluated` ห้าม
+  ถอดคำ ระบุตัวบุคคล หรือแสดงเป็นผลสุขภาพ
 - การเก็บตัวอย่างเสียงเพื่อสร้าง dataset ต้องเป็น protocol แยก มี consent,
   coded identity, encryption, retention, access log และ erasure owner
 - ก่อน persist acoustic features ต้องรวมข้อมูลนั้นใน backup/snapshot/retention/
   account-erasure contract และทดสอบ public redaction
 
-Smart Ear P0.6 อยู่ใน API v1 แบบ Admin-only level-only แล้ว แต่ classifier,
-event storage และ user-facing summary ยังเป็น `ROADMAP/SHADOW` Client ต้องตรวจ
+Smart Ear P1-shadow อยู่ใน API v1 แบบ Admin-only แล้ว โดย Pi/API/UI และ
+Timeline persistence รองรับ label แต่ Firmware candidate ยังต้องผ่าน physical
+validation/installation gate; user-facing summary ยังเป็น `ROADMAP` Client ต้องตรวจ
 `contract_version`, `classification_state` และห้ามเปลี่ยน candidate เป็นผลตรวจ
 
 ## Data ที่ออกจาก Pod

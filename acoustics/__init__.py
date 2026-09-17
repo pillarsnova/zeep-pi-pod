@@ -1,9 +1,4 @@
-"""Admin-only acoustic observability contracts.
-
-The current Pod exposes verified sound level only.  Candidate acoustic labels
-remain a validation roadmap until versioned DSP features and an approved model
-are available.
-"""
+"""Admin-only sound-level and optional Firmware DSP shadow projections."""
 
 from .contracts import acoustic_contract_snapshot
 from .live_timeline import live_timeline_reader

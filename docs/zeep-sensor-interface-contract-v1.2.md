@@ -38,7 +38,25 @@ Pi ไม่มี CEM gate, LAeq metadata gate, firmware-profile gate หรื
       "reason": "ok",
       "values": {
         "sound_dba": 39.8,
-        "sound_dbfs": -65.2
+        "sound_dbfs": -65.2,
+        "sound_class": "steady_equipment_like",
+        "sound_class_state": "provisional",
+        "sound_class_confidence": 0.81,
+        "sound_event_detected": true,
+        "sound_classifier_version": "zeep-dsp-rule-v0.1-shadow",
+        "sound_window_sequence": 42,
+        "sound_features": {
+          "low_ratio": 0.61,
+          "mid_ratio": 0.31,
+          "high_ratio": 0.08,
+          "spectral_centroid_hz": 412.0,
+          "spectral_flatness": 0.12,
+          "spectral_flux": 0.04,
+          "crest_factor": 3.1,
+          "syllabic_modulation": 0.08,
+          "breathing_periodicity": 0.11,
+          "breathing_period_s": null
+        }
       }
     }
   }
@@ -74,6 +92,24 @@ Hub 1 ใน allowlist ชัดเจน เช่น `temperature_c`, `humidit
 เป็นเรื่องปกติและห้ามใช้ `abs(sound_dbfs)` หรือ `sound_laeq_dba` เป็น fallback
 metadata รุ่นเก่า เช่น `sound_valid`, weighting, metric, window และ profile ไม่มี
 อำนาจบล็อกหรืออนุมัติ `sound_dba`
+
+## Optional Acoustic DSP Shadow Extension
+
+Firmware ที่เปิดใช้ DSP shadow อาจส่ง `sound_class`, state, confidence, event flag,
+classifier version, window sequence และ feature scalars ตามตัวอย่างด้านบนได้ โดย
+Pi รับเฉพาะ positive allowlist และตัด field อื่นทิ้ง ป้ายที่ยอมรับใน candidate นี้คือ
+`quiet`, `steady_equipment_like`, `speech_like`, `snore_like`, `impact_like` และ
+`unknown`; ค่าเหล่านี้เป็น **ป้ายชั่วคราวสำหรับ Admin** ไม่ใช่การยืนยันแหล่งเสียง
+หรือการวินิจฉัยสุขภาพ
+
+ระบบไม่ส่งหรือเก็บ PCM/Raw audio, ไม่ถอดคำพูด และ DSP shadow ต้องไม่เปลี่ยน
+Sleep State, Sleep Score, Recovery Score หรือสั่ง Control อัตโนมัติ หาก feature
+หรือ classifier หาย ค่า temperature/humidity/lux และ `sound_dba` ต้องทำงานต่อได้
+ตามปกติ ป้ายจะเปลี่ยนเป็น `not_evaluated` โดยไม่สร้าง label จาก dBA เพียงค่าเดียว
+
+Firmware candidate ใน repository ผ่าน build gate แล้ว แต่ยังไม่ใช่หลักฐานว่า
+ติดตั้งอยู่บน Production Hub การเปิดใช้งานจริงต้องผ่าน backup, physical validation,
+privacy/consent และ field comparison ก่อน Flash
 
 ## ภาคผนวกประวัติ Firmware ที่ยกเลิกแล้ว (ห้ามใช้กับ Production)
 

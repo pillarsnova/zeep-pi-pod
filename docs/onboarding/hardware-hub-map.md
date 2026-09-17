@@ -99,14 +99,15 @@ Control Hub 1 ยืนยันเพียงว่า ESP32 เรียก�
 - ค่าเฉลี่ยใน Sensor frame เป็นการรวมเชิงพลังงานของ valid packet-level
   `sound_dba` observations ไม่ใช่ DSP บน PCM และยังไม่ควรอ้างว่าเป็น certified
   LAeq(A) จน Production firmware contract ยืนยัน weighting, window และ calibration.
-- Pi ยังไม่ได้รับ PCM, band energy หรือ spectral/temporal features จึงยังจำแนกไม่ได้
-  ว่าเสียงมาจากแอร์ พัดลม ประตู เพลง หรือแหล่งภายนอก.
+- Pi ไม่รับ PCM แต่ contract รองรับ band energy และ spectral/temporal feature
+  scalars จาก Firmware DSP shadow candidate เพื่อวางป้ายชั่วคราวบน Admin Timeline.
 - `state.system.sound_analysis` มี sample count, average, min/max/span และธง
   large step สำหรับ Admin observability เท่านั้น ไม่ใช่ source classifier.
-- แผนจำแนกเสียงอยู่ที่
+- แผนและ implementation boundary อยู่ที่
   [หูอัจฉริยะ · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md) และมีสถานะ
-  **P0.5 ADMIN SHADOW** สำหรับ level/capability registry ส่วน DSP classifier ยังเป็น
-  **ROADMAP**; ทั้งสองส่วนต้องไม่กระทบ Sleep State, Score หรือ Control.
+  **P1 ADMIN SHADOW**: Pi/API/UI พร้อมรับ marker แล้ว ส่วน Firmware candidate ยัง
+  ไม่ถือว่า Production จนผ่าน physical gate; ทุกส่วนต้องไม่กระทบ Sleep State,
+  Score หรือ Control.
 
 ### Failure behavior
 

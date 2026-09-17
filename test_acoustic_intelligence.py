@@ -1,4 +1,4 @@
-"""Guardrails for the Admin-only Smart Ear level-only shadow."""
+"""Guardrails for the Admin-only Smart Ear level and DSP shadow."""
 
 from __future__ import annotations
 
@@ -43,9 +43,9 @@ class AcousticContractTests(unittest.TestCase):
         contract = acoustic_contract_snapshot()
         encoded = json.dumps(contract, ensure_ascii=False)
 
-        self.assertEqual(contract["mode"], "admin_shadow_level_only")
+        self.assertEqual(contract["mode"], "admin_shadow_dsp_optional")
         self.assertTrue(contract["current_capability"]["sound_level"])
-        self.assertFalse(contract["current_capability"]["acoustic_classification"])
+        self.assertTrue(contract["current_capability"]["acoustic_classification"])
         for label in ("speech_like", "snore_like", "cough_like"):
             self.assertIn(label, encoded)
         self.assertNotIn("apnea", encoded.casefold())
@@ -92,8 +92,83 @@ class AcousticContractTests(unittest.TestCase):
         self.assertIn("sound_level_unavailable", result["reason_codes"])
         self.assertIn("microphone_not_live", result["reason_codes"])
 
+    def test_versioned_firmware_label_is_visible_but_never_scores(self) -> None:
+        snapshot = live_snapshot()
+        snapshot["sensor"]["environment"]["acoustic"] = {
+            "label": "snore_like",
+            "state": "provisional",
+            "confidence": 0.84,
+            "event_detected": True,
+            "classifier_version": "zeep-dsp-rule-v0.1-shadow",
+            "features": {"breathing_periodicity": 0.62},
+        }
+
+        result = build_acoustic_monitor_snapshot(snapshot)
+
+        self.assertEqual(result["status"], "dsp_shadow")
+        self.assertEqual(result["classification_state"], "provisional")
+        self.assertEqual(result["confidence_band"], "high")
+        self.assertEqual(
+            result["results"]["human_sound_hypotheses"][0]["key"],
+            "snore_like",
+        )
+        self.assertTrue(result["evidence"]["feature_telemetry_available"])
+        self.assertFalse(any(result["impact"].values()))
+
 
 class AcousticTimelineTests(unittest.TestCase):
+    def test_firmware_dsp_label_becomes_a_timed_shadow_event(self) -> None:
+        samples = [
+            {
+                "t": 1_000.0,
+                "dba": 44.0,
+                "acoustic_label": "speech_like",
+                "acoustic_state": "provisional",
+                "acoustic_confidence": 0.82,
+                "acoustic_event_detected": True,
+                "acoustic_classifier_version": "zeep-dsp-rule-v0.1-shadow",
+                "acoustic_window_sequence": 8,
+            },
+            {
+                "t": 1_010.0,
+                "dba": 45.0,
+                "acoustic_label": "speech_like",
+                "acoustic_state": "provisional",
+                "acoustic_confidence": 0.78,
+                "acoustic_event_detected": True,
+                "acoustic_classifier_version": "zeep-dsp-rule-v0.1-shadow",
+                "acoustic_window_sequence": 9,
+            },
+        ]
+
+        result = build_acoustic_timeline_snapshot(
+            samples,
+            session_id="session-dsp",
+            session_active=True,
+            recording=True,
+        )
+
+        labels = [event for event in result["events"] if event["key"] == "speech_like"]
+        self.assertEqual(len(labels), 1)
+        self.assertEqual(labels[0]["start_epoch_s"], 1_000.0)
+        self.assertEqual(labels[0]["end_epoch_s"], 1_020.0)
+        self.assertEqual(labels[0]["confidence_band"], "high")
+        self.assertFalse(labels[0]["contributes_to_primary_score"])
+        self.assertEqual(result["classification"]["label"], "speech_like")
+        self.assertEqual(result["event_summary"]["counts"]["speech_like"], 1)
+
+    def test_scalar_level_still_cannot_manufacture_a_dsp_label(self) -> None:
+        result = build_acoustic_timeline_snapshot(
+            [{"t": 1_000.0, "dba": 68.0}, {"t": 1_010.0, "dba": 70.0}],
+            session_id="session-level-only",
+            session_active=True,
+            recording=True,
+        )
+        self.assertEqual(result["classification"]["state"], "insufficient_input")
+        self.assertFalse(
+            any(event["category"] == "dsp_label" for event in result["events"])
+        )
+
     def test_level_timeline_marks_only_observed_patterns(self) -> None:
         samples = [
             {"t": 1_000.0, "dba": 40.0},
@@ -113,7 +188,10 @@ class AcousticTimelineTests(unittest.TestCase):
         )
 
         self.assertEqual(result["status"], "ready")
-        self.assertEqual(result["analysis_scope"], "sound_level_pattern_only")
+        self.assertEqual(
+            result["analysis_scope"],
+            "sound_level_and_firmware_dsp_labels",
+        )
         self.assertEqual(result["summary"]["coverage_pct"], 100.0)
         self.assertEqual(result["summary"]["peak_dba"], 54.0)
         keys = {event["key"] for event in result["events"]}
@@ -122,12 +200,15 @@ class AcousticTimelineTests(unittest.TestCase):
         self.assertEqual(result["classification"]["sound_source"], "unknown")
         self.assertEqual(result["classification"]["human_sound"], "not_evaluated")
         self.assertFalse(any(result["impact"].values()))
-        self.assertEqual(result["detector"]["version"], "zeep-level-pattern-v1.0")
+        self.assertEqual(
+            result["detector"]["version"],
+            "zeep-level-pattern-v1.0+dsp-label-v0.1",
+        )
         self.assertFalse(result["detector"]["certified_laeq"])
 
-        encoded = json.dumps(result, ensure_ascii=False).casefold()
-        for unsupported in ("snore_like", "speech_like", "cough_like", "compressor"):
-            self.assertNotIn(unsupported, encoded)
+        self.assertFalse(
+            any(event["category"] == "dsp_label" for event in result["events"])
+        )
 
     def test_missing_sound_is_visible_without_becoming_a_sound_event(self) -> None:
         result = build_acoustic_timeline_snapshot(

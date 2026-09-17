@@ -14,11 +14,12 @@ Admin live observability สำหรับเตรียม Adaptive Control �
 (`automatic_actuation=false`) ตาม
 [Adaptive Control Data Foundation v1](adaptive-control-data-foundation-v1.md)
 
-Admin Acoustic Intelligence P0.6 ใช้
+Admin Acoustic Intelligence P1-shadow ใช้
 `GET /api/v1/admin/contracts/acoustics` และ
 `GET /api/v1/admin/acoustics/live` เพื่อดู capability กับระดับปัจจุบัน และใช้
 `GET /api/v1/admin/acoustics/timeline` ดูกราฟกับกฎตรวจค่าระดับเสียงราย Session
-ผลจำแนกแหล่งเสียงยังเป็น `not_evaluated`, ไม่มี Raw audio และไม่กระทบ Sleep State,
+เมื่อ Firmware ส่ง DSP label ระบบแสดง `provisional` พร้อม confidence; หากไม่มี
+จะเป็น `not_evaluated/insufficient_input` ไม่มี Raw audio และไม่กระทบ Sleep State,
 คะแนน หรือ Control ตาม
 [Acoustic Intelligence DSP Plan](onboarding/smart-ear-dsp-plan.md)
 
@@ -127,6 +128,23 @@ Sleep/Recovery Score ที่อนุมัติร่วมกันแล�
 
 ทุก response สำเร็จส่ง `Cache-Control: private, no-store` เพื่อไม่ให้ Browser,
 proxy หรือ shared cache เก็บผลสุขภาพของ Session
+
+## Admin Acoustic Timeline
+
+`GET /api/v1/admin/acoustics/timeline`
+
+คืน Timeline ระดับเสียงของ Session ที่กำลังทำงาน พร้อม event marker สองชั้น:
+
+- Level event จาก Pi: `rapid_change`, `sustained_high`, `missing_data`
+- Firmware DSP shadow label: `steady_equipment_like`, `speech_like`,
+  `snore_like`, `impact_like`
+
+DSP event มี `start_epoch_s`, `end_epoch_s`, `confidence`, `confidence_band`,
+`classifier_version` และ `event_detected` เพื่อให้แอปวางสัญลักษณ์บน Timeline
+คล้าย event marker ของ CCTV ผลทั้งหมดเป็น Admin-only/provisional,
+`contributes_to_primary_score=false` และไม่มี Raw audio หรือ transcript ใน API
+หาก Firmware ยังไม่ส่ง DSP fields ระบบยังคืน Level Timeline ตามเดิมโดย
+`classification.state=insufficient_input`
 
 ## 1. รายการประวัติการใช้งาน
 

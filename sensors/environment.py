@@ -10,6 +10,68 @@ from typing import Any
 from sensors.contracts import SOUND_SENSOR_MODEL
 from sensors.values import first_numeric
 
+ACOUSTIC_LABELS = frozenset(
+    {
+        "quiet",
+        "steady_equipment_like",
+        "speech_like",
+        "snore_like",
+        "impact_like",
+        "unknown",
+    }
+)
+
+
+def _acoustic_projection(
+    hub1: Mapping[str, Any],
+    *,
+    source_live: bool,
+    sound_live: bool,
+) -> dict[str, Any]:
+    """Expose only versioned DSP metadata; never PCM or speech content."""
+    label = str(hub1.get("sound_class") or "unknown").strip().lower()
+    state = str(hub1.get("sound_class_state") or "insufficient_input").strip()
+    confidence = hub1.get("sound_class_confidence")
+    if label not in ACOUSTIC_LABELS:
+        label = "unknown"
+    if not isinstance(confidence, (int, float)) or isinstance(confidence, bool):
+        confidence = 0.0
+    confidence = max(0.0, min(1.0, float(confidence)))
+    valid = bool(
+        source_live
+        and sound_live
+        and state == "provisional"
+        and label != "unknown"
+    )
+    numeric_fields = (
+        "sound_low_band_ratio",
+        "sound_mid_band_ratio",
+        "sound_high_band_ratio",
+        "sound_spectral_centroid_hz",
+        "sound_spectral_flatness",
+        "sound_spectral_flux",
+        "sound_crest_factor",
+        "sound_syllabic_modulation",
+        "sound_breathing_periodicity",
+        "sound_breathing_period_s",
+    )
+    features = {
+        key.removeprefix("sound_"): first_numeric(hub1, (key,))
+        for key in numeric_fields
+    }
+    return {
+        "label": label if valid else "unknown",
+        "state": "provisional" if valid else "insufficient_input",
+        "confidence": round(confidence, 4) if valid else 0.0,
+        "event_detected": bool(valid and hub1.get("sound_event_detected")),
+        "classifier_version": str(
+            hub1.get("sound_classifier_version") or "unavailable"
+        ),
+        "window_sequence": first_numeric(hub1, ("sound_window_sequence",)),
+        "features": features if valid else {},
+        "raw_audio_transmitted": False,
+    }
+
 
 def source_freshness(
     payload: Mapping[str, Any],
@@ -283,7 +345,7 @@ def compose_environment_snapshot(
     raw_values = dict(values)
     for metric in calibration_metrics:
         values[metric] = apply_bias(metric, values.get(metric))
-    return {
+    result = {
         **values,
         "sound_dbfs_raw": _sound_dbfs_raw(
             hub1,
@@ -311,3 +373,9 @@ def compose_environment_snapshot(
             for key, source in sources.items()
         },
     }
+    result["acoustic"] = _acoustic_projection(
+        hub1,
+        source_live=bool(sources["hub1"]["live"]),
+        sound_live=devices.get("sph0645", {}).get("status") == "live",
+    )
+    return result

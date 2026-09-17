@@ -354,7 +354,7 @@ function renderAcousticIntelligence(data={}){
   document.getElementById('acousticSoundSource').textContent=provenance.sound_source||'ESP32 sound_dba direct';
   document.getElementById('acousticFirmware').textContent=provenance.firmware_version||'ยังไม่ยืนยัน';
   document.getElementById('acousticContractVersion').textContent=data.contract_version||'contract --';
-  document.getElementById('acousticGuardrail').textContent='วิเคราะห์รูปแบบระดับเสียงเท่านั้น · ยังไม่ระบุว่าเป็นเสียงอะไร · ไม่บันทึก Raw audio';
+  document.getElementById('acousticGuardrail').textContent='ป้าย DSP เป็นผลทดลองสำหรับ Admin · ไม่บันทึก Raw audio · ไม่เปลี่ยน Sleep State หรือคะแนน';
 }
 
 let acousticTimelineFetchedAt=0;
@@ -386,6 +386,10 @@ function acousticDuration(seconds){
 }
 
 function acousticEventDetail(event={}){
+  if(event.category==='dsp_label'){
+    const confidence=acousticFinite(event.confidence);
+    return `${confidence==null?'ไม่ระบุความเชื่อมั่น':`ความเชื่อมั่น ${Math.round(confidence*100)}%`} · ${event.window_count||1} ช่วงวัด · Shadow label`;
+  }
   if(event.key==='rapid_change'){
     const delta=acousticFinite(event.delta_db);
     return `${acousticFixed(event.from_dba)} → ${acousticFixed(event.to_dba)} dBA${delta==null?'':` · ${delta>0?'+':''}${delta.toFixed(1)} dB`}`;
@@ -436,7 +440,12 @@ function drawAcousticTimeline(data={}){
     const eventStart=Math.max(start,Number(event.start_epoch_s)),eventEnd=Math.min(end,Number(event.end_epoch_s));
     if(!Number.isFinite(eventStart)||!Number.isFinite(eventEnd)||eventEnd<start||eventStart>end)return;
     const bandX=x(eventStart),bandWidth=Math.max(3,x(eventEnd)-bandX);
-    if(event.key==='missing_data'){
+    if(event.category==='dsp_label'){
+      const symbols={snore_like:'Z',speech_like:'พูด',impact_like:'!',steady_equipment_like:'≈'};
+      const colors={snore_like:'#9b7cf4',speech_like:'#48d4e5',impact_like:'#ff6e6e',steady_equipment_like:'#6fd393'};
+      const markerX=x(eventStart),markerY=top+14,symbol=symbols[event.key]||'•',color=colors[event.key]||'#f1bc55';
+      eventMarkers.push(`<g><circle cx="${markerX.toFixed(1)}" cy="${markerY}" r="10" fill="${color}" stroke="#071923" stroke-width="2"><title>${escapeMarkup(event.label||'DSP event')}</title></circle><text x="${markerX.toFixed(1)}" y="${markerY+3}" text-anchor="middle" fill="#06151d" font-size="${symbol.length>1?7:10}" font-weight="800">${escapeMarkup(symbol)}</text></g>`);
+    }else if(event.key==='missing_data'){
       eventBands.push(`<rect x="${bandX.toFixed(1)}" y="${top}" width="${bandWidth.toFixed(1)}" height="${plotHeight}" fill="#708793" opacity=".13"/><line x1="${bandX.toFixed(1)}" y1="${top}" x2="${bandX.toFixed(1)}" y2="${height-bottom}" stroke="#8096a0" stroke-dasharray="4 4"/>`);
     }else if(event.key==='sustained_high'){
       eventBands.push(`<rect x="${bandX.toFixed(1)}" y="${top}" width="${bandWidth.toFixed(1)}" height="${plotHeight}" rx="4" fill="#e8af47" opacity=".1"/>`);
@@ -468,6 +477,7 @@ function drawAcousticTimeline(data={}){
 function renderAcousticTimeline(data={}){
   const root=document.getElementById('acousticIntelligenceCard');if(!root)return;
   const summary=data.summary||{},pattern=summary.pattern||{},events=Array.isArray(data.events)?data.events:[];
+  const classification=data.classification||{};
   const ready=data.status==='ready';
   const badgeLabels={ready:'LEVEL TIMELINE · LIVE',no_session:'รอ SESSION',waiting_for_recording:'รอเริ่มบันทึก',collecting:'กำลังสะสมข้อมูล',no_data:'ไม่มี SOUND DATA',stale:'ข้อมูลไม่อัปเดต'};
   document.getElementById('acousticStatusBadge').textContent=badgeLabels[data.status]||'LEVEL TIMELINE';
@@ -477,6 +487,10 @@ function renderAcousticTimeline(data={}){
   document.getElementById('acousticPeakMeta').textContent=ready&&summary.minimum_dba!=null?`ต่ำสุด ${acousticFixed(summary.minimum_dba)} dBA`:'ยังไม่มีข้อมูล Session';
   document.getElementById('acousticPattern').textContent=pattern.label||'กำลังรอข้อมูล';
   document.getElementById('acousticPatternMeta').textContent=pattern.detail||data.message||'เริ่ม Session เพื่อวิเคราะห์';
+  document.getElementById('acousticLatestLabel').textContent=classification.display_name||'ยังไม่มีป้ายเสียง';
+  document.getElementById('acousticLatestLabelMeta').textContent=classification.state==='provisional'
+    ?`ผลทดลอง · ความเชื่อมั่น ${Math.round(Number(classification.confidence||0)*100)}%`
+    :'รอ DSP feature จาก ESP32';
   document.getElementById('acousticCoverage').textContent=`Coverage ${acousticFixed(summary.coverage_pct||0,0)}%`;
   const start=data.timeline?.start_epoch_s,end=data.timeline?.end_epoch_s;
   const cadences=Array.isArray(data.timeline?.cadences_s)?data.timeline.cadences_s:[];
@@ -485,11 +499,12 @@ function renderAcousticTimeline(data={}){
     ?`${acousticClock(start)}–${acousticClock(end)} · รอบ ${cadenceLabel} วินาที`
     :data.message||'ยังไม่มี Session ที่กำลังบันทึก';
   const counts=data.event_summary?.counts||{};
-  const observed=Number(counts.rapid_change||0)+Number(counts.sustained_high||0);
+  const dsp=Number(counts.snore_like||0)+Number(counts.speech_like||0)+Number(counts.impact_like||0)+Number(counts.steady_equipment_like||0);
+  const observed=Number(counts.rapid_change||0)+Number(counts.sustained_high||0)+dsp;
   const gaps=Number(counts.missing_data||0);
   const truncated=data.event_summary?.truncated?' · แสดงรายการล่าสุดบางส่วน':'';
   document.getElementById('acousticEventSummary').textContent=observed
-    ?`${observed} ช่วง${gaps?` · ข้อมูลขาด ${gaps} ช่วง`:''}${truncated}`
+    ?`${observed} ช่วง${dsp?` · DSP label ${dsp}`:''}${gaps?` · ข้อมูลขาด ${gaps} ช่วง`:''}${truncated}`
     :gaps?`ยังไม่พบการเปลี่ยนระดับเสียงเด่น · ข้อมูลขาด ${gaps} ช่วง`:'ยังไม่พบช่วงที่เด่นชัด';
   const eventRoot=document.getElementById('acousticEventList');
   eventRoot.innerHTML=events.length?events.slice().reverse().map(event=>`<article class="${escapeMarkup(event.key||'unknown')}"><div><time>${escapeMarkup(acousticClock(event.start_epoch_s,{seconds:true}))}${Number(event.end_epoch_s)>Number(event.start_epoch_s)?`–${escapeMarkup(acousticClock(event.end_epoch_s,{seconds:true}))}`:''}</time><b>${escapeMarkup(event.label||'เหตุการณ์ระดับเสียง')}</b><span>${escapeMarkup(acousticEventDetail(event))}</span></div></article>`).join(''):`<div class="acoustic-empty">${escapeMarkup(data.message||'ยังไม่มีเหตุการณ์ระดับเสียง')}</div>`;

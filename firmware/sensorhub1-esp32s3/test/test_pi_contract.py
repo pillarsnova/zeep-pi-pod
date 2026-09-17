@@ -48,6 +48,11 @@ class PiContractTests(unittest.TestCase):
                         "sound_dbfs": -68.0 if sph_live else None,
                         "sound_dba": 55.0 if sph_live else None,
                         "sound_window_sequence": 7,
+                        "sound_class": "speech_like" if sph_live else "unknown",
+                        "sound_class_state": "provisional" if sph_live else "insufficient_input",
+                        "sound_class_confidence": 0.82 if sph_live else 0.0,
+                        "sound_event_detected": sph_live,
+                        "sound_classifier_version": "zeep-dsp-rule-v0.1-shadow",
                     },
                 },
             },
@@ -129,7 +134,10 @@ class PiContractTests(unittest.TestCase):
                 decoded = decode_hub_payload(
                     packet, expected_hub="sensorhub1")
                 self.assertEqual(decoded["boot_id"], 91)
-                self.assertNotIn("sound_window_sequence", decoded)
+                if live["sph0645"]:
+                    self.assertEqual(decoded["sound_window_sequence"], 7)
+                    self.assertEqual(decoded["sound_class"], "speech_like")
+                    self.assertTrue(decoded["sound_event_detected"])
                 self.assertEqual(decoded["sensor_status"], live)
                 self.assertEqual(
                     set(decoded["sensor_diagnostics"]), set(live))

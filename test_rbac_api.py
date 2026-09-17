@@ -585,6 +585,12 @@ class RbacApiTests(unittest.TestCase):
                 "acoustic_intelligence",
                 pod_app.snapshot_for(user_principal),
             )
+            consumer_environment = (
+                pod_app.snapshot_for(user_principal).get("sensor", {}).get(
+                    "environment", {}
+                )
+            )
+            self.assertNotIn("acoustic", consumer_environment)
         finally:
             pod_app.auth_sessions.revoke(token)
 
@@ -619,7 +625,7 @@ class RbacApiTests(unittest.TestCase):
         )
         self.assertEqual(
             acoustic_contract.json()["data"]["mode"],
-            "admin_shadow_level_only",
+            "admin_shadow_dsp_optional",
         )
         acoustic_live = admin.get("/api/v1/admin/acoustics/live")
         self.assertEqual(acoustic_live.status_code, 200)
@@ -646,7 +652,7 @@ class RbacApiTests(unittest.TestCase):
         )
         self.assertEqual(
             acoustic_timeline.json()["data"]["analysis_scope"],
-            "sound_level_pattern_only",
+            "sound_level_and_firmware_dsp_labels",
         )
         admin_state = admin.get("/api/v1/state")
         self.assertIn("acoustic_intelligence", admin_state.json()["data"])

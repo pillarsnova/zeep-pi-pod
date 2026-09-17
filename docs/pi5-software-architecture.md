@@ -7,6 +7,18 @@
 เป้าหมายคือให้แก้แต่ละส่วนได้โดยไม่ทำให้ Sensor, Session, Safety และอุปกรณ์
 ควบคุมกระทบกันโดยไม่ตั้งใจ
 
+## SMART EAR · DSP shadow event path
+
+ESP32 ประมวลผลหน้าต่างเสียง 10 วินาทีและส่งเฉพาะ dBA, DSP label, confidence,
+feature summary, classifier version และ window sequence ผ่าน Sensor contract
+ฝั่ง Pi ทำ allowlist/validation, เก็บพร้อม Session Timeline และฉายผลผ่าน
+`/api/v1/admin/acoustics/timeline` เป็น marker ตามเวลาในหน้า Monitor
+
+ห้ามส่งหรือเก็บ PCM/Raw audio และทุก label เป็น provisional Admin shadow
+ไม่เป็นอินพุตโดยตรงของ Sleep State, Sleep Score, Recovery Score หรือ Control
+หาก Firmware ไม่มี field ใหม่ ระบบ fail-soft เป็น Level Timeline โดยไม่สร้าง
+label จากค่า dBA เพียงค่าเดียว
+
 ## 1. หลักการแบ่งระบบ
 
 `app.py` เป็น **legacy composition root**: Sensor-frame sampler ถูกย้ายออกแล้วและ
@@ -237,9 +249,10 @@ Audio boundary ใช้รูปแบบเดียวกันโดยไ�
 6. ลด `app.py` ให้เหลือ configuration, dependency wiring, lifespan และ router wiring
 
 Acoustic Intelligence ที่เสนอใน
-[DSP Plan](onboarding/smart-ear-dsp-plan.md) มี `acoustics/` รุ่น P0.6
-contract และ Admin level-only projection แล้ว ส่วน feature parser, classifier,
-event tracker และ persistence ยังเป็น ROADMAP และห้ามเพิ่มก่อนผ่าน Gate ที่กำหนด
+[DSP Plan](onboarding/smart-ear-dsp-plan.md) มี `acoustics/` รุ่น P1-shadow:
+contract validation, event grouping, Timeline persistence, Admin API และ Monitor
+marker พร้อมแล้ว ส่วน Firmware candidate ยังไม่ถือเป็น Production จนผ่าน
+physical validation/installation gate
 
 แต่ละขั้นต้องเป็น behavior-preserving commit ขนาดเล็กที่ย้อนกลับได้ ห้ามรวมการจูน
 Health threshold, เปลี่ยน Schema หรือ Flash Firmware ไว้ใน Refactor commit เดียวกัน

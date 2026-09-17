@@ -28,8 +28,9 @@
 
 สำหรับทีม Sensor, Firmware, Data/ML, Monitor หรือ Product ที่จะพัฒนาเสียง ให้อ่าน
 [หูอัจฉริยะ · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md) เพิ่ม เอกสารนี้
-มี **P0.5 ADMIN SHADOW SHELL** สำหรับ level-only/capability registry ส่วน classifier
-ยังไม่ใช่ความสามารถ LIVE ของ v1
+มี **P1 ADMIN SHADOW** สำหรับ level timeline และ optional Firmware DSP marker;
+Pi/API/UI พร้อมแล้ว แต่ classifier ยังไม่ถือว่า LIVE/Production จน Firmware ผ่าน
+physical validation และติดตั้งจริง
 
 หากต้องตอบคำถามส่งมอบ v1 ให้เริ่มจาก
 [v1 System Handover and Freeze Readiness](../zeep-v1-system-handover-and-freeze-readiness.md)
@@ -92,7 +93,7 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 | API สำหรับ App | [ZEEP API v1](../zeep-api-v1.md), [Schema Reference](../zeep-api-schema-reference-v1.md), Pydantic models และ `/openapi.json` ของ release ที่ deploy |
 | Sensor field/range/provenance | [Sensor Interface Contract](../zeep-sensor-interface-contract-v1.2.md) และ [`sensors/contracts.py`](../../sensors/contracts.py) |
 | Tech stack, database และเครื่องมือ | [Technology Stack, Data และเครื่องมือ](technology-stack-and-tools.md) เป็น orientation; runtime ยึด requirements/config/service จริง |
-| แผนจำแนกเสียง/DSP | [หูอัจฉริยะ · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md) และ [Validation Protocol](../../research/evidence-library/ACOUSTIC_INTELLIGENCE_VALIDATION.md); P0.5 contract เป็น runtime ส่วน classifier ยังเป็น ROADMAP |
+| แผนจำแนกเสียง/DSP | [หูอัจฉริยะ · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md) และ [Validation Protocol](../../research/evidence-library/ACOUSTIC_INTELLIGENCE_VALIDATION.md); P1-shadow รองรับ marker ฝั่ง Pi แล้ว ส่วน Firmware ยังต้องผ่าน physical gate |
 | Test/release gate | [TESTING.md](../../TESTING.md) |
 | Pull, Sync, Deploy, Backup | [Pi 5 Operations Runbook](../pi5-operations-runbook.md) |
 | คำที่แสดงต่อผู้ใช้ | [Product Language Guideline](../zeep-product-language-guideline-v1.md) |
@@ -141,7 +142,7 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 | Restore Summary | คำอธิบายคะแนนหลัก ไม่ใช่คะแนนที่สาม |
 | OFF BED | Occupancy exception แยกจาก Wake และไม่เข้า Sleep Stage ratio |
 | Shadow | คำแนะนำ/การประเมินที่ไม่มีสิทธิ์สั่ง Hardware |
-| Acoustic Intelligence | P0.5 แสดงระดับเสียงและทะเบียน Candidate ให้ Admin; การอนุมานจาก DSP ยังเป็น ROADMAP และไม่ฟัง/ถอดเนื้อหาคำพูด |
+| Acoustic Intelligence | P1-shadow แสดงระดับเสียงและ optional Firmware DSP marker ให้ Admin; ไม่ส่ง Raw audio ไม่ฟัง/ถอดเนื้อหาคำพูด และไม่กระทบ State/Score/Control |
 | Email-first identity | ใช้ email ที่ยืนยันได้ก่อน; ข้อมูลเก่าอาจยังใช้ normalized legacy account key โดยมี alias ที่ตรวจสอบแล้ว |
 
 ## พร้อมรับงานชิ้นแรกเมื่อ

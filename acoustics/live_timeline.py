@@ -33,6 +33,16 @@ def live_timeline_reader(
                     "t": item.get("t"),
                     "dba": item.get("dba"),
                     "sample_interval_s": item.get("sample_interval_s"),
+                    "acoustic_label": item.get("acoustic_label"),
+                    "acoustic_state": item.get("acoustic_state"),
+                    "acoustic_confidence": item.get("acoustic_confidence"),
+                    "acoustic_event_detected": item.get("acoustic_event_detected"),
+                    "acoustic_classifier_version": item.get(
+                        "acoustic_classifier_version"
+                    ),
+                    "acoustic_window_sequence": item.get(
+                        "acoustic_window_sequence"
+                    ),
                 }
                 for item in ((active or {}).get("samples") or [])
             ]

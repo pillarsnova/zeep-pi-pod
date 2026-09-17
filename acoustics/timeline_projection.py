@@ -9,6 +9,7 @@ from typing import Any
 
 from sensors.sound import energy_average_db
 
+from .label_events import detect_label_events, latest_classification
 from .level_events import (
     DEFAULT_CADENCE_SECONDS,
     RAPID_CHANGE_DB,
@@ -20,11 +21,11 @@ from .level_events import (
 )
 
 TIMELINE_SCHEMA = "zeep.acoustic.level-timeline"
-TIMELINE_SCHEMA_VERSION = "1.0"
+TIMELINE_SCHEMA_VERSION = "1.1"
 DEFAULT_DISPLAY_RANGE = (30.0, 130.0)
 DEFAULT_MAX_POINTS = 240
 MAX_VISIBLE_EVENTS = 24
-DETECTOR_VERSION = "zeep-level-pattern-v1.0"
+DETECTOR_VERSION = "zeep-level-pattern-v1.0+dsp-label-v0.1"
 
 
 def build_acoustic_timeline_snapshot(
@@ -52,7 +53,12 @@ def build_acoustic_timeline_snapshot(
     valid_levels = [
         float(row["dba"]) for row in rows if row.get("dba") is not None
     ]
-    events = detect_level_events(rows, cadence_s=cadence_s)
+    level_events = detect_level_events(rows, cadence_s=cadence_s)
+    label_events = detect_label_events(samples, cadence_s=cadence_s)
+    events = sorted(
+        [*level_events, *label_events],
+        key=lambda event: (event["start_epoch_s"], event["key"]),
+    )
     pattern = describe_level_pattern(rows, events)
     points = _compact_points(
         rows,
@@ -82,7 +88,7 @@ def build_acoustic_timeline_snapshot(
         "schema_version": TIMELINE_SCHEMA_VERSION,
         "generated_at": generated.isoformat(timespec="milliseconds"),
         "status": status,
-        "analysis_scope": "sound_level_pattern_only",
+        "analysis_scope": "sound_level_and_firmware_dsp_labels",
         "detector": _detector_block(),
         "session": _session_block(
             session_active, recording, session_id, start_epoch_s
@@ -99,7 +105,7 @@ def build_acoustic_timeline_snapshot(
         ),
         "events": visible_events,
         "event_summary": _event_summary(events, visible_events),
-        "classification": _classification_block(),
+        "classification": latest_classification(samples),
         "privacy": _privacy_block(),
         "impact": _impact_block(),
         "message": _message(status, summary),
@@ -117,14 +123,6 @@ def _detector_block() -> dict[str, Any]:
             "review_level_dba": SUSTAINED_LEVEL_DBA,
             "review_span_s": SUSTAINED_MIN_SECONDS,
         },
-    }
-
-
-def _classification_block() -> dict[str, str]:
-    return {
-        "state": "not_evaluated",
-        "sound_source": "unknown",
-        "human_sound": "not_evaluated",
     }
 
 
@@ -216,7 +214,11 @@ def _summary(
 ) -> dict[str, Any]:
     expected = _expected_sample_count(rows, cadence_s=cadence_s)
     valid_count = len(valid_levels)
-    observed = [event for event in events if event["category"] == "observed_level"]
+    observed = [
+        event
+        for event in events
+        if event["category"] in {"observed_level", "dsp_label"}
+    ]
     missing = [event for event in events if event["category"] == "sensor_quality"]
     average = energy_average_db(
         valid_levels,
@@ -366,7 +368,15 @@ def _chart_range(values: Sequence[float], *, low: float, high: float) -> list[fl
 
 
 def _visible_events(events: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    quotas = {"missing_data": 6, "sustained_high": 8, "rapid_change": 10}
+    quotas = {
+        "missing_data": 4,
+        "sustained_high": 5,
+        "rapid_change": 6,
+        "snore_like": 5,
+        "speech_like": 5,
+        "impact_like": 5,
+        "steady_equipment_like": 4,
+    }
     newest = sorted(
         events,
         key=lambda event: float(event.get("start_epoch_s") or 0),
@@ -394,9 +404,18 @@ def _event_summary(
     events: Sequence[Mapping[str, Any]],
     visible: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
+    keys = (
+        "rapid_change",
+        "sustained_high",
+        "missing_data",
+        "snore_like",
+        "speech_like",
+        "impact_like",
+        "steady_equipment_like",
+    )
     counts = {
         key: sum(1 for event in events if event.get("key") == key)
-        for key in ("rapid_change", "sustained_high", "missing_data")
+        for key in keys
     }
     return {
         "total_count": len(events),

@@ -107,6 +107,21 @@ class DatabaseManager:
                                 f"ALTER TABLE timeline ADD COLUMN "
                                 f"{name} {field_type}"
                             )
+                    acoustic_columns = {
+                        "acoustic_label": "TEXT",
+                        "acoustic_state": "TEXT",
+                        "acoustic_confidence": "REAL",
+                        "acoustic_event_detected": "INTEGER",
+                        "acoustic_classifier_version": "TEXT",
+                        "acoustic_window_sequence": "INTEGER",
+                        "acoustic_features_json": "TEXT",
+                    }
+                    for name, field_type in acoustic_columns.items():
+                        if name not in timeline_columns:
+                            connection.execute(
+                                f"ALTER TABLE timeline ADD COLUMN "
+                                f"{name} {field_type}"
+                            )
                 else:
                     # Existing Pod databases predate the explicit tx label.
                     # Keep epoch_index authoritative and backfill tx1, tx2, ...
@@ -307,13 +322,21 @@ class DatabaseManager:
                 """INSERT INTO timeline
                    (session_id,timestamp,temperature,humidity,co2,pm2_5,voc_index,
                     lux,sound,heart_rate,respiration_rate,bed_status,
-                    respiratory_evidence_valid,respiratory_evidence_reason)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    respiratory_evidence_valid,respiratory_evidence_reason,
+                    acoustic_label,acoustic_state,acoustic_confidence,
+                    acoustic_event_detected,acoustic_classifier_version,
+                    acoustic_window_sequence,acoustic_features_json)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (p["session_id"], p["timestamp"], p.get("temperature"), p.get("humidity"),
                  p.get("co2"), p.get("pm2_5"), p.get("voc_index"), p.get("lux"),
                  p.get("sound"), p.get("heart_rate"), p.get("respiration_rate"),
                  p.get("bed_status"), p.get("respiratory_evidence_valid"),
-                 p.get("respiratory_evidence_reason")),
+                 p.get("respiratory_evidence_reason"), p.get("acoustic_label"),
+                 p.get("acoustic_state"), p.get("acoustic_confidence"),
+                 p.get("acoustic_event_detected"),
+                 p.get("acoustic_classifier_version"),
+                 p.get("acoustic_window_sequence"),
+                 p.get("acoustic_features_json")),
             )
         elif job.operation == "event":
             value = p.get("value")

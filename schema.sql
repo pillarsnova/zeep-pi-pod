@@ -41,6 +41,13 @@ CREATE TABLE IF NOT EXISTS timeline (
     bed_status TEXT,
     respiratory_evidence_valid INTEGER,
     respiratory_evidence_reason TEXT,
+    acoustic_label TEXT,
+    acoustic_state TEXT,
+    acoustic_confidence REAL,
+    acoustic_event_detected INTEGER,
+    acoustic_classifier_version TEXT,
+    acoustic_window_sequence INTEGER,
+    acoustic_features_json TEXT,
     FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
 );
 
@@ -57,4 +64,4 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user_start ON sessions(username_key, sta
 CREATE INDEX IF NOT EXISTS idx_timeline_session_timestamp ON timeline(session_id, timestamp);
 CREATE INDEX IF NOT EXISTS idx_events_session_timestamp ON events(session_id, timestamp);
 
-INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '6');
+INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '7');

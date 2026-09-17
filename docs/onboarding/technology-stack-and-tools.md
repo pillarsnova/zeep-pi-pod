@@ -22,6 +22,7 @@ Account backend ซึ่งอยู่นอก repository นี้
 | Database | SQLite WAL; ไม่มี ORM | Session/Timeline/Event, Raw BCG, Auth และ Pod occupancy |
 | Sidecar storage | JSON/JSONL และ durable filesystem outbox | Profile, Baseline, checkpoint, device state, audit และ retry |
 | Hardware I/O | USB Serial JSONL/Binary, MQTT, BCM GPIO, MPV IPC | Sensor Hub, BCG, Control Hub, relay/driver และเสียงออกลำโพง |
+| Acoustic DSP shadow | ESP32-S3 FFT/features + Pi contract/timeline | ส่งเฉพาะ provisional label/confidence/feature summary; ไม่ส่ง Raw audio |
 | QA | `unittest`, `quality_gate.py`, Ruff, JSON Schema, `ui_composer.py check` | Focused regression, style, contract/evidence และ generated UI |
 | Delivery/Ops | Git/GitHub `origin/develop`, GitHub Actions, SSH/Tailscale, `systemd` | Review, CI, deploy, remote operation และ recovery |
 
@@ -160,11 +161,12 @@ source/weighting/window metadata ยังไม่ได้อยู่ใน r
 เป็นเสียงคอมเพรสเซอร์ พัดลม ประตู เพลง หรือเสียงจากภายนอก แผนเพิ่มความสามารถอยู่ที่
 [หูอัจฉริยะ · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md)
 
-P0.6 มี `acoustics/` สำหรับ versioned capability contract, Admin level-only
-projection และ Session Level Timeline ผ่าน `/api/v1/admin/contracts/acoustics`,
-`/api/v1/admin/acoustics/live` และ `/api/v1/admin/acoustics/timeline` Candidate
-เช่น `snore_like`/`speech_like`
-แสดงเป็น `planned/not_evaluated` เท่านั้น ยังไม่มี feature parser หรือ classifier
+P1-shadow มี `acoustics/` สำหรับ versioned capability contract, Admin level/DSP
+projection และ Session Timeline ผ่าน `/api/v1/admin/contracts/acoustics`,
+`/api/v1/admin/acoustics/live` และ `/api/v1/admin/acoustics/timeline` Pi รองรับ
+feature parser, persistence และ marker ของ `snore_like`, `speech_like`,
+`impact_like` และ `steady_equipment_like` แล้ว แต่จะแสดง `not_evaluated` จน
+Sensor Hub ส่งผลจาก Firmware candidate ที่ผ่าน physical validation และติดตั้งจริง
 
 ## เครื่องมือพัฒนา ทดสอบ และส่งมอบ
 
@@ -189,9 +191,10 @@ backup, deploy, restart และ recovery ให้ยึด
 - ไม่มี React/Vue/Node frontend build ใน Pi runtime
 - ไม่มี ORM, Redis, PostgreSQL, Docker หรือ Kubernetes ใน deployment ปัจจุบัน
 - ไม่มี Raw audio/PCM database และไม่มีระบบถอดคำพูด
-- ไม่มี FFT/MFCC/spectral classifier หรือ ML model จำแนกแหล่งเสียง
-- ไม่มี Production firmware source ของ Sensor Hub 1 ใน repository; folder firmware
-  ที่มีอยู่เป็น `ARCHIVED / DO NOT FLASH`
+- ไม่มี ML model, MFCC หรือระบบยืนยันแหล่งเสียงระดับ Production; มีเพียง
+  interpretable FFT/rule-based DSP shadow candidate ที่ยังไม่ผ่าน field validation
+- มี Firmware DSP candidate ของ Sensor Hub 1 ที่ build ได้ใน repository แต่ยังเป็น
+  `NOT INSTALLED / DO NOT FLASH WITHOUT HARDWARE GATE`
 - ไม่มี automatic actuation จาก Sleep State, Adaptive recommendation หรือเสียง
 - ไม่มี clinical diagnosis, PSG equivalence, SpO2 หรือ whole-day readiness
 

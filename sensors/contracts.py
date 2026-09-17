@@ -55,7 +55,30 @@ __all__ = (
 SENSOR_VALUE_FIELDS: dict[str, frozenset[str]] = {
     "sht3x_dis": frozenset({"temperature_c", "humidity_rh"}),
     "opt3001": frozenset({"lux"}),
-    "sph0645": frozenset({"sound_dba", "sound_dbfs"}),
+    "sph0645": frozenset(
+        {
+            "sound_dba",
+            "sound_dbfs",
+            "sound_class",
+            "sound_class_state",
+            "sound_class_confidence",
+            "sound_event_detected",
+            "sound_classifier_version",
+            "sound_low_band_ratio",
+            "sound_mid_band_ratio",
+            "sound_high_band_ratio",
+            "sound_spectral_centroid_hz",
+            "sound_spectral_flatness",
+            "sound_spectral_flux",
+            "sound_crest_factor",
+            "sound_syllabic_modulation",
+            "sound_breathing_periodicity",
+            "sound_breathing_period_s",
+            "sound_spectral_frames",
+            "sound_envelope_frames",
+            "sound_window_sequence",
+        }
+    ),
     "mhz19c": frozenset({"co2_ppm"}),
     "pms7003": frozenset(
         {

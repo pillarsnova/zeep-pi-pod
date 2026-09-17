@@ -4192,6 +4192,7 @@ def take_session_sample() -> Dict[str, Any]:
     sleep_metrics = sleep.get("metrics") or {}
     auxiliary = sleep_metrics.get("auxiliary_evidence") or {}
     acoustic = auxiliary.get("acoustic") or {}
+    acoustic_dsp = e.get("acoustic") or {}
     devices = e.get("devices") or {}
     live = lambda key: (devices.get(key) or {}).get("status") == "live"
     b_ok = bool(b.get("connected"))
@@ -4216,6 +4217,13 @@ def take_session_sample() -> Dict[str, Any]:
         "voc": e.get("voc_index") if live("sgp40") else None,
         "lux": e.get("lux") if live("opt3001") else None,
         "dba": e.get("sound_dba_est") if live("sph0645") else None,
+        "acoustic_label": acoustic_dsp.get("label"),
+        "acoustic_state": acoustic_dsp.get("state"),
+        "acoustic_confidence": acoustic_dsp.get("confidence"),
+        "acoustic_event_detected": bool(acoustic_dsp.get("event_detected")),
+        "acoustic_classifier_version": acoustic_dsp.get("classifier_version"),
+        "acoustic_window_sequence": acoustic_dsp.get("window_sequence"),
+        "acoustic_features": dict(acoustic_dsp.get("features") or {}),
         "hr": b.get("heart_rate_bpm") if b_ok else None,
         "rr": b.get("respiration_rate") if b_ok else None,
         "bed": b.get("status_text") if b_ok else None,
@@ -4447,6 +4455,17 @@ def session_sampler():
                     "bed_status": sample["bed"],
                     "respiratory_evidence_valid": sample["respiratory_evidence_valid"],
                     "respiratory_evidence_reason": sample["respiratory_evidence_reason"],
+                    "acoustic_label": sample.get("acoustic_label"),
+                    "acoustic_state": sample.get("acoustic_state"),
+                    "acoustic_confidence": sample.get("acoustic_confidence"),
+                    "acoustic_event_detected": sample.get("acoustic_event_detected"),
+                    "acoustic_classifier_version": sample.get("acoustic_classifier_version"),
+                    "acoustic_window_sequence": sample.get("acoustic_window_sequence"),
+                    "acoustic_features_json": json.dumps(
+                        sample.get("acoustic_features") or {},
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ),
                 },
             )
 
@@ -5263,6 +5282,17 @@ def _restore_interrupted_session() -> Optional[str]:
             "voc": x.get("voc_index"),
             "lux": x.get("lux"),
             "dba": x.get("sound"),
+            "acoustic_label": x.get("acoustic_label"),
+            "acoustic_state": x.get("acoustic_state"),
+            "acoustic_confidence": x.get("acoustic_confidence"),
+            "acoustic_event_detected": bool(x.get("acoustic_event_detected")),
+            "acoustic_classifier_version": x.get("acoustic_classifier_version"),
+            "acoustic_window_sequence": x.get("acoustic_window_sequence"),
+            "acoustic_features": (
+                json.loads(x["acoustic_features_json"])
+                if x.get("acoustic_features_json")
+                else {}
+            ),
             "hr": x.get("heart_rate"),
             "rr": x.get("respiration_rate"),
             "bed": x.get("bed_status"),

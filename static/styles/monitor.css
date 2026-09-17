@@ -255,6 +255,10 @@ body[data-view="monitor"] .acoustic-shadow-card {
   content: "";
 }
 .acoustic-event-list article.missing_data::before { background: #718b96; }
+.acoustic-event-list article.snore_like::before { background: #9b7cf4; }
+.acoustic-event-list article.speech_like::before { background: #48d4e5; }
+.acoustic-event-list article.impact_like::before { background: #ff6e6e; }
+.acoustic-event-list article.steady_equipment_like::before { background: #6fd393; }
 .acoustic-event-list article > div { min-width: 0; }
 .acoustic-event-list :is(time, b, span) { display: block; }
 .acoustic-event-list time { color: #6fdde7; font: 700 10px "SF Mono", ui-monospace, monospace; }

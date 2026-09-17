@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <driver/i2s.h>
 
+#include "acoustic_classifier.h"
+
 namespace zeep {
 
 struct SoundWindow {
@@ -24,6 +26,7 @@ struct SoundWindow {
   uint32_t completed_ms = 0;
   uint32_t sequence = 0;
   const char* invalid_reason = nullptr;
+  AcousticFeatures acoustic;
 };
 
 struct AudioHealth {
@@ -58,6 +61,7 @@ class AudioMeter {
   TaskHandle_t task_handle_ = nullptr;
   mutable portMUX_TYPE result_lock_ = portMUX_INITIALIZER_UNLOCKED;
   SoundWindow pending_;
+  AcousticClassifier acoustic_classifier_;
   float calibration_offset_db_ = 0.0F;
   bool driver_ready_ = false;
   bool task_running_ = false;

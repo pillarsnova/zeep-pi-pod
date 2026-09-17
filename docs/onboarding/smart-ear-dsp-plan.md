@@ -1,6 +1,6 @@
 # ZEEP หูอัจฉริยะ — Acoustic Intelligence DSP Plan
 
-สถานะ: **P0.6 ADMIN LEVEL TIMELINE LIVE · DSP CLASSIFIER NOT LIVE**
+สถานะ: **P1 SHADOW PIPELINE IMPLEMENTED · FIRMWARE CANDIDATE NOT INSTALLED**
 
 ขอบเขต: จำแนกลักษณะและบริบทของเสียงเพื่อช่วยทีมดูแล Pod
 
@@ -33,6 +33,12 @@ Packet Inspector ยังคงทำหน้าที่ตรวจค่า
 WebSocket และไม่แก้ Raw timeline ผลจำแนกแหล่ง/ชนิดเสียงยังเป็น `not_evaluated`
 จนมี feature telemetry และ classifier ที่ผ่าน Gate
 
+รุ่น P1-shadow เพิ่มเส้นทางรองรับ `sound_class`, confidence, classifier version,
+window sequence และ DSP features ตั้งแต่ Sensor contract → Session Timeline → API
+→ สัญลักษณ์บน Monitor แล้ว พร้อม migration ฐานข้อมูลแบบ additive อย่างไรก็ตาม
+Firmware ที่ build ได้ยังเป็น **validation candidate และยังไม่ได้ Flash ลงอุปกรณ์**
+หน้า Monitor จึง fail-soft กลับเป็น Level Timeline เดิมจนได้รับ packet รุ่นใหม่จริง
+
 ## 1. ปัจจุบันระบบรู้อะไร
 
 ### LIVE · Telemetry ที่ Runtime รับและตรวจได้
@@ -52,17 +58,17 @@ WebSocket และไม่แก้ Raw timeline ผลจำแนกแห�
 
 - แหล่งกำเนิดจริงของเสียงจาก microphone เดียว
 - ตำแหน่ง ทิศทาง ผู้พูด หรือเนื้อหาคำพูด
-- Production firmware ใช้ weighting/time constant/window ใด จนกว่าจะมี source,
-  version และ contract ที่ตรวจได้
+- Production firmware ที่ติดตั้งอยู่ยังไม่มี DSP class/version ตาม contract ใหม่
 - ค่าปัจจุบันเป็น certified LAeq(A) หรือผ่านมาตรฐานเครื่องวัด Class 1/2 หรือไม่
 - ACK ของแอร์/พัดลมหมายความว่าอุปกรณ์กายภาพกำลังสร้างเสียงจริงหรือไม่
 
-### สิ่งที่ยังไม่มี
+### สิ่งที่ยังไม่มีใน Production
 
-ไม่มี PCM/spectrum บน Pi, FFT/MFCC หรือ acoustic source classifier รุ่น P0.6 มี
+ไม่มี PCM/spectrum บน Pi และจะไม่เพิ่ม PCM บน Pi รุ่น P0.6 มี
 event detector สำหรับ **รูปแบบระดับเสียง** และ event-bout แบบ deterministic แล้ว
 แต่ scalar dBA เพียงค่าเดียวยังไม่อาจแยก compressor, airflow, door, music หรือ
-external noise ได้อย่างน่าเชื่อถือ
+external noise ได้อย่างน่าเชื่อถือ ส่วน P1-shadow candidate คำนวณ FFT/features
+บน ESP32 และส่งเฉพาะผลย่อ แต่ยังต้องผ่าน controlled physical validation
 
 ### กฎ Level Timeline ที่ LIVE
 
@@ -91,8 +97,8 @@ BCG vendor status `5` ที่ UI เรียกว่า `Snoring flag` เ�
 ### ไม่ทำในรุ่นแรก
 
 - ไม่ฟัง/ถอด/เก็บเนื้อหาคำพูด และไม่ระบุตัวบุคคลด้วยเสียง
-- ไม่แสดงไอ กรน หรือเสียงพูดเป็นผลตรวจ; แสดงได้เฉพาะ research candidate ที่ยัง
-  `not_evaluated` และห้ามสร้าง label `apnea`
+- ป้าย `speech_like` และ `snore_like` แสดงเฉพาะ Admin พร้อมคำว่า “ผลทดลอง”
+  และ confidence; ห้ามสร้าง label `apnea` หรือแสดงเป็นผลตรวจสุขภาพ
 - ไม่เปลี่ยน Sleep State, Sleep Score หรือ Recovery Score
 - ไม่สั่งแอร์ เพลง พัดลม ประตู หรืออุปกรณ์ใดอัตโนมัติ
 - ไม่นำ archived firmware มา Flash หรือถือเป็น Production source of truth
@@ -182,86 +188,51 @@ acoustics/
 
 ห้ามเพิ่ม logic เหล่านี้ลง `app.py`; composition root ทำเพียง wiring/lifecycle
 
-## 5. Telemetry contract ที่ต้องอนุมัติก่อนเขียน classifier
+## 5. Telemetry contract ที่ใช้ใน P1-shadow
 
 ### Routing decision
 
-Current reader รับ `event=environment`, schema `zeep.sensor.telemetry` version
-`1.0` และ allowlist SPH0645 เฉพาะ `sound_dba`/`sound_dbfs` การใส่ feature object
-เพิ่มใน nested schema โดยไม่เปลี่ยน contract จะถูกตัดทิ้ง ขณะที่ legacy flat bridge
-ยัง permissive กว่าและอาจเก็บ unknown key ไว้ใน normalized payload P0 ต้องปิด
-boundary นี้สำหรับ acoustic fields และห้ามอาศัย behavior legacy เป็น contract
+Current reader รับ `event=environment`, schema `zeep.sensor.telemetry` version `1.0`
+P1-shadow เลือกขยาย nested `sph0645.values` แบบ **positive allowlist** เพราะ label
+เกิดจากหน้าต่างเสียงเดียวกับ `sound_dba` และต้องเดินทางด้วย clock/sequence เดียวกัน
+Unknown field ยังถูกตัดทิ้ง และ Legacy flat bridge ไม่ใช่ authority ของ DSP fields
 
-แผนนี้เลือก **event/router แยก** เป็นค่าเริ่มต้น:
-
-- ESP32 ส่ง `event=acoustic_features` ด้วย schema/version ของตนเองบน USB JSONL
-- reader route ไป acoustic validator/state โดยไม่ทับ canonical environment state
-- packet เดิม `event=environment` ยังคง backward compatible และเป็นเจ้าของ dBA
-- หากข้อจำกัด firmware บังคับให้ใช้ nested object ต้อง bump Sensor telemetry schema,
-  ใช้ strict validator และ migration plan; ห้ามขยาย allowlist แบบรับ field ไม่จำกัด
+- `sound_dba` ยังคงเป็นค่าระดับเสียงหลักและทำงานได้แม้ DSP ไม่พร้อม
+- `sound_class`, state, confidence, classifier version และ feature scalars เป็น optional
+- Pi จะรับ label เฉพาะ state `provisional`, class อยู่ใน allowlist, confidence finite
+  และ microphone live; เงื่อนไขไม่ครบจะเป็น `insufficient_input`
+- ไม่รับ array/blob/base64/PCM หรือข้อความคำพูดผ่าน contract นี้
 
 Clock contract ต้องอาศัย `boot_id`, `sequence` และ monotonic timestamp จาก ESP32
 จากนั้น Pi ประทับ `received_at_utc` และเก็บ clock mapping/drift policy การให้ ESP32
 ส่ง UTC เองโดยไม่มี synchronization ไม่เพียงพอสำหรับ correlate กับ BCG/device event
 
-ตัวอย่างเพื่อออกแบบ schema ไม่ใช่ API ที่ LIVE และ **ทุกค่าตัวเลขเป็น
-non-normative example** จน Production firmware source และ feature specification
-ได้รับอนุมัติ ค่า `sample_rate_hz=16000` ด้านล่างไม่ได้กำหนดให้ Production ต้องใช้
-16 kHz:
+ตัวอย่าง wire fields ภายใน `sensors.sph0645.values` (ค่าตัวเลขเป็นตัวอย่าง):
 
 ```json
 {
-  "event": "acoustic_features",
-  "schema": "zeep.acoustic.telemetry",
-  "schema_version": "1.0",
-  "firmware_version": "required",
-  "dsp_version": "required",
-  "boot_id": "boot-example",
-  "sequence": 1842,
-  "captured_monotonic_ms": 912300,
-  "window_ms": 10000,
-  "subwindow_ms": 1000,
-  "internal_frame_ms": 32,
-  "sample_rate_hz": 16000,
-  "coverage_pct": 99.2,
-  "expected_sample_count": 160000,
-  "valid_sample_count": 158720,
-  "clip_ratio": 0.0,
-  "overrun_count": 0,
-  "level": {
-    "sound_dba": 43.2,
-    "maximum_dba": 49.8,
-    "maximum_method": "pending-contract"
-  },
-  "temporal": {
-    "crest_factor_db": 3.1,
-    "transient_count": 1,
-    "modulation_index": 0.12
-  },
-  "spectral": {
-    "fft_size": 512,
-    "fft_window": "hann",
-    "fft_hop_samples": 256,
-    "bands_db": [
-      {"low_hz": 80, "high_hz": 250, "value_db": -24.1},
-      {"low_hz": 250, "high_hz": 1000, "value_db": -31.4},
-      {"low_hz": 1000, "high_hz": 4000, "value_db": -38.0},
-      {"low_hz": 4000, "high_hz": 8000, "value_db": -45.2}
-    ],
-    "centroid_hz": 418.0,
-    "flatness": 0.18,
-    "periodicity": 0.72
-  },
-  "privacy": {
-    "raw_audio_transmitted": false,
-    "raw_audio_retained": false
-  }
+  "sound_dba": 43.2,
+  "sound_window_sequence": 1842,
+  "sound_class": "snore_like",
+  "sound_class_state": "provisional",
+  "sound_class_confidence": 0.78,
+  "sound_event_detected": true,
+  "sound_classifier_version": "zeep-dsp-rule-v0.1-shadow",
+  "sound_low_band_ratio": 0.61,
+  "sound_mid_band_ratio": 0.31,
+  "sound_high_band_ratio": 0.08,
+  "sound_spectral_centroid_hz": 418.0,
+  "sound_spectral_flatness": 0.18,
+  "sound_spectral_flux": 0.07,
+  "sound_crest_factor": 4.2,
+  "sound_syllabic_modulation": 0.05,
+  "sound_breathing_periodicity": 0.62,
+  "sound_breathing_period_s": 3.6
 }
 ```
 
-JSON ด้านบนคือ **ESP32 wire packet** จึงไม่มี UTC หลัง validator รับ packet แล้ว
-Pi จึงเพิ่ม `received_at_utc` และ `clock_mapping_version` ใน normalized record โดย
-ไม่เขียนกลับไปอ้างว่าเป็นเวลาที่ ESP32 วัดโดยตรง
+ESP32 ไม่มี UTC; Pi ผูก label เข้ากับเวลารับ Sensor frame และ Session sample
+โดยใช้ `boot_id`, packet sequence และ `sound_window_sequence` ป้องกันการนับซ้ำ
 
 ใช้ชื่อ `laeq_dba` ได้ต่อเมื่อ contract ยืนยัน A-weighting, integration window,
 time behavior และ calibration provenance ชัดเจน ก่อนหน้านั้นให้ใช้ชื่อกลาง เช่น
@@ -289,7 +260,7 @@ API, log หรือ database
 
 ### Admin transport และ API
 
-P0.6 ใช้ **Admin WebSocket projection** สำหรับค่าปัจจุบัน และ REST แบบ read-only
+P1-shadow ใช้ **Admin WebSocket projection** สำหรับค่าปัจจุบัน และ REST แบบ read-only
 สำหรับ contract กับ Timeline ของ Session:
 
 - `GET /api/v1/admin/contracts/acoustics`
@@ -299,9 +270,10 @@ P0.6 ใช้ **Admin WebSocket projection** สำหรับค่าปั�
 ทุกเส้นทางต้องอ่าน projection service เดียวกัน ใช้ positive allowlist และ
 `Cache-Control: private, no-store` สำหรับ HTTP response
 
-Timeline endpoint สร้าง level-pattern event แบบ deterministic จาก Session samples
-เมื่อเรียกใช้งานและไม่สร้าง acoustic persistence แยก Candidate Registry อยู่เฉพาะ
-contract endpoint และห้ามตีความเป็นผลจำแนกเสียง
+Timeline endpoint รวม level-pattern event จาก Pi กับ provisional DSP event จาก
+Firmware โดย persist allowlisted label/confidence/features ใน `timeline` พร้อม
+Session เท่านั้น ไม่มี acoustic database แยก Candidate Registry ยังอยู่เฉพาะ
+contract endpoint และ label ห้ามถูกตีความเป็นผลตรวจสุขภาพ
 
 ตัวอย่าง classification response:
 
@@ -341,10 +313,9 @@ contract endpoint และห้ามตีความเป็นผลจ�
 
 ### Storage decision
 
-เหตุการณ์ที่ผูกกับ Recorded Session อาจเก็บ derived transition/summary ใน `events`
-พร้อม version และ provenance เพราะตารางนี้บังคับ `session_id` ส่วนเหตุการณ์ตอน Pod
-ว่าง/commissioning ต้องอยู่ operational audit หรือ store แยกที่มี retention ชัดเจน
-ห้ามสร้าง Session ปลอมเพื่อรองรับข้อมูลเสียง
+P1-shadow เก็บ allowlisted label/confidence/features ลง `timeline` เฉพาะขณะ
+Recorded Session เพื่อรักษาเวลาเดียวกับ Sensor อื่นและรองรับ restart เหตุการณ์ตอน
+Pod ว่าง/commissioning ไม่ถูกเก็บเป็น Session และห้ามสร้าง Session ปลอม
 
 หากงาน R&D ต้องใช้ feature cadence 10 วินาทีเพื่อทำซ้ำ confusion matrix จึงค่อย
 เสนอ `acoustics.db` แยก โดยต้องกำหนด schema, ground-truth link, backup, snapshot,
@@ -482,12 +453,12 @@ Automatic actuation ต้องมี safety proposal และ validation แ�
 | No-actuation/fail-safe | Safety + QA | Safety owner |
 | Deploy, smoke, rollback | Operations | Release owner |
 
-## 11. Definition of ready ก่อนเริ่มเขียนโค้ด
+## 11. Definition of ready ก่อน Flash และเปิด Physical Pilot
 
 - [ ] ได้ Production Sensor Hub 1 firmware source, version และ checksum ที่ตรวจได้
 - [ ] ระบุ sample rate, bit alignment, weighting, window และ calibration ของ level path
-- [ ] อนุมัติ event routing, clock mapping/drift และ strict packet-size/field allowlist
-- [ ] อนุมัติ feature schema/taxonomy/unknown behavior และ test vectors
+- [x] กำหนด event routing และ strict field allowlist ฝั่ง Pi
+- [x] กำหนด feature schema/taxonomy/unknown behavior และ regression tests ฝั่ง Pi
 - [ ] อนุมัติ no-raw-audio default, consent, retention, access และ erasure boundary
 - [ ] ระบุ test matrix, metric, sample count และ acceptance ก่อนเก็บผล
 - [ ] ยืนยัน Admin WebSocket เป็น current-level transport, REST เป็น
@@ -496,9 +467,10 @@ Automatic actuation ต้องมี safety proposal และ validation แ�
 - [ ] ยืนยันว่า Sleep State/Score/Control ไม่อ่าน classifier output
 - [ ] มี rollback ที่ปิด Smart Ear ได้โดยไม่ปิด Sensor Hub 1 หรือ Session
 
-จนกว่ารายการนี้ครบ ให้ถือ **การจำแนกเสียง** เป็น ROADMAP ส่วน P0.6 Monitor/API
-ดูได้เฉพาะ `sound_dba`, freshness, level aggregation และ deterministic Level
-Timeline ส่วน Candidate Registry อยู่ใน contract และมีสถานะ `planned` เท่านั้น
+จนกว่ารายการ Physical Pilot ครบ ให้ถือ label เป็น **P1-shadow candidate** หน้า
+Monitor/API รองรับ marker แล้ว แต่ Production ที่ยังไม่ส่ง DSP fields จะทำงานเป็น
+Level Timeline เดิมโดยอัตโนมัติ ห้าม Flash candidate โดยข้าม backup, identity,
+meter regression และ rollback gate
 
 ## 12. เอกสารและทะเบียนที่เกี่ยวข้อง
 

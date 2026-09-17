@@ -1,4 +1,4 @@
-"""Build the Admin Smart Ear shadow projection without inferring labels."""
+"""Build the Admin Smart Ear projection from versioned firmware DSP labels."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from .contracts import (
     LIVE_SCHEMA_VERSION,
     acoustic_contract_snapshot,
 )
+from .label_events import LABELS
 
 
 def _finite_number(value: Any) -> float | None:
@@ -81,6 +82,11 @@ def _level_context(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         "sample_count": max(0, sample_count),
         "sound_dba": sound_dba,
         "status": status if status in allowed else "unavailable",
+        "acoustic": (
+            dict(environment.get("acoustic"))
+            if isinstance(environment.get("acoustic"), Mapping)
+            else {}
+        ),
     }
 
 
@@ -104,10 +110,12 @@ def _aggregation(context: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _reason_codes(context: Mapping[str, Any]) -> list[str]:
-    reasons = [
-        "feature_telemetry_unavailable",
-        "temporal_resolution_insufficient",
-    ]
+    acoustic = context.get("acoustic") or {}
+    reasons = []
+    if acoustic.get("state") != "provisional":
+        reasons.extend(
+            ["feature_telemetry_unavailable", "classification_input_unavailable"]
+        )
     if context["sound_dba"] is None:
         reasons.append("sound_level_unavailable")
     if not context["device_live"]:
@@ -128,24 +136,50 @@ def build_acoustic_monitor_snapshot(
     *,
     generated_at: datetime | None = None,
 ) -> dict[str, Any]:
-    """Return a fail-soft Admin projection for the current level-only phase.
-
-    Scalar dBA cannot establish signal shape, source, speech, snoring or cough.
-    Consequently all classification result arrays remain empty and the state is
-    ``not_evaluated`` until a versioned feature telemetry path is deployed.
-    """
+    """Return a fail-soft Admin projection without classifying scalar dBA."""
     contract = acoustic_contract_snapshot()
     context = _level_context(snapshot)
     level_status = context["status"]
+    acoustic = context.get("acoustic") or {}
+    classification_active = (
+        acoustic.get("state") == "provisional"
+        and acoustic.get("label") in LABELS
+    )
+    label = str(acoustic.get("label") or "unknown")
+    confidence = _finite_number(acoustic.get("confidence"))
+    confidence_band = (
+        "high" if confidence is not None and confidence >= 0.8
+        else "medium" if confidence is not None and confidence >= 0.6
+        else "low" if classification_active
+        else "unavailable"
+    )
+    group = LABELS.get(label, ("ยังไม่ทราบ", "unknown"))[1]
+    display_name = LABELS.get(label, ("ยังไม่ทราบ", "unknown"))[0]
+    likely_sources = (
+        [{"key": label, "label": display_name, "confidence": confidence}]
+        if classification_active and group in {"equipment_like", "impact"}
+        else []
+    )
+    human = (
+        [{"key": label, "label": display_name, "confidence": confidence}]
+        if classification_active and group == "human_sound_like"
+        else []
+    )
 
     return {
         "schema": LIVE_SCHEMA,
         "schema_version": LIVE_SCHEMA_VERSION,
         "contract_version": contract["contract_version"],
-        "phase": "P0.6",
-        "status": "level_only" if level_status == "valid" else level_status,
-        "classification_state": "not_evaluated",
-        "confidence_band": "unavailable",
+        "phase": "P1-shadow",
+        "status": (
+            "dsp_shadow" if classification_active
+            else "level_only" if level_status == "valid"
+            else level_status
+        ),
+        "classification_state": (
+            "provisional" if classification_active else "not_evaluated"
+        ),
+        "confidence_band": confidence_band,
         "observed_at": _observed_at(context, generated_at),
         "level": {
             "sound_dba": context["sound_dba"],
@@ -156,22 +190,27 @@ def build_acoustic_monitor_snapshot(
         },
         "aggregation": _aggregation(context),
         "results": {
-            "shapes": [],
-            "likely_sources": [],
-            "human_sound_hypotheses": [],
+            "shapes": (
+                [{"key": label, "label": display_name, "confidence": confidence}]
+                if classification_active
+                else []
+            ),
+            "likely_sources": likely_sources,
+            "human_sound_hypotheses": human,
             "mixed": False,
         },
         "reason_codes": _reason_codes(context),
         "evidence": {
-            "quality": "level_only",
-            "feature_telemetry_available": False,
-            "missing": list(contract["required_features"]),
+            "quality": "firmware_dsp_shadow" if classification_active else "level_only",
+            "feature_telemetry_available": classification_active,
+            "missing": [] if classification_active else list(contract["required_features"]),
+            "features": dict(acoustic.get("features") or {}),
             "bcg_snoring_flag_is_microphone_evidence": False,
         },
         "provenance": {
             "sound_source": "esp32_sound_dba_direct",
-            "feature_schema_version": None,
-            "classifier_version": None,
+            "feature_schema_version": "1.0" if classification_active else None,
+            "classifier_version": acoustic.get("classifier_version"),
             "firmware_version": _firmware_version(context["esp32"]),
         },
         "privacy": contract["privacy"],

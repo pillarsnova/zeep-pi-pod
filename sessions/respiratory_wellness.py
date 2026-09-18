@@ -128,25 +128,25 @@ def _unavailable_personal_baseline(
         "sessions_used": int(sessions),
         "minimum_sessions": RESPIRATORY_BASELINE_MIN_COMPARISON_SESSIONS,
         "reason": (
-            "ข้อมูลอ้างอิงส่วนบุคคลพร้อมแล้ว "
-            "แต่ข้อมูลครั้งนี้ยังไม่เพียงพอสำหรับเปรียบเทียบ"
+            "ข้อมูลอ้างอิงส่วนบุคคลพร้อมแล้ว แต่ข้อมูลครั้งนี้ยังไม่เพียงพอสำหรับเปรียบเทียบ"
             if reference_ready
-            else "กำลังเก็บข้อมูลชีพจรและการหายใจจากการพักรูปแบบเดียวกัน "
-            "เพื่อสร้างข้อมูลอ้างอิงส่วนบุคคล"
+            else "กำลังเก็บข้อมูลชีพจรและการหายใจจากการพักรูปแบบเดียวกัน เพื่อสร้างข้อมูลอ้างอิงส่วนบุคคล"
         ),
         "reference_ready": reference_ready,
         "requires_paired_hr_rr": True,
         "affects_score": False,
     }
     if reference_ready:
-        result.update({
-            "median_hr_bpm": round(float(baseline_hr), 1),
-            "typical_range_hr_bpm": hr_range,
-            "median_rr_brpm": round(float(baseline_rr), 1),
-            "typical_range_rr_brpm": rr_range,
-            "same_mode_only": True,
-            "prior_sessions_only": True,
-        })
+        result.update(
+            {
+                "median_hr_bpm": round(float(baseline_hr), 1),
+                "typical_range_hr_bpm": hr_range,
+                "median_rr_brpm": round(float(baseline_rr), 1),
+                "typical_range_rr_brpm": rr_range,
+                "same_mode_only": True,
+                "prior_sessions_only": True,
+            }
+        )
     return result
 
 

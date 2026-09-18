@@ -33,4 +33,3 @@ def enforce_advisory(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         candidate.pop("command_endpoint", None)
         guarded.append(candidate)
     return guarded
-

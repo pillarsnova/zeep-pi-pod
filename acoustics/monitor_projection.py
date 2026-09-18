@@ -155,11 +155,15 @@ def _confidence_band(confidence: float | None, active: bool) -> str:
     return "low" if active else "unavailable"
 
 
-def _hypothesis(label: str, display: str, confidence: float | None) -> list[dict[str, Any]]:
+def _hypothesis(
+    label: str, display: str, confidence: float | None
+) -> list[dict[str, Any]]:
     return [{"key": label, "label": display, "confidence": confidence}]
 
 
-def _classification_context(acoustic: Mapping[str, Any]) -> tuple[bool, str, float | None, str, str]:
+def _classification_context(
+    acoustic: Mapping[str, Any],
+) -> tuple[bool, str, float | None, str, str]:
     active = acoustic.get("state") == "provisional" and acoustic.get("label") in LABELS
     label = str(acoustic.get("label") or "unknown")
     confidence = _finite_number(acoustic.get("confidence"))
@@ -199,8 +203,10 @@ def build_acoustic_monitor_snapshot(
         "contract_version": contract["contract_version"],
         "phase": "P1-shadow",
         "status": (
-            "dsp_shadow" if classification_active
-            else "level_only" if level_status == "valid"
+            "dsp_shadow"
+            if classification_active
+            else "level_only"
+            if level_status == "valid"
             else level_status
         ),
         "classification_state": (

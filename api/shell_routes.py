@@ -19,6 +19,7 @@ def create_shell_router(
     smart_response: Callable[[], dict[str, Any]],
 ) -> APIRouter:
     router = APIRouter(tags=["Pod shell"])
+    operator_dependency = Depends(require_pod_operator)
 
     @router.get("/")
     async def root():
@@ -40,7 +41,7 @@ def create_shell_router(
         return _shell(static_dir)
 
     @router.get("/api/state")
-    async def api_state(principal: Any = Depends(require_pod_operator)):
+    async def api_state(principal: Any = operator_dependency):
         return snapshot_for(principal)
 
     @router.get("/api/public/status")
@@ -48,7 +49,7 @@ def create_shell_router(
         return public_status()
 
     @router.get("/api/smart-response")
-    async def api_smart_response(_: Any = Depends(require_pod_operator)):
+    async def api_smart_response(_: Any = operator_dependency):
         return smart_response()
 
     return router
@@ -59,4 +60,3 @@ def _shell(static_dir: Path) -> FileResponse:
         static_dir / "index.html",
         headers={"Cache-Control": "no-store, max-age=0", "Pragma": "no-cache"},
     )
-

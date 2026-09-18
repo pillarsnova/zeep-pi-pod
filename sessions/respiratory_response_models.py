@@ -64,8 +64,7 @@ class RespiratoryObservations(ContractModel):
             ):
                 raise ValueError("paired evidence does not satisfy minimum quality")
             if (
-                values.get("paired_hr_rr_samples", 0)
-                > values.get("valid_samples", 0)
+                values.get("paired_hr_rr_samples", 0) > values.get("valid_samples", 0)
                 or values.get("paired_hr_rr_minutes", 0)
                 > values.get("valid_minutes", 0)
                 or values.get("paired_hr_rr_minutes", 0)

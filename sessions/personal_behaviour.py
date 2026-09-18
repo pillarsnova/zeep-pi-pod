@@ -157,19 +157,21 @@ def _respiratory_reference(
     regularity = _numbers(paired_rows, "respiratory_regularity_factor")
     sessions = len(paired_rows)
     reference = empty_respiratory_reference()
-    reference.update({
-        "status": (
-            "active"
-            if sessions >= RESPIRATORY_BASELINE_MIN_COMPARISON_SESSIONS
-            else "learning"
-        ),
-        "sessions_used": sessions,
-        "median_hr_bpm": _median(heart_rates),
-        "typical_range_hr_bpm": _typical_range(heart_rates),
-        "median_rr_brpm": _median(breathing_rates),
-        "typical_range_rr_brpm": _typical_range(breathing_rates),
-        "regularity_median": _median(regularity, 3),
-    })
+    reference.update(
+        {
+            "status": (
+                "active"
+                if sessions >= RESPIRATORY_BASELINE_MIN_COMPARISON_SESSIONS
+                else "learning"
+            ),
+            "sessions_used": sessions,
+            "median_hr_bpm": _median(heart_rates),
+            "typical_range_hr_bpm": _typical_range(heart_rates),
+            "median_rr_brpm": _median(breathing_rates),
+            "typical_range_rr_brpm": _typical_range(breathing_rates),
+            "regularity_median": _median(regularity, 3),
+        }
+    )
     return reference
 
 

@@ -24,20 +24,30 @@ ACOUSTIC_LABELS = frozenset(
 
 def _sound_feature_values(hub1: Mapping[str, Any]) -> dict[str, float]:
     fields = (
-        "sound_low_band_ratio", "sound_mid_band_ratio", "sound_high_band_ratio",
-        "sound_spectral_centroid_hz", "sound_spectral_flatness",
-        "sound_spectral_flux", "sound_crest_factor",
-        "sound_syllabic_modulation", "sound_breathing_periodicity",
-        "sound_breathing_period_s", "sound_feature_coverage",
-        "sound_feature_window_ms", "sound_feature_sequence",
-        "sound_feature_age_ms", "sound_clip_ratio", "sound_alignment_errors",
-        "sound_transient_count", "sound_spectral_frames", "sound_envelope_frames",
+        "sound_low_band_ratio",
+        "sound_mid_band_ratio",
+        "sound_high_band_ratio",
+        "sound_spectral_centroid_hz",
+        "sound_spectral_flatness",
+        "sound_spectral_flux",
+        "sound_crest_factor",
+        "sound_syllabic_modulation",
+        "sound_breathing_periodicity",
+        "sound_breathing_period_s",
+        "sound_feature_coverage",
+        "sound_feature_window_ms",
+        "sound_feature_sequence",
+        "sound_feature_age_ms",
+        "sound_clip_ratio",
+        "sound_alignment_errors",
+        "sound_transient_count",
+        "sound_spectral_frames",
+        "sound_envelope_frames",
     )
     return {
         key.removeprefix("sound_"): value
         for key in fields
-        if (value := first_numeric(hub1, (key,))) is not None
-        and math.isfinite(value)
+        if (value := first_numeric(hub1, (key,))) is not None and math.isfinite(value)
     }
 
 
@@ -50,9 +60,7 @@ def _sound_window_values(hub1: Mapping[str, Any]) -> dict[str, Any]:
         "peak": peak,
         "peak_a": first_numeric(hub1, ("sound_peak_a",)),
         "crest_factor": (
-            peak / rms
-            if rms is not None and rms > 0 and peak is not None
-            else None
+            peak / rms if rms is not None and rms > 0 and peak is not None else None
         ),
         "dbfs_a": first_numeric(hub1, ("sound_dbfs_a",)),
         "sample_rate_hz": first_numeric(hub1, ("sound_sample_rate_hz",)),
@@ -85,10 +93,7 @@ def _acoustic_projection(
         confidence = 0.0
     confidence = max(0.0, min(1.0, float(confidence)))
     valid = bool(
-        source_live
-        and sound_live
-        and state == "provisional"
-        and label != "unknown"
+        source_live and sound_live and state == "provisional" and label != "unknown"
     )
     features = _sound_feature_values(hub1)
     window_features = _sound_window_values(hub1)
@@ -103,8 +108,11 @@ def _acoustic_projection(
         "window_sequence": first_numeric(hub1, ("sound_window_sequence",)),
         "features": {**window_features, **features},
         "feature_source": (
-            "firmware_dsp" if features else "esp32_window_summary"
-            if window_features else "unavailable"
+            "firmware_dsp"
+            if features
+            else "esp32_window_summary"
+            if window_features
+            else "unavailable"
         ),
         "raw_audio_transmitted": False,
     }

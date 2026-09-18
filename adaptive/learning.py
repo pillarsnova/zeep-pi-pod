@@ -9,8 +9,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from adaptive.features import finite_number, prepare_live_features
 from adaptive.control_policy import advisory_control_policy, enforce_advisory
+from adaptive.features import finite_number, prepare_live_features
 
 ADAPTIVE_LEARNING_VERSION = "zeep.adaptive-learning-live.v1"
 DEFAULT_WINDOW_SECONDS = 300
@@ -358,14 +358,16 @@ def build_adaptive_learning_snapshot(
         "live_features": metrics,
         "sleep_estimator": _sleep_estimator(sleep),
         "device_intent": _device_intent(snapshot),
-        "candidate_recommendations": enforce_advisory([
-            *_personal_reference_recommendations(
-                metrics,
-                behaviour_data,
-                observation_id,
-            ),
-            *_recommendations(snapshot, observation_id),
-        ]),
+        "candidate_recommendations": enforce_advisory(
+            [
+                *_personal_reference_recommendations(
+                    metrics,
+                    behaviour_data,
+                    observation_id,
+                ),
+                *_recommendations(snapshot, observation_id),
+            ]
+        ),
         "blockers": _blockers(snapshot, quality),
         "versions": _versions(snapshot),
         "guardrails": [

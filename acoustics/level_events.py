@@ -93,9 +93,7 @@ def describe_level_pattern(
 ) -> dict[str, str]:
     """Summarize the observed level shape in plain, non-source language."""
     values = [
-        float(sample["dba"])
-        for sample in samples
-        if sample.get("dba") is not None
+        float(sample["dba"]) for sample in samples if sample.get("dba") is not None
     ]
     if len(values) < 2:
         return {
@@ -124,11 +122,7 @@ def describe_level_pattern(
             "detail": f"พบการเปลี่ยนระดับชัด {len(rapid)} ช่วง",
         }
     if spread <= 3.0:
-        label = (
-            "ค่อนข้างเงียบและคงที่"
-            if average < 40.0
-            else "ระดับเสียงค่อนข้างคงที่"
-        )
+        label = "ค่อนข้างเงียบและคงที่" if average < 40.0 else "ระดับเสียงค่อนข้างคงที่"
         return {
             "key": "quiet_steady" if average < 40.0 else "steady",
             "label": label,
@@ -157,13 +151,10 @@ def _missing_intervals(
         if sample.get("dba") is None:
             invalid_start = timestamp if invalid_start is None else invalid_start
             invalid_end = timestamp
-            invalid_end_interval = float(
-                sample.get("sample_interval_s") or cadence_s
-            )
+            invalid_end_interval = float(sample.get("sample_interval_s") or cadence_s)
             invalid_minimum = min(
                 invalid_minimum,
-                float(sample.get("sample_interval_s") or cadence_s)
-                * GAP_MIN_SAMPLES,
+                float(sample.get("sample_interval_s") or cadence_s) * GAP_MIN_SAMPLES,
             )
         elif invalid_start is not None and invalid_end is not None:
             intervals.append(
@@ -187,10 +178,13 @@ def _missing_intervals(
 
     merged: list[list[float]] = []
     for start, end, minimum in sorted(intervals):
-        merge_interval = min(
-            minimum,
-            merged[-1][2] if merged else minimum,
-        ) / GAP_MIN_SAMPLES
+        merge_interval = (
+            min(
+                minimum,
+                merged[-1][2] if merged else minimum,
+            )
+            / GAP_MIN_SAMPLES
+        )
         if merged and start <= merged[-1][1] + merge_interval * 0.25:
             merged[-1][1] = max(merged[-1][1], end)
             merged[-1][2] = min(merged[-1][2], minimum)
@@ -307,10 +301,7 @@ def _rapid_changes(
                     1,
                 ),
                 "evidence_quality": "rule_match",
-                "evidence": (
-                    f"เปลี่ยน {abs(delta):.1f} dB ภายใน "
-                    f"{end - start:.0f} วินาที"
-                ),
+                "evidence": (f"เปลี่ยน {abs(delta):.1f} dB ภายใน {end - start:.0f} วินาที"),
             }
         )
 
@@ -320,8 +311,7 @@ def _rapid_changes(
     for candidate in candidates:
         if (
             coalesced
-            and candidate["start_epoch_s"] - coalesced[-1]["end_epoch_s"]
-            <= cadence_s
+            and candidate["start_epoch_s"] - coalesced[-1]["end_epoch_s"] <= cadence_s
         ):
             current_delta = abs(float(candidate["delta_db"]))
             previous_delta = abs(float(coalesced[-1]["delta_db"]))

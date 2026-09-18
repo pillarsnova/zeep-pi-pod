@@ -16,11 +16,11 @@ def create_fleet_router(
     fleet_snapshot: Callable[[], dict[str, Any]],
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1/admin/fleet", tags=["Fleet health"])
+    admin_dependency = Depends(require_admin)
 
     @router.get("/health")
-    def health(response: Response, _: Any = Depends(require_admin)):
+    def health(response: Response, _: Any = admin_dependency):
         response.headers["Cache-Control"] = "private, no-store"
         return response_envelope(fleet_snapshot(), kind="fleet_health")
 
     return router
-

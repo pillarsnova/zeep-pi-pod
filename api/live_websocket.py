@@ -78,4 +78,3 @@ async def _close_best_effort(ws: WebSocket, *, code: int, reason: str) -> None:
         await ws.close(code=code, reason=reason)
     except (RuntimeError, WebSocketDisconnect):
         pass
-

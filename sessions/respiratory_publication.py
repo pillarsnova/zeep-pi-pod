@@ -113,9 +113,7 @@ def _observation_numbers(raw: dict[str, Any]) -> dict[str, Any]:
         "occupied_minutes": _number_or(
             raw.get("occupied_minutes"), minimum=0.0, maximum=10_000.0
         ),
-        "coverage_pct": _number_or(
-            raw.get("coverage_pct"), minimum=0.0, maximum=100.0
-        ),
+        "coverage_pct": _number_or(raw.get("coverage_pct"), minimum=0.0, maximum=100.0),
         "excluded_motion_or_weak_signal_minutes": _number_or(
             raw.get("excluded_motion_or_weak_signal_minutes"),
             minimum=0.0,
@@ -132,31 +130,33 @@ def _observation_numbers(raw: dict[str, Any]) -> dict[str, Any]:
 def _observations(source: dict[str, Any], *, trusted_version: bool) -> dict[str, Any]:
     raw = mapping(source.get("observations")) if trusted_version else {}
     public = _observation_numbers(raw)
-    public.update({
-        "median_hr_bpm": _bounded_number(
-            raw.get("median_hr_bpm"), minimum=30.0, maximum=220.0
-        ),
-        "median_paired_rr_brpm": _bounded_number(
-            raw.get("median_paired_rr_brpm"), minimum=4.0, maximum=60.0
-        ),
-        "median_rr_brpm": _bounded_number(
-            raw.get("median_rr_brpm"), minimum=4.0, maximum=60.0
-        ),
-        "p10_rr_brpm": _bounded_number(
-            raw.get("p10_rr_brpm"), minimum=4.0, maximum=60.0
-        ),
-        "p90_rr_brpm": _bounded_number(
-            raw.get("p90_rr_brpm"), minimum=4.0, maximum=60.0
-        ),
-        "regularity_factor": _bounded_number(
-            raw.get("regularity_factor"), minimum=0.0, maximum=1.0
-        ),
-        "regularity_key": (
-            raw.get("regularity_key")
-            if raw.get("regularity_key") in REGULARITY_KEYS
-            else "insufficient"
-        ),
-    })
+    public.update(
+        {
+            "median_hr_bpm": _bounded_number(
+                raw.get("median_hr_bpm"), minimum=30.0, maximum=220.0
+            ),
+            "median_paired_rr_brpm": _bounded_number(
+                raw.get("median_paired_rr_brpm"), minimum=4.0, maximum=60.0
+            ),
+            "median_rr_brpm": _bounded_number(
+                raw.get("median_rr_brpm"), minimum=4.0, maximum=60.0
+            ),
+            "p10_rr_brpm": _bounded_number(
+                raw.get("p10_rr_brpm"), minimum=4.0, maximum=60.0
+            ),
+            "p90_rr_brpm": _bounded_number(
+                raw.get("p90_rr_brpm"), minimum=4.0, maximum=60.0
+            ),
+            "regularity_factor": _bounded_number(
+                raw.get("regularity_factor"), minimum=0.0, maximum=1.0
+            ),
+            "regularity_key": (
+                raw.get("regularity_key")
+                if raw.get("regularity_key") in REGULARITY_KEYS
+                else "insufficient"
+            ),
+        }
+    )
     paired_minutes = public["paired_hr_rr_minutes"]
     internally_consistent = bool(
         public["paired_hr_rr_samples"] <= public["valid_samples"]
@@ -186,24 +186,14 @@ def _personal_baseline(source: dict[str, Any]) -> dict[str, Any]:
     raw = mapping(source.get("personal_baseline"))
     status = str(raw.get("status") or "not_ready")
     sessions_used = _session_count(raw.get("sessions_used"))
-    hr_median = _bounded_number(
-        raw.get("median_hr_bpm"), minimum=30.0, maximum=220.0
-    )
-    rr_median = _bounded_number(
-        raw.get("median_rr_brpm"), minimum=4.0, maximum=60.0
-    )
+    hr_median = _bounded_number(raw.get("median_hr_bpm"), minimum=30.0, maximum=220.0)
+    rr_median = _bounded_number(raw.get("median_rr_brpm"), minimum=4.0, maximum=60.0)
     hr_pair = _numeric_pair(
         raw.get("typical_range_hr_bpm"), minimum=30.0, maximum=220.0
     )
-    rr_pair = _numeric_pair(
-        raw.get("typical_range_rr_brpm"), minimum=4.0, maximum=60.0
-    )
-    delta_hr = _bounded_number(
-        raw.get("delta_hr_bpm"), minimum=-190.0, maximum=190.0
-    )
-    delta_rr = _bounded_number(
-        raw.get("delta_rr_brpm"), minimum=-56.0, maximum=56.0
-    )
+    rr_pair = _numeric_pair(raw.get("typical_range_rr_brpm"), minimum=4.0, maximum=60.0)
+    delta_hr = _bounded_number(raw.get("delta_hr_bpm"), minimum=-190.0, maximum=190.0)
+    delta_rr = _bounded_number(raw.get("delta_rr_brpm"), minimum=-56.0, maximum=56.0)
     reference_ready = bool(
         raw.get("reference_ready") is True
         and sessions_used >= RESPIRATORY_BASELINE_MIN_COMPARISON_SESSIONS
@@ -242,14 +232,16 @@ def _personal_baseline(source: dict[str, Any]) -> dict[str, Any]:
         reference_ready=reference_ready,
     )
     if reference_ready:
-        public.update({
-            "median_hr_bpm": hr_median,
-            "typical_range_hr_bpm": hr_pair,
-            "median_rr_brpm": rr_median,
-            "typical_range_rr_brpm": rr_pair,
-            "same_mode_only": True,
-            "prior_sessions_only": True,
-        })
+        public.update(
+            {
+                "median_hr_bpm": hr_median,
+                "typical_range_hr_bpm": hr_pair,
+                "median_rr_brpm": rr_median,
+                "typical_range_rr_brpm": rr_pair,
+                "same_mode_only": True,
+                "prior_sessions_only": True,
+            }
+        )
     if available:
         if delta_hr is not None:
             public["delta_hr_bpm"] = delta_hr
@@ -270,10 +262,7 @@ def _age_context(source: dict[str, Any]) -> dict[str, Any]:
         "guidance": guidance,
         "role": "context_only",
         "threshold_adjustment_applied": False,
-        "note": (
-            "ช่วงอายุใช้ช่วยอธิบายแนวโน้มเท่านั้น "
-            "ไม่ได้เปลี่ยนคะแนนหรือเกณฑ์การหายใจ"
-        ),
+        "note": ("ช่วงอายุใช้ช่วยอธิบายแนวโน้มเท่านั้น ไม่ได้เปลี่ยนคะแนนหรือเกณฑ์การหายใจ"),
     }
 
 
@@ -292,9 +281,7 @@ def _confidence(source: dict[str, Any]) -> dict[str, Any]:
 def _reference_context(source: dict[str, Any]) -> dict[str, Any]:
     raw = mapping(source.get("reference_context"))
     public = {
-        "adult_orientation_range_brpm": list(
-            RESPIRATORY_ADULT_CONTEXT_RANGE_BRPM
-        ),
+        "adult_orientation_range_brpm": list(RESPIRATORY_ADULT_CONTEXT_RANGE_BRPM),
         "recheck_range_brpm": list(RESPIRATORY_ADULT_RECHECK_RANGE_BRPM),
         "ranges_are_diagnostic": False,
         "age_specific_cutoff_applied": False,
@@ -396,9 +383,7 @@ def public_respiratory_wellness(value: Any) -> dict[str, Any]:
         status_key, status_label = user_respiratory_status("insufficient")
         vital_summary = _vital_summary(status_key, observations)
     reason_codes = [
-        item
-        for item in scalar_list(source.get("reason_codes"))
-        if item in REASON_CODES
+        item for item in scalar_list(source.get("reason_codes")) if item in REASON_CODES
     ]
     if not trusted_version and "historical_provenance_unavailable" not in reason_codes:
         reason_codes.append("historical_provenance_unavailable")
@@ -414,9 +399,7 @@ def public_respiratory_wellness(value: Any) -> dict[str, Any]:
         "observations": observations,
         "vital_summary": vital_summary,
         "confidence": _confidence(
-            source
-            if trusted_version and vital_summary["available"] is True
-            else {}
+            source if trusted_version and vital_summary["available"] is True else {}
         ),
         "age_context": _age_context(source),
         "personal_baseline": baseline,

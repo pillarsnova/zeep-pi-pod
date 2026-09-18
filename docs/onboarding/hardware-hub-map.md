@@ -52,10 +52,10 @@ Control Hub 1 ยืนยันเพียงว่า ESP32 เรียก�
 | Sensor Hub 1 | SHT3x-DIS: temperature/humidity; OPT3001: lux; SPH0645LM4H-B: `sound_dba`/diagnostic dBFS | `/dev/ttyACM0`, 115200, JSON หนึ่ง object ต่อบรรทัด | `state["sensor"]["esp32"]` | `hardware/sensorhub1.py` + `sensors/contracts.py` + `sensors/runtime.py` |
 | Sensor Hub 2 | MH-Z19C: CO2; PMS7003: PM1/2.5/10; SGP40: raw/VOC Index | MQTT `127.0.0.1:1883`, telemetry/status topics | `state["sensor"]["sensorhub2"]` | `hardware/sensorhub2.py` |
 | BCG | LSM-800-T waveform 25 samples, bed status, HR, RR | `/dev/ttyUSB_HRB`, 115200, binary frame 66 bytes | `state["sensor"]["bcg"]`; raw Session epochs in `bcg.db` | `hardware/bcg.py`; parser `sensors/bcg.py`; storage `bcg_storage.py` |
-| Control Hub 1 | ESP32-S3 bridge ส่งคำสั่ง IR ไปเครื่องปรับอากาศ | MQTT command/status/event | `state["aircon"]` | `hardware/controlhub1.py`; route/sequence policy ยังอยู่ใน `app.py` |
-| Control Hub 2 | ESP32 bridge ใช้ servo 4 ตัวกดรีโมตเตียงปรับระดับ | MQTT command/status/event | `state["bed_control"]` | `hardware/controlhub2.py`; auto-stop policy ยังอยู่ใน `app.py` |
+| Control Hub 1 | ESP32-S3 bridge ส่งคำสั่ง IR ไปเครื่องปรับอากาศ | MQTT command/status/event | `state["aircon"]` | `hardware/controlhub1.py`; HTTP wiring อยู่ `api/control_routes.py`; sequence policy ยังอยู่ใน `app.py` |
+| Control Hub 2 | ESP32 bridge ใช้ servo 4 ตัวกดรีโมตเตียงปรับระดับ | MQTT command/status/event | `state["bed_control"]` | `hardware/controlhub2.py`; HTTP wiring อยู่ `api/control_routes.py`; auto-stop policy ยังอยู่ใน `app.py` |
 | Audio | เพลง local และ Brainwave preview ออกลำโพงของ Pi | MPV IPC ผ่าน Unix socket; `afplay`/`ffplay` เป็น development fallback | `state["music"]`, `state["system"]["player"]` | `hardware/audio.py`, `audio_api.py`, `brainwave_audio.py` |
-| GPIO | ประตู 2 ทิศ, ไฟเพดาน/ดาว, Aroma 4, Steam, Red light 3 zone | Pi BCM GPIO ผ่าน `gpiozero` + `lgpio` chip 0 | `state["gpio"]` เป็น commanded state | `hardware/gpio.py`; pulse/route policy ยังอยู่ใน `app.py` |
+| GPIO | ประตู 2 ทิศ, ไฟเพดาน/ดาว, Aroma 4, Steam, Red light 3 zone | Pi BCM GPIO ผ่าน `gpiozero` + `lgpio` chip 0 | `state["gpio"]` เป็น commanded state | `hardware/gpio.py`; lock/cooldown อยู่ `hardware/pulse_control.py`; HTTP อยู่ `api/legacy_control_routes.py` |
 
 ## 1. Sensor Hub 1 — USB Serial JSONL
 

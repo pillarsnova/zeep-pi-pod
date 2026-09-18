@@ -228,7 +228,8 @@ class SensorHub1Reader:
                 for key in field_names
                 if key.startswith("sound_spectral_")
                 or key.startswith("sound_breathing_")
-                or key in {
+                or key
+                in {
                     "sound_crest_factor",
                     "sound_syllabic_modulation",
                     "sound_low_band_ratio",

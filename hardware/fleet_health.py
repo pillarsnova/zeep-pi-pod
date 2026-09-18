@@ -87,4 +87,3 @@ def local_pod_health(
             }
         ],
     }
-

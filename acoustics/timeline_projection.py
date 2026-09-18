@@ -50,9 +50,7 @@ def build_acoustic_timeline_snapshot(
         display_max=high,
         fallback_cadence_s=cadence_s,
     )
-    valid_levels = [
-        float(row["dba"]) for row in rows if row.get("dba") is not None
-    ]
+    valid_levels = [float(row["dba"]) for row in rows if row.get("dba") is not None]
     level_events = detect_level_events(rows, cadence_s=cadence_s)
     label_events = detect_label_events(samples, cadence_s=cadence_s)
     events = sorted(
@@ -76,9 +74,7 @@ def build_acoustic_timeline_snapshot(
     )
     status = _status(session_active, recording, len(valid_levels))
     start_epoch_s = (
-        float(rows[0]["t"])
-        if rows
-        else _positive_number(started_at_epoch_s)
+        float(rows[0]["t"]) if rows else _positive_number(started_at_epoch_s)
     )
     end_epoch_s = float(rows[-1]["t"]) if rows else start_epoch_s
 
@@ -90,9 +86,7 @@ def build_acoustic_timeline_snapshot(
         "status": status,
         "analysis_scope": "sound_level_and_firmware_dsp_labels",
         "detector": _detector_block(),
-        "session": _session_block(
-            session_active, recording, session_id, start_epoch_s
-        ),
+        "session": _session_block(session_active, recording, session_id, start_epoch_s),
         "summary": summary,
         "timeline": _timeline_block(
             start_epoch_s,
@@ -170,10 +164,7 @@ def _timeline_block(
         "end_epoch_s": end,
         "cadence_s": cadence_s,
         "cadences_s": sorted(
-            {
-                float(row.get("sample_interval_s") or cadence_s)
-                for row in rows
-            }
+            {float(row.get("sample_interval_s") or cadence_s) for row in rows}
         ),
         "display_range_dba": [low, high],
         "chart_range_dba": _chart_range(levels, low=low, high=high),
@@ -237,9 +228,7 @@ def _summary(
         "valid_sample_count": valid_count,
         "expected_sample_count": expected,
         "coverage_pct": (
-            round(min(100.0, valid_count * 100.0 / expected), 1)
-            if expected
-            else 0.0
+            round(min(100.0, valid_count * 100.0 / expected), 1) if expected else 0.0
         ),
         "observed_event_count": len(observed),
         "missing_interval_count": len(missing),
@@ -307,9 +296,7 @@ def _continuous_level_runs(
     active: list[Mapping[str, float | None]] = []
     for row in rows:
         timestamp = float(row["t"])
-        expected = float(
-            active[-1].get("sample_interval_s") if active else cadence_s
-        )
+        expected = float(active[-1].get("sample_interval_s") if active else cadence_s)
         contiguous = not active or timestamp - float(active[-1]["t"]) <= expected * 2.5
         if row.get("dba") is not None and contiguous:
             active.append(row)
@@ -384,14 +371,10 @@ def _visible_events(events: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]
     )
     selected: list[Mapping[str, Any]] = []
     for key, quota in quotas.items():
-        selected.extend(
-            [event for event in newest if event.get("key") == key][:quota]
-        )
+        selected.extend([event for event in newest if event.get("key") == key][:quota])
     selected_ids = {str(event.get("id")) for event in selected}
     selected.extend(
-        event
-        for event in newest
-        if str(event.get("id")) not in selected_ids
+        event for event in newest if str(event.get("id")) not in selected_ids
     )
     selected = selected[:MAX_VISIBLE_EVENTS]
     return sorted(
@@ -414,8 +397,7 @@ def _event_summary(
         "steady_equipment_like",
     )
     counts = {
-        key: sum(1 for event in events if event.get("key") == key)
-        for key in keys
+        key: sum(1 for event in events if event.get("key") == key) for key in keys
     }
     return {
         "total_count": len(events),
@@ -427,9 +409,7 @@ def _event_summary(
 
 def _message(status: str, summary: Mapping[str, Any]) -> str:
     if status == "no_session":
-        return (
-            "เริ่ม Session เพื่อดูภาพระดับเสียงตลอดช่วงที่ระบบบันทึก"
-        )
+        return "เริ่ม Session เพื่อดูภาพระดับเสียงตลอดช่วงที่ระบบบันทึก"
     if status == "waiting_for_recording":
         return "รอ Session เริ่มบันทึกหลัง HR และ RR ผ่านเกณฑ์"
     if status == "no_data":

@@ -40,9 +40,7 @@ def live_timeline_reader(
                     "acoustic_classifier_version": item.get(
                         "acoustic_classifier_version"
                     ),
-                    "acoustic_window_sequence": item.get(
-                        "acoustic_window_sequence"
-                    ),
+                    "acoustic_window_sequence": item.get("acoustic_window_sequence"),
                 }
                 for item in ((active or {}).get("samples") or [])
             ]

@@ -86,4 +86,3 @@ def _number(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return result if math.isfinite(result) else None
-

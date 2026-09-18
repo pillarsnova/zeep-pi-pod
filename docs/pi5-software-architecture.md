@@ -21,9 +21,10 @@ label จากค่า dBA เพียงค่าเดียว
 
 ## 1. หลักการแบ่งระบบ
 
-`app.py` เป็น **legacy composition root**: Sensor-frame sampler ถูกย้ายออกแล้วและ
-เหลือเพียง compatibility facade แต่ Session/Sleep orchestration และ routes บางส่วน
-ยังอยู่ เป้าหมายที่บังคับด้วย architecture ratchet คือให้เหลือเฉพาะการสร้าง FastAPI
+`app.py` เป็น **legacy composition root**: Sensor-frame sampler, Live Sleep estimator,
+waiting-bed/recording sampler และ GPIO pulse routes ถูกย้ายออกแล้ว โดยเหลือ compatibility
+facade กับ dependency wiring แต่ resume/finalize และ routes บางส่วนยังอยู่ เป้าหมายที่
+บังคับด้วย architecture ratchet คือให้เหลือเฉพาะการสร้าง FastAPI
 app, ต่อ lifecycle, ประกอบ dependency และเรียก adapters เท่านั้น กฎ deterministic
 ใหม่ต้องอยู่ใน pure module เพื่อให้ทดสอบได้โดยไม่เปิด GPIO, Serial, MQTT หรือเสียง
 
@@ -42,10 +43,14 @@ app, ต่อ lifecycle, ประกอบ dependency และเรียก
 | Sensor transports | `hardware/sensorhub1.py`, `sensorhub2.py` | USB/MQTT readers ที่รับ state และ callback จาก composition root |
 | BCG transport | `hardware/bcg.py`, `sensors/bcg.py` | LSM-800-T framing/reconnect, byte parser และ live-state publication; `app.bcg_reader()` เป็น compatibility facade |
 | Sensor-frame sampling | `sessions/sensor_frame_sampler.py` | รวม BCG + canonical environment ตาม cadence 10 วินาที; ไม่ตัดสิน Sleep Stage |
+| Live Sleep estimator | `sessions/live_sleep_estimator.py`, `sessions/live_sleep_runtime.py` | สูตรเดิมรับ dependency contract แบบ explicit ต่อรอบคำนวณ; คง object identity ของ state/lock และ threshold/output เดิม |
+| Live Session sampling lifecycle | `sessions/live_sampler.py` | รอ Bed+HR+RR gate, promote เป็น recording และ persist Timeline ผ่าน explicit ports |
 | Live Session projection | `sessions/live_projection.py` | Contract และ pure builders ของสถานะ Session 20 fields; Login, Restart และ Finalize ใช้ shape เดียวกัน |
 | Live API projection | `api/state_projection.py` | ประกอบ freshness/stale/fallback ของ Hub, BCG และ Control จาก detached snapshot โดยไม่แก้ live reader state |
 | Control transports | `hardware/controlhub1.py`, `controlhub2.py` | MQTT command/ACK ของแอร์และเตียง แยกจาก HTTP routes |
 | Control intent persistence | `hardware/aircon_reference.py` | Repository เก็บค่าอ้างอิงพัดลม 1–5 แบบ atomic; constructor ไม่เปิดไฟล์และ initialize ใน lifespan |
+| Device control HTTP | `api/control_routes.py`, `api/legacy_control_routes.py` | Router คง URL, RBAC และ payload ของ Aircon, Bed, GPIO, Door และ Aroma/Steam เดิม |
+| GPIO pulse controls | `hardware/pulse_control.py` | Service เป็นเจ้าของ lock/cooldown ของประตูและ Aroma/Steam แยกจาก HTTP |
 | Audio controls | `hardware/audio_library.py`, `audio_runtime.py`, `audio_process.py`, `audio_watchers.py`, `audio.py`, `audio_api.py` | Pure defaults/listing, runtime contract, subprocess/IPC adapter, watcher registry, player facade และ HTTP policy โดยไม่มี I/O ตอน import |
 | Shadow guidance | `smart_response.py` | ประเมินคำแนะนำสภาพแวดล้อมโดยไม่สั่งอุปกรณ์ |
 | Adaptive learning monitor | `adaptive/learning.py`, `adaptive/features.py` | เทียบ Live กับ Baseline และรวม version/device intent ใน Shadow mode |
@@ -196,7 +201,7 @@ Onboarding ใช้เอกสารนี้เป็น Roadmap ทางเ
 | R7b | เสร็จแล้ว | Live Session ใช้ typed Contract + pure projection module + app Adapter/Facade; Restart รักษา Wellness context และ Logout ล้าง Personal context ครบ |
 | R7c | เสร็จแล้ว | Audio ใช้ pure Library + typed runtime Contract + system/process Adapter + lifecycle Facade; import ไม่ค้นหา player/ALSA หรือสร้าง music directory และ shutdown drain watcher แบบ bounded |
 
-`app.py` คงอยู่ที่ไม่เกิน 7,995 บรรทัด และเป็น composition root ต่อไป ส่วน API,
+`app.py` คงอยู่ที่ไม่เกิน 6,948 บรรทัด และเป็น composition root ต่อไป ส่วน API,
 Sensor contract/calibration/normalization/environment/sound และ value helpers อยู่ใน
 package ตามโดเมนแล้ว ไฟล์ชื่อเดิมที่ root เหลือเป็น facade บางเพื่อรักษา script/test
 เดิม การย้ายนี้ไม่เปลี่ยน Sleep/Score formula, Sensor cadence, ชื่อ public JSON key
@@ -238,14 +243,15 @@ Audio boundary ใช้รูปแบบเดียวกันโดยไ�
 
 ### 6.3 ลำดับถัดไป
 
-1. แยก Session lifecycle orchestration แบบทีละช่วง โดยเริ่ม waiting-bed → recording
-   start; คง DB durability, gate recheck และ checkpoint ordering เดิม
-2. จากนั้นจึงแยก resume และ finalize ออกจาก composition root โดยใช้ Live Session
+1. แยก waiting-bed → recording sampler แล้ว; ขั้นถัดไปคือย้าย resume และ finalize
+   โดยคง DB durability, gate recheck และ checkpoint ordering เดิม
+2. แยก resume และ finalize ออกจาก composition root โดยใช้ Live Session
    contract ที่แยกแล้วและรักษา Restart continuity
-3. ทำ Sleep estimator facade ให้รับ typed input แล้ว delegate ไปยัง feature,
-   scorer และ policy เดิม พร้อม golden replay; ห้ามเปลี่ยน threshold ใน change นี้
+3. Sleep estimator มี compatibility facade และย้ายสูตรเดิมออกแล้ว; ขั้นถัดไปคือแบ่ง
+   typed input/context ออกจาก orchestration พร้อม golden replay โดยห้ามเปลี่ยน threshold
 4. รวม report pipeline ที่ซ้ำระหว่าง Live, Replay, Rescore และ Trim ให้ใช้ contract เดียว
-5. แบ่ง FastAPI router ที่ยังอยู่ใน `app.py` ตาม auth, control, session และ admin/monitor
+5. Control routes แยกแล้ว; ย้าย Aircon/Bed policy ไป service แล้วแบ่ง auth, session และ
+   admin/monitor ต่อ
 6. ลด `app.py` ให้เหลือ configuration, dependency wiring, lifespan และ router wiring
 
 Acoustic Intelligence ที่เสนอใน

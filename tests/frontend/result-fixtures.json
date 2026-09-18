@@ -1,0 +1,38 @@
+{
+  "nap": {
+    "rest_mode": "nap_recovery",
+    "ended_at_utc": "2026-09-19T06:30:00Z",
+    "sleep_quality": {
+      "available": true, "score": 86, "level_key": "very_good",
+      "component_points": {"goal_duration": 23, "physiological_response": 29, "rest_continuity": 25, "environment_support": 9},
+      "component_max_points": {"goal_duration": 25, "physiological_response": 35, "rest_continuity": 30, "environment_support": 10}
+    },
+    "restore_summary": {
+      "available": true,
+      "status": {"key": "rest_goal_full"},
+      "drivers": {"positive": [{"key": "rest_continuity"}, {"key": "environment_sound"}], "attention": [{"key": "physiological_response"}]},
+      "recommendation": {"primary": "ครั้งถัดไปลองเริ่มด้วยการหายใจสบาย ๆ แล้วพักโดยไม่ต้องบังคับให้หลับ"},
+      "personal_baseline": {"maturity": {"key": "early", "sessions_used": 3}},
+      "confidence": {"level": "medium"},
+      "subjective_outcome": {"status": "not_measured"}
+    }
+  },
+  "sleep": {
+    "rest_mode": "sleep",
+    "ended_at_utc": "2026-09-19T00:00:00Z",
+    "sleep_quality": {
+      "available": true, "score": 90, "level_key": "very_good",
+      "component_points": {"sleep_opportunity": 23, "sleep_stability": 31, "restorative_architecture": 18, "physiological_response": 9, "environment_support": 9},
+      "component_max_points": {"sleep_opportunity": 25, "sleep_stability": 35, "restorative_architecture": 20, "physiological_response": 10, "environment_support": 10}
+    },
+    "restore_summary": {
+      "available": true,
+      "status": {"key": "sleep_restore_very_good"},
+      "drivers": {"positive": [{"key": "sleep_stability"}, {"key": "environment_temperature"}], "attention": []},
+      "recommendation": {"primary": "รักษาช่วงเวลาเข้านอนที่สบาย และดูแนวโน้มร่วมกับความรู้สึกหลังตื่น"},
+      "personal_baseline": {"maturity": {"key": "active", "sessions_used": 5}},
+      "confidence": {"level": "high"},
+      "subjective_outcome": {"status": "measured", "freshness_delta": 2, "activity_readiness": 8}
+    }
+  }
+}

@@ -32,6 +32,7 @@
 | `scripts/08-sensors-monitor.js` | Sensor, BCG, calibration และ packet inspector |
 | `scripts/09-auth-login.js` | User identity, login, logout และ history-user loading |
 | `scripts/10-session-end-report.js` | End-of-session report, PNG/QR และ auth bootstrap |
+| `scripts/11-result-summary.js` | Shared result presenter: score, emotion, component bars, drivers และ next step; ใช้ร่วมใน History/Session End |
 | `scripts/11-history-list.js` | Usage history list และ Restore Summary helpers |
 | `scripts/12-history-report.js` | Detailed Overnight/Nap report rendering |
 | `scripts/12-connection-state.js` | Pure connection/freshness presenter และ shared status renderer |
@@ -44,7 +45,13 @@ python ui_composer.py build
 python ui_composer.py check
 python -m unittest -q test_ui_composer
 node --test tests/frontend/*.test.cjs
+python tests/frontend/preview_results.py
 ```
+
+คำสั่ง preview แสดงเฉพาะข้อมูลจำลองจาก `tests/frontend/result-fixtures.json`
+บน localhost ไม่เชื่อมต่อ Pod และไม่สร้าง Session จริง ใช้ตรวจ Nap/Overnight
+ที่ขนาดมือถือและจอใหญ่ CSS ของ component นี้อยู่ใน
+`static/styles/result-summary.css` และต้องไม่ย้ายสูตรคะแนนมาคำนวณใน browser
 
 `build` เขียน bundle แบบ atomic และ `check` จะหยุดงานหาก source กับ
 `static/index.html` ไม่ตรงกัน

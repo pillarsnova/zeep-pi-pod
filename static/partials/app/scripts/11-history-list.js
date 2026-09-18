@@ -291,14 +291,14 @@ function restoreDriverText(value){
 }
 
 const USER_RESTORE_DRIVER_COPY=Object.freeze({
-  sleep_opportunity:'เวลาและช่วงเตรียมตัวก่อนนอนมีส่วนต่อผลครั้งนี้',
-  sleep_stability:'ความต่อเนื่องของการนอนมีส่วนต่อผลครั้งนี้',
-  restorative_architecture:'รูปแบบการนอนที่ประเมินได้มีส่วนต่อผลครั้งนี้',
-  cycle_expression:'ความต่อเนื่องของช่วงการนอนมีส่วนต่อผลครั้งนี้',
-  goal_duration:'เวลาพักตามที่เลือกมีส่วนต่อผลครั้งนี้',
-  physiological_response:'ความนิ่งของชีพจรและการหายใจมีส่วนต่อผลครั้งนี้',
-  rest_continuity:'ความต่อเนื่องและการขยับระหว่างพักมีส่วนต่อผลครั้งนี้',
-  environment_support:'สภาพแวดล้อมภายใน ZEEP มีส่วนต่อผลครั้งนี้',
+  sleep_opportunity:['เวลาและการเริ่มหลับช่วยให้พักได้ดี','เวลาและช่วงเตรียมตัวก่อนนอนยังปรับได้'],
+  sleep_stability:['นอนต่อเนื่องได้ดี','นอนต่อเนื่องได้เป็นบางช่วง'],
+  restorative_architecture:['รูปแบบการนอนสนับสนุนผลครั้งนี้','รูปแบบการนอนครั้งนี้มีหลักฐานบางส่วน'],
+  cycle_expression:['พบช่วงการนอนที่ต่อเนื่อง','ช่วงการนอนยังต่อเนื่องได้อีก'],
+  goal_duration:['เวลาพักสนับสนุนเป้าหมายครั้งนี้','เวลาพักยังสั้นกว่าเป้าหมายที่เลือก'],
+  physiological_response:['ชีพจรและการหายใจค่อนข้างนิ่ง','ชีพจรและการหายใจเปลี่ยนแปลงบางช่วง'],
+  rest_continuity:['พักต่อเนื่องและขยับไม่มาก','มีการขยับหรือลุกระหว่างพัก'],
+  environment_support:['บรรยากาศเหมาะกับการพัก','บรรยากาศบางด้านยังปรับให้สบายขึ้นได้'],
 });
 function userRestoreDriverText(value,tone){
   const key=String(value?.key||'').toLowerCase();
@@ -306,7 +306,7 @@ function userRestoreDriverText(value,tone){
     const metric=USER_PRODUCT_COPY.environmentMetrics[key.slice(12)]||'สภาพแวดล้อม';
     return tone==='positive'?`${metric}เหมาะกับการพักครั้งนี้`:`${metric}ยังปรับให้สบายขึ้นได้`;
   }
-  return USER_RESTORE_DRIVER_COPY[key]
+  return USER_RESTORE_DRIVER_COPY[key]?.[tone==='positive'?0:1]
     ||(tone==='positive'?'มีปัจจัยที่ช่วยให้การพักครั้งนี้เป็นไปได้ดี':'มีบางจุดที่ลองปรับให้การพักครั้งถัดไปสบายขึ้นได้');
 }
 
@@ -364,140 +364,6 @@ function adminResultEvidence(report,quality,summary,presentation){
   </details>`;
 }
 
-function renderRestoreSummary(source,presentation,ended=true){
-  const payload=source?.data||source||{};
-  const report=payload.session_report||payload;
-  const summary=restoreSummarySource(source)||{};
-  const quality=payload.sleep_quality||report.quality||{};
-  const adminView=currentPrincipal?.role==='admin';
-  const safetyReviewRequired=reportSafetyReviewRequired(source);
-  const scoreAvailable=Boolean(
-    ended&&presentation!=='unknown'&&quality.available&&quality.score!=null,
-  );
-  const scoreTitle=resultScoreTitle(quality,presentation,adminView);
-  const status=summary.status||{};
-  const statusKey=String(status?.key||status||'').toLowerCase();
-  const statusLabels={
-    excellent:'ยอดเยี่ยม',very_good:'ดีมาก',good:'ดี',fair:'พอใช้',
-    safety_review:'ควรให้ทีมตรวจสอบ',
-    limited_evidence:'สรุปการพักครั้งนี้แล้ว',
-    low:'ให้เวลากับการพักเพิ่ม',sleep_restore_very_good:'ดีมาก',
-    sleep_restore_good:'ดี',pace_morning:'ได้พักในระดับหนึ่ง',
-    prioritise_rest:'ให้เวลากับการพักเพิ่ม',rest_goal_full:'พักได้ดีมาก',
-    rest_good:'ช่วงพักเป็นไปได้ดี',rest_partial:'ได้พักในระดับหนึ่ง',
-    rest_more:'ลองปรับให้สบายขึ้น',
-  };
-  const statusLabel=scoreAvailable&&safetyReviewRequired
-    ?USER_PRODUCT_COPY.scoreLevels.safety_review
-    :scoreAvailable
-    ?(
-      (adminView
-        ?restorePlainText(status?.label||status?.title):statusLabels[statusKey])
-      ||statusLabels[statusKey]
-      ||(adminView?(quality.level||userScoreLevelLabel(quality)):userScoreLevelLabel(quality))
-    )
-    :!ended?'กำลังบันทึกการพัก':'ครั้งนี้ยังไม่มีคะแนน';
-  const statusMeaning=scoreAvailable&&safetyReviewRequired
-    ?'พบค่าสภาพแวดล้อมบางช่วงที่ควรให้ทีมตรวจสอบก่อนใช้งานครั้งถัดไป'
-    :scoreAvailable
-    ?(adminView
-      ?restorePlainText(status?.meaning||status?.description)
-      :userRestoreMeaning(statusKey,presentation,false))
-    :!ended
-      ?'ZEEP กำลังบันทึกข้อมูลระหว่างการพัก'
-      :userUnavailableScoreReason(quality,presentation);
-  const drivers=summary.drivers||{};
-  const positives=Array.isArray(drivers.positive)
-    ?drivers.positive:Array.isArray(summary.positive_drivers)?summary.positive_drivers:[];
-  const attentions=Array.isArray(drivers.attention)
-    ?drivers.attention:Array.isArray(summary.attention_drivers)?summary.attention_drivers:[];
-  const driverGroup=(title,items,tone)=>{
-    const rows=items.map(item=>adminView?restoreDriverText(item):historyEscape(userRestoreDriverText(item,tone))).filter(Boolean).slice(0,2);
-    if(!rows.length)return '';
-    return `<div class="restore-driver-group ${tone}"><b>${title}</b><ul>${rows.map(row=>`<li>${row}</li>`).join('')}</ul></div>`;
-  };
-  const driverMarkup=presentation==='unknown'
-    ?'<div class="restore-summary-empty">แสดงเฉพาะข้อมูลที่บันทึก โดยยังไม่ตีความเป็น Overnight หรือ Nap & Refresh</div>'
-    :summary.available===false||!Object.keys(summary).length
-    ?`<div class="restore-summary-empty">${!ended?'รายละเอียดจะพร้อมหลังจบการพัก':'ยังดูข้อมูลการพักและ Sensor ที่บันทึกไว้ได้ตามปกติ'}</div>`
-    :[
-      driverGroup('สิ่งที่ทำได้ดี',positives,'positive'),
-      driverGroup('สิ่งที่ลองปรับได้',attentions,'attention'),
-    ].join('')||'<div class="restore-summary-empty">ยังไม่มีปัจจัยที่ต้องดูแลเป็นพิเศษ</div>';
-  const canonicalRecommendation=restorePlainText(summary.recommendation,['primary'])
-    ||restorePlainText(report.post_session_guidance,['primary']);
-  const recommendation=presentation==='unknown'
-    ?'ตรวจสอบรูปแบบการพักก่อนนำผลครั้งนี้ไปเปรียบเทียบ'
-    :canonicalRecommendation||(presentation==='recovery'
-      ?'ครั้งถัดไปเลือกเวลาที่สบาย แล้วปล่อยให้ร่างกายพักโดยไม่ต้องบังคับให้หลับ'
-      :'รักษาเวลาเข้านอนให้สม่ำเสมอ และค่อย ๆ ปรับสิ่งรบกวนทีละอย่าง');
-  const subjective=summary.subjective_outcome||{};
-  const subjectiveRows=[];
-  if(subjective.status==='measured'){
-    const freshnessRaw=subjective.freshness_delta;
-    const freshness=freshnessRaw==null||freshnessRaw===''?null:Number(freshnessRaw);
-    if(freshness!==null&&Number.isFinite(freshness)){
-      const amount=Number.isInteger(Math.abs(freshness))
-        ?String(Math.abs(freshness)):Math.abs(freshness).toFixed(1);
-      subjectiveRows.push(freshness>0
-        ?`สดชื่นขึ้น ${amount} ระดับ`
-        :freshness<0?`ความสดชื่นลดลง ${amount} ระดับ`:'ความสดชื่นใกล้เคียงก่อนพัก');
-    }
-    const readinessRaw=subjective.activity_readiness;
-    const readiness=readinessRaw==null||readinessRaw===''?null:Number(readinessRaw);
-    if(readiness!==null&&Number.isFinite(readiness)){
-      subjectiveRows.push(`ความพร้อมทำกิจกรรม ${readiness.toFixed(1).replace(/\.0$/,'')}/10`);
-    }
-  }
-  const subjectiveMarkup=subjectiveRows.length
-    ?`<div class="restore-subjective-outcome"><b>ความรู้สึกก่อน–หลังพัก</b><span>${subjectiveRows.map(row=>historyEscape(row)).join(' · ')}</span><small>จากแบบประเมินของผู้ใช้ · ไม่ได้อนุมานจาก Sensor</small></div>`
-    :'';
-  const personalBaseline=summary.personal_baseline||{};
-  const maturity=personalBaseline.maturity||personalBaseline;
-  const maturityKey=String(maturity.key||personalBaseline.status||'learning');
-  const userMaturityLabel={
-    learning:'กำลังเรียนรู้รูปแบบของคุณ',early:'เริ่มเห็นรูปแบบของคุณ',
-    active:'พร้อมเทียบกับรูปแบบของคุณ',stable:'รูปแบบของคุณชัดเจนขึ้น',
-  }[maturityKey]||'กำลังเรียนรู้รูปแบบของคุณ';
-  const maturityLabel=adminView
-    ?restorePlainText(maturity)||userMaturityLabel:userMaturityLabel;
-  const sessionsUsed=Number(maturity.sessions_used??personalBaseline.sessions_used);
-  const baselineText=Number.isFinite(sessionsUsed)&&sessionsUsed>0
-    ?`${maturityLabel} · จากการพัก ${Math.round(sessionsUsed)} ครั้ง`:maturityLabel;
-  const confidence=summary.confidence||payload.data_quality?.confidence
-    ||report.data_quality?.confidence||{};
-  const confidenceLabel=restorePlainText(confidence)||'ยังไม่ระบุ';
-  const confidenceDisplay=scoreAvailable
-    ?(adminView?confidenceLabel:userConfidenceLevelLabel(confidence.level))
-    :!ended?'กำลังบันทึกข้อมูล':'ข้อมูลยังไม่พอสรุปคะแนน';
-  const scope=summary.session_scope||summary.scope||{};
-  const scopeLabel=adminView
-    ?restorePlainText(scope)||(presentation==='recovery'?'Nap & Refresh':'Overnight Recovery')
-    :presentation==='recovery'?'Nap & Refresh':presentation==='sleep'?'Overnight Recovery':'การพักครั้งนี้';
-  const scoreValue=scoreAvailable?wellnessScoreValue(quality.score):null;
-  const scoreTone=scoreAvailable
-    ?sleepQualityTone(quality,safetyReviewRequired):'unavailable';
-  const safetyBanner=safetyReviewRequired
-    ?'<div class="result-safety-review"><b>ควรให้ทีมตรวจสอบ</b><span>มีค่าสภาพแวดล้อมบางช่วงแตะเกณฑ์ความปลอดภัย คะแนนยังแสดงได้ แต่ควรตรวจรายละเอียดก่อนใช้งานครั้งถัดไป</span></div>'
-    :'';
-  return `<section class="restore-summary-card result-summary-card mode-${presentation} quality-${scoreTone}" style="--quality-score:${scoreValue??0}">
-    <div class="result-summary-primary">
-      <div class="sleep-quality-ring" aria-label="${historyEscape(scoreTitle)} ${scoreAvailable?wellnessScoreDisplay(quality.score):'ยังไม่มีคะแนน'}"><span class="sleep-quality-value"><strong>${scoreAvailable?wellnessScoreDisplay(quality.score):'—'}</strong><small>/100</small></span></div>
-      <div class="result-summary-copy">
-        <span class="sleep-quality-eyebrow">${historyEscape(scoreTitle)} · ZEEP WELLNESS</span>
-        <h3>${historyEscape(statusLabel)}</h3>
-        ${statusMeaning?`<p>${historyEscape(statusMeaning)}</p>`:''}
-        <small>${historyEscape(scopeLabel)} · ${adminView?'ประเมินเฉพาะ Session นี้':'สรุปเฉพาะการพักครั้งนี้'}</small>
-      </div>
-    </div>
-    ${safetyBanner}
-    <div class="result-summary-actions"><div class="restore-drivers">${driverMarkup}</div><div class="restore-recommendation"><b>คำแนะนำครั้งถัดไป</b><p>${recommendation?historyEscape(recommendation):'ใช้งานตามปกติและสังเกตความรู้สึกหลังพัก'}</p></div></div>
-    ${subjectiveMarkup}
-    <div class="restore-summary-meta"><span><b>รูปแบบของคุณ</b>${historyEscape(baselineText)}</span><span><b>${adminView?'ความมั่นใจ':'ความชัดเจนของข้อมูล'}</b>${historyEscape(confidenceDisplay)}</span></div>
-    ${adminView?adminResultEvidence(report,quality,summary,presentation):''}
-    <div class="restore-claim-note">${adminView?'ผลสรุปสำหรับตรวจสอบระบบและพัฒนาต่อ':'ผล Wellness เฉพาะการพักครั้งนี้ · ดูร่วมกับความรู้สึกของคุณ · ไม่ใช่การวินิจฉัย'}</div>
-  </section>`;
-}
 
 function renderHistorySummary(d){
   const summary=d.summary||{};

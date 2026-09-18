@@ -7,7 +7,7 @@
 > **Product position:** ZEEP Wellness & Longevity · ผลเป็นการประเมิน
 > เชิงสุขภาพจาก Sensor ไม่ใช่การวินิจฉัยหรือผล AASM/PSG
 >
-> **Status:** Implemented presentation contract · 2026-09-13
+> **Status:** Implemented presentation contract · visual update 2026-09-19
 >
 > **Related specification:**
 > [ZEEP Restore Summary v1](zeep-restore-summary-v1.md) ·
@@ -52,6 +52,32 @@ Wellness boundary ทำให้ผู้ใช้ต้องอ่านซ�
 6. Personal Baseline และความชัดเจนของข้อมูลในภาษาที่เข้าใจง่าย
 7. รายละเอียดการพักและ Timeline แบบพับเก็บ
 8. ข้อความกำกับ Wellness หนึ่งบรรทัด
+
+### 2.1 Shared visual summary — 19 กันยายน 2026
+
+หน้า `/sessions` และผลหลังจบ Session ใช้ presenter เดียวกัน:
+[`11-result-summary.js`](../static/partials/app/scripts/11-result-summary.js)
+กับ [`result-summary.css`](../static/styles/result-summary.css)
+โดยคงธีม Javis และไม่เพิ่ม frontend framework
+
+- แสดงวงแหวนคะแนนเดียว พร้อมสัญลักษณ์ระดับผลการพักและข้อความสั้น
+  สัญลักษณ์เป็นภาษาภาพของผลประเมิน ไม่ใช่การตรวจอารมณ์จริงของผู้ใช้
+- Nap ใช้สี mint และไอคอนแสงอาทิตย์; Overnight ใช้สีม่วงอ่อนและพระจันทร์
+  ชื่อโหมดและชื่อคะแนนต้องอยู่ด้วยเสมอ ไม่ใช้สีเพียงอย่างเดียว
+- แถบคะแนนย่อยอ่าน `component_points` / `component_max_points` จาก Server
+  ไม่คำนวณคะแนนใหม่และไม่กำหนดน้ำหนักสูตรซ้ำใน frontend แสดงเฉพาะส่วนที่
+  ใช้ได้กับโหมดนั้น และไม่แสดงค่าทดแทนใน `imputed_component_points` เป็นกราฟ
+- ความยาวแถบเทียบคะแนนเต็มของแต่ละด้าน ไม่ใช่เปอร์เซ็นต์การฟื้นตัวของร่างกาย
+- Safety review อยู่เหนือผลหลัก; ข้อมูลไม่ครบไม่ใช้หน้ายิ้มสื่อความมั่นใจสูง
+- ความรู้สึกก่อน–หลังแสดงเฉพาะ `subjective_outcome.status=measured`
+  และค่าที่ใช้ได้จริง ค่า 0 มีความหมาย ส่วน null/ข้อความว่าง/ค่าผิดชนิดไม่ใช่ 0
+- จอใหญ่แบ่งผลหลักและกราฟเป็นสองส่วน มือถือเรียงลงล่าง; การ์ดปัจจัยและ
+  คำแนะนำใช้พื้นที่เต็มเมื่อไม่มีการ์ดคู่ ไม่มี animation ตกแต่งสัญญาณ
+
+ขอบเขตรอบนี้คือ HTML ของ Pi UI เท่านั้น ไม่เปลี่ยน API schema, สูตรคะแนน,
+Sleep State หรือข้อมูลย้อนหลัง ภาพ PNG/QR export ยังใช้ Canvas เดิม
+ทีม App ใช้ presentation API เดิมได้ แต่กราฟคะแนนย่อยใน Pi UI รอบนี้อ่านจาก
+quality payload เดิม ไม่ได้เพิ่ม numeric component contract ใน presentation API
 
 Session ที่จบแล้วแต่คะแนนไม่ผ่านเงื่อนไขเผยแพร่ต้องใช้ข้อความ
 “ครั้งนี้ยังไม่มีคะแนน” พร้อมเหตุผลที่ทำให้ผู้ใช้เข้าใจได้ ห้ามใช้
@@ -142,3 +168,14 @@ Rerun เฉพาะเมื่อ:
   `arithmetic_invariant.holds === true`
 - หน้าจอขนาด Tablet และ Mobile ไม่มีข้อความหรือการ์ดล้นกรอบ
 - Legacy endpoints และข้อมูลคะแนนเดิมยังทำงานย้อนหลังได้
+
+## 8. Verification
+
+- `python ui_composer.py check`: bundle ต้องตรงกับ source partials
+- `python quality_gate.py ui`: build, product-language และ UI contracts
+- `node --test tests/frontend/*.test.cjs`: synthetic behavioral tests รวม
+  invalid/zero score, mode, subjective feedback, Safety, XSS และ null principal
+- `python tests/frontend/preview_results.py`: localhost preview ด้วยข้อมูลจำลอง
+  สำหรับ visual QA เท่านั้น ห้ามใช้ภาพตัวอย่างเป็นหลักฐานผลของผู้ทดสอบจริง
+- หลัง deploy ตรวจ `/sessions` และการส่งข้อมูลตามปกติ โดยไม่สร้าง Session
+  หรือสั่งอุปกรณ์จริงเพื่อทดสอบหน้าตา

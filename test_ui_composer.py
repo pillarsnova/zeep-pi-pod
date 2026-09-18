@@ -657,7 +657,7 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn('class="restore-summary-card result-summary-card', template)
         self.assertIn('class="result-summary-primary"', template)
         self.assertIn('class="result-summary-actions"', template)
-        self.assertIn("คำแนะนำครั้งถัดไป", template)
+        self.assertIn("ลองทำสิ่งนี้ในครั้งถัดไป", template)
         self.assertIn("ครั้งนี้ยังไม่มีคะแนน", template)
         self.assertIn("function reportSafetyReviewRequired", template)
         self.assertIn("USER_PRODUCT_COPY.scoreLevels.safety_review", template)

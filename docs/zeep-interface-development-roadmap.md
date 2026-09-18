@@ -24,6 +24,9 @@
   มีปุ่มลองใหม่ และคำตอบเก่าห้ามทับตัวกรองใหม่
 - เพิ่ม Node built-in behavioral tests บนเครื่องพัฒนา/CI เท่านั้น ไม่มี Node,
   npm dependency หรือ runtime ใหม่ที่ต้องเพิ่มใน Pi
+- ปรับ Shared Result Summary ของ Sessions/Session End: วงแหวนคะแนนเดียว,
+  สัญลักษณ์ระดับผลการพัก, กราฟคะแนนย่อยจริง, ปัจจัยสำคัญและคำแนะนำหนึ่งข้อ
+  แยก presenter/CSS ออกจาก history list โดยไม่เปลี่ยนสูตรหรือผลย้อนหลัง
 
 ## ทุกหน้ามีหน้าที่ชัดเจน
 
@@ -79,6 +82,7 @@ static/partials/app/
   pages/{dashboard,control,monitor,sessions}/  # ROADMAP
 static/styles/
   connection-state.css       # ทำแล้ว: scoped component
+  result-summary.css         # ทำแล้ว: scoped shared result component
   monitor.css, sessions.css  # มีแล้ว; ค่อยย้าย legacy overrides
 tests/frontend/              # ทำแล้ว: synthetic behavioral tests
 ```
@@ -102,6 +106,10 @@ Dashboard ลดพื้นที่ empty card เมื่อไม่มี 
 เมื่อมีหลักฐานจริงเท่านั้น รักษาปุ่มประตูฉุกเฉินที่เข้าถึงได้ง่าย
 
 ### 3. Sessions visual summary
+
+ส่วน summary ทำแล้วตาม [Result presentation](zeep-session-result-presentation-v1.md)
+ใช้ร่วมกับ Session End; ภาพ PNG/QR และ numeric component API สำหรับ App
+ยังไม่อยู่ในขอบเขตการเปลี่ยนรอบนี้
 
 รายชื่อ compact, selected row ชัด, selected report หนึ่งจุด แยก trend ตามโหมด
 รักษา denominator/coverage/provisional ตาม API ไม่คำนวณคะแนนซ้ำใน browser

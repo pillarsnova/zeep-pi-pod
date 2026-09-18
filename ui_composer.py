@@ -54,6 +54,7 @@ SCRIPT_PARTIALS = (
         "app/scripts/10-session-end-report.js",
         "/* ---- จบ Session:",
     ),
+    ("app/scripts/11-result-summary.js", "/* Shared result experience"),
     ("app/scripts/11-history-list.js", "function fmtDateTh("),
     (
         "app/scripts/11-usage-users.js",

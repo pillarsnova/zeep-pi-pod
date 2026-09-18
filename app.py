@@ -111,6 +111,7 @@ from hardware.bcg import (
 )
 from hardware.controlhub1 import ControlHub1MQTT, configure_controlhub1
 from hardware.controlhub2 import ControlHub2BedMQTT, configure_controlhub2
+from hardware.bed_motion import MOVEMENT_COMMANDS
 from hardware.gpio import GPIOManager
 from hardware.fleet_health import local_pod_health
 from hardware.sensorhub2 import run_sensorhub2_reader
@@ -1219,6 +1220,10 @@ def apply_safety_profile(trigger: str) -> Dict[str, Any]:
     """Idempotent local safe profile. Door auto-open intentionally excluded."""
     results: Dict[str, Any] = {}
     with _safety_action_lock:
+        # Reject new movement before sending STOP; otherwise a concurrent
+        # request could restart a device between the stop and the latch.
+        with state_lock:
+            state["safety"]["latched"] = True
         try:
             player.stop()
             results["stop_music"] = True
@@ -1252,7 +1257,6 @@ def apply_safety_profile(trigger: str) -> Dict[str, Any]:
         results["bed_stop"] = controlhub2_bed_mqtt.publish_stop_best_effort()
         action = {"at": time.time(), "trigger": trigger, "results": results}
         with state_lock:
-            state["safety"]["latched"] = True
             state["safety"]["last_action"] = action
         try:
             _refresh_active_session_safety_checkpoint(latched=True)
@@ -2987,6 +2991,7 @@ configure_controlhub1(
     shared_state=state,
     shared_state_lock=state_lock,
     event_logger=log_event,
+    safety_guard=lambda action: _require_safety_allows(action),
 )
 controlhub1_mqtt = ControlHub1MQTT()
 configure_controlhub2(
@@ -3007,60 +3012,7 @@ configure_controlhub2(
     # function is declared later while FastAPI routes are assembled.
     safety_guard=lambda action: _require_safety_allows(action),
 )
-controlhub2_bed_mqtt = ControlHub2BedMQTT()
-
-# Generation tokens cancel an older delayed stop when a new movement starts.
-# Without this guard, command B could be stopped early by command A's timer.
-_bed_motion_timer_lock = threading.Lock()
-_bed_motion_generation = 0
-
-
-def _cancel_bed_auto_stop(reason: str) -> None:
-    global _bed_motion_generation
-    with _bed_motion_timer_lock:
-        _bed_motion_generation += 1
-    with state_lock:
-        state["bed_control"]["auto_stop_at"] = None
-        state["bed_control"]["auto_stop_pending"] = False
-    log_event("controlhub2_bed", "auto_stop_cancelled", reason=reason)
-
-
-def _schedule_bed_auto_stop(source_command: str) -> None:
-    """Schedule one authoritative stop for the latest movement command."""
-    global _bed_motion_generation
-    with _bed_motion_timer_lock:
-        _bed_motion_generation += 1
-        generation = _bed_motion_generation
-    stop_at = time.time() + BED_MOVE_SECONDS
-    with state_lock:
-        state["bed_control"]["motion_duration_s"] = BED_MOVE_SECONDS
-        state["bed_control"]["auto_stop_at"] = stop_at
-        state["bed_control"]["auto_stop_pending"] = True
-
-    def worker():
-        time.sleep(BED_MOVE_SECONDS)
-        with _bed_motion_timer_lock:
-            if generation != _bed_motion_generation:
-                return
-        published = controlhub2_bed_mqtt.publish_stop_best_effort(reason=f"auto_{BED_MOVE_SECONDS:g}s:{source_command}")
-        with _bed_motion_timer_lock:
-            still_latest = generation == _bed_motion_generation
-        if still_latest:
-            with state_lock:
-                state["bed_control"]["auto_stop_at"] = None
-                state["bed_control"]["auto_stop_pending"] = False
-        log_event(
-            "controlhub2_bed",
-            "auto_stop_completed" if published else "auto_stop_publish_failed",
-            source_command=source_command,
-            duration_s=BED_MOVE_SECONDS,
-        )
-
-    threading.Thread(
-        target=worker,
-        daemon=True,
-        name=f"bed-auto-stop-{generation}",
-    ).start()
+controlhub2_bed_mqtt = ControlHub2BedMQTT(move_seconds=BED_MOVE_SECONDS)
 
 
 def bcg_reader():
@@ -3841,6 +3793,7 @@ async def lifespan(_: FastAPI):
                 )
             database.flush(30)
         player.shutdown()
+        controlhub2_bed_mqtt.motion.close()
         try:
             _persist_last_sensor_frame(analysis_frame_cached())
         except Exception as exc:
@@ -4661,20 +4614,8 @@ def set_aircon_fan_level_reference(
 def bed_control_command(cmd: BedControlCommand):
     requested_command = _normalize_bed_command(cmd.command)
     acknowledgement, command = controlhub2_bed_mqtt.publish_and_wait(requested_command, toggle_repeat=False)
-    movement_commands = {
-        "head_up",
-        "head_down",
-        "foot_up",
-        "foot_down",
-        "flat",
-        "center_all",
-    }
-    auto_stop_after_s = None
-    if command in movement_commands:
-        _schedule_bed_auto_stop(command)
-        auto_stop_after_s = BED_MOVE_SECONDS
-    elif command == "bed_stop":
-        _cancel_bed_auto_stop("explicit_stop")
+    # The transport arms the deadline at publication, even if its ACK is lost.
+    auto_stop_after_s = BED_MOVE_SECONDS if command in MOVEMENT_COMMANDS else None
     note_session_activity(
         "bed_command",
         {

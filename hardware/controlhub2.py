@@ -16,6 +16,8 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from hardware.bed_motion import MOVEMENT_COMMANDS, BedMotionService
+
 mqtt: Any
 MQTT_AVAILABLE: bool
 MQTT_HOST: str
@@ -74,13 +76,24 @@ def configure_controlhub2(
 class ControlHub2BedMQTT:
     """Serialize bed commands and wait for the matching ESP32 acknowledgement."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, move_seconds: float = 2.0) -> None:
         self._client = None
         self._client_lock = threading.Lock()
         self._command_lock = threading.Lock()
         self._ack_condition = threading.Condition()
         self._ack_seq = 0
         self._last_ack = None
+        self.motion = BedMotionService(
+            duration_seconds=move_seconds,
+            publish_stop=self._publish_stop_untracked,
+            update_state=self._update_motion_state,
+            log_event=lambda *args, **kwargs: log_event(*args, **kwargs),
+        )
+
+    @staticmethod
+    def _update_motion_state(patch: dict[str, Any]) -> None:
+        with state_lock:
+            state["bed_control"].update(patch)
 
     def _set_client(self, client: Any) -> None:
         with self._client_lock:
@@ -249,9 +262,14 @@ class ControlHub2BedMQTT:
         log_event("controlhub2_bed", "mqtt_error", error=str(exc))
 
     def _publish(self, command: str) -> None:
+        self.motion.publish(command, lambda: self._publish_raw(command))
+
+    def _publish_raw(self, command: str) -> None:
         client = self._get_client()
         if client is None or not client.is_connected():
             raise HTTPException(503, "Control Hub 2 Bed ไม่เชื่อมต่อ")
+        if command in MOVEMENT_COMMANDS:
+            safety_allows(f"Bed {command}")
         info = client.publish(COMMAND_TOPIC, command, qos=0, retain=False)
         if info.rc != mqtt.MQTT_ERR_SUCCESS:
             raise HTTPException(503, f"MQTT publish failed: {info.rc}")
@@ -269,6 +287,16 @@ class ControlHub2BedMQTT:
                 reason=reason,
                 error=str(exc),
             )
+            return False
+
+    def _publish_stop_untracked(self, reason: str) -> bool:
+        """Timer callback: caller already owns the motion publication lock."""
+        try:
+            self._publish_raw("bed_stop")
+            log_event("controlhub2_bed", "stop_published", reason=reason)
+            return True
+        except Exception as exc:
+            log_event("controlhub2_bed", "stop_failed", reason=reason, error=str(exc))
             return False
 
     def publish_and_wait(

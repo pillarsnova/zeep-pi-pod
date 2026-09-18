@@ -30,6 +30,7 @@ CONTROLHUB1_MIN_IR_GAP_SECONDS: float
 state: MutableMapping[str, Any]
 state_lock: Any
 log_event: Callable[..., None]
+safety_allows: Callable[[str], None]
 
 
 def configure_controlhub1(
@@ -48,13 +49,14 @@ def configure_controlhub1(
     shared_state: MutableMapping[str, Any],
     shared_state_lock: Any,
     event_logger: Callable[..., None],
+    safety_guard: Callable[[str], None],
 ) -> None:
     """Install dependencies supplied by the process composition root."""
     global mqtt, MQTT_AVAILABLE, MQTT_HOST, MQTT_PORT, MQTT_KEEPALIVE
     global CONTROLHUB1_COMMAND_TOPIC, CONTROLHUB1_STATUS_TOPIC
     global CONTROLHUB1_EVENT_TOPIC, CONTROLHUB1_STALE_SECONDS
     global CONTROLHUB1_ACK_TIMEOUT_SECONDS, CONTROLHUB1_MIN_IR_GAP_SECONDS
-    global state, state_lock, log_event
+    global state, state_lock, log_event, safety_allows
 
     mqtt = mqtt_module
     MQTT_AVAILABLE = mqtt_available
@@ -70,6 +72,7 @@ def configure_controlhub1(
     state = shared_state
     state_lock = shared_state_lock
     log_event = event_logger
+    safety_allows = safety_guard
 
 
 class ControlHub1MQTT:
@@ -260,6 +263,10 @@ class ControlHub1MQTT:
         # retain=False is mandatory: an old command must never replay when
         # the ESP32 reconnects. QoS 0 matches the current firmware; changing
         # to QoS 1 could duplicate a toggle-style IR command.
+        # Recheck after the IR delay for EVERY sequence step. Safety may have
+        # latched while an earlier command was awaiting its acknowledgement.
+        if command not in {"off", "status"}:
+            safety_allows(f"Air Con {command}")
         info = client.publish(CONTROLHUB1_COMMAND_TOPIC, command, qos=0, retain=False)
         if info.rc != mqtt.MQTT_ERR_SUCCESS:
             raise HTTPException(503, f"MQTT publish failed: {info.rc}")

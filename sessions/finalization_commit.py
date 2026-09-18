@@ -19,6 +19,16 @@ RecoverActive = Callable[[MutableMapping[str, Any]], None]
 ClearCheckpoint = Callable[[], None]
 
 
+class FinalizationCommittedError(RuntimeError):
+    """The result is durable; only post-commit checkpoint cleanup failed."""
+
+    committed = True
+
+    def __init__(self, cleanup_error: Exception) -> None:
+        super().__init__("Session committed; checkpoint cleanup failed")
+        self.cleanup_error = cleanup_error
+
+
 @dataclass(frozen=True)
 class FinalizationPorts:
     """Injected persistence and recovery boundaries for one finalization."""
@@ -80,4 +90,9 @@ def commit_live_session_finalization(
         raise
 
     record.pop("started_monotonic", None)
-    ports.clear_checkpoint()
+    try:
+        ports.clear_checkpoint()
+    except Exception as exc:
+        # Callers must never interpret unlink failure as permission to reopen
+        # a Session whose finalization transaction has already committed.
+        raise FinalizationCommittedError(exc) from exc

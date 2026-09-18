@@ -271,6 +271,162 @@ class SessionFinalizationTests(unittest.TestCase):
         self.assertEqual(self.call_names()[-2:], ["publish_idle", "reset_inference"])
         pod_app._enqueue_session_ingest.assert_called_once()
 
+    def test_read_failure_restores_owner_without_restarting_running_bcg(self) -> None:
+        failure = OSError("read unavailable")
+        self.database.read_sessions.side_effect = failure
+        with self.assertRaisesRegex(OSError, "read unavailable") as raised:
+            pod_app._finalize_active_session()
+        self.assertIs(raised.exception, failure)
+        self.assertIs(pod_app._active_session, self.active)
+        pod_app.bcg_storage.start_session.assert_not_called()
+        pod_app._clear_active_session_checkpoint.assert_not_called()
+        pod_app.report_shares.discard.assert_called_once_with("zeep:coded")
+
+    def test_projection_exception_restores_owner_and_original_record(self) -> None:
+        original = dict(self.record)
+        pod_app.report_projection.project_report_samples.side_effect = ValueError(
+            "projection unavailable"
+        )
+        with self.assertRaisesRegex(ValueError, "projection unavailable"):
+            pod_app._finalize_active_session()
+        self.assertIs(pod_app._active_session, self.active)
+        self.assertEqual(self.record, original)
+        pod_app.bcg_storage.start_session.assert_not_called()
+
+    def test_report_failure_restores_record_cadence_and_bcg_for_retry(self) -> None:
+        original = dict(self.record)
+        self.projection["report_interval_s"] = 5.0
+        self.replace(
+            "build_session_report", Mock(side_effect=ValueError("report unavailable"))
+        )
+        with self.assertRaisesRegex(ValueError, "report unavailable"):
+            pod_app._finalize_active_session()
+        self.assertIs(pod_app._active_session, self.active)
+        self.assertEqual(self.record, original)
+        pod_app.bcg_storage.start_session.assert_called_once_with("finalize-test")
+        self.database.enqueue.assert_not_called()
+        pod_app._clear_active_session_checkpoint.assert_not_called()
+
+    def test_share_reservation_failure_does_not_drop_session(self) -> None:
+        pod_app.report_shares.reserve.side_effect = RuntimeError("share unavailable")
+        with self.assertRaisesRegex(RuntimeError, "share unavailable"):
+            pod_app._finalize_active_session()
+        self.assertIs(pod_app._active_session, self.active)
+        pod_app.bcg_storage.start_session.assert_not_called()
+
+    def test_checkpoint_failure_after_commit_still_closes_and_publishes_report(
+        self,
+    ) -> None:
+        pod_app._clear_active_session_checkpoint.side_effect = OSError("unlink failed")
+        result = pod_app._finalize_active_session()
+        self.assertIs(result, self.record)
+        self.assertIsNone(pod_app._active_session)
+        pod_app.bcg_storage.start_session.assert_not_called()
+        pod_app._enqueue_session_ingest.assert_called_once()
+        pod_app._replace_session_projection_locked.assert_called_once()
+        self.assertTrue(
+            any(
+                call.args[:2] == ("session", "finalization_cleanup_failed")
+                and call.kwargs.get("step") == "clear_checkpoint"
+                for call in pod_app.log_event.call_args_list
+            )
+        )
+
+    def test_postcommit_failures_are_isolated_and_still_publish_idle(self) -> None:
+        pod_app._enqueue_session_ingest.side_effect = OSError("outbox unavailable")
+        pod_app.report_shares.fulfil.side_effect = ValueError("share unavailable")
+        pod_app._save_profiles.side_effect = OSError("profile unavailable")
+        result = pod_app._finalize_active_session()
+        self.assertTrue(result["session_report"]["available"])
+        self.assertIsNone(pod_app._active_session)
+        pod_app.bcg_storage.start_session.assert_not_called()
+        pod_app._replace_session_projection_locked.assert_called_once()
+        pod_app._reset_live_sleep_inference.assert_called_once_with(None)
+        pod_app.report_shares.discard.assert_called_once_with("zeep:coded")
+        failed_steps = {
+            call.kwargs.get("step")
+            for call in pod_app.log_event.call_args_list
+            if call.args[:2] == ("session", "finalization_cleanup_failed")
+        }
+        self.assertTrue({"ingest", "share", "learning"}.issubset(failed_steps))
+
+    def test_waiting_logout_failure_still_releases_ui_without_starting_bcg(
+        self,
+    ) -> None:
+        self.record["started_monotonic"] = None
+        self.active["phase"] = "waiting_bed"
+        self.replace(
+            "_logout_zeep_session", Mock(side_effect=ValueError("logout failed"))
+        )
+        result = pod_app._finalize_active_session()
+        self.assertFalse(result["recording_started"])
+        self.assertIsNone(pod_app._active_session)
+        pod_app._replace_session_projection_locked.assert_called_once()
+        pod_app.report_shares.discard.assert_called_once_with("zeep:coded")
+        pod_app.bcg_storage.start_session.assert_not_called()
+
+    def test_failure_does_not_replace_another_owner_or_restart_its_bcg(self) -> None:
+        other = {"record": {"session_id": "other-session"}}
+
+        def failed_report(*args, **kwargs):
+            pod_app._active_session = other
+            raise ValueError("report unavailable")
+
+        self.replace("build_session_report", Mock(side_effect=failed_report))
+        with self.assertRaisesRegex(ValueError, "report unavailable"):
+            pod_app._finalize_active_session()
+        self.assertIs(pod_app._active_session, other)
+        pod_app.bcg_storage.start_session.assert_not_called()
+        pod_app.log_event.assert_any_call(
+            "session",
+            "finalization_recovery_owner_conflict",
+            session_id="finalize-test",
+        )
+
+    def test_waiting_checkpoint_failure_restores_waiting_without_bcg(self) -> None:
+        self.record["started_monotonic"] = None
+        self.active["phase"] = "waiting_bed"
+        original = dict(self.record)
+        pod_app._clear_active_session_checkpoint.side_effect = OSError("unlink failed")
+        with self.assertRaisesRegex(OSError, "unlink failed"):
+            pod_app._finalize_active_session()
+        self.assertIs(pod_app._active_session, self.active)
+        self.assertEqual(self.record, original)
+        pod_app.bcg_storage.start_session.assert_not_called()
+        pod_app._replace_session_projection_locked.assert_not_called()
+
+    def test_postcommit_audit_failure_still_publishes_idle(self) -> None:
+        pod_app._clear_active_session_checkpoint.side_effect = OSError("unlink failed")
+
+        def failed_audit(component, event, **details):
+            if event == "finalization_cleanup_failed":
+                raise OSError("audit unavailable")
+
+        pod_app.log_event.side_effect = failed_audit
+        with self.assertLogs("sessions.finalization", level="ERROR") as captured:
+            result = pod_app._finalize_active_session()
+        self.assertTrue(result["session_report"]["available"])
+        self.assertIn("audit unavailable", captured.output[0])
+        self.assertIsNone(pod_app._active_session)
+        pod_app.bcg_storage.start_session.assert_not_called()
+        pod_app._replace_session_projection_locked.assert_called_once()
+        pod_app._enqueue_session_ingest.assert_called_once()
+
+    def test_recovery_audit_failure_preserves_original_operation_exception(
+        self,
+    ) -> None:
+        failure = ValueError("original report failure")
+        self.replace("build_session_report", Mock(side_effect=failure))
+        self.replace(
+            "_restore_active_after_finalization_failure",
+            Mock(side_effect=OSError("recovery unavailable")),
+        )
+        pod_app.log_event.side_effect = OSError("audit unavailable")
+        with self.assertLogs("sessions.finalization", level="ERROR"):
+            with self.assertRaises(ValueError) as raised:
+                pod_app._finalize_active_session()
+        self.assertIs(raised.exception, failure)
+
 
 if __name__ == "__main__":
     unittest.main()

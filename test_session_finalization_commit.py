@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import MagicMock, call
 
 from sessions.finalization_commit import (
+    FinalizationCommittedError,
     FinalizationPorts,
     build_session_finalize_payload,
     commit_live_session_finalization,
@@ -201,7 +202,7 @@ class SessionFinalizationCommitTests(unittest.TestCase):
         failure = OSError("checkpoint unlink failed")
         recover_active = MagicMock()
 
-        with self.assertRaises(OSError) as raised:
+        with self.assertRaises(FinalizationCommittedError) as raised:
             commit_live_session_finalization(
                 active,
                 {},
@@ -215,7 +216,8 @@ class SessionFinalizationCommitTests(unittest.TestCase):
                 ),
             )
 
-        self.assertIs(raised.exception, failure)
+        self.assertIs(raised.exception.cleanup_error, failure)
+        self.assertTrue(raised.exception.committed)
         recover_active.assert_not_called()
         self.assertNotIn("started_monotonic", active["record"])
 

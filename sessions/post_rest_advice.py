@@ -38,6 +38,7 @@ def _session_tip(group, selected, quality):
     tip = "rest_routine"
     if selected.get("category") == "environment":
         metric = key.removeprefix("environment_")
+        metric = {"voc": "voc_index", "pm25": "pm2_5"}.get(metric, metric)
         tip = "environment_" + metric
         title, primary = ENVIRONMENT_TIPS.get(
             metric,

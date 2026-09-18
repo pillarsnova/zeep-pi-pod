@@ -80,6 +80,13 @@ class PostRestAdviceTests(unittest.TestCase):
         self.assertEqual(summary["source_score"]["value"], 82)
         self.assertTrue(summary["recommendation"]["reason"])
 
+    def test_report_metric_aliases_select_specific_actions(self):
+        for metric, expected in (("voc", "environment_voc_index"), ("pm25", "environment_pm2_5")):
+            tip = build_post_rest_advice("sleep", 80, {"attention": [{
+                "key": "environment_" + metric, "category": "environment",
+            }]})
+            self.assertEqual(tip["tip_id"], expected)
+
     def test_invalid_questionnaire_is_not_promoted_to_measured(self):
         summary = build_restore_summary(_sleep_quality(), subjective_outcome={
             "status": "measured", "freshness_delta": 2,

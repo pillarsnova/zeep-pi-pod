@@ -132,6 +132,10 @@ function renderRestoreSummary(source,presentation,ended=true){
     :canonicalRecommendation||(presentation==='recovery'
       ?'ครั้งถัดไปเลือกเวลาที่สบาย แล้วปล่อยให้ร่างกายพักโดยไม่ต้องบังคับให้หลับ'
       :'รักษาเวลาเข้านอนให้สม่ำเสมอ และค่อย ๆ ปรับสิ่งรบกวนทีละอย่าง');
+  const tip=ended&&presentation!=='unknown'?(summary.recommendation||{}):{};
+  const tipTitle=restorePlainText(tip,['title']);
+  const tipWhen=restorePlainText(tip,['when_label']);
+  const tipReason=restorePlainText(tip,['reason']);
   const subjective=summary.subjective_outcome||{};
   const subjectiveRows=[];
   if(subjective.status==='measured'){
@@ -200,7 +204,7 @@ function renderRestoreSummary(source,presentation,ended=true){
     </div>
     ${components}
     </div>
-    <div class="result-summary-actions"><div class="restore-drivers">${driverMarkup}</div><div class="restore-recommendation"><span class="result-next-icon">${resultIcon('arrow')}</span><div><b>ลองทำสิ่งนี้ในครั้งถัดไป</b><p>${recommendation?historyEscape(recommendation):'ใช้งานตามปกติและสังเกตความรู้สึกหลังพัก'}</p></div></div></div>
+    <div class="result-summary-actions"><div class="restore-drivers">${driverMarkup}</div><div class="restore-recommendation"><span class="result-next-icon">${resultIcon('arrow')}</span><div><b>คำแนะนำสำหรับคุณ</b>${tipWhen?`<small class="result-tip-when">${historyEscape(tipWhen)} · อ้างอิงการพักครั้งนี้</small>`:''}${tipTitle?`<h4>${historyEscape(tipTitle)}</h4>`:''}<p>${recommendation?historyEscape(recommendation):'ใช้งานตามปกติและสังเกตความรู้สึกหลังพัก'}</p>${tipReason?`<details class="result-tip-reason"><summary>เหตุผลที่แนะนำ</summary><p>${historyEscape(tipReason)}</p></details>`:''}</div></div></div>
     ${subjectiveMarkup}
     <div class="restore-summary-meta"><span><b>รูปแบบของคุณ</b>${historyEscape(baselineText)}</span><span><b>${adminView?'ความมั่นใจ':'ความชัดเจนของข้อมูล'}</b>${historyEscape(confidenceDisplay)}</span></div>
     ${adminView?adminResultEvidence(report,quality,summary,presentation):''}

@@ -337,10 +337,8 @@ def _result_context(
         "subjective_outcome": _subjective(summary if available else {}),
         "recommendation": (
             str(recommendation.get("primary") or "ดูแนวโน้มร่วมกับความรู้สึกหลังพัก")
-            if available
-            else (
-                "ดูรายละเอียดที่บันทึกไว้หลังจบการพักครั้งนี้" if closed else "ดูผลสรุปหลังจบการพักครั้งนี้"
-            )
+            if available or closed
+            else "ดูผลสรุปหลังจบการพักครั้งนี้"
         ),
         "confidence_label": (
             str(confidence.get("label") or "ข้อมูลสำหรับครั้งนี้ยังมีจำกัด")

@@ -234,7 +234,7 @@ Historical `auto/unknown_legacy` ต้องส่ง `unresolved_score` แล
 | Action bands | `zeep-restore-action-bands-v1.1-observational-copy` |
 | Driver policy | `zeep-restore-drivers-v1.0` |
 | Baseline comparison | `zeep-restore-personal-baseline-v1.0` |
-| Recommendation | `zeep-restore-recommendation-v1.1-observational-copy` |
+| Recommendation | `zeep-restore-recommendation-v1.2-after-rest` · [คำแนะนำหลังพัก](zeep-post-rest-advice.md) |
 | Product language | `zeep-product-language-v1.1` |
 | Sleep Score formula | `zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10` |
 | Recovery Score formula | `zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10` |

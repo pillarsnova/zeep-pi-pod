@@ -5,14 +5,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from sessions.post_rest_advice import build_post_rest_advice
 from sessions.restore_summary_policy import (
     ACTION_BANDS,
-    RECOMMENDATIONS,
     STATUS_MEANINGS,
 )
 from sleep_system_policy import (
     RESTORE_ACTION_BANDS_VERSION,
-    RESTORE_RECOMMENDATION_VERSION,
 )
 
 
@@ -80,42 +79,20 @@ def build_recommendation(
     drivers: Mapping[str, Any],
     *,
     limited_evidence: bool = False,
+    quality: Mapping[str, Any] | None = None,
+    baseline: Mapping[str, Any] | None = None,
+    subjective: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Return one bounded next action based only on available evidence."""
-    attention = list(drivers.get("attention") or [])
-    selected = attention[0] if attention else None
-    if selected and selected.get("priority") == "safety_review":
-        message = str(
-            selected.get("action")
-            or "กรุณาแจ้งทีมงานและตรวจเหตุการณ์ Safety ก่อนใช้งานครั้งถัดไป"
-        )
-    elif limited_evidence:
-        message = "บันทึกความรู้สึกหลังพัก และใช้งานครั้งถัดไปตามปกติ"
-    elif score is None:
-        message = "บอกความรู้สึกหลังพักได้ตามจริง และลองใช้งานตามปกติอีกครั้ง"
-    elif selected and selected.get("category") == "environment":
-        message = str(
-            selected.get("action") or "ปรับปัจจัยแวดล้อมที่ระบบระบุ แล้วเปรียบเทียบ Session ถัดไป"
-        )
-    elif selected:
-        message = RECOMMENDATIONS.get(group, {}).get(
-            str(selected.get("key")),
-            "ทบทวนปัจจัยที่ได้คะแนนต่ำสุด แล้วเปรียบเทียบกับ Session ถัดไป",
-        )
-    elif group == "sleep":
-        message = "ลองคงรูปแบบการนอนครั้งนี้และติดตามแนวโน้มจากหลายคืน"
-    elif group == "nap_recovery":
-        message = "ลองคงรูปแบบการพักครั้งนี้และบันทึกความรู้สึกหลังพัก"
-    else:
-        message = "เลือกรูปแบบการพักเพื่อรับคำแนะนำที่เหมาะกับครั้งนี้"
-    return {
-        "primary": message,
-        "source_driver_key": selected.get("key") if selected else None,
-        "version": RESTORE_RECOMMENDATION_VERSION,
-        "one_action_only": True,
-        "automatic_actuation": False,
-        "medical_advice": False,
-    }
+    """Compatibility facade for the single after-rest recommendation policy."""
+    return build_post_rest_advice(
+        group,
+        score,
+        drivers,
+        quality=quality,
+        baseline=baseline,
+        subjective=subjective,
+        limited_evidence=limited_evidence,
+    )
 
 
 def session_scope(group: str) -> dict[str, Any]:

@@ -1017,7 +1017,7 @@ engineering shadow score
       "recommendation": {
         "primary": "รักษารูปแบบที่ได้ผลและติดตามแนวโน้มจากหลายคืน",
         "source_driver_key": null,
-        "version": "zeep-restore-recommendation-v1.1-observational-copy",
+        "version": "zeep-restore-recommendation-v1.2-after-rest",
         "one_action_only": true,
         "automatic_actuation": false,
         "medical_advice": false
@@ -1237,7 +1237,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       "recommendation": {
         "primary": "รักษารูปแบบการพักที่ได้ผลและบันทึกความรู้สึกหลังพัก",
         "source_driver_key": null,
-        "version": "zeep-restore-recommendation-v1.1-observational-copy",
+        "version": "zeep-restore-recommendation-v1.2-after-rest",
         "one_action_only": true,
         "automatic_actuation": false,
         "medical_advice": false
@@ -1438,7 +1438,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       "recommendation": {
         "primary": "ระบุรูปแบบการพักและตรวจความพร้อมของ Sensor ก่อนครั้งถัดไป",
         "source_driver_key": null,
-        "version": "zeep-restore-recommendation-v1.1-observational-copy",
+        "version": "zeep-restore-recommendation-v1.2-after-rest",
         "one_action_only": true,
         "automatic_actuation": false,
         "medical_advice": false

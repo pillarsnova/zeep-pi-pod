@@ -52,7 +52,7 @@
 | Restore Personal Baseline | `zeep-restore-personal-baseline-v1.0` |
 | Personal behaviour baseline | `zeep-personal-behaviour-baseline-v1.4-paired-vitals-three-session-reference` |
 | Personal rest-window baseline | `zeep-personal-rest-window-v1.2-bounded-partitioned-finite` |
-| Restore recommendation | `zeep-restore-recommendation-v1.1-observational-copy` |
+| Restore recommendation | `zeep-restore-recommendation-v1.2-after-rest` · [คำแนะนำหลังพัก](zeep-post-rest-advice.md) |
 | Product language | `zeep-product-language-v1.1` |
 | Environment context | `zeep-environment-context-v2.1-optional-acoustic-input` |
 | Environment Session aggregation | `zeep-environment-session-v1.0-sustained-decile` |

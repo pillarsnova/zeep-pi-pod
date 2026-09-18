@@ -2797,6 +2797,7 @@ def build_sleep_quality(
 def _post_session_guidance(
     quality: Dict[str, Any],
     findings: list[Dict[str, Any]],
+    recommendation: Dict[str, Any],
 ) -> Dict[str, Any]:
     """Return practical, non-diagnostic guidance for the next activity.
 
@@ -2808,22 +2809,7 @@ def _post_session_guidance(
     group = str(mode.get("group") or mode.get("requested") or "nap_recovery")
     score = _number(quality.get("score"))
     released = bool(quality.get("available") and score is not None)
-    if not released:
-        primary = (
-            "ผล Sensor ยังไม่ครบพอสำหรับสรุปคะแนน ให้ใช้ความรู้สึกหลังพักประกอบก่อนทำกิจกรรมถัดไป"
-        )
-    elif group == "sleep" and score >= 85:
-        primary = "เริ่มเช้าวันใหม่ตามปกติ และบันทึกความสดชื่นเพื่อเทียบกับ Sleep Score"
-    elif group == "sleep" and score >= 70:
-        primary = "ให้เวลาร่างกายตื่นตัว ดื่มน้ำ รับแสงธรรมชาติ และเช็กความง่วงก่อนเริ่มงาน"
-    elif group == "sleep":
-        primary = "เริ่มกิจกรรมแบบค่อยเป็นค่อยไป และหลีกเลี่ยงงานเสี่ยงหากยังง่วงมาก"
-    elif score >= 85:
-        primary = "พักปรับตัวสั้น ๆ แล้วกลับสู่กิจกรรม พร้อมบันทึกความสดชื่นหลัง Nap & Refresh"
-    elif score >= 70:
-        primary = "ลุกขยับเบา ๆ ดื่มน้ำ และประเมินพลังงานของตนเองก่อนทำกิจกรรมถัดไป"
-    else:
-        primary = "ให้เวลาปรับตัว 5–10 นาที รับแสงหรือขยับเบา ๆ แล้วประเมินความพร้อมอีกครั้ง"
+    primary = recommendation["primary"]
 
     environment_action = next(
         (
@@ -3467,7 +3453,6 @@ def build_session_report(
 
     bed = _bed_events(rows)
     insight = quality.get("insight") or "สรุปจากข้อมูลที่ระบบบันทึกได้ใน Session นี้"
-    post_session_guidance = _post_session_guidance(quality, findings)
     effective_personal_context = (
         personal_context
         or quality.get("personal_context")
@@ -3506,6 +3491,7 @@ def build_session_report(
         trend_context=(effective_trend_context if score_identity["valid"] else None),
         subjective_outcome=effective_subjective_outcome,
     )
+    post_session_guidance = _post_session_guidance(quality, findings, restore_summary["recommendation"])
     return {
         # Report availability means a completed interval can be summarised.
         # Evidence availability/confidence remains explicit inside ``quality``;

@@ -28,6 +28,7 @@ from sessions.restore_summary_copy import (
     session_scope,
 )
 from sessions.restore_summary_policy import COMPONENT_COPY
+from sessions.result_context import canonical_subjective_outcome
 from sessions.score_identity import assess_score_identity, mode_groups
 from sleep_system_policy import (
     RESTORE_DRIVER_POLICY_VERSION,
@@ -289,30 +290,6 @@ def _confidence(quality: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _subjective_outcome(
-    outcome: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    if not outcome or outcome.get("status") in {
-        "not_measured",
-        "unavailable",
-    }:
-        return {
-            "status": "not_measured",
-            "label": "ยังไม่ได้บันทึกความรู้สึกหลังพัก",
-            "freshness_delta": None,
-            "activity_readiness": None,
-            "sensor_inferred": False,
-        }
-    return {
-        "status": "measured",
-        "label": "บันทึกความรู้สึกก่อน–หลังการพักแล้ว",
-        "freshness_delta": outcome.get("freshness_delta"),
-        "activity_readiness": outcome.get("activity_readiness"),
-        "source": outcome.get("source") or "session_questionnaire",
-        "sensor_inferred": False,
-    }
-
-
 def build_restore_summary(
     quality: Mapping[str, Any] | None,
     *,
@@ -344,6 +321,14 @@ def build_restore_summary(
         driver.get("priority") == "safety_review"
         for driver in driver_summary.get("attention", [])
     )
+    baseline_summary = build_baseline_summary(
+        personal_context if score_identity["valid"] else None,
+        score,
+        group,
+        source_formula_version=source_score.get("formula_version"),
+        source_target_key=source_target_key,
+    )
+    subjective_summary = canonical_subjective_outcome(subjective_outcome)
     return {
         "version": RESTORE_SUMMARY_VERSION,
         "available": source_score["available"],
@@ -358,13 +343,7 @@ def build_restore_summary(
         ),
         "session_scope": session_scope(group),
         "drivers": driver_summary,
-        "personal_baseline": build_baseline_summary(
-            personal_context if score_identity["valid"] else None,
-            score,
-            group,
-            source_formula_version=source_score.get("formula_version"),
-            source_target_key=source_target_key,
-        ),
+        "personal_baseline": baseline_summary,
         "trend": build_trend_summary(
             trend_context if score_identity["valid"] else None,
             group=group,
@@ -376,8 +355,11 @@ def build_restore_summary(
             score,
             driver_summary,
             limited_evidence=limited_evidence,
+            quality=score_quality,
+            baseline=baseline_summary,
+            subjective=subjective_summary,
         ),
         "confidence": _confidence(score_quality),
-        "subjective_outcome": _subjective_outcome(subjective_outcome),
+        "subjective_outcome": subjective_summary,
         "claim_boundary": claim_boundary(),
     }

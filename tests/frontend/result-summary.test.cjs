@@ -34,6 +34,21 @@ function render(context, payload, ended = true) {
   );
 }
 
+test('after-rest card exposes an escaped reason without a second recommendation', () => {
+  const context = runtime();
+  const payload = fixture();
+  payload.restore_summary.recommendation = {
+    primary: 'ลองพักเงียบ', title: 'สำหรับคุณ <script>',
+    when_label: 'ก่อนพักครั้งถัดไป', reason: 'เหตุผล <img src=x>',
+  };
+  const html = render(context, payload);
+  assert.match(html, /คำแนะนำสำหรับคุณ/);
+  assert.match(html, /เหตุผลที่แนะนำ/);
+  assert.match(html, /&lt;script&gt;/);
+  assert.doesNotMatch(html, /<img src=x>|ลองทำสิ่งนี้ในครั้งถัดไป/);
+  assert.equal((html.match(/ลองพักเงียบ/g) || []).length, 1);
+});
+
 test('two modes retain their existing score and exactly one primary score', () => {
   const context = runtime();
   for (const [name, title] of [['nap', 'Recovery Score'], ['sleep', 'Sleep Score']]) {

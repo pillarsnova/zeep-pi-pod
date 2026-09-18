@@ -471,6 +471,9 @@ def _rebuild(
             if isinstance(old_final.get("health_reference"), dict)
             else None
         ),
+        subjective_outcome=(old_report.get("restore_summary") or {}).get(
+            "subjective_outcome"
+        ),
         sleep_score_state_counts=score_counts,
     )
     if report_only and not is_approved_sleep_result_version(

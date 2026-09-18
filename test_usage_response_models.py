@@ -239,6 +239,7 @@ class UsageResponseModelTests(unittest.TestCase):
                 "freshness_delta": 2,
                 "activity_readiness": 8,
                 "source": "session_questionnaire",
+                "sensor_inferred": False,
             },
         )
 

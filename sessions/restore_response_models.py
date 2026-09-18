@@ -12,6 +12,7 @@ from typing import Any, Literal
 from pydantic import Field, root_validator, validator
 
 from sessions._response_model_base import ContractModel
+from sessions.advice_response_models import RestoreRecommendation
 
 ScoreType = Literal["sleep_score", "recovery_score", "unresolved_score"]
 SessionMode = Literal["sleep", "nap_recovery", "unknown"]
@@ -328,15 +329,6 @@ class UnavailableTrend(ContractModel):
 
 
 RestoreTrend = AvailableTrend | UnavailableTrend
-
-
-class RestoreRecommendation(ContractModel):
-    primary: str
-    source_driver_key: str | None = Field(...)
-    version: str
-    one_action_only: Literal[True]
-    automatic_actuation: Literal[False]
-    medical_advice: Literal[False]
 
 
 class RestoreConfidence(ContractModel):

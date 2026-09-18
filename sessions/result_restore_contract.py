@@ -7,6 +7,7 @@ from typing import Any
 
 from common.mappings import as_mapping as _mapping
 from common.numbers import as_number as _number
+from sessions.post_rest_advice import build_post_rest_advice
 from sessions.restore_summary import build_restore_summary
 from sessions.result_context import (
     canonical_restore_contexts,
@@ -179,7 +180,15 @@ def build_result_restore_summary(
         ),
         "personal_baseline": contexts["personal_baseline"],
         "trend": contexts["trend"],
-        "recommendation": public_result_value(canonical.get("recommendation") or {}),
+        "recommendation": build_post_rest_advice(
+            group,
+            _number(score.get("value")) if score_available else None,
+            canonical.get("drivers") or {},
+            quality=quality,
+            baseline=contexts["personal_baseline"],
+            subjective=contexts["subjective_outcome"],
+            limited_evidence=bool(quality.get("limited_evidence_neutral_score")),
+        ),
         "confidence": public_result_value(canonical.get("confidence") or {}),
         "subjective_outcome": contexts["subjective_outcome"],
         "claim_boundary": public_result_value(canonical.get("claim_boundary") or {}),

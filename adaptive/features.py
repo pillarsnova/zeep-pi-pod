@@ -159,6 +159,8 @@ def _metric(
     reference: Any,
     window: dict[str, Any] | None,
     group: str,
+    *,
+    reference_policy_override: str | None = None,
 ) -> dict[str, Any]:
     (
         key,
@@ -170,6 +172,13 @@ def _metric(
         _,
         reference_policy,
     ) = spec
+    if reference_policy_override is not None:
+        reference_policy = reference_policy_override
+        reference_source = (
+            "personal physiology baseline"
+            if reference_policy == "personal_sleep_history"
+            else "prior completed same-mode sessions"
+        )
     live_value = finite_number(value)
     baseline_value = finite_number(reference)
     comparison, delta, relative = _comparison(
@@ -267,7 +276,7 @@ def _feature_value_maps(
     snapshot: dict[str, Any],
     baseline: dict[str, Any],
     behaviour: dict[str, Any],
-) -> tuple[dict[str, Any], dict[str, Any]]:
+) -> tuple[dict[str, Any], dict[str, Any], str]:
     environment = (snapshot.get("sensor") or {}).get("environment") or {}
     bcg = (snapshot.get("sensor") or {}).get("bcg") or {}
     frame = snapshot.get("sensor_frame") or {}
@@ -285,8 +294,10 @@ def _feature_value_maps(
     typical = best_environment or behaviour.get("typical_environment") or {}
     respiratory = behaviour.get("respiratory_reference") or {}
     rr_reference = respiratory.get("median_rr_brpm")
+    rr_reference_policy = "same_mode_history"
     if finite_number(rr_reference) is None:
         rr_reference = baseline.get("rr_sleep_median")
+        rr_reference_policy = "personal_sleep_history"
     frame_live = not frame.get("stale")
     bcg_live = bool(
         frame_live
@@ -327,7 +338,7 @@ def _feature_value_maps(
         "light": typical.get("lux_median"),
         "sound": typical.get("sound_median"),
     }
-    return live, references
+    return live, references, rr_reference_policy
 
 
 def prepare_live_features(
@@ -347,7 +358,9 @@ def prepare_live_features(
         now=now,
         window_seconds=window_seconds,
     )
-    live, references = _feature_value_maps(snapshot, baseline, behaviour)
+    live, references, rr_reference_policy = _feature_value_maps(
+        snapshot, baseline, behaviour
+    )
     metrics = [
         _metric(
             spec,
@@ -355,6 +368,9 @@ def prepare_live_features(
             references[spec[0]],
             _window_stats(samples, spec[6], expected),
             group,
+            reference_policy_override=(
+                rr_reference_policy if spec[0] == "respiration_rate" else None
+            ),
         )
         for spec in FEATURE_SPECS
     ]

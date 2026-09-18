@@ -16,6 +16,20 @@ ADAPTIVE_LEARNING_VERSION = "zeep.adaptive-learning-live.v1"
 DEFAULT_WINDOW_SECONDS = 300
 
 
+def _prioritize_recommendations(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep urgent guidance visible when clients cap the number of cards."""
+    priority = {
+        "critical": 0,
+        "blocked": 1,
+        "attention": 2,
+        "watch": 3,
+        "personal_baseline": 4,
+        "stable": 6,
+    }
+    # Stable sorting preserves source order for equally important observations.
+    return sorted(items, key=lambda item: priority.get(str(item.get("level")), 5))
+
+
 def _data_quality(
     snapshot: dict[str, Any],
     samples: list[dict[str, Any]],
@@ -358,15 +372,17 @@ def build_adaptive_learning_snapshot(
         "live_features": metrics,
         "sleep_estimator": _sleep_estimator(sleep),
         "device_intent": _device_intent(snapshot),
-        "candidate_recommendations": enforce_advisory(
-            [
-                *_personal_reference_recommendations(
-                    metrics,
-                    behaviour_data,
-                    observation_id,
-                ),
-                *_recommendations(snapshot, observation_id),
-            ]
+        "candidate_recommendations": _prioritize_recommendations(
+            enforce_advisory(
+                [
+                    *_personal_reference_recommendations(
+                        metrics,
+                        behaviour_data,
+                        observation_id,
+                    ),
+                    *_recommendations(snapshot, observation_id),
+                ]
+            )
         ),
         "blockers": _blockers(snapshot, quality),
         "versions": _versions(snapshot),

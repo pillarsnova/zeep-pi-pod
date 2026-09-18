@@ -7,6 +7,7 @@ import unittest
 
 from adaptive.learning import build_adaptive_learning_snapshot
 from api_state_projection import project_consumer_snapshot
+from smart_response import SmartResponsePolicy, evaluate_smart_response
 
 
 def live_snapshot() -> dict:
@@ -100,6 +101,103 @@ def live_snapshot() -> dict:
 
 
 class AdaptiveLearningTests(unittest.TestCase):
+    def test_critical_guidance_is_visible_before_personal_advice(self) -> None:
+        snapshot = live_snapshot()
+        snapshot["sensor"]["environment"].update(
+            temperature_c=29,
+            humidity_rh=70,
+            co2_ppm=1400,
+            lux=50,
+            sound_dba_est=60,
+        )
+        snapshot["smart_response"] = evaluate_smart_response(
+            snapshot,
+            SmartResponsePolicy("test", 18, 27, 1000, 1300, 40),
+            now=1_800_000_000,
+        )
+        behaviour = {
+            "best_rest_window": {
+                "available": True,
+                "outcome_supported": True,
+                "environment_reference_available": True,
+                "environment": {
+                    "temp_median": 22,
+                    "humidity_median": 50,
+                    "co2_median": 700,
+                    "lux_median": 0.1,
+                    "sound_median": 34,
+                },
+            },
+        }
+        original = copy.deepcopy(snapshot)
+        result = build_adaptive_learning_snapshot(snapshot, behaviour=behaviour)
+        recommendations = result["candidate_recommendations"]
+        visible = [item for item in recommendations if item["level"] != "stable"][:6]
+
+        self.assertGreater(len(recommendations), 6)
+        self.assertEqual(visible[0]["level"], "critical")
+        self.assertEqual(visible[0]["domain"], "air")
+        self.assertTrue(all(item["executable"] is False for item in recommendations))
+        self.assertEqual(snapshot, original)
+
+    def test_guidance_priority_is_stable_for_equal_severity(self) -> None:
+        snapshot = live_snapshot()
+        snapshot["smart_response"]["recommendations"] = [
+            {"domain": "first", "level": "attention"},
+            {"domain": "second", "level": "attention"},
+            {"domain": "missing", "level": "blocked"},
+            {"domain": "alarm", "level": "critical"},
+        ]
+        result = build_adaptive_learning_snapshot(snapshot)
+
+        self.assertEqual(
+            [item["domain"] for item in result["candidate_recommendations"]],
+            ["alarm", "missing", "first", "second"],
+        )
+
+    def test_nap_rr_fallback_identifies_overnight_reference(self) -> None:
+        snapshot = live_snapshot()
+        snapshot["session"]["rest_mode"] = "nap_recovery"
+        result = build_adaptive_learning_snapshot(
+            snapshot,
+            baseline={"rr_sleep_median": 13.2},
+        )
+        respiration = next(
+            item
+            for item in result["live_features"]
+            if item["key"] == "respiration_rate"
+        )
+
+        self.assertEqual(respiration["reference"], 13.2)
+        self.assertEqual(
+            respiration["reference_scope"], "qualified_overnight_reference"
+        )
+        self.assertEqual(
+            respiration["reference_source"], "personal physiology baseline"
+        )
+
+    def test_nap_rr_prefers_its_same_mode_reference(self) -> None:
+        snapshot = live_snapshot()
+        snapshot["session"]["rest_mode"] = "nap_recovery"
+        result = build_adaptive_learning_snapshot(
+            snapshot,
+            baseline={"rr_sleep_median": 13.2},
+            behaviour={"respiratory_reference": {"median_rr_brpm": 15.1}},
+        )
+        respiration = next(
+            item
+            for item in result["live_features"]
+            if item["key"] == "respiration_rate"
+        )
+
+        self.assertEqual(respiration["reference"], 15.1)
+        self.assertEqual(
+            respiration["reference_scope"], "prior_completed_same_mode_sessions"
+        )
+        self.assertEqual(
+            respiration["reference_source"], "prior completed same-mode sessions"
+        )
+
     def test_contract_compares_live_values_without_actuation(self) -> None:
         baseline = {
             "status": "active",

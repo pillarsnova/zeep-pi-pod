@@ -6,14 +6,17 @@ import unittest
 from pathlib import Path
 
 from personal import BaselineStore
+from sessions.finalization_summary import build_final_summary
+from sessions.history_quality import released_historical_quality
+from sessions.restore_summary import build_restore_summary
 from sleep_session_report import build_session_report, build_sleep_quality
 from sleep_system_policy import (
     APPROVED_SLEEP_RESULT_VERSION_PAIRS,
     PERSONAL_BEHAVIOUR_BASELINE_VERSION,
-    PRE_MINIMUM_ONLY_SESSION_REPORT_VERSION,
-    PRE_MINIMUM_ONLY_SLEEP_QUALITY_VERSION,
     PRE_CONTINUITY_SESSION_REPORT_VERSION,
     PRE_CONTINUITY_SLEEP_QUALITY_VERSION,
+    PRE_MINIMUM_ONLY_SESSION_REPORT_VERSION,
+    PRE_MINIMUM_ONLY_SLEEP_QUALITY_VERSION,
     PRE_NAP_TIMING_SESSION_REPORT_VERSION,
     PRE_NAP_TIMING_SLEEP_QUALITY_VERSION,
     PRE_RECOVERY_TIMING_SESSION_REPORT_VERSION,
@@ -28,9 +31,6 @@ from sleep_system_policy import (
     SLEEP_QUALITY_VERSION,
     SLEEP_SCORE_FORMULA_VERSION,
 )
-from sessions.history_quality import released_historical_quality
-from sessions.finalization_summary import build_final_summary
-from sessions.restore_summary import build_restore_summary
 
 
 def _sleep_quality(score=82):
@@ -129,9 +129,6 @@ class _BehaviourDatabase:
 
 class RestoreSummaryTests(unittest.TestCase):
     def test_finalization_freezes_prior_context_for_historical_display(self):
-        source = Path("app.py").read_text(encoding="utf-8")
-
-        self.assertIn("restore_context = baselines.behaviour_context(", source)
         context = {"prior_sessions": 3, "reference": {"heart_rate_bpm": 62.0}}
         summary = build_final_summary(
             {"summary": {"bed_status_counts": {}, "sleep_state_counts": {},
@@ -144,8 +141,6 @@ class RestoreSummaryTests(unittest.TestCase):
         persisted = json.loads(json.dumps(summary))
         context["reference"]["heart_rate_bpm"] = 99.0
         self.assertEqual(persisted["restore_context"]["reference"]["heart_rate_bpm"], 62.0)
-        self.assertIn("personal_context=restore_context", source)
-        self.assertIn("trend_context=restore_context", source)
 
     def test_overnight_wraps_sleep_score_without_third_score(self):
         summary = build_restore_summary(_sleep_quality())

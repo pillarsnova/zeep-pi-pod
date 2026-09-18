@@ -14,7 +14,7 @@ import subprocess
 import threading
 import time
 import uuid
-from collections import Counter, deque
+from collections import deque
 from collections.abc import Mapping
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -130,7 +130,8 @@ from sessions.finalization_commit import (
     FinalizationPorts,
     commit_live_session_finalization as commit_session_finalization,
 )
-from sessions.finalization_summary import build_final_summary, build_night_summary
+from sessions.finalization import SessionFinalizer
+from sessions.finalization_contracts import FinalizationPolicy, SessionFinalizationPorts
 from sessions.live_sleep_estimator import (
     estimate_sleep_state as _estimate_sleep_state_impl,
 )
@@ -263,8 +264,6 @@ from sleep_signal_features import (
     filter_vital_values,
     movement_window_metrics,
     summary_features,
-    terminal_occupancy_timeline,
-    terminal_wake_transition,
     waveform_features,
 )
 from sleep_stage_scoring import (
@@ -3606,360 +3605,90 @@ def _commit_live_session_finalization(
     )
 
 
+def _logout_zeep_session(active: Dict[str, Any]) -> None:
+    """Revoke the account token best-effort after local Session persistence."""
+    refresh_token = (active.get("auth") or {}).get("refresh_token")
+    if not refresh_token:
+        return
+    try:
+        _zeep_request(
+            "POST", "/v1/auth/logout", json_body={"refreshToken": refresh_token}
+        )
+    except (ZeepApiOffline, HTTPException) as exc:
+        log_event(
+            "auth", "zeep_logout_failed", user=active["record"]["username"],
+            error=str(getattr(exc, "detail", exc)),
+        )
+
+
+def _session_finalizer() -> SessionFinalizer:
+    """Bind current adapters without copying Session state or policy formulas."""
+    return SessionFinalizer(
+        SessionFinalizationPorts(
+            session_lock=session_lock,
+            state_lock=state_lock,
+            profile_lock=profile_lock,
+            get_active=lambda: _active_session,
+            set_active=_set_active_session,
+            reserve_share=report_shares.reserve,
+            discard_share=report_shares.discard,
+            fulfil_share=report_shares.fulfil,
+            flush=database.flush,
+            writer_health=database.health,
+            flush_failure=_database_flush_failure,
+            read_sessions=database.read_sessions,
+            clear_checkpoint=_clear_active_session_checkpoint,
+            recover_active=_restore_active_after_finalization_failure,
+            commit=_commit_live_session_finalization,
+            project_samples=report_projection.project_report_samples,
+            series_stats=_series_stats,
+            end_bcg=bcg_storage.end_session,
+            vital_gate=session_vital_gate_now,
+            build_quality=build_sleep_quality,
+            build_report=build_session_report,
+            baseline_context=baselines.behaviour_context,
+            update_baseline=baselines.update_user,
+            availability=session_availability_by_account,
+            load_profiles=_load_profiles,
+            save_profiles=_save_profiles,
+            release_lease=occupancy_client.release,
+            logout_account=_logout_zeep_session,
+            enqueue_ingest=_enqueue_session_ingest,
+            replace_projection=_replace_session_projection_locked,
+            reset_inference=_reset_live_sleep_inference,
+            log_event=log_event,
+            clock=time.time,
+            monotonic=time.monotonic,
+            utc_now=lambda: datetime.now(timezone.utc),
+        ),
+        FinalizationPolicy(
+            pod_id=POD_ID,
+            sample_interval_s=SESSION_SAMPLE_SECONDS,
+            evidence_interval_s=SLEEP_EVIDENCE_EPOCH_SECONDS,
+            heart_rate_range=HR_SANITY_RANGE_BPM,
+            respiration_rate_range=RR_SANITY_RANGE_PER_MIN,
+            required_packets=SESSION_VITAL_START_PACKETS,
+            timeline_schema_version=SESSION_TIMELINE_SCHEMA_VERSION,
+            bed_start_seconds=BED_START_SECONDS,
+            baseline_start_utc=PERSONAL_BASELINE_LEARNING_START_UTC,
+            estimator_version=SLEEP_ESTIMATOR_VERSION,
+            evidence_version=SLEEP_EVIDENCE_VERSION,
+            baseline_version=ZEEP_SLEEP_BASELINE_VERSION,
+            transition_policy=ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
+            g2_ontology=SLEEP_G2_ONTOLOGY_VERSION,
+            terminal_wake_policy=TERMINAL_WAKE_POLICY_VERSION,
+        ),
+    )
+
+
 @synchronized_by(session_lock)
 def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]:
-    """Close the active session and persist its record. Returns None if idle."""
-    global _active_session
-    with session_lock:
-        active = _active_session
-        _active_session = None
-    if active is None:
-        return None
-    record = active["record"]
-    report_shares.reserve(record.get("identity_subject"), account_key=record.get("username_key"))
-    samples = active["samples"]
-    acquisition_interval_s = _sample_interval_seconds(record.get("sample_interval_s"), SESSION_SAMPLE_SECONDS)
-    ended_at_utc = datetime.now(timezone.utc).isoformat()
-    # Preserve the monotonic origin until the atomic DB close succeeds.  A
-    # failed writer can then retry the same live Session without turning it
-    # into a synthetic zero-duration/non-recorded close.
-    started_monotonic = record.get("started_monotonic")
-    never_recorded = started_monotonic is None
-    duration = 0.0 if never_recorded else max(0.0, time.monotonic() - started_monotonic)
-    start_epoch: Optional[float] = None
-    if not never_recorded:
-        try:
-            start_epoch = datetime.fromisoformat(str(record.get("started_at_utc"))).timestamp()
-        except (TypeError, ValueError):
-            start_epoch = time.time() - duration
-    # Sleep decisions are emitted at the end of a 30-second Evidence epoch,
-    # whereas Sensor samples arrive every 10 seconds.  Reproject the durable
-    # right-closed intervals before any count/score/upload work so the decision
-    # cannot be shifted forward by one or two Sensor rows.  The flush also
-    # makes all pre-restart derived events visible to this final report.
-    if not database.flush(30):
-        # The caller can safely retry End Session. Restoring the in-memory
-        # object prevents a transient writer stall from publishing a report or
-        # upload built from forward-looking Dashboard snapshots.
-        with session_lock:
-            if _active_session is None:
-                _active_session = active
-        report_shares.discard(record.get("identity_subject"))
-        writer_error = database.health().get("last_error")
-        log_event(
-            "session",
-            "sleep_attribution_projection_deferred",
-            session_id=record["session_id"],
-            reason=("database_writer_error" if writer_error else "database_flush_timeout"),
-            error=writer_error,
-        )
-        raise _database_flush_failure("before Sleep attribution projection")
-    stage_events = database.read_sessions(
-        "SELECT timestamp,value FROM events WHERE session_id=? AND type='sleep_stage' ORDER BY timestamp",
-        (record["session_id"],),
-    )
-    status_events = database.read_sessions(
-        "SELECT timestamp,value FROM events WHERE session_id=? AND type='sleep_stage_status' ORDER BY timestamp",
-        (record["session_id"],),
-    )
-    if never_recorded:
-        # Login/occupancy is not a recorded sleep Session. If the bed + fresh
-        # HR/RR gate never passes, close only the Login lease/checkpoint and do
-        # not create a zero-duration report, timeline, or personal baseline.
-        vital_gate = session_vital_gate_now(active)
-        record.update(
-            {
-                "ended_at_utc": ended_at_utc,
-                "end_reason": ("not_recorded" if reason == "logout" else f"{reason}_not_recorded"),
-                "duration_s": 0.0,
-                "samples": [],
-                "recording_started": False,
-                "start_gate": vital_gate,
-            }
-        )
-        _clear_active_session_checkpoint()
-        log_event(
-            "session",
-            "closed_without_recording",
-            session_id=record["session_id"],
-            user=record["username"],
-            reason=record["end_reason"],
-            gate_reason=vital_gate["reason"],
-        )
-        lease = active.get("occupancy_lease")
-        if lease is not None:
-            try:
-                occupancy_client.release(lease)
-            except (CoordinatorUnavailable, OccupancyConflict) as exc:
-                log_event(
-                    "occupancy",
-                    "lease_release_deferred",
-                    session_id=record["session_id"],
-                    pod_id=POD_ID,
-                    error=str(exc),
-                )
-        refresh_token = (active.get("auth") or {}).get("refresh_token")
-        if refresh_token:
-            try:
-                _zeep_request(
-                    "POST",
-                    "/v1/auth/logout",
-                    json_body={"refreshToken": refresh_token},
-                )
-            except (ZeepApiOffline, HTTPException) as exc:
-                log_event(
-                    "auth",
-                    "zeep_logout_failed",
-                    user=record["username"],
-                    error=str(getattr(exc, "detail", exc)),
-                )
-        with state_lock:
-            _replace_session_projection_locked(
-                inactive_session_projection(
-                    required_packets=SESSION_VITAL_START_PACKETS,
-                    reason="no_session",
-                )
-            )
-        _reset_live_sleep_inference(None)
-        report_shares.discard(record.get("identity_subject"))
-        return record
-    projection = report_projection.project_report_samples(
-        samples,
-        start_at=start_epoch,
-        end_at=float(start_epoch) + duration,
-        cadence_segments=record.get("sample_cadence_segments") or [],
-        sensor_interval_s=acquisition_interval_s,
-        decision_interval_s=SLEEP_EVIDENCE_EPOCH_SECONDS,
-        stage_events=stage_events,
-        status_events=status_events,
-        heart_rate_range=HR_SANITY_RANGE_BPM,
-        respiration_rate_range=RR_SANITY_RANGE_PER_MIN,
-    )
-    samples = projection["samples"]
-    report_samples = projection["report_samples"]
-    sample_interval_s = projection["report_interval_s"]
-    cadence_summary = projection["cadence_summary"]
-    sample_grid_summary = projection["grid_summary"]
-    if not sample_grid_summary["classification_complete"]:
-        with session_lock:
-            if _active_session is None:
-                _active_session = active
-        report_shares.discard(record.get("identity_subject"))
-        raise RuntimeError("report continuity invariant failed: unattributed recording time")
-    bed_counts = projection["bed_status_counts"]
-    sleep_counts = projection["sleep_state_counts"]
-    sleep_score_counts = projection["sleep_score_state_counts"]
-    estimator_versions = Counter(smp.get("sleep_estimator_version") for smp in samples if smp.get("sleep_estimator_version"))
-    latest_estimator_version = next(
-        (smp.get("sleep_estimator_version") for smp in reversed(samples) if smp.get("sleep_estimator_version")),
-        SLEEP_ESTIMATOR_VERSION,
-    )
-    record.update(
-        {
-            "ended_at_utc": ended_at_utc,
-            "end_reason": reason,
-            "duration_s": round(duration, 1),
-            "sample_interval_s": sample_interval_s,
-            "sensor_sample_interval_s": acquisition_interval_s,
-            "sample_cadence_segments": record.get("sample_cadence_segments") or [],
-            "sample_cadence_summary": cadence_summary,
-            "report_sample_grid": sample_grid_summary,
-            "samples": samples,
-            "summary": {
-                # Mixed-cadence rows are expanded only for calculation so these are
-                # time-weighted statistics; ``record['samples']`` stays raw/auditable.
-                "temperature_c": _series_stats([s["temp"] for s in report_samples]),
-                "humidity_rh": _series_stats([s["hum"] for s in report_samples]),
-                "sound_dba_est": _series_stats([s["dba"] for s in report_samples]),
-                "lux": _series_stats([s["lux"] for s in report_samples]),
-                "heart_rate_bpm": _series_stats([s["hr"] for s in report_samples]),
-                "respiration_rate": _series_stats([s["rr"] for s in report_samples]),
-                "bed_status_counts": bed_counts,
-                "sleep_state_counts": sleep_counts,
-                "sleep_score_state_counts": sleep_score_counts,
-            },
-            "sleep_estimator": latest_estimator_version,
-            "sleep_estimator_versions": dict(estimator_versions),
-            "sleep_provenance_complete": bool(samples) and sum(estimator_versions.values()) == len(samples),
-            "sleep_evidence_version": SLEEP_EVIDENCE_VERSION,
-            "sleep_baseline_version": ZEEP_SLEEP_BASELINE_VERSION,
-            "sleep_transition_policy": ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
-            "sleep_g2_ontology": SLEEP_G2_ONTOLOGY_VERSION,
-            "terminal_wake_policy": TERMINAL_WAKE_POLICY_VERSION,
-            "counters": active["counters"],
-        }
-    )
-    # The final visible sequence must close the human episode as
-    # ``... -> Wake -> occupancy/Session end``.  This is an operational
-    # boundary from the explicit End action or a confirmed terminal bed exit,
-    # not a manufactured AASM epoch, so it is kept out of all stage totals.
-    terminal_occupancy = terminal_occupancy_timeline(
-        samples,
-        session_end=record["ended_at_utc"],
-        sample_interval_s=_sample_interval_seconds(
-            samples[-1].get("sample_interval_s") if samples else None,
-            acquisition_interval_s,
-        ),
-    )
-    terminal_wake = terminal_wake_transition(
-        ({"state": sample.get("sleep")} for sample in samples),
-        terminal_occupancy=terminal_occupancy,
-        session_end=record["ended_at_utc"],
-        end_reason=reason,
-    )
-    record["terminal_wake_transition"] = terminal_wake
-    # SQLite คือ source of truth; ส่วนที่ schema ไม่มีเก็บใน final_summary.
-    try:
-        bcg_storage.end_session(record["session_id"])
-        # Drain the final BCG epoch separately. If it fails, do not allow the
-        # Session close transaction to commit over an unseen writer error.
-        if not database.flush(30):
-            raise _database_flush_failure("final BCG epoch")
-    except Exception:
-        _restore_active_after_finalization_failure(active)
-        raise
-    night_summary = build_night_summary(
-        record,
-        report_samples,
-        duration=duration,
-        sample_interval_s=sample_interval_s,
-    )
-    # Persist final quality beside its factors for reproducible history.
-    sleep_quality = build_sleep_quality(
-        record["duration_s"],
-        night_summary,
-        record["summary"]["sleep_state_counts"],
-        completed=True,
-        rest_mode=record.get("rest_mode") or "auto",
-        stage_sequence=report_samples,
-        sensor_samples=report_samples,
-        sample_interval_s=_sample_interval_seconds(
-            sample_interval_s,
-            SESSION_SAMPLE_SECONDS,
-        ),
-        target_duration_s=record.get("target_duration_s"),
-        score_state_counts=record["summary"]["sleep_score_state_counts"],
-    )
-    night_summary["sleep_quality"] = sleep_quality
-    night_summary["wellness_score"] = sleep_quality.get("score")
-    record["sleep_quality"] = sleep_quality
-    restore_context = baselines.behaviour_context(record["username_key"], record.get("rest_mode") or "auto", record.get("target_duration_s"))
-    session_report = build_session_report(
-        record["duration_s"],
-        report_samples,
-        night_summary,
-        record["summary"]["sleep_state_counts"],
-        sleep_quality,
-        rest_mode=record.get("rest_mode") or "auto",
-        sample_interval_s=sample_interval_s,
-        estimator_version=record.get("sleep_estimator"),
-        completed=True,
-        timeline_schema_version=SESSION_TIMELINE_SCHEMA_VERSION,
-        target_duration_s=record.get("target_duration_s"),
-        personal_context=restore_context,
-        trend_context=restore_context,
-        health_reference=record.get("health_reference"),
-        sleep_score_state_counts=record["summary"]["sleep_score_state_counts"],
-    )
-    record["session_report"] = session_report
-    final_summary = build_final_summary(
-        record,
-        sample_interval_s=sample_interval_s,
-        acquisition_interval_s=acquisition_interval_s,
-        cadence_summary=cadence_summary,
-        sample_grid_summary=sample_grid_summary,
-        restore_context=restore_context,
-        night_summary=night_summary,
-        session_report=session_report,
-        terminal_wake=terminal_wake,
-        timeline_schema_version=SESSION_TIMELINE_SCHEMA_VERSION,
-        bed_start_seconds=BED_START_SECONDS,
-    )
-    _commit_live_session_finalization(active, final_summary, terminal_wake)
-    log_event(
-        "session",
-        "logout",
-        session_id=record["session_id"],
-        user=record["username"],
-        duration_s=record["duration_s"],
-        samples=len(samples),
-        reason=reason,
-    )
-    lease = active.get("occupancy_lease")
-    if lease is not None:
-        try:
-            occupancy_client.release(lease)
-            log_event(
-                "occupancy",
-                "lease_released",
-                session_id=record["session_id"],
-                pod_id=POD_ID,
-            )
-        except (CoordinatorUnavailable, OccupancyConflict) as exc:
-            # The lease expires automatically; never lose a completed sleep
-            # record merely because the coordinator is temporarily offline.
-            log_event(
-                "occupancy",
-                "lease_release_deferred",
-                session_id=record["session_id"],
-                pod_id=POD_ID,
-                error=str(exc),
-            )
-    # เพิกถอน refresh token family ฝั่ง ZEEP เพื่อไม่ให้ session ของตู้ค้างอยู่ใน
-    # บัญชีผู้ใช้. best-effort: เน็ตหลุดตอน logout ต้องไม่ทำให้บันทึกผลไม่สำเร็จ
-    # (DB flush ผ่านไปแล้วก่อนถึงจุดนี้)
-    refresh_token = (active.get("auth") or {}).get("refresh_token")
-    if refresh_token:
-        try:
-            _zeep_request("POST", "/v1/auth/logout", json_body={"refreshToken": refresh_token})
-        except (ZeepApiOffline, HTTPException) as exc:
-            log_event(
-                "auth",
-                "zeep_logout_failed",
-                user=record["username"],
-                error=str(getattr(exc, "detail", exc)),
-            )
-    # Upload after DB flush; the idempotent outbox survives network/restart.
-    _enqueue_session_ingest(record, report_samples)
-    report_shares.fulfil(record, access_token=(active.get("auth") or {}).get("access_token"))
-    # Adaptive learning: อัปเดต baseline ส่วนบุคคลจากคืนล่าสุด (≤7 คืน rolling)
-    try:
-        bl = baselines.update_user(record["username_key"])
-        log_event(
-            "ai",
-            "baseline_updated",
-            user=record["username"],
-            status=bl.get("status"),
-            nights=bl.get("nights_used"),
-        )
-    except Exception as exc:
-        log_event("ai", "baseline_update_failed", user=record["username"], error=str(exc))
-    availability = session_availability_by_account(
-        database.read_sessions,
-        PERSONAL_BASELINE_LEARNING_START_UTC,
-    ).get(record["username_key"], {})
-    with profile_lock:
-        profiles = _load_profiles()
-        profile = profiles.get(record["username_key"])
-        if profile is not None:
-            # SQLite is authoritative. Incrementing a cached JSON counter can
-            # drift after cleanup, migration or a retried finalisation.
-            profile["sessions"] = int(availability.get("lifetime_sessions") or 0)
-            profile["last_session_utc"] = availability.get("last_data_session_utc") or record["ended_at_utc"]
-            _save_profiles(profiles)
-    with state_lock:
-        _replace_session_projection_locked(
-            inactive_session_projection(
-                required_packets=SESSION_VITAL_START_PACKETS,
-                reason="no_session",
-            )
-        )
-    _reset_live_sleep_inference(None)
-    return record
+    """Compatibility facade; keep the original lifecycle lock across closure."""
+    return _session_finalizer().finalize(reason)
 
 
-def _set_restored_active_session(active: Dict[str, Any]) -> None:
-    """Publish restart ownership; the restarter retains the original lock scope."""
+def _set_active_session(active: Optional[Dict[str, Any]]) -> None:
+    """Assign live ownership; lifecycle services retain the original lock scope."""
     global _active_session
     _active_session = active
 
@@ -3975,7 +3704,7 @@ def _session_restarter() -> SessionRestarter:
             state=state,
             sleep_path=_sleep_stage_path,
             get_active=lambda: _active_session,
-            set_active=_set_restored_active_session,
+            set_active=_set_active_session,
             load_checkpoint=_load_active_session_checkpoint,
             clear_checkpoint=_clear_active_session_checkpoint,
             save_checkpoint=_save_active_session_checkpoint,

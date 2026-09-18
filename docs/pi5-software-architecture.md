@@ -23,8 +23,8 @@ label จากค่า dBA เพียงค่าเดียว
 
 `app.py` เป็น **legacy composition root**: Sensor-frame sampler, Live Sleep estimator,
 waiting-bed/recording sampler และ GPIO pulse routes ถูกย้ายออกแล้ว โดยเหลือ compatibility
-facade กับ dependency wiring; resume แยกเป็น service แล้ว แต่ finalize และ routes
-บางส่วนยังอยู่ เป้าหมายที่
+facade กับ dependency wiring; resume/finalize แยกเป็น service แล้ว แต่ Login orchestration
+และ routes บางส่วนยังอยู่ เป้าหมายที่
 บังคับด้วย architecture ratchet คือให้เหลือเฉพาะการสร้าง FastAPI
 app, ต่อ lifecycle, ประกอบ dependency และเรียก adapters เท่านั้น กฎ deterministic
 ใหม่ต้องอยู่ใน pure module เพื่อให้ทดสอบได้โดยไม่เปิด GPIO, Serial, MQTT หรือเสียง
@@ -69,6 +69,8 @@ app, ต่อ lifecycle, ประกอบ dependency และเรียก
 | Final report | `sleep_session_report.py` | Mode-aware Sleep Score/Recovery Score และรายงานหลังจบ Session |
 | Account ingest outbox | `sessions/ingest_payload.py`, `ingest_outbox.py` | สร้าง payload แบบ allowlist, เขียนคิว atomic และ retry โดยไม่ทำให้ Session finalization ล้ม |
 | Atomic Session finalization | `sessions/finalization_commit.py` | commit ผลที่สร้างแล้วลง DB, กู้ live Session เมื่อ persistence ล้ม และลบ checkpoint หลัง durable flush เท่านั้น |
+| Finalization orchestration | `sessions/finalization.py`, `finalization_contracts.py` | แยก waiting/recorded close, flush ก่อน projection/หลัง BCG, commit แล้วจึง logout/upload/learn ผ่าน explicit ports; caller คง lifecycle lock |
+| Final report assembly | `sessions/finalization_report.py` | ประกอบ record, terminal marker, score และ report ด้วยสูตรเดิม และใช้ prior baseline ก่อนเรียนรู้ Session ปัจจุบัน |
 | Finalization calculations | `sessions/finalization_summary.py` | Pure builders ของ onset/WASO/stage ratios และ final-summary payload โดยคงสูตรและ field เดิม |
 | Storage | `database.py`, `bcg_storage.py`, `backup.py` | SQLite writer, raw BCG และ Daily backup |
 | UI source | `static/index.template.html`, `static/partials/control/*`, `static/partials/app/*` | App shell, Control cards, Base CSS และ ordered JavaScript fragments |
@@ -205,8 +207,9 @@ Onboarding ใช้เอกสารนี้เป็น Roadmap ทางเ
 | R7b | เสร็จแล้ว | Live Session ใช้ typed Contract + pure projection module + app Adapter/Facade; Restart รักษา Wellness context และ Logout ล้าง Personal context ครบ |
 | R7c | เสร็จแล้ว | Audio ใช้ pure Library + typed runtime Contract + system/process Adapter + lifecycle Facade; import ไม่ค้นหา player/ALSA หรือสร้าง music directory และ shutdown drain watcher แบบ bounded |
 | R8a | เสร็จแล้ว | Session restart ใช้ service/ports/pure timeline builder; entry points เดิมเหลือ facade 3 บรรทัด และไม่เปลี่ยนสูตร/ผลย้อนหลัง |
+| R8b | เสร็จแล้ว | Finalization orchestrator และ report assembly แยกจาก app; facade 3 บรรทัดคง lifecycle lock และลำดับ durable commit/cleanup เดิม |
 
-`app.py` คงอยู่ที่ไม่เกิน 6,477 บรรทัด และเป็น composition root ต่อไป ส่วน API,
+`app.py` คงอยู่ที่ไม่เกิน 6,206 บรรทัด และเป็น composition root ต่อไป ส่วน API,
 Sensor contract/calibration/normalization/environment/sound และ value helpers อยู่ใน
 package ตามโดเมนแล้ว ไฟล์ชื่อเดิมที่ root เหลือเป็น facade บางเพื่อรักษา script/test
 เดิม การย้ายนี้ไม่เปลี่ยน Sleep/Score formula, Sensor cadence, ชื่อ public JSON key
@@ -248,10 +251,9 @@ Audio boundary ใช้รูปแบบเดียวกันโดยไ�
 
 ### 6.3 ลำดับถัดไป
 
-1. waiting-bed sampler และ durable recording-start service แยกแล้ว รวมถึง pure
-   finalization calculations; orchestrator ของ finalization ยังอยู่ใน `app.py`
-2. Resume แยกแล้ว; ถัดไปแยก finalization I/O ออกจาก composition root โดยใช้ Live
-   Session contract และรักษาลำดับ checkpoint/DB commit
+1. waiting-bed sampler, durable recording start, resume และ finalization แยกแล้ว
+   รวมถึง report assembly; ขั้นถัดไปคือ Login/start-session orchestration
+2. คง public facade, lock และลำดับ checkpoint/DB commit เมื่อแยก lifecycle ส่วนที่เหลือ
 3. Sleep estimator มี compatibility facade และย้ายสูตรเดิมออกแล้ว; ขั้นถัดไปคือแบ่ง
    typed input/context ออกจาก orchestration พร้อม golden replay โดยห้ามเปลี่ยน threshold
 4. รวม report pipeline ที่ซ้ำระหว่าง Live, Replay, Rescore และ Trim ให้ใช้ contract เดียว
@@ -287,3 +289,22 @@ Transport, ownership และ failure behavior ของอุปกรณ์�
   sleep context และลำดับ side effects ตรงกัน ไม่ใช่การยืนยันความแม่นยำทางการแพทย์
 - Regression หลัก: `test_session_restart.py`, `test_rbac_api.py`,
   `test_sleep_restart_context.py`, `test_session_cadence.py` และ architecture ratchet
+
+### 6.5 Finalization boundary และหลักฐาน Refactor
+
+- `SessionFinalizer` รับ state/persistence/clock ผ่าน `SessionFinalizationPorts`;
+  `_finalize_active_session()` คง `session_lock` ครอบทั้งกระบวนการเช่นเดิม
+- Flush derived events ก่อน project right-closed intervals; ตรวจ continuity ก่อน
+  คำนวณคะแนน แล้ว drain BCG และ commit ผลสำเร็จก่อนลบ checkpoint/monotonic origin
+- Waiting Login ที่ไม่ผ่าน start gate ปิดเฉพาะ occupancy/account/checkpoint ไม่สร้าง
+  Recorded Session, report หรือ Personal Baseline ปลอม
+- หลัง commit จึง release lease, logout account, enqueue ingest, fulfil share,
+  เรียนรู้ Baseline และนับการใช้งานจาก SQLite; remote cleanup ยังคง best-effort เดิม
+- `finalization_report.py` ใช้ Sleep Score/Recovery Score builder เดิมและ prior
+  personal context เดียวกันสำหรับ report/trend/final_summary ไม่ใช่สูตรใหม่
+- เทียบโค้ดก่อน/หลังแบบ exact ใน 16 กรณีจำลอง ทั้ง Nap/Overnight, waiting, idle,
+  projection/BCG/commit failure และ remote failure: record, คะแนน, report, profile,
+  exception และลำดับ side effects ตรงกัน ไม่แก้ historical/raw data
+- Regression: `test_session_finalization.py`, `test_session_finalization_commit.py`,
+  `test_finalization_summary.py`, `test_session_ingest.py`, `test_restore_summary.py`
+  และ `test_rbac_api.py`; ตรวจ behavior แทนการผูก test กับข้อความใน `app.py`

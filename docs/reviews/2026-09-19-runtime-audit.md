@@ -1,6 +1,6 @@
 # Runtime audit — 19 September 2026
 
-สถานะ: **Local verification passed — Internal Pilot**
+สถานะ: **Verified change record — Internal Pilot**
 
 ขอบเขต: Pi5 runtime บน `origin/develop` ต่อจาก `b74905f`; ตรวจโดยสาม Agent
 แยกด้าน Session lifecycle, Hardware control และ Adaptive/API quality gate
@@ -48,7 +48,35 @@ happy-path ไม่ครอบคลุม รอบนี้แก้กา�
 - Control stress: 13 test cases × 25 รอบ = **325 executions ผ่าน** ไม่ใช่ 325 tests ใหม่
 - Independent cross-review: control/finalization/commit **41 tests ผ่าน**
 - เพิ่ม characterization ก่อน Login extraction 8 cases; ไม่ใช้บัญชีจริงหรือฐานจริง
-- Git SHA และ Production smoke จะบันทึกหลัง deploy/test เสร็จ
+- รอบแรก deploy `42e0324` (รวม `156d37a`, `c861d00`, `6a0a720`) ผ่าน
+  `origin/develop` ด้วย PillarsMan; Pi focused **194 tests ผ่าน**
+- Restart รอบแรก 19 September 2026 **03:30:25 +07**; service active/running,
+  Pod ว่าง, Safety ready และไม่ latched
+- API state, Fleet Health, Adaptive Live ตอบ 200; WebSocket ได้ frame;
+  Hub 1/Hub 2/BCG connected และข้อมูลสด, Control links connected,
+  sensor-frame cadence 10 วินาทีไม่ stale; ไม่พบ ERROR/Traceback/CancelledError
+- ยืนยัน Adaptive `automatic_actuation=false`; ไม่ทดสอบสั่งอุปกรณ์จริง
+
+## ขั้นต่อเนื่อง — Login/start Session
+
+เมื่อรอบแรกผ่านบน Pi จึงเริ่มแยก `_start_pod_session` ตาม roadmap โดยใช้
+characterization ก่อนย้าย 8 cases และเพิ่มเป็น 13 permanent cases หลังย้าย.
+
+- แยก `sessions/start.py` (283 บรรทัด), `start_contracts.py` (107) และ
+  `start_profile.py` (134); `app.py` เหลือ **5,932 บรรทัด** จากต้นรอบ 6,206
+- Public facade 28 บรรทัด; per-call composition 47 บรรทัด; module ไม่ import app
+  หรือ FastAPI และไม่เปลี่ยน signature/HTTP response, lock, lease หรือ checkpoint
+- Exact trace harness **24/24 สถานการณ์ตรงกับ `42e0324`** ทั้งผล, error,
+  active record, Profile และ side-effect order; UTC/UUID กำหนดแน่นอนใน test เท่านั้น
+- Independent review: **133 API/Auth/Start/Profile tests ผ่าน**
+- Full gate หลังรวมขั้นนี้: **1,286 tests ผ่าน ไม่มี skip**, UI/Ruff/compile/
+  Evidence registry/diff-check ผ่าน; Full gate รอบนี้รันใหม่เพราะมี code revision
+  ใหม่และแก้ test infrastructure ไม่ใช่การรันชุดเดิมซ้ำเพื่อเพิ่มตัวเลข
+- ปรับ focused style scope ให้ตรง Full/CI: ตรวจ extracted packages ด้วย Ruff;
+  root legacy ยัง compile + regression + architecture ratchet ตามเดิม ไม่แก้
+  legacy style หลายร้อยจุดปะปนใน Login extraction
+- ตรวจ Git SHA ที่ติดตั้งและเวลา restart จริงด้วย Operations runbook; ผล smoke
+  ระดับเครื่องจริงแยกจาก local test และไม่ถือว่าเป็น physical actuator validation
 
 ## ขอบเขตที่ยังไม่ยืนยันและขั้นต่อไป
 

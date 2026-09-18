@@ -23,7 +23,8 @@ label จากค่า dBA เพียงค่าเดียว
 
 `app.py` เป็น **legacy composition root**: Sensor-frame sampler, Live Sleep estimator,
 waiting-bed/recording sampler และ GPIO pulse routes ถูกย้ายออกแล้ว โดยเหลือ compatibility
-facade กับ dependency wiring แต่ resume/finalize และ routes บางส่วนยังอยู่ เป้าหมายที่
+facade กับ dependency wiring; resume แยกเป็น service แล้ว แต่ finalize และ routes
+บางส่วนยังอยู่ เป้าหมายที่
 บังคับด้วย architecture ratchet คือให้เหลือเฉพาะการสร้าง FastAPI
 app, ต่อ lifecycle, ประกอบ dependency และเรียก adapters เท่านั้น กฎ deterministic
 ใหม่ต้องอยู่ใน pure module เพื่อให้ทดสอบได้โดยไม่เปิด GPIO, Serial, MQTT หรือเสียง
@@ -46,6 +47,7 @@ app, ต่อ lifecycle, ประกอบ dependency และเรียก
 | Live Sleep estimator | `sessions/live_sleep_estimator.py`, `sessions/live_sleep_runtime.py` | สูตรเดิมรับ dependency contract แบบ explicit ต่อรอบคำนวณ; คง object identity ของ state/lock และ threshold/output เดิม |
 | Live Session sampling lifecycle | `sessions/live_sampler.py` | รอ Bed+HR+RR gate, promote เป็น recording และ persist Timeline ผ่าน explicit ports |
 | Recording start | `sessions/recording_start.py` | Recheck HR/RR, flush Session row, เริ่ม BCG แล้ว publish/checkpoint recording ตามลำดับเดิม |
+| Session restart | `sessions/restart.py`, `restart_contracts.py`, `restart_timeline.py` | คืน waiting/recording ผ่าน explicit ports; reconcile checkpoint กับ DB, คืน owner/mode/onset/reference และรักษา cadence เดิมของแต่ละ sample |
 | Live Session projection | `sessions/live_projection.py` | Contract และ pure builders ของสถานะ Session 20 fields; Login, Restart และ Finalize ใช้ shape เดียวกัน |
 | Live API projection | `api/state_projection.py` | ประกอบ freshness/stale/fallback ของ Hub, BCG และ Control จาก detached snapshot โดยไม่แก้ live reader state |
 | Control transports | `hardware/controlhub1.py`, `controlhub2.py` | MQTT command/ACK ของแอร์และเตียง แยกจาก HTTP routes |
@@ -202,8 +204,9 @@ Onboarding ใช้เอกสารนี้เป็น Roadmap ทางเ
 | R7a | เสร็จแล้ว | Aircon fan-reference ใช้ Repository + explicit lifespan initialization; import `app.py` ไม่อ่านหรือเขียนไฟล์ reference |
 | R7b | เสร็จแล้ว | Live Session ใช้ typed Contract + pure projection module + app Adapter/Facade; Restart รักษา Wellness context และ Logout ล้าง Personal context ครบ |
 | R7c | เสร็จแล้ว | Audio ใช้ pure Library + typed runtime Contract + system/process Adapter + lifecycle Facade; import ไม่ค้นหา player/ALSA หรือสร้าง music directory และ shutdown drain watcher แบบ bounded |
+| R8a | เสร็จแล้ว | Session restart ใช้ service/ports/pure timeline builder; entry points เดิมเหลือ facade 3 บรรทัด และไม่เปลี่ยนสูตร/ผลย้อนหลัง |
 
-`app.py` คงอยู่ที่ไม่เกิน 6,839 บรรทัด และเป็น composition root ต่อไป ส่วน API,
+`app.py` คงอยู่ที่ไม่เกิน 6,477 บรรทัด และเป็น composition root ต่อไป ส่วน API,
 Sensor contract/calibration/normalization/environment/sound และ value helpers อยู่ใน
 package ตามโดเมนแล้ว ไฟล์ชื่อเดิมที่ root เหลือเป็น facade บางเพื่อรักษา script/test
 เดิม การย้ายนี้ไม่เปลี่ยน Sleep/Score formula, Sensor cadence, ชื่อ public JSON key
@@ -247,8 +250,8 @@ Audio boundary ใช้รูปแบบเดียวกันโดยไ�
 
 1. waiting-bed sampler และ durable recording-start service แยกแล้ว รวมถึง pure
    finalization calculations; orchestrator ของ finalization ยังอยู่ใน `app.py`
-2. แยก resume และ finalization I/O ออกจาก composition root โดยใช้ Live Session
-   contract ที่แยกแล้วและรักษา Restart continuity กับลำดับ checkpoint/DB commit
+2. Resume แยกแล้ว; ถัดไปแยก finalization I/O ออกจาก composition root โดยใช้ Live
+   Session contract และรักษาลำดับ checkpoint/DB commit
 3. Sleep estimator มี compatibility facade และย้ายสูตรเดิมออกแล้ว; ขั้นถัดไปคือแบ่ง
    typed input/context ออกจาก orchestration พร้อม golden replay โดยห้ามเปลี่ยน threshold
 4. รวม report pipeline ที่ซ้ำระหว่าง Live, Replay, Rescore และ Trim ให้ใช้ contract เดียว
@@ -268,3 +271,19 @@ Health threshold, เปลี่ยน Schema หรือ Flash Firmware ไ�
 
 Transport, ownership และ failure behavior ของอุปกรณ์อยู่ที่
 [Hardware and Hub Map](onboarding/hardware-hub-map.md)
+
+### 6.4 Restart boundary และหลักฐาน Refactor
+
+- `SessionRestarter` เลือก checkpoint/open row; Session ที่มี explicit end จะไม่ถูก
+  เปิดใหม่ และ checkpoint ระยะ waiting ที่มี DB start แล้วจะคืนเป็น recording
+- `RestartPorts` ผูก adapter/state/lock/clock ทุกครั้งที่เรียก; ไม่ copy global state
+  ค้างไว้ และ module ไม่ import `app.py` หรือเปิด I/O ตอน import
+- `restore_timeline()` คืน Sensor/SMART EAR/HR/RR ตาม field เดิม และเพิ่ม segment
+  cadence สำหรับข้อมูลใหม่เท่านั้น ไม่เขียนทับ Timeline หรือ Raw
+- coordinator ขัดข้องยังคง Login/Recording พร้อม `occupancy_error`; checkpoint
+  refresh ล้มต้อง log ไม่ไล่ผู้ใช้ออก; legacy resume ต้อง flush ก่อนเริ่ม BCG
+- Characterization ทดสอบทั้งก่อน/หลังย้าย และเทียบผลเดิม/ใหม่แบบ exact ใน 13
+  สถานการณ์จำลอง: active state, projection, samples, checkpoint, profile,
+  sleep context และลำดับ side effects ตรงกัน ไม่ใช่การยืนยันความแม่นยำทางการแพทย์
+- Regression หลัก: `test_session_restart.py`, `test_rbac_api.py`,
+  `test_sleep_restart_context.py`, `test_session_cadence.py` และ architecture ratchet

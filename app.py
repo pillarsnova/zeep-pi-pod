@@ -140,7 +140,6 @@ from sessions.lifecycle import (
     SessionCheckpointStore,
     bed_is_occupied,
     evaluate_vital_start_gate,
-    service_resume_event,
 )
 from sessions.live_projection import (
     LiveSessionProjection,
@@ -150,6 +149,8 @@ from sessions.live_projection import (
 )
 from sessions.live_sampler import LiveSamplerPorts, LiveSessionSampler
 from sessions.recording_start import RecordingStartPorts, begin_recording
+from sessions.restart import SessionRestarter
+from sessions.restart_contracts import RestartPolicy, RestartPorts
 from sessions.sleep_context import (
     checkpoint_sleep_context,
     restore_session_sleep_context,
@@ -3957,435 +3958,72 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
     return record
 
 
-def _restore_waiting_session(checkpoint: Dict[str, Any]) -> Optional[str]:
-    """Restore a logged-in occupant before bed confirmation/DB Session start."""
+def _set_restored_active_session(active: Dict[str, Any]) -> None:
+    """Publish restart ownership; the restarter retains the original lock scope."""
     global _active_session
-    safety_context = _restore_safety_checkpoint_context(checkpoint)
-    record = dict(checkpoint["record"])
-    session_id = record["session_id"]
-    with profile_lock:
-        profiles = _load_profiles()
-        profile = profiles.get(record["username_key"], {})
-    age = record.get("age") if record.get("age") is not None else profile.get("age")
-    age_group = record.get("age_group") or profile.get("age_group") or _age_group(age)
-    health_reference = record.get("health_reference")
-    if not isinstance(health_reference, dict) or health_reference.get("schema_version") != 1:
-        health_reference = _health_reference_from_profile(profile)
-    restored_mode = record.get("rest_mode") or "auto"
-    restored_target = resolve_rest_target(restored_mode, record.get("target_duration_s"))
-    display_name = (
-        record.get("display_name")
-        or profile.get("display_name")
-        or record["username"]
-    )
-    wellness_context = record.get("wellness_context")
-    rest_baseline = rest_window(
-        baselines,
-        record["username_key"],
-        restored_mode,
-        restored_target.get("seconds"),
-    )
-    auth_source = record.get("auth_source") or (
-        "zeep" if record.get("zeep_public_id") else "local"
-    )
-    identity_subject = record["identity_subject"]
-    restored_lease: Optional[OccupancyLease] = None
-    occupancy_error: Optional[str] = None
-    try:
-        restored_lease = occupancy_client.acquire(
-            subject=identity_subject,
-            pod_id=record.get("pod_id") or POD_ID,
-            pod_session_id=session_id,
-            username=record["username"],
-        )
-    except (CoordinatorUnavailable, OccupancyConflict) as exc:
-        # A restart must not evict an already authenticated occupant merely
-        # because the shared coordinator is temporarily unreachable.
-        occupancy_error = getattr(exc, "reason", None) or str(exc)
+    _active_session = active
 
-    record.update(
-        {
-            "age": age,
-            "age_group": age_group,
-            "health_reference": health_reference,
-            "display_name": display_name,
-            "rest_mode": restored_mode,
-            "target_duration_s": restored_target.get("seconds"),
-            "sample_interval_s": _sample_interval_seconds(record.get("sample_interval_s"), SESSION_SAMPLE_SECONDS),
-            "started_at_utc": None,
-            "started_monotonic": None,
-        }
+
+def _session_restarter() -> SessionRestarter:
+    """Bind the current adapters per call, never a stale copy of runtime globals."""
+    return SessionRestarter(
+        RestartPorts(
+            session_lock=session_lock,
+            state_lock=state_lock,
+            profile_lock=profile_lock,
+            sleep_path_lock=sleep_path_lock,
+            state=state,
+            sleep_path=_sleep_stage_path,
+            get_active=lambda: _active_session,
+            set_active=_set_restored_active_session,
+            load_checkpoint=_load_active_session_checkpoint,
+            clear_checkpoint=_clear_active_session_checkpoint,
+            save_checkpoint=_save_active_session_checkpoint,
+            restore_safety=_restore_safety_checkpoint_context,
+            current_safety=_current_safety_checkpoint_context,
+            read_sessions=database.read_sessions,
+            enqueue=database.enqueue,
+            flush=database.flush,
+            load_profiles=_load_profiles,
+            save_profiles=_save_profiles,
+            age_group=_age_group,
+            health_reference=_health_reference_from_profile,
+            resolve_target=resolve_rest_target,
+            rest_baseline=partial(rest_window, baselines),
+            acquire_lease=occupancy_client.acquire,
+            availability=session_availability_by_account,
+            reset_inference=_reset_live_sleep_inference,
+            reset_sleep_path=_reset_sleep_stage_path,
+            restore_sleep_context=restore_session_sleep_context,
+            start_bcg=bcg_storage.start_session,
+            vital_gate=session_vital_gate_now,
+            replace_projection=_replace_session_projection_locked,
+            log_event=log_event,
+            clock=time.time,
+            monotonic=time.monotonic,
+            utc_now=lambda: datetime.now(timezone.utc),
+        ),
+        RestartPolicy(
+            pod_id=POD_ID,
+            sample_interval_s=SESSION_SAMPLE_SECONDS,
+            sample_limit=SESSION_SAMPLE_LIMIT,
+            required_packets=SESSION_VITAL_START_PACKETS,
+            heart_rate_range=HR_SANITY_RANGE_BPM,
+            respiration_rate_range=RR_SANITY_RANGE_PER_MIN,
+            evidence_interval_s=SLEEP_EVIDENCE_EPOCH_SECONDS,
+            baseline_start_utc=PERSONAL_BASELINE_LEARNING_START_UTC,
+        ),
     )
-    with state_lock:
-        vital_gate_start_packet_count = int(state["sensor"]["bcg"].get("packets") or 0)
-    restored = {
-        "record": record,
-        "auth": None,
-        "owner_auth_session_id": checkpoint.get("owner_auth_session_id"),
-        "occupancy_lease": restored_lease,
-        "occupancy_error": occupancy_error,
-        "last_lease_renew": time.monotonic(),
-        "samples": [],
-        "counters": {},
-        "last_sample": float("-inf"),
-        "phase": "waiting_bed",
-        "safety_context": safety_context,
-        # Re-check the complete BED_START_SECONDS after boot because the Pi
-        # cannot verify whether the person stayed on the bed while offline.
-        "onbed_since": None,
-        "vital_gate_start_packet_count": vital_gate_start_packet_count,
-    }
-    with session_lock:
-        if _active_session is not None:
-            return None
-        _active_session = restored
-    _reset_live_sleep_inference(session_id)
-    try:
-        _save_active_session_checkpoint(restored)
-    except Exception as exc:
-        log_event("session", "restart_checkpoint_refresh_failed", error=str(exc))
-    armed_at = record.get("armed_at_utc")
-    try:
-        armed_epoch = datetime.fromisoformat(armed_at).timestamp() if armed_at else time.time()
-    except (TypeError, ValueError):
-        armed_epoch = time.time()
-    vital_gate = session_vital_gate_now(restored)
-    with state_lock:
-        _replace_session_projection_locked(
-            active_session_projection(
-                SessionPublicIdentity(
-                    username=record["username"],
-                    account_key=record["username_key"],
-                    email=profile.get("email") or profile.get("zeep_email"),
-                    display_name=display_name,
-                    auth_source=auth_source,
-                    gender=record.get("gender"),
-                    age=age,
-                    age_group=age_group,
-                    health_reference=health_reference,
-                ),
-                session_id=session_id,
-                rest_mode=restored_mode,
-                target_duration_s=restored_target.get("seconds"),
-                started_at=armed_epoch,
-                samples=0,
-                recording=False,
-                vital_gate=vital_gate,
-                wellness_context_available=bool(wellness_context),
-                personal_rest_baseline=rest_baseline,
-            )
-        )
-    log_event(
-        "session",
-        "login_restored_after_restart",
-        session_id=session_id,
-        user=record["username"],
-        phase="waiting_bed",
-        owner_login_restored=bool(checkpoint.get("owner_auth_session_id")),
-        occupancy_error=occupancy_error,
-    )
-    return session_id
+
+
+def _restore_waiting_session(checkpoint: Dict[str, Any]) -> Optional[str]:
+    """Compatibility facade for restoring an authenticated waiting occupant."""
+    return _session_restarter().restore_waiting(checkpoint)
 
 
 def _restore_interrupted_session() -> Optional[str]:
-    """Resume the newest session that has no explicit user logout.
-
-    Supports both the new open-row shutdown behavior and one-time migration from
-    the previous release, which closed a row with end_reason=server_shutdown.
-    """
-    global _active_session
-    checkpoint = _load_active_session_checkpoint()
-    rows: List[Dict[str, Any]] = []
-    if checkpoint is not None:
-        checkpoint_record = checkpoint["record"]
-        checkpoint_rows = database.read_sessions(
-            "SELECT * FROM sessions WHERE session_id=? LIMIT 1",
-            (checkpoint_record["session_id"],),
-        )
-        checkpoint_row = checkpoint_rows[0] if checkpoint_rows else None
-        explicitly_ended = bool(checkpoint_row and checkpoint_row.get("end_time") is not None and checkpoint_row.get("end_reason") != "server_shutdown")
-        if explicitly_ended:
-            # A crash after final DB commit but before unlink must never reopen
-            # a Session that the User/Admin explicitly completed.
-            _clear_active_session_checkpoint()
-            log_event(
-                "session",
-                "stale_restart_checkpoint_removed",
-                session_id=checkpoint_record["session_id"],
-                end_reason=checkpoint_row.get("end_reason"),
-            )
-            checkpoint = None
-        elif checkpoint.get("phase") == "waiting_bed" and checkpoint_row is None:
-            return _restore_waiting_session(checkpoint)
-        elif checkpoint_row is not None:
-            # Reconcile the narrow crash window after DB session_start commits
-            # but before the checkpoint flips from waiting_bed to recording.
-            checkpoint["phase"] = "recording"
-            checkpoint_record["started_at_utc"] = checkpoint_row["start_time"]
-            rows = [checkpoint_row]
-        else:
-            _clear_active_session_checkpoint()
-            checkpoint = None
-    if not rows:
-        rows = database.read_sessions(
-            """SELECT * FROM sessions
-               WHERE end_time IS NULL OR end_reason='server_shutdown'
-               ORDER BY start_time DESC LIMIT 1"""
-        )
-    if not rows:
-        return None
-    row = rows[0]
-    session_id = row["session_id"]
-    was_legacy_closed = row.get("end_reason") == "server_shutdown"
-    timeline = database.read_sessions(
-        """SELECT * FROM timeline WHERE session_id=? ORDER BY timestamp
-           LIMIT ?""",
-        (session_id, SESSION_SAMPLE_LIMIT),
-    )
-    checkpoint_record = checkpoint["record"] if checkpoint is not None else {}
-    restored_sample_interval_s = _sample_interval_seconds(
-        checkpoint_record.get("sample_interval_s"),
-        _timeline_sample_interval(timeline, 5.0),
-    )
-    migration_at_utc = datetime.now(timezone.utc).isoformat()
-    cadence_segments = _normalise_cadence_segments(
-        checkpoint_record.get("sample_cadence_segments"),
-        start_at_utc=row["start_time"],
-        fallback_interval_s=restored_sample_interval_s,
-    )
-    previous_live_interval_s = (
-        _sample_interval_seconds(
-            cadence_segments[-1].get("sample_interval_s"),
-            restored_sample_interval_s,
-        )
-        if cadence_segments
-        else restored_sample_interval_s
-    )
-    cadence_upgraded = not math.isclose(
-        previous_live_interval_s,
-        SESSION_SAMPLE_SECONDS,
-        rel_tol=0.0,
-        abs_tol=0.001,
-    )
-    if cadence_upgraded:
-        cadence_segments.append(
-            {
-                "start_at_utc": migration_at_utc,
-                "sample_interval_s": SESSION_SAMPLE_SECONDS,
-            }
-        )
-    samples = [
-        {
-            "t": datetime.fromisoformat(x["timestamp"]).timestamp(),
-            "temp": x.get("temperature"),
-            "hum": x.get("humidity"),
-            "co2": x.get("co2"),
-            "pm2_5": x.get("pm2_5"),
-            "voc": x.get("voc_index"),
-            "lux": x.get("lux"),
-            "dba": x.get("sound"),
-            "acoustic_label": x.get("acoustic_label"),
-            "acoustic_state": x.get("acoustic_state"),
-            "acoustic_confidence": x.get("acoustic_confidence"),
-            "acoustic_event_detected": bool(x.get("acoustic_event_detected")),
-            "acoustic_classifier_version": x.get("acoustic_classifier_version"),
-            "acoustic_window_sequence": x.get("acoustic_window_sequence"),
-            "acoustic_features": (
-                json.loads(x["acoustic_features_json"])
-                if x.get("acoustic_features_json")
-                else {}
-            ),
-            "hr": x.get("heart_rate"),
-            "rr": x.get("respiration_rate"),
-            "bed": x.get("bed_status"),
-            "sleep": None,
-            **rr_evidence.persisted_evidence_fields(x),
-            "sample_interval_s": _cadence_interval_at(
-                datetime.fromisoformat(x["timestamp"]).timestamp(),
-                cadence_segments,
-                restored_sample_interval_s,
-            ),
-        }
-        for x in timeline
-    ]
-    event_rows = database.read_sessions(
-        "SELECT type,COUNT(*) AS n FROM events WHERE session_id=? AND type!='final_summary' GROUP BY type",
-        (session_id,),
-    )
-    counters = {x["type"]: int(x["n"]) for x in event_rows}
-    restored = restore_session_sleep_context(
-        database.read_sessions,
-        session_id,
-        samples=samples,
-        checkpoint_context=(checkpoint.get("sleep_context") if isinstance(checkpoint, dict) else None),
-        heart_rate_range=HR_SANITY_RANGE_BPM,
-        respiration_rate_range=RR_SANITY_RANGE_PER_MIN,
-        fallback_interval_s=SLEEP_EVIDENCE_EPOCH_SECONDS,
-    )
-    with sleep_path_lock:
-        _reset_sleep_stage_path(session_id)
-        _sleep_stage_path.update(restored["path"])
-    restored_sleep_context = restored["provenance"]
-    started_dt = datetime.fromisoformat(row["start_time"])
-    elapsed_s = max(0.0, time.time() - started_dt.timestamp())
-    with profile_lock:
-        profiles = _load_profiles()
-        profile = profiles.get(row["username_key"], {})
-        age = checkpoint_record.get("age") if checkpoint_record.get("age") is not None else profile.get("age")
-        age_group = checkpoint_record.get("age_group") or profile.get("age_group") or _age_group(age)
-        health_reference = checkpoint_record.get("health_reference")
-        if not isinstance(health_reference, dict) or health_reference.get("schema_version") != 1:
-            health_reference = _health_reference_from_profile(profile)
-    identity_subject = checkpoint_record.get("identity_subject") or row.get("identity_subject") or (f"zeep:{row['zeep_public_id']}" if row.get("zeep_public_id") else f"legacy:{row['username_key']}")
-    restored_mode = checkpoint_record.get("rest_mode") or row.get("rest_mode") or "auto"
-    persisted_target = checkpoint_record.get("target_duration_s")
-    if persisted_target is None:
-        persisted_target = row.get("target_duration_s")
-    restored_target = resolve_rest_target(restored_mode, persisted_target)
-    display_name = (
-        checkpoint_record.get("display_name")
-        or profile.get("display_name")
-        or row["user"]
-    )
-    wellness_context = checkpoint_record.get("wellness_context")
-    auth_source = checkpoint_record.get("auth_source") or (
-        "zeep" if row.get("zeep_public_id") else "local"
-    )
-    rest_baseline = rest_window(
-        baselines,
-        row["username_key"],
-        restored_mode,
-        restored_target.get("seconds"),
-    )
-    restored_lease: Optional[OccupancyLease] = None
-    occupancy_error: Optional[str] = None
-    try:
-        restored_lease = occupancy_client.acquire(
-            subject=identity_subject,
-            pod_id=row.get("pod_id") or POD_ID,
-            pod_session_id=session_id,
-            username=row["user"],
-        )
-    except (CoordinatorUnavailable, OccupancyConflict) as exc:
-        # Recovery is occupant-first: keep local monitoring/recording alive and
-        # surface a DEGRADED lease state for the administrator to resolve.
-        occupancy_error = getattr(exc, "reason", None) or str(exc)
-
-    safety_context = _restore_safety_checkpoint_context(checkpoint) if checkpoint is not None else _current_safety_checkpoint_context()
-    _active_session = {
-        "record": {
-            "session_id": session_id,
-            "username": row["user"],
-            "username_key": row["username_key"],
-            "gender": row.get("gender"),
-            "age": age,
-            "age_group": age_group,
-            "health_reference": health_reference,
-            "display_name": display_name,
-            "wellness_context": wellness_context,
-            "armed_at_utc": checkpoint_record.get("armed_at_utc") or row["created_at"],
-            # Old/open rows may predate explicit intent storage. Keep ``auto``
-            # unresolved; elapsed time and model output cannot invent intent.
-            "rest_mode": restored_mode,
-            "target_duration_s": restored_target.get("seconds"),
-            "auth_source": auth_source,
-            "started_at_utc": row["start_time"],
-            "started_monotonic": time.monotonic() - elapsed_s,
-            # New samples use the active 10-second contract. Historical rows
-            # retain their segment-specific interval for the final report.
-            "sample_interval_s": SESSION_SAMPLE_SECONDS,
-            "sample_cadence_segments": cadence_segments,
-            "identity_subject": identity_subject,
-            "pod_id": row.get("pod_id") or POD_ID,
-            "zeep_public_id": row.get("zeep_public_id"),
-        },
-        "auth": None,
-        "owner_auth_session_id": (checkpoint.get("owner_auth_session_id") if checkpoint is not None else None),
-        "occupancy_lease": restored_lease,
-        "occupancy_error": occupancy_error,
-        "last_lease_renew": time.monotonic(),
-        "samples": samples,
-        "counters": counters,
-        "last_sample": float("-inf"),
-        "phase": "recording",
-        "onbed_since": None,
-        "safety_context": safety_context,
-    }
-    if was_legacy_closed:
-        database.enqueue("sessions", "session_resume", {"session_id": session_id})
-        if not database.flush(30):
-            raise RuntimeError("database writer did not flush session resume")
-        availability = session_availability_by_account(
-            database.read_sessions,
-            PERSONAL_BASELINE_LEARNING_START_UTC,
-        ).get(row["username_key"], {})
-        with profile_lock:
-            profiles = _load_profiles()
-            legacy_profile = profiles.get(row["username_key"])
-            if legacy_profile is not None:
-                legacy_profile["sessions"] = int(availability.get("lifetime_sessions") or 0)
-                legacy_profile["last_session_utc"] = availability.get("last_data_session_utc")
-                _save_profiles(profiles)
-    bcg_storage.start_session(session_id)
-    with state_lock:
-        _replace_session_projection_locked(
-            active_session_projection(
-                SessionPublicIdentity(
-                    username=row["user"],
-                    account_key=row["username_key"],
-                    email=profile.get("email") or profile.get("zeep_email"),
-                    display_name=display_name,
-                    auth_source=auth_source,
-                    gender=row.get("gender"),
-                    age=age,
-                    age_group=age_group,
-                    health_reference=health_reference,
-                ),
-                session_id=session_id,
-                rest_mode=restored_mode,
-                target_duration_s=restored_target.get("seconds"),
-                started_at=started_dt.timestamp(),
-                samples=len(samples),
-                recording=True,
-                vital_gate={
-                    "ready": True,
-                    "heart_rate_valid": None,
-                    "respiration_rate_valid": None,
-                    "confirmed_packets": SESSION_VITAL_START_PACKETS,
-                    "required_packets": SESSION_VITAL_START_PACKETS,
-                    "reason": "recording_resumed",
-                },
-                wellness_context_available=bool(wellness_context),
-                personal_rest_baseline=rest_baseline,
-            )
-        )
-    database.enqueue("sessions", "event", service_resume_event(session_id, migration_at_utc))
-    log_event(
-        "session",
-        "resumed_after_restart",
-        session_id=session_id,
-        user=row["user"],
-        samples=len(samples),
-        legacy_closed=was_legacy_closed,
-        owner_login_restored=bool(checkpoint and checkpoint.get("owner_auth_session_id")),
-        occupancy_error=occupancy_error,
-        sleep_context=restored_sleep_context,
-    )
-    if cadence_upgraded:
-        log_event(
-            "session",
-            "sample_cadence_upgraded",
-            session_id=session_id,
-            previous_sample_interval_s=previous_live_interval_s,
-            sample_interval_s=SESSION_SAMPLE_SECONDS,
-            historical_samples=len(samples),
-            effective_at_utc=migration_at_utc,
-        )
-    try:
-        _save_active_session_checkpoint(_active_session)
-    except Exception as exc:
-        log_event("session", "restart_checkpoint_refresh_failed", error=str(exc))
-    return session_id
+    """Resume the newest Session without an explicit User/Admin completion."""
+    return _session_restarter().restore()
 
 
 @asynccontextmanager

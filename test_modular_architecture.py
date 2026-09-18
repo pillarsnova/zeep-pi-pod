@@ -24,7 +24,7 @@ DOMAIN_PACKAGE_NAMES = (
 DOMAIN_PACKAGES = tuple(ROOT / name for name in DOMAIN_PACKAGE_NAMES)
 MAX_PACKAGE_FILE_LINES = 500
 MAX_FUNCTION_LINES = 90
-MAX_APP_LINES = 6_839
+MAX_APP_LINES = 6_477
 MAX_SNAPSHOT_FUNCTION_LINES = 118
 MAX_BCG_READER_FACADE_LINES = 31
 MAX_SENSOR_FRAME_SAMPLER_FACADE_LINES = 27
@@ -370,6 +370,14 @@ class ModularArchitectureTests(unittest.TestCase):
         )
         length = int(finalizer.end_lineno or finalizer.lineno) - finalizer.lineno + 1
         self.assertLessEqual(length, MAX_FINALIZATION_COMMIT_FACADE_LINES)
+
+    def test_restart_entry_points_remain_thin_facades(self) -> None:
+        tree = ast.parse((ROOT / "app.py").read_text(encoding="utf-8"))
+        names = {"_restore_waiting_session", "_restore_interrupted_session"}
+        facades = [node for node in tree.body if getattr(node, "name", None) in names]
+        self.assertEqual({node.name for node in facades}, names)
+        for node in facades:
+            self.assertLessEqual(node.end_lineno - node.lineno + 1, 3)
 
     def test_hardware_classes_live_in_hardware_package(self) -> None:
         tree = ast.parse((ROOT / "app.py").read_text(encoding="utf-8"))

@@ -142,7 +142,11 @@ def _machine_identity(system: str | None = None) -> str:
 
 def _macos_encryption_status(destination: Path) -> dict[str, Any]:
     existing = _existing_parent(destination)
-    if existing.stat().st_dev == Path("/").stat().st_dev:
+    startup_volumes = [Path("/"), Path("/System/Volumes/Data")]
+    if any(
+        volume.exists() and existing.stat().st_dev == volume.stat().st_dev
+        for volume in startup_volumes
+    ):
         output = _command_output([_trusted_tool("Darwin", "fdesetup"), "status"])
         enabled = _macos_filevault_enabled(output)
         technology = "FileVault"
@@ -261,6 +265,10 @@ def require_workstation_approval(
     marker: Path = DEFAULT_MARKER,
 ) -> dict[str, Any]:
     """Validate local approval and re-check encryption before every sync."""
+    from .developer_workstation import EXCEPTION_MARKER, require_development_mac
+
+    if marker == DEFAULT_MARKER and EXCEPTION_MARKER.exists():
+        return require_development_mac(destination)
     marker = marker.expanduser().absolute()
     try:
         payload, marker_stat = read_private_json(marker)

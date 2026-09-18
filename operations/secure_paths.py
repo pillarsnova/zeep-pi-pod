@@ -231,9 +231,11 @@ def cleanup_sensitive_artifacts(
 
 
 def sqlite_database_is_valid(path: Path, expected_tables: set[str]) -> bool:
-    """Run a read-only SQLite integrity and schema check."""
+    """Validate a standalone frozen backup without creating WAL/SHM files."""
     try:
-        connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        connection = sqlite3.connect(
+            f"{path.resolve().as_uri()}?mode=ro&immutable=1", uri=True
+        )
         try:
             check = connection.execute("PRAGMA quick_check").fetchone()
             rows = connection.execute(

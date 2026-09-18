@@ -481,6 +481,8 @@ def sync_pod_data(
             max(1, retention_count),
             final_path,
         )
+        if not final_path.is_dir():
+            raise PodDataSyncError("New snapshot failed verification during retention")
         cleaned.extend(
             f"{pod_directory.name}/{name}"
             for name in cleanup_sensitive_artifacts(

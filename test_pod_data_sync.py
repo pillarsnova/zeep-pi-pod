@@ -41,6 +41,22 @@ def _digest(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+class FrozenSQLiteValidationTests(unittest.TestCase):
+    def test_wal_mode_backup_validation_never_creates_sidecar_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "snapshot.db"
+            connection = sqlite3.connect(path)
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("CREATE TABLE sessions (id INTEGER)")
+            connection.commit()
+            connection.close()
+            before = _digest(path.read_bytes())
+            self.assertTrue(secure_paths.sqlite_database_is_valid(path, {"sessions"}))
+            self.assertTrue(secure_paths.sqlite_database_is_valid(path, {"sessions"}))
+            self.assertEqual(before, _digest(path.read_bytes()))
+            self.assertEqual([item.name for item in Path(directory).iterdir()], ["snapshot.db"])
+
+
 def _archive(
     path: Path,
     *,

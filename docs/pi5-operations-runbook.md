@@ -12,7 +12,8 @@
 4. ต้องผ่าน risk-based focused tests ตามส่วนที่แก้ และ CI/Full gate ตาม trigger ใน
    `TESTING.md`; รัน Full local เมื่อข้ามระบบ ผลไม่แน่นอน migration หรือก่อน Freeze
 5. ใช้ `git pull --ff-only origin develop` เพื่อไม่สร้าง merge โดยไม่ตั้งใจ
-6. ทุก workstation ต้องเป็นเครื่องทีมที่อนุมัติแล้วและเปิด disk encryption ก่อน Sync
+6. เครื่องทีมทั่วไปต้องอนุมัติและเปิด disk encryption ก่อน Sync; ข้อยกเว้นสำหรับ
+   Mac เครื่องพัฒนาของเจ้าของระบบวันที่ 19 ก.ย. 2026 อยู่ในหัวข้อด้านล่าง
 
 ## การเข้าถึง
 
@@ -25,6 +26,27 @@ HTTP ใช้ได้เฉพาะ LAN ที่ควบคุมหรื�
 `AUTH_SECURE_COOKIE=true`
 
 ## ตรวจและทดสอบบนเครื่องทีม
+
+### ข้อยกเว้น Mac เครื่องพัฒนาที่เจ้าของอนุมัติ
+
+วันที่ 19 ก.ย. 2026 เจ้าของระบบอนุมัติให้ยกเว้นเงื่อนไขเข้ารหัส **เฉพาะ Mac
+เครื่องพัฒนาปัจจุบัน** หลังรับทราบว่า FileVault ปิดอยู่ ไม่ใช่ข้อยกเว้นสำหรับทีมทุกเครื่อง
+
+```bash
+python3 approve_workstation.py --developer-mac-exception \
+  --approved-by "PillarsMan — explicit owner approval 2026-09-19" \
+  --destination /Users/gm/Sites/zeep-lab/private-data/pod-sync
+```
+
+ทะเบียนอยู่ใน `private-data/developer-mac-approval.json` (ไม่เข้า Git), สิทธิ์ 0600,
+ผูกกับ machine ID, hostname, OS user และ destination tree; อายุไม่เกิน 365 วัน
+เป็น **owner-approved exception ไม่ใช่ OS-admin approval** และบันทึกว่า encryption
+ปิดตามจริง การเปลี่ยนเครื่อง/ผู้ใช้/ปลายทางไม่ผ่าน การคัดลอก repo ไม่อนุมัติเครื่องใหม่
+บัญชี macOS ปัจจุบันเป็น trust boundary ของข้อยกเว้นนี้ ไม่ใช่กลไก MDM ส่วนกลาง
+ลบทะเบียนข้อยกเว้นเพื่อยกเลิก แล้วกลับสู่ขั้นตอน OS-admin + encryption ด้านล่าง
+ห้ามนำข้อยกเว้นนี้ไปใช้กับเครื่องพนักงานโดยไม่มีคำอนุมัติใหม่
+
+### ขั้นตอนปกติสำหรับเครื่องทีมอื่น
 
 เริ่มงานบนเครื่องทีมที่ได้รับอนุญาตด้วยคำสั่งเดียว:
 

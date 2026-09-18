@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
+from operations.developer_workstation import approve_development_mac
 from operations.workstation_approval import (
     WorkstationApprovalError,
     approve_workstation,
@@ -23,6 +24,11 @@ def parser() -> argparse.ArgumentParser:
         "--check", action="store_true", help="Verify existing approval."
     )
     command.add_argument(
+        "--developer-mac-exception",
+        action="store_true",
+        help="Explicit owner approval: waive encryption only on this development Mac/destination.",
+    )
+    command.add_argument(
         "--destination",
         type=Path,
         default=Path("private-data/pod-sync"),
@@ -33,11 +39,17 @@ def parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = parser().parse_args()
+    if args.developer_mac_exception and not args.approved_by:
+        parser().error("--developer-mac-exception requires --approved-by")
     try:
         result = (
             require_workstation_approval(args.destination)
             if args.check
-            else approve_workstation(args.approved_by, destination=args.destination)
+            else (
+                approve_development_mac(args.approved_by, args.destination)
+                if args.developer_mac_exception
+                else approve_workstation(args.approved_by, destination=args.destination)
+            )
         )
     except WorkstationApprovalError as exc:
         print(f"[workstation-approval] failed: {exc}")

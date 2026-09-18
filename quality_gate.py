@@ -45,10 +45,12 @@ PROFILE_TESTS: dict[str, tuple[str, ...]] = {
         "test_sensor_contract.py",
         "test_sensor_services.py",
         "test_sensorhub1_reader.py",
+        "test_bcg_reader.py",
         "test_api_state_projection.py",
     ),
     "control": (
         "test_control_protocol.py",
+        "test_control_failsafe.py",
         "test_aircon_reference.py",
         "test_gpio_lifecycle.py",
         "test_audio_api.py",
@@ -69,6 +71,7 @@ PROFILE_TESTS: dict[str, tuple[str, ...]] = {
     ),
     "session": (
         "test_session_lifecycle.py",
+        "test_session_start.py",
         "test_recording_start.py",
         "test_session_restart.py",
         "test_session_finalization.py",
@@ -103,6 +106,15 @@ PROFILE_TESTS: dict[str, tuple[str, ...]] = {
         "test_research_evidence_library.py",
         "test_documentation_alignment.py",
     ),
+    "adaptive": (
+        "test_adaptive_learning.py",
+        "test_sensor_services.py",
+    ),
+    "learning": (
+        "test_user_ai_context.py",
+        "test_user_learning_profile.py",
+        "test_personal_behaviour.py",
+    ),
 }
 
 FULL_TRIGGER_FILES = {
@@ -118,14 +130,25 @@ PROFILE_PATTERNS: dict[str, tuple[str, ...]] = {
         "calibration",
         "firmware/sensorhub1",
         "smart_response",
+        "hardware/bcg.py",
     ),
-    "control": ("control", "aircon", "gpio", "audio", "brainwave", "music"),
+    "control": (
+        "control",
+        "aircon",
+        "gpio",
+        "audio",
+        "brainwave",
+        "music",
+        "hardware/bed_",
+    ),
     "sleep": (
         "sleep_stage",
         "sleep_signal",
         "sleep_system_policy",
         "baseline",
         "personal.py",
+        "live_sleep",
+        "sleep_context",
     ),
     "score": (
         "sleep_session_report",
@@ -139,6 +162,14 @@ PROFILE_PATTERNS: dict[str, tuple[str, ...]] = {
     "history": ("historical", "history", "reclassify", "rescore", "replay"),
     "data": ("database", "backup", "maintenance", "cleanup", "trim_session"),
     "sync": ("pod_data_sync", "snapshot_export"),
+    "adaptive": ("adaptive/", "smart_response"),
+    "learning": (
+        "user_ai",
+        "user_learning",
+        "user_profile",
+        "user_baseline_context",
+        "personal_behaviour",
+    ),
 }
 
 
@@ -156,12 +187,12 @@ def git_lines(*args: str) -> list[str]:
 
 
 def changed_files(base: str) -> list[str]:
-    paths = set(git_lines("diff", "--name-only", "--diff-filter=ACMR", "HEAD"))
+    paths = set(git_lines("diff", "--name-only", "--diff-filter=ACDMR", "HEAD"))
     paths.update(
         git_lines(
             "diff",
             "--name-only",
-            "--diff-filter=ACMR",
+            "--diff-filter=ACDMR",
             f"{base}...HEAD",
         )
     )
@@ -179,6 +210,9 @@ def classify(path: str) -> set[str]:
     if lowered.startswith("firmware/sensorhub1-esp32s3/test/"):
         return {"sensor"}
     if name.startswith("test_") and name.endswith(".py"):
+        if not (ROOT / path).is_file():
+            # A retired test cannot be imported; validate its remaining consumers.
+            return {"full"}
         return {f"test:{path}"}
     if lowered.startswith("docs/") or name in {"README.md", "CLAUDE.md"}:
         return set()
@@ -189,9 +223,12 @@ def classify(path: str) -> set[str]:
         profiles.add("evidence")
     if name == "app.py":
         profiles.add("core")
-    if path.endswith(".py") and not profiles:
+    if path.endswith(".py"):
         candidate = ROOT / f"test_{Path(path).stem}.py"
-        profiles.add(f"test:{candidate.name}" if candidate.exists() else "core")
+        if candidate.is_file():
+            profiles.add(f"test:{candidate.name}")
+        elif not profiles:
+            profiles.add("core")
     return profiles
 
 

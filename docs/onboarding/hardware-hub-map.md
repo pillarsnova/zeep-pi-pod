@@ -253,6 +253,8 @@ HTTP policy ที่ `app.py` เพิ่มเหนือ transport:
   ไม่ส่ง fan.
 - IR command เว้นอย่างน้อย default 1.2 s หลัง ACK ล่าสุด.
 - `off` และ `status` ใช้ได้ระหว่าง safety latch; command อื่นต้องผ่าน safety guard.
+- Transport ตรวจ safety ซ้ำหลัง IR delay ก่อน publish ทุก step; หาก latch ระหว่าง
+  `on` → `temp 18` จะไม่ส่ง step ถัดไป ไม่ใช่ตรวจเฉพาะตอนรับ HTTP request.
 - ค่า fan 1–5 เป็น acknowledged cycle/reference ที่ Pi persist ไว้ใน
   `data/aircon_control_state.json`; ไม่ใช่ค่าที่วัดจากแอร์.
 
@@ -285,15 +287,23 @@ feedback wire จากแอร์ จึงห้ามเพิ่ม automat
   `status`.
 - Command serialize และจับ ACK ด้วย command string + receive time เช่น Hub 1.
 
-HTTP/service policy ที่ยังอยู่ใน `app.py`:
+HTTP facade อยู่ใน `app.py`; deadline owner อยู่ใน `hardware/bed_motion.py` และ
+transport เรียก service ก่อนรอ ACK:
 
-- movement ทุกตัวเป็น bounded one-shot; หลัง default `BED_MOVE_SECONDS=2` Pi
-  สร้าง timer ส่ง `bed_stop` แบบ best effort แม้ browser หลุด.
+- movement ทุกตัวเป็น bounded one-shot; เริ่ม timer ทันทีที่ MQTT publish สำเร็จ
+  และส่ง `bed_stop` หลัง default `BED_MOVE_SECONDS=2` แม้ ACK หายหรือ browser หลุด.
 - generation token ยกเลิก timer เก่าเมื่อ movement ใหม่เริ่ม เพื่อไม่ให้ stop ของ
   command A ไปตัด command B ก่อนเวลา.
-- explicit `bed_stop` ยกเลิก auto-stop timer.
+- movement publish และ timed stop ถือ lock เดียวกันจน publish เสร็จ เพื่อปิด race
+  ระหว่างการตรวจ generation กับการส่ง stop; ไม่ถือ lock ตลอดช่วงรอ ACK.
+- explicit/safety `bed_stop` ยกเลิก timer เฉพาะเมื่อ publish สำเร็จ; ถ้าส่งไม่สำเร็จ
+  deadline เดิมยังอยู่ และถ้าสร้าง timer ไม่ได้ให้พยายาม stop ทันที.
 - movement ต้องผ่าน safety guard; `bed_stop` และ `status` ไม่ต้องผ่าน.
 - Safety safe profile เรียก `publish_stop_best_effort()` โดยไม่รอ ACKและไม่โยน error.
+- Safety Profile ตั้ง latch ก่อนเริ่ม side effects เพื่อปิดช่อง movement แทรกหลัง
+  stop; ปล่อย state lock ก่อนสั่ง hardware เพื่อลดความเสี่ยง lock inversion.
+- lifespan ปิด timer และพยายาม stop ถ้ายังมี movement ค้าง; idle shutdown ไม่ส่ง
+  คำสั่งอุปกรณ์ และ constructor ไม่สร้าง thread/เปิด transport.
 
 ### State/ACK/failure behavior
 
@@ -302,8 +312,9 @@ HTTP/service policy ที่ยังอยู่ใน `app.py`:
   ACK timeout default 3 วินาที: 504; hub reject: 502.
 - Disconnect ระหว่าง command ปลุก condition waiter แต่ request ยังสิ้นสุดตาม
   ACK deadline; pending state ถูก clear ใน `finally`.
-- Auto-stop publish fail จะ log `auto_stop_publish_failed` และไม่ raise กลับ browser
-  เพราะ browser request จบไปแล้ว.
+- Auto-stop publish fail จะ log `auto_stop_publish_failed`, ตั้ง
+  `auto_stop_error=publish_failed` และไม่ raise กลับ browser เพราะ request จบแล้ว;
+  ไม่ถือว่ามี physical confirmation และไม่ retry movement อัตโนมัติ.
 - Event มี `active_command`, `active_servo`, `command_count` ได้ แต่ repo ไม่ได้
   ระบุ feedback จากกลไกเตียงจริง จึงควรตีความ ACK เป็น bridge acknowledgement
   เท่านั้นจน hardware contract ระบุอย่างอื่น.

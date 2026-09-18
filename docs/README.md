@@ -4,7 +4,7 @@
 
 เจ้าของ: Pi 5 application team
 
-อัปเดตล่าสุด: 17 กันยายน 2026
+อัปเดตล่าสุด: 19 กันยายน 2026
 
 เริ่มจาก [ZEEP v1 Team Onboarding](onboarding/README.md) ซึ่งเป็นหน้าหลักสำหรับ
 สมาชิกทีมทุกบทบาท เอกสารนี้เป็นทะเบียนเอกสารที่ยังใช้งาน ไม่ใช่การประกาศว่า
@@ -55,6 +55,7 @@
 
 ## หลักฐาน Regression ที่ยังใช้งาน
 
+- [Runtime Multi-agent Audit · 19 September 2026](reviews/2026-09-19-runtime-audit.md)
 - [Wake Lock-in Regression Register](zeep-wake-lock-regression-register.md)
 - [Case Study CS-01](zeep-case-study-cs-01-two-overnight-sessions.md)
 - [Brainwave Sound Lab](brainwave-sound-lab-v1.md)

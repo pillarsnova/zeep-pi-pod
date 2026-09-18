@@ -51,6 +51,7 @@ app, ต่อ lifecycle, ประกอบ dependency และเรียก
 | Live Session projection | `sessions/live_projection.py` | Contract และ pure builders ของสถานะ Session 20 fields; Login, Restart และ Finalize ใช้ shape เดียวกัน |
 | Live API projection | `api/state_projection.py` | ประกอบ freshness/stale/fallback ของ Hub, BCG และ Control จาก detached snapshot โดยไม่แก้ live reader state |
 | Control transports | `hardware/controlhub1.py`, `controlhub2.py` | MQTT command/ACK ของแอร์และเตียง แยกจาก HTTP routes |
+| Bounded bed motion | `hardware/bed_motion.py` | เริ่ม deadline ที่ publish สำเร็จ ไม่รอ ACK; serialize movement/stop ด้วย generation และปิดงานใน lifespan |
 | Control intent persistence | `hardware/aircon_reference.py` | Repository เก็บค่าอ้างอิงพัดลม 1–5 แบบ atomic; constructor ไม่เปิดไฟล์และ initialize ใน lifespan |
 | Device control HTTP | `api/control_routes.py`, `api/legacy_control_routes.py` | Router คง URL, RBAC และ payload ของ Aircon, Bed, GPIO, Door และ Aroma/Steam เดิม |
 | GPIO pulse controls | `hardware/pulse_control.py` | Service เป็นเจ้าของ lock/cooldown ของประตูและ Aroma/Steam แยกจาก HTTP |
@@ -68,7 +69,7 @@ app, ต่อ lifecycle, ประกอบ dependency และเรียก
 | Identity erasure | `identity/account_erasure.py`, `account_erasure_api.py` | ลบ local active store ของ canonical account/aliases, Session, BCG, Baseline, checkpoint และ capability ที่ค้าง |
 | Final report | `sleep_session_report.py` | Mode-aware Sleep Score/Recovery Score และรายงานหลังจบ Session |
 | Account ingest outbox | `sessions/ingest_payload.py`, `ingest_outbox.py` | สร้าง payload แบบ allowlist, เขียนคิว atomic และ retry โดยไม่ทำให้ Session finalization ล้ม |
-| Atomic Session finalization | `sessions/finalization_commit.py` | commit ผลที่สร้างแล้วลง DB, กู้ live Session เมื่อ persistence ล้ม และลบ checkpoint หลัง durable flush เท่านั้น |
+| Atomic Session finalization | `sessions/finalization_commit.py` | commit ผลลง DB, กู้ live Session เมื่อ persistence ล้ม และแยก committed-but-cleanup-failed ออกจาก precommit failure |
 | Finalization orchestration | `sessions/finalization.py`, `finalization_contracts.py` | แยก waiting/recorded close, flush ก่อน projection/หลัง BCG, commit แล้วจึง logout/upload/learn ผ่าน explicit ports; caller คง lifecycle lock |
 | Final report assembly | `sessions/finalization_report.py` | ประกอบ record, terminal marker, score และ report ด้วยสูตรเดิม และใช้ prior baseline ก่อนเรียนรู้ Session ปัจจุบัน |
 | Finalization calculations | `sessions/finalization_summary.py` | Pure builders ของ onset/WASO/stage ratios และ final-summary payload โดยคงสูตรและ field เดิม |
@@ -208,8 +209,9 @@ Onboarding ใช้เอกสารนี้เป็น Roadmap ทางเ
 | R7c | เสร็จแล้ว | Audio ใช้ pure Library + typed runtime Contract + system/process Adapter + lifecycle Facade; import ไม่ค้นหา player/ALSA หรือสร้าง music directory และ shutdown drain watcher แบบ bounded |
 | R8a | เสร็จแล้ว | Session restart ใช้ service/ports/pure timeline builder; entry points เดิมเหลือ facade 3 บรรทัด และไม่เปลี่ยนสูตร/ผลย้อนหลัง |
 | R8b | เสร็จแล้ว | Finalization orchestrator และ report assembly แยกจาก app; facade 3 บรรทัดคง lifecycle lock และลำดับ durable commit/cleanup เดิม |
+| R8c | เสร็จแล้ว | Bed motion deadline แยกเป็น service; แก้ precommit recovery, postcommit cleanup และ safety recheck ก่อนทุก AC publish พร้อม regression จำลอง |
 
-`app.py` คงอยู่ที่ไม่เกิน 6,206 บรรทัด และเป็น composition root ต่อไป ส่วน API,
+`app.py` คงอยู่ที่ไม่เกิน 6,147 บรรทัด และเป็น composition root ต่อไป ส่วน API,
 Sensor contract/calibration/normalization/environment/sound และ value helpers อยู่ใน
 package ตามโดเมนแล้ว ไฟล์ชื่อเดิมที่ root เหลือเป็น facade บางเพื่อรักษา script/test
 เดิม การย้ายนี้ไม่เปลี่ยน Sleep/Score formula, Sensor cadence, ชื่อ public JSON key
@@ -257,8 +259,8 @@ Audio boundary ใช้รูปแบบเดียวกันโดยไ�
 3. Sleep estimator มี compatibility facade และย้ายสูตรเดิมออกแล้ว; ขั้นถัดไปคือแบ่ง
    typed input/context ออกจาก orchestration พร้อม golden replay โดยห้ามเปลี่ยน threshold
 4. รวม report pipeline ที่ซ้ำระหว่าง Live, Replay, Rescore และ Trim ให้ใช้ contract เดียว
-5. Control routes แยกแล้ว; ย้าย Aircon/Bed policy ไป service แล้วแบ่ง auth, session และ
-   admin/monitor ต่อ
+5. Control routes และ Bed motion deadline แยกแล้ว; ย้าย Aircon sequence policy ไป
+   service แล้วแบ่ง auth, session และ admin/monitor ต่อ
 6. ลด `app.py` ให้เหลือ configuration, dependency wiring, lifespan และ router wiring
 
 Acoustic Intelligence ที่เสนอใน
@@ -299,12 +301,34 @@ Transport, ownership และ failure behavior ของอุปกรณ์�
 - Waiting Login ที่ไม่ผ่าน start gate ปิดเฉพาะ occupancy/account/checkpoint ไม่สร้าง
   Recorded Session, report หรือ Personal Baseline ปลอม
 - หลัง commit จึง release lease, logout account, enqueue ingest, fulfil share,
-  เรียนรู้ Baseline และนับการใช้งานจาก SQLite; remote cleanup ยังคง best-effort เดิม
+  เรียนรู้ Baseline และนับการใช้งานจาก SQLite; แต่ละ optional side effect เป็น
+  best-effort แยกกัน และคืน local projection เป็น idle แม้การบันทึก Profile ล้ม
+- ถ้า read/project/build report ล้มก่อน commit ให้คืน owner/record/cadence เดิม
+  และคืน BCG เมื่อเคยพยายามปิด; ห้ามทับ owner รายใหม่หรือกู้ BCG ซ้ำ
+- หลัง durable commit หากลบ checkpoint ไม่สำเร็จ ให้ log cleanup failure และปิด
+  local Session ต่อ ห้ามเปิดผลที่จบแล้วกลับมา; restart ยึด ended row ใน DB
 - `finalization_report.py` ใช้ Sleep Score/Recovery Score builder เดิมและ prior
   personal context เดียวกันสำหรับ report/trend/final_summary ไม่ใช่สูตรใหม่
-- เทียบโค้ดก่อน/หลังแบบ exact ใน 16 กรณีจำลอง ทั้ง Nap/Overnight, waiting, idle,
+- ตอนแยก R8b เทียบโค้ดก่อน/หลังแบบ exact ใน 16 กรณีจำลอง ทั้ง Nap/Overnight, waiting, idle,
   projection/BCG/commit failure และ remote failure: record, คะแนน, report, profile,
   exception และลำดับ side effects ตรงกัน ไม่แก้ historical/raw data
+- R8c เป็น bug fix แยกจาก extraction: เพิ่ม failure-injection สำหรับ read, projection,
+  report builder, checkpoint, profile และ audit log โดยยังใช้สูตรผลลัพธ์เดิม
 - Regression: `test_session_finalization.py`, `test_session_finalization_commit.py`,
   `test_finalization_summary.py`, `test_session_ingest.py`, `test_restore_summary.py`
   และ `test_rbac_api.py`; ตรวจ behavior แทนการผูก test กับข้อความใน `app.py`
+
+### 6.6 Control และคำแนะนำที่ตรวจซ้ำ
+
+- Bed motion publish และ timed stop ใช้ lock เดียวกัน; ACK หายไม่ทำให้ deadline หาย
+  และ timer เก่าไม่สามารถข้ามไปหยุดคำสั่งใหม่หลังตรวจ generation แล้ว
+- Stop เป็น best-effort MQTT publication ไม่ใช่การยืนยันว่าเตียงหยุดทางกายภาพ;
+  publish ล้มต้องมี error state/audit และไม่ retry movement อัตโนมัติ
+- แอร์ตรวจ safety หลัง IR delay ก่อน publish ทุก step; `off`/`status` ยังใช้ได้
+- Safety Profile ตั้ง latch ก่อน side effects โดยปล่อย state lock ก่อน hardware
+  I/O เพื่อกัน movement แทรกหลัง stop โดยไม่เพิ่ม lock inversion
+- Adaptive recommendations เรียง critical → blocked → attention → watch → personal
+  ก่อน client จำกัด 6 การ์ด; ยังเป็น advisory และไม่มีสิทธิ์สั่งอุปกรณ์
+- RR ที่ fallback มาจาก personal sleep history ระบุ provenance ตามจริง ไม่อ้างว่า
+  เป็น same-mode history; ไม่เปลี่ยนค่า HR/RR หรือสูตรคะแนน
+- รายงานการตรวจและข้อจำกัด: [Runtime audit · 19 September 2026](reviews/2026-09-19-runtime-audit.md)

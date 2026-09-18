@@ -129,6 +129,11 @@ sleep onset และ awake reference เดิมได้ เมื่อห�
    ลง durable outbox; network failure ไม่ทำให้ local finalization ล้มและ sweeper
    retry ภายหลัง
 
+ถ้าการอ่านข้อมูลหรือสร้างรายงานล้มก่อน durable commit ระบบคืน Session เดิมให้
+ลองจบใหม่ได้ โดยรักษาเจ้าของและข้อมูลเดิม หลัง commit แล้วการลบ checkpoint หรือ
+อัปเดต Profile ล้มจะเป็น cleanup warning ไม่เปิด Session ที่จบแล้วกลับมา และไม่
+ขวางขั้น cleanup อื่นหรือการคืนหน้าจอเป็น idle
+
 ## Feature-to-module map
 
 ตารางนี้เป็นจุดเริ่ม trace code ไม่ใช่ ownership registry ฉบับเต็ม Hardware transport

@@ -27,8 +27,13 @@ python quality_gate.py full
 ```
 
 Domain ที่รองรับ: `core`, `ui`, `sensor`, `control`, `sleep`, `score`, `session`,
-`auth`, `history`, `data`, `sync` และ `evidence` การแก้ไฟล์ Test/Infrastructure
-จะยกระดับตามความเสี่ยงโดยอัตโนมัติ
+`auth`, `history`, `data`, `sync`, `evidence`, `adaptive` และ `learning`
+การแก้ไฟล์ Test/Infrastructure จะยกระดับตามความเสี่ยงโดยอัตโนมัติ
+
+Focused gate เลือกตาม domain และเพิ่ม test ที่ตรงชื่อ module เสมอ แม้มี domain
+อื่นครอบอยู่แล้ว เพื่อไม่ให้การย้ายไฟล์ไป `sessions/` กลบ Sleep/AI privacy tests
+การตรวจ Git รวมไฟล์ที่ลบด้วย; เมื่อลบ test จะใช้ Full gate เพื่อตรวจส่วนที่เหลือ
+แทนการพยายาม import test ที่ไม่มีแล้ว และจะไม่ compile source ที่ลบไป
 
 ## Focused suites
 

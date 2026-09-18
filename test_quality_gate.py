@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import quality_gate
@@ -77,6 +80,54 @@ class QualityGateSelectionTests(unittest.TestCase):
             for filename in tests:
                 with self.subTest(profile=profile, filename=filename):
                     self.assertTrue((quality_gate.ROOT / filename).is_file())
+
+    def test_focused_style_targets_match_full_package_boundary(self):
+        self.assertEqual(
+            quality_gate.package_style_targets(
+                [
+                    "app.py",
+                    "test_session_start.py",
+                    "sessions/live_projection.py",
+                    "hardware/bed_motion.py",
+                    "docs/architecture.md",
+                ]
+            ),
+            ["sessions/live_projection.py", "hardware/bed_motion.py"],
+        )
+
+    def test_changed_roots_compile_without_expanding_legacy_lint_scope(self):
+        paths = [
+            "app.py",
+            "sessions/live_projection.py",
+            "test_session_live_projection.py",
+        ]
+        args = SimpleNamespace(
+            scopes=["changed"],
+            base="origin/develop",
+            dry_run=True,
+            list_profiles=False,
+        )
+        with (
+            patch.object(quality_gate, "parse_args", return_value=args),
+            patch.object(quality_gate, "changed_files", return_value=paths),
+            patch.object(quality_gate, "run") as run,
+            redirect_stdout(StringIO()),
+        ):
+            self.assertEqual(quality_gate.main(), 0)
+
+        commands = [call.args[0] for call in run.call_args_list]
+        style = [command for command in commands if command[1:3] == ["-m", "ruff"]]
+        self.assertEqual(
+            [command[3:] for command in style],
+            [
+                ["check", "sessions/live_projection.py"],
+                ["format", "--check", "sessions/live_projection.py"],
+            ],
+        )
+        compile_command = next(
+            command for command in commands if command[1:3] == ["-m", "py_compile"]
+        )
+        self.assertEqual(compile_command[3:], paths)
 
 
 if __name__ == "__main__":

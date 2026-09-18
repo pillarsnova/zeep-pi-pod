@@ -35,6 +35,12 @@ Focused gate เลือกตาม domain และเพิ่ม test ท�
 การตรวจ Git รวมไฟล์ที่ลบด้วย; เมื่อลบ test จะใช้ Full gate เพื่อตรวจส่วนที่เหลือ
 แทนการพยายาม import test ที่ไม่มีแล้ว และจะไม่ compile source ที่ลบไป
 
+Focused, Full และ CI ใช้ขอบเขต Ruff เดียวกันคือ extracted packages ใน
+`quality_gate.DOMAIN_PACKAGES` โดย Focused ตรวจ style/format ของไฟล์ที่เปลี่ยน
+ภายใน packages เหล่านั้น ส่วน Python ที่เปลี่ยนทุกไฟล์ รวม `app.py`, root facade
+และ tests ยังต้องผ่าน compilation และ regression ที่เกี่ยวข้อง ไม่ขยายการแก้
+legacy style ทั้งไฟล์เป็นส่วนหนึ่งของการ Refactor ย่อย
+
 ## Focused suites
 
 ใช้ `quality_gate.py` เป็นทางหลัก รายการด้านล่างเป็นคำสั่งอ้างอิงเมื่อต้องการ

@@ -245,6 +245,15 @@ def test_plan(profiles: set[str]) -> list[str]:
     return list(dict.fromkeys(tests))
 
 
+def package_style_targets(paths: list[str]) -> list[str]:
+    """Use the same extracted-package Ruff boundary as Full gate and CI."""
+    return [
+        path
+        for path in paths
+        if path.endswith(".py") and Path(path).parts[0] in DOMAIN_PACKAGES
+    ]
+
+
 def run(command: list[str], *, dry_run: bool) -> None:
     print("+", " ".join(command), flush=True)
     if not dry_run:
@@ -342,11 +351,17 @@ def main() -> int:
     changed_python = [
         path for path in files if path.endswith(".py") and (ROOT / path).is_file()
     ]
-    if changed_python:
+    style_targets = package_style_targets(changed_python)
+    if style_targets:
         run(
-            [sys.executable, "-m", "ruff", "check", *changed_python],
+            [sys.executable, "-m", "ruff", "check", *style_targets],
             dry_run=args.dry_run,
         )
+        run(
+            [sys.executable, "-m", "ruff", "format", "--check", *style_targets],
+            dry_run=args.dry_run,
+        )
+    if changed_python:
         run([sys.executable, "-m", "py_compile", *changed_python], dry_run=args.dry_run)
     run(["git", "diff", "--check"], dry_run=args.dry_run)
     print(f"Completed in {time.monotonic() - started:.1f}s")

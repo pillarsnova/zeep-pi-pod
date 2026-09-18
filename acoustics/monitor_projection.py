@@ -147,6 +147,26 @@ def _observed_at(context: Mapping[str, Any], generated_at: datetime | None) -> s
     return moment.astimezone(UTC).isoformat(timespec="milliseconds")
 
 
+def _confidence_band(confidence: float | None, active: bool) -> str:
+    if confidence is not None and confidence >= 0.8:
+        return "high"
+    if confidence is not None and confidence >= 0.6:
+        return "medium"
+    return "low" if active else "unavailable"
+
+
+def _hypothesis(label: str, display: str, confidence: float | None) -> list[dict[str, Any]]:
+    return [{"key": label, "label": display, "confidence": confidence}]
+
+
+def _classification_context(acoustic: Mapping[str, Any]) -> tuple[bool, str, float | None, str, str]:
+    active = acoustic.get("state") == "provisional" and acoustic.get("label") in LABELS
+    label = str(acoustic.get("label") or "unknown")
+    confidence = _finite_number(acoustic.get("confidence"))
+    display, group = LABELS.get(label, ("ยังไม่ทราบ", "unknown"))
+    return active, label, confidence, display, group
+
+
 def build_acoustic_monitor_snapshot(
     snapshot: Mapping[str, Any],
     *,
@@ -158,27 +178,17 @@ def build_acoustic_monitor_snapshot(
     level_status = context["status"]
     acoustic = context.get("acoustic") or {}
     features = dict(acoustic.get("features") or {})
-    classification_active = (
-        acoustic.get("state") == "provisional"
-        and acoustic.get("label") in LABELS
+    classification_active, label, confidence, display_name, group = (
+        _classification_context(acoustic)
     )
-    label = str(acoustic.get("label") or "unknown")
-    confidence = _finite_number(acoustic.get("confidence"))
-    confidence_band = (
-        "high" if confidence is not None and confidence >= 0.8
-        else "medium" if confidence is not None and confidence >= 0.6
-        else "low" if classification_active
-        else "unavailable"
-    )
-    group = LABELS.get(label, ("ยังไม่ทราบ", "unknown"))[1]
-    display_name = LABELS.get(label, ("ยังไม่ทราบ", "unknown"))[0]
+    confidence_band = _confidence_band(confidence, classification_active)
     likely_sources = (
-        [{"key": label, "label": display_name, "confidence": confidence}]
+        _hypothesis(label, display_name, confidence)
         if classification_active and group in {"equipment_like", "impact"}
         else []
     )
     human = (
-        [{"key": label, "label": display_name, "confidence": confidence}]
+        _hypothesis(label, display_name, confidence)
         if classification_active and group == "human_sound_like"
         else []
     )
@@ -213,7 +223,7 @@ def build_acoustic_monitor_snapshot(
         "aggregation": _aggregation(context),
         "results": {
             "shapes": (
-                [{"key": label, "label": display_name, "confidence": confidence}]
+                _hypothesis(label, display_name, confidence)
                 if classification_active
                 else []
             ),

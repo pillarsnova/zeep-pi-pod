@@ -32,7 +32,12 @@ def current_markdown_files() -> list[Path]:
 
     files = list(CURRENT_DOC_FILES)
     for root in CURRENT_DOC_DIRS:
-        files.extend(path for path in root.rglob("*.md") if "archive" not in path.parts)
+        files.extend(
+            path
+            for path in root.rglob("*.md")
+            if "archive" not in path.parts
+            and not any(part.startswith(".") for part in path.relative_to(root).parts)
+        )
     return sorted(set(files))
 
 

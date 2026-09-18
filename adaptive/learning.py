@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from adaptive.features import finite_number, prepare_live_features
+from adaptive.control_policy import advisory_control_policy, enforce_advisory
 
 ADAPTIVE_LEARNING_VERSION = "zeep.adaptive-learning-live.v1"
 DEFAULT_WINDOW_SECONDS = 300
@@ -339,13 +340,7 @@ def build_adaptive_learning_snapshot(
             if session.get("recording") and quality["environment_live"]
             else "กำลังรอข้อมูลสำหรับ Adaptive Learning"
         ),
-        "control_policy": {
-            "automatic_actuation": False,
-            "recommendation_only": True,
-            "sleep_state_as_actuator_input": False,
-            "command_endpoint": None,
-            "safety_supervisor_authoritative": True,
-        },
+        "control_policy": advisory_control_policy(),
         "session": _session_summary(session, smart, group),
         "cadence": {
             "sensor_frame_s": frame.get("refresh_s") or 10,
@@ -363,14 +358,14 @@ def build_adaptive_learning_snapshot(
         "live_features": metrics,
         "sleep_estimator": _sleep_estimator(sleep),
         "device_intent": _device_intent(snapshot),
-        "candidate_recommendations": [
+        "candidate_recommendations": enforce_advisory([
             *_personal_reference_recommendations(
                 metrics,
                 behaviour_data,
                 observation_id,
             ),
             *_recommendations(snapshot, observation_id),
-        ],
+        ]),
         "blockers": _blockers(snapshot, quality),
         "versions": _versions(snapshot),
         "guardrails": [

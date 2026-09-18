@@ -30,6 +30,7 @@ def _api_index_data() -> dict[str, Any]:
             "sleep_policy": "/api/v1/admin/contracts/sleep",
             "maintenance": "/api/v1/admin/maintenance",
             "adaptive_learning_live": "/api/v1/admin/adaptive/live",
+            "fleet_health": "/api/v1/admin/fleet/health",
             "acoustic_contract": "/api/v1/admin/contracts/acoustics",
             "acoustic_live": "/api/v1/admin/acoustics/live",
             "acoustic_timeline": "/api/v1/admin/acoustics/timeline",

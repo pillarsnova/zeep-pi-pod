@@ -40,13 +40,12 @@ from fastapi import (
     Request,
     Response,
     Security,
-    WebSocket,
-    WebSocketDisconnect,
 )
-from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.security import APIKeyCookie
 from fastapi.staticfiles import StaticFiles
+from api.fleet import create_fleet_router
 from api.history import create_history_router
+from api.live_websocket import create_live_websocket_router
 from api.models import (
     ActiveSessionProfileCommand,
     AdminLoginCommand,
@@ -77,6 +76,7 @@ from control_protocol import (
 )
 from database import DatabaseManager
 from api.v1 import create_api_v1_router
+from api.shell_routes import create_shell_router
 from acoustics import build_acoustic_monitor_snapshot, live_timeline_reader
 from adaptive.learning import build_adaptive_learning_snapshot
 from api.state_projection import (
@@ -112,6 +112,7 @@ from hardware.bcg import (
 from hardware.controlhub1 import ControlHub1MQTT, configure_controlhub1
 from hardware.controlhub2 import ControlHub2BedMQTT, configure_controlhub2
 from hardware.gpio import GPIOManager
+from hardware.fleet_health import local_pod_health
 from hardware.sensorhub2 import run_sensorhub2_reader
 from safety.faults import SafetyThresholds, evaluate_safety_faults
 from hardware.sensorhub1 import (
@@ -5700,6 +5701,12 @@ def _active_session_token() -> Optional[str]:
         return str(session_id or f"active:{id(active)}")
 
 
+def _active_session_for_live() -> Optional[Dict[str, Any]]:
+    """Return the current immutable-by-convention live Session reference."""
+    with session_lock:
+        return _active_session
+
+
 app.include_router(
     create_qr_login_router(
         qr_logins,
@@ -5709,6 +5716,32 @@ app.include_router(
         pod_occupied=_pod_is_occupied,
         log_event=log_event,
         lifecycle_lock=session_lock,
+    )
+)
+app.include_router(
+    create_live_websocket_router(
+        cookie_name=COOKIE_NAME,
+        resolve_principal=auth_sessions.resolve,
+        active_session=_active_session_for_live,
+        principal_owns_active=_principal_owns_active,
+        snapshot_for=snapshot_for,
+        await_end_notice=report_shares.await_notice,
+    )
+)
+app.include_router(
+    create_fleet_router(
+        require_admin=require_admin,
+        fleet_snapshot=lambda: local_pod_health(
+            snapshot(),
+            pod_id=POD_ID,
+            stale_seconds={
+                "sensorhub1": ESP32_STALE_SECONDS,
+                "sensorhub2": SENSORHUB2_STALE_SECONDS,
+                "bcg": BCG_STALE_SECONDS,
+                "controlhub1": CONTROLHUB1_STALE_SECONDS,
+                "controlhub2": CONTROLHUB2_STALE_SECONDS,
+            },
+        ),
     )
 )
 app.include_router(create_profile_completion_router(
@@ -6155,45 +6188,6 @@ def _require_safety_allows(action: str):
         raise HTTPException(423, f"Safety EMERGENCY latch: ไม่อนุญาต {action}")
 
 
-@app.get("/")
-async def root():
-    """Use a stable public entry point instead of mixing role selectors."""
-    return RedirectResponse(url="/login", status_code=307)
-
-
-@app.get("/login")
-@app.get("/login/qr")
-@app.get("/admin/login")
-async def login_view():
-    """Serve the shared shell; the immutable URL selects the login audience."""
-    return FileResponse(
-        STATIC_DIR / "index.html",
-        headers={"Cache-Control": "no-store, max-age=0", "Pragma": "no-cache"},
-    )
-
-
-# The onboard UI is one lightweight application with role-focused views.
-# Keeping one asset avoids duplicating the WebSocket and GPIO command logic,
-# while stable URLs let operators and developers bookmark the page they need.
-@app.get("/dashboard")
-@app.get("/control")
-@app.get("/control-debug")
-@app.get("/monitor")
-@app.get("/sessions")
-@app.get("/admin")
-async def ui_view():
-    return FileResponse(
-        STATIC_DIR / "index.html",
-        headers={"Cache-Control": "no-store, max-age=0", "Pragma": "no-cache"},
-    )
-
-
-@app.get("/api/state")
-async def api_state(principal: Principal = Depends(require_pod_operator)):
-    return snapshot_for(principal)
-
-
-@app.get("/api/public/status")
 def public_status():
     """Non-sensitive boot information used before a browser is authenticated."""
     occupied = _pod_is_occupied()
@@ -6213,10 +6207,15 @@ def public_status():
     }
 
 
-@app.get("/api/smart-response")
-async def api_smart_response(_: Principal = Depends(require_pod_operator)):
-    """Read-only Smart Response decisions; Shadow Mode never actuates devices."""
-    return snapshot()["smart_response"]
+app.include_router(
+    create_shell_router(
+        static_dir=STATIC_DIR,
+        require_pod_operator=require_pod_operator,
+        snapshot_for=snapshot_for,
+        public_status=public_status,
+        smart_response=lambda: snapshot()["smart_response"],
+    )
+)
 
 
 @app.post("/api/aircon/command")
@@ -7977,37 +7976,6 @@ def system_shutdown():
         raise HTTPException(503, "Set ENABLE_SYSTEM_POWEROFF=1 on the Raspberry Pi")
     threading.Thread(target=_graceful_poweroff, name="system-poweroff", daemon=False).start()
     return {"ok": True, "status": "flushing_before_poweroff"}
-
-
-@app.websocket("/ws")
-async def websocket_endpoint(ws: WebSocket):
-    cookie_token = ws.cookies.get(COOKIE_NAME)
-    principal = auth_sessions.resolve(cookie_token)
-    if principal is None:
-        await ws.close(code=4401, reason="login required")
-        return
-    if not principal.is_admin:
-        with session_lock:
-            active = _active_session
-        if active is None or not _principal_owns_active(active, principal):
-            await ws.close(code=4403, reason="not pod session owner")
-            return
-    await ws.accept()
-    try:
-        while True:
-            if not principal.is_admin:
-                with session_lock:
-                    active = _active_session
-                if not _principal_owns_active(active, principal):
-                    notice = await report_shares.await_notice(principal.subject)
-                    if notice is not None:
-                        await ws.send_json({"type": "session_ended", **notice})
-                    await ws.close(code=4403, reason="pod session ended")
-                    return
-            await ws.send_json(snapshot_for(principal))
-            await asyncio.sleep(0.5)
-    except (WebSocketDisconnect, RuntimeError):
-        pass
 
 
 if __name__ == "__main__":

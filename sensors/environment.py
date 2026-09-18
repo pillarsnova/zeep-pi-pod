@@ -22,6 +22,53 @@ ACOUSTIC_LABELS = frozenset(
 )
 
 
+def _sound_feature_values(hub1: Mapping[str, Any]) -> dict[str, float]:
+    fields = (
+        "sound_low_band_ratio", "sound_mid_band_ratio", "sound_high_band_ratio",
+        "sound_spectral_centroid_hz", "sound_spectral_flatness",
+        "sound_spectral_flux", "sound_crest_factor",
+        "sound_syllabic_modulation", "sound_breathing_periodicity",
+        "sound_breathing_period_s", "sound_feature_coverage",
+        "sound_feature_window_ms", "sound_feature_sequence",
+        "sound_feature_age_ms", "sound_clip_ratio", "sound_alignment_errors",
+        "sound_transient_count", "sound_spectral_frames", "sound_envelope_frames",
+    )
+    return {
+        key.removeprefix("sound_"): value
+        for key in fields
+        if (value := first_numeric(hub1, (key,))) is not None
+        and math.isfinite(value)
+    }
+
+
+def _sound_window_values(hub1: Mapping[str, Any]) -> dict[str, Any]:
+    rms = first_numeric(hub1, ("sound_rms",))
+    peak = first_numeric(hub1, ("sound_peak",))
+    values = {
+        "rms": rms,
+        "rms_a": first_numeric(hub1, ("sound_rms_a",)),
+        "peak": peak,
+        "peak_a": first_numeric(hub1, ("sound_peak_a",)),
+        "crest_factor": (
+            peak / rms
+            if rms is not None and rms > 0 and peak is not None
+            else None
+        ),
+        "dbfs_a": first_numeric(hub1, ("sound_dbfs_a",)),
+        "sample_rate_hz": first_numeric(hub1, ("sound_sample_rate_hz",)),
+        "sample_count": first_numeric(hub1, ("sound_samples",)),
+        "window_ms": first_numeric(hub1, ("sound_window_ms",)),
+        "laeq_dba_reported": first_numeric(hub1, ("sound_laeq_dba",)),
+        "field_calibrated": hub1.get("sound_dba_calibrated") is True,
+        "calibration_offset_db": first_numeric(hub1, ("sound_calibration_offset_db",)),
+    }
+    return {
+        key: round(value, 6) if isinstance(value, float) else value
+        for key, value in values.items()
+        if value is not None and (not isinstance(value, float) or math.isfinite(value))
+    }
+
+
 def _acoustic_projection(
     hub1: Mapping[str, Any],
     *,
@@ -43,65 +90,8 @@ def _acoustic_projection(
         and state == "provisional"
         and label != "unknown"
     )
-    numeric_fields = (
-        "sound_low_band_ratio",
-        "sound_mid_band_ratio",
-        "sound_high_band_ratio",
-        "sound_spectral_centroid_hz",
-        "sound_spectral_flatness",
-        "sound_spectral_flux",
-        "sound_crest_factor",
-        "sound_syllabic_modulation",
-        "sound_breathing_periodicity",
-        "sound_breathing_period_s",
-        "sound_feature_coverage",
-        "sound_feature_window_ms",
-        "sound_feature_sequence",
-        "sound_feature_age_ms",
-        "sound_clip_ratio",
-        "sound_alignment_errors",
-        "sound_transient_count",
-        "sound_spectral_frames",
-        "sound_envelope_frames",
-    )
-    features = {
-        key.removeprefix("sound_"): first_numeric(hub1, (key,))
-        for key in numeric_fields
-    }
-    features = {
-        key: value
-        for key, value in features.items()
-        if value is not None and math.isfinite(value)
-    }
-    rms = first_numeric(hub1, ("sound_rms",))
-    peak = first_numeric(hub1, ("sound_peak",))
-    crest_factor = (
-        peak / rms
-        if rms is not None and rms > 0 and peak is not None
-        else None
-    )
-    window_features = {
-        "rms": rms,
-        "rms_a": first_numeric(hub1, ("sound_rms_a",)),
-        "peak": peak,
-        "peak_a": first_numeric(hub1, ("sound_peak_a",)),
-        "crest_factor": crest_factor,
-        "dbfs_a": first_numeric(hub1, ("sound_dbfs_a",)),
-        "sample_rate_hz": first_numeric(hub1, ("sound_sample_rate_hz",)),
-        "sample_count": first_numeric(hub1, ("sound_samples",)),
-        "window_ms": first_numeric(hub1, ("sound_window_ms",)),
-        "laeq_dba_reported": first_numeric(hub1, ("sound_laeq_dba",)),
-        "field_calibrated": hub1.get("sound_dba_calibrated") is True,
-        "calibration_offset_db": first_numeric(
-            hub1,
-            ("sound_calibration_offset_db",),
-        ),
-    }
-    window_features = {
-        key: round(value, 6) if isinstance(value, float) else value
-        for key, value in window_features.items()
-        if value is not None and math.isfinite(value)
-    }
+    features = _sound_feature_values(hub1)
+    window_features = _sound_window_values(hub1)
     return {
         "label": label if valid else "unknown",
         "state": "provisional" if valid else "insufficient_input",

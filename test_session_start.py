@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from contextlib import ExitStack
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -173,8 +174,10 @@ class SessionStartTests(unittest.TestCase):
             "blood_group": "O+",
         }
         self.auth["profile_refreshed"] = False
-        self.start(health_reference={})
+        self.start(health_reference={}, gender="male", age=30)
         profile = self.profiles[self.owner.account_key]
+        self.assertEqual(profile["gender"], "female")
+        self.assertEqual(profile["age"], 40)
         self.assertEqual(profile["height_cm"], 169)
         self.assertEqual(profile["blood_group"], "O+")
         self.assertEqual(profile["health_reference_refresh_status"], "cached")
@@ -193,6 +196,89 @@ class SessionStartTests(unittest.TestCase):
         self.assertIsNone(profile["height_cm"])
         self.assertIsNone(profile["blood_group"])
         self.assertEqual(profile["health_reference_refresh_status"], "live_login")
+
+    def test_local_fallback_keeps_local_key_and_does_not_need_auth_tokens(self) -> None:
+        self.owner.account_key = "local-person"
+        self.owner.email = None
+        self.owner.subject = "local:test-pod:local-person"
+        result = self.start(username="local-person", auth=None)
+        active = pod_app._active_session
+        self.assertTrue(result["ok"])
+        self.assertIsNone(active["auth"])
+        self.assertEqual(active["record"]["username_key"], "local-person")
+        self.assertEqual(active["record"]["auth_source"], "local")
+        profile = self.profiles["local-person"]
+        self.assertIsNone(profile["email"])
+        self.assertEqual(profile["health_reference_refresh_status"], "local_login")
+
+    def test_acquire_conflict_preserves_response_shape_and_saved_profile(self) -> None:
+        pod_app.occupancy_client.acquire.side_effect = pod_app.OccupancyConflict(
+            "account_already_in_use", "other-pod"
+        )
+        with self.assertRaises(pod_app.HTTPException) as caught:
+            self.start()
+        self.assertEqual(caught.exception.status_code, 409)
+        self.assertEqual(
+            caught.exception.detail,
+            {
+                "code": "account_already_in_use",
+                "message": "บัญชีนี้กำลังใช้งานตู้อื่นอยู่",
+                "pod_id": "other-pod",
+            },
+        )
+        self.assertEqual(
+            [call[0] for call in self.calls.mock_calls],
+            ["save_profiles", "baseline", "acquire"],
+        )
+
+    def test_second_owner_race_releases_new_lease_without_replacing_owner(self) -> None:
+        existing = {"record": {"session_id": "other-session"}}
+
+        def acquire_with_race(**kwargs):
+            pod_app._active_session = existing
+            return self.lease
+
+        pod_app.occupancy_client.acquire.side_effect = acquire_with_race
+        with self.assertRaises(pod_app.HTTPException) as caught:
+            self.start()
+        self.assertEqual(caught.exception.status_code, 409)
+        self.assertIs(pod_app._active_session, existing)
+        pod_app.occupancy_client.release.assert_called_once_with(self.lease)
+        pod_app._save_active_session_checkpoint.assert_not_called()
+        pod_app._replace_session_projection_locked.assert_not_called()
+
+    def test_safety_snapshot_does_not_become_an_additional_login_gate(self) -> None:
+        self.replace(
+            "state",
+            {"safety": {"level": "LATCHED"}, "sensor": {"bcg": {"packets": 42}}},
+        )
+        result = self.start()
+        self.assertTrue(result["ok"])
+        self.assertFalse(result["monitor_only"])
+        self.assertIsNone(result["warning"])
+        self.assertEqual(pod_app._active_session["vital_gate_start_packet_count"], 42)
+        self.assertEqual(pod_app.log_event.call_args.kwargs["safety_level"], "LATCHED")
+
+    def test_distinct_clock_points_and_session_suffix_are_preserved(self) -> None:
+        origin = datetime(2026, 9, 19, tzinfo=UTC)
+        moments = [origin + timedelta(seconds=i) for i in range(4)]
+        clock = self.replace("datetime", Mock())
+        clock.now.side_effect = moments
+        self.stack.enter_context(
+            patch.object(
+                pod_app.uuid, "uuid4", return_value=SimpleNamespace(hex="abcdef")
+            )
+        )
+        self.start()
+        profile = self.profiles[self.owner.account_key]
+        record = pod_app._active_session["record"]
+        self.assertEqual(clock.now.call_count, 4)
+        self.assertEqual(
+            profile["health_reference_updated_at_utc"], moments[0].isoformat()
+        )
+        self.assertEqual(profile["created_at_utc"], moments[1].isoformat())
+        self.assertEqual(record["session_id"], "s-20260919T000002Z-abcdef")
+        self.assertEqual(record["armed_at_utc"], moments[3].isoformat())
 
 
 if __name__ == "__main__":

@@ -145,14 +145,19 @@ from sessions.lifecycle import (
 )
 from sessions.live_projection import (
     LiveSessionProjection,
-    SessionPublicIdentity,
-    active_session_projection,
     inactive_session_projection,
 )
 from sessions.live_sampler import LiveSamplerPorts, LiveSessionSampler
 from sessions.recording_start import RecordingStartPorts, begin_recording
 from sessions.restart import SessionRestarter
 from sessions.restart_contracts import RestartPolicy, RestartPorts
+from sessions.start import SessionStarter
+from sessions.start_contracts import (
+    SessionStartRejected,
+    StartPolicy,
+    StartPorts,
+    StartRequest,
+)
 from sessions.sleep_context import (
     checkpoint_sleep_context,
     restore_session_sleep_context,
@@ -4689,6 +4694,55 @@ app.include_router(
 
 
 # ---------- session login / logout / history ----------
+def _session_starter() -> SessionStarter:
+    """Bind current adapters and clocks without copying lifecycle ownership."""
+    return SessionStarter(
+        StartPorts(
+            session_lock=session_lock,
+            state_lock=state_lock,
+            profile_lock=profile_lock,
+            state=state,
+            get_active=lambda: _active_session,
+            set_active=_set_active_session,
+            normalize_username=_normalize_username,
+            normalize_email=_normalize_email,
+            normalize_mode=normalise_rest_mode,
+            resolve_target=resolve_rest_target,
+            age_group=_age_group,
+            date_of_birth=_normalise_date_of_birth,
+            body_measurement=_normalise_body_measurement,
+            blood_group=_normalise_blood_group,
+            health_reference=_health_reference_from_profile,
+            wellness_context=session_context_snapshot,
+            load_profiles=_load_profiles,
+            save_profiles=_save_profiles,
+            rest_baseline=partial(rest_window, baselines),
+            acquire_lease=occupancy_client.acquire,
+            release_lease=occupancy_client.release,
+            occupancy_mode=lambda: occupancy_client.mode,
+            current_safety=_current_safety_checkpoint_context,
+            save_checkpoint=_save_active_session_checkpoint,
+            reset_inference=_reset_live_sleep_inference,
+            vital_gate=session_vital_gate_now,
+            replace_projection=_replace_session_projection_locked,
+            snapshot=snapshot,
+            log_event=log_event,
+            clock=time.time,
+            monotonic=time.monotonic,
+            utc_now=lambda: datetime.now(timezone.utc),
+            session_suffix=lambda: uuid.uuid4().hex[:6],
+        ),
+        StartPolicy(
+            pod_id=POD_ID,
+            sample_interval_s=SESSION_SAMPLE_SECONDS,
+            bed_start_seconds=BED_START_SECONDS,
+            age_groups=AGE_SLEEP_BASELINES,
+            default_ages=AGE_GROUP_DEFAULT_AGE,
+            genders=GENDERS,
+        ),
+    )
+
+
 def _start_pod_session(
     username: str,
     gender: Optional[str],
@@ -4701,291 +4755,22 @@ def _start_pod_session(
     rest_mode: str = "nap_recovery",
     target_duration_minutes: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """ตรวจค่า, อัปเดต profile ในตู้ แล้วเปิด session ใหม่ (สถานะ "รอขึ้นเตียง").
-
-    ใช้ร่วมกันสองทาง: login ด้วยบัญชี ZEEP (`/api/auth/login`) และโหมด local
-    fallback ตอนต่อ ZEEP API ไม่ได้ (`/api/session/login`). ``owner`` คือ browser
-    auth session ที่มีสิทธิ์จบ session นี้ ส่วน token ของ ZEEP อยู่ใน ``auth``
-    เท่านั้น จึงไม่หลุดไป snapshot, WebSocket หรือฐานข้อมูล.
-    """
-    global _active_session
-    with state_lock:
-        safety = dict(state["safety"])
-    # Session access and safety actuation are deliberately independent. A user
-    # may authenticate and record a session in any supervisor state; READY,
-    # ARMED and the emergency latch remain authoritative inside Smart Response
-    # and every protected device-command endpoint.
-    monitor_only = False
-    username = _normalize_username(username)
-    # Verified ZEEP sessions are stored under normalized email. Local fallback
-    # has no verified email and therefore retains its local username key.
-    key = owner.account_key
-    email = owner.email
-    if auth:
-        email = _normalize_email(str(auth.get("email") or ""))
-        if key != email:
-            raise HTTPException(409, "Account identity ไม่ตรงกับ Email ที่ยืนยันแล้ว")
-    gender = (gender or "").strip().lower() or None
-    age_group = (age_group or "").strip() or None
-    incoming_health = dict(health_reference or {})
-    try:
-        rest_mode = normalise_rest_mode(rest_mode)
-    except ValueError as exc:
-        raise HTTPException(422, "รูปแบบการพักไม่ถูกต้อง") from exc
-    target = resolve_rest_target(
-        rest_mode,
-        (target_duration_minutes * 60 if target_duration_minutes is not None else None),
-        use_mode_default=True,
-    )
-    if not target.get("available"):
-        message = (
-            "Nap & Refresh ต้องเลือกเวลาพัก 30 หรือ 90 นาที"
-            if rest_mode == "nap_recovery"
-            else "เป้าหมายระยะเวลาของรูปแบบการพักไม่ถูกต้อง"
-        )
-        raise HTTPException(422, message)
-    if age_group is not None and age_group not in AGE_SLEEP_BASELINES:
-        raise HTTPException(422, "ช่วงอายุต้องเป็น 18-29, 30-44, 45-59 หรือ 60+")
-    if age is None:
-        age = AGE_GROUP_DEFAULT_AGE.get(age_group)
-    if age is not None and not 18 <= age <= 100:
-        raise HTTPException(422, "อายุต้องอยู่ระหว่าง 18–100 ปี")
-    if gender is not None and gender not in GENDERS:
-        raise HTTPException(422, f"gender ต้องเป็นหนึ่งใน {', '.join(GENDERS)}")
-
-    with session_lock:
-        if _active_session is not None:
-            raise HTTPException(
-                409,
-                {"code": "pod_already_occupied", "message": "ตู้นี้กำลังมีผู้ใช้งาน"},
-            )
-
-    # A successful /users/me response is authoritative for this Login.  When
-    # that endpoint is unavailable we keep the last verified profile instead
-    # of replacing it with empty values, and mark the snapshot as cached.
-    profile_refreshed = bool(auth and auth.get("profile_refreshed", True))
-    health_reference_now = datetime.now(timezone.utc).isoformat()
-    with profile_lock:
-        profiles = _load_profiles()
-        profile = profiles.get(key)
-        if profile is None:
-            if gender is None:
-                raise HTTPException(422, "ผู้ใช้ใหม่ต้องเลือกเพศ (ชาย/หญิง/อื่น ๆ/ไม่ระบุ)")
-            if age_group is None:
-                raise HTTPException(422, "ผู้ใช้ใหม่ต้องเลือกช่วงอายุสำหรับ Baseline")
-            profile = {
-                "username": username,
-                "account_key": key,
-                "email": email,
-                "gender": gender,
-                "age": age,
-                "age_is_estimated": incoming_health.get("age_years") is None,
-                "age_group": age_group,
-                "date_of_birth": _normalise_date_of_birth(incoming_health.get("date_of_birth")),
-                "height_cm": _normalise_body_measurement(incoming_health.get("height_cm"), measurement="height_cm"),
-                "weight_kg": _normalise_body_measurement(incoming_health.get("weight_kg"), measurement="weight_kg"),
-                "blood_group": _normalise_blood_group(incoming_health.get("blood_group")),
-                "created_at_utc": datetime.now(timezone.utc).isoformat(),
-                "sessions": 0,
-                "last_session_utc": None,
-            }
-        else:
-            profile["username"] = username
-            profile["account_key"] = key
-            if email:
-                profile["email"] = email
-            if age is None:
-                age = profile.get("age")
-            if age_group is None:
-                age_group = profile.get("age_group") or _age_group(age)
-            if gender and (not auth or profile_refreshed):
-                profile["gender"] = gender
-            if age is not None and (not auth or profile_refreshed):
-                profile["age"] = age
-                if incoming_health.get("age_years") is not None:
-                    profile["age_is_estimated"] = False
-            profile["age_group"] = age_group
-            optional_health_fields = {
-                "date_of_birth": _normalise_date_of_birth(incoming_health.get("date_of_birth")),
-                "height_cm": _normalise_body_measurement(incoming_health.get("height_cm"), measurement="height_cm"),
-                "weight_kg": _normalise_body_measurement(incoming_health.get("weight_kg"), measurement="weight_kg"),
-                "blood_group": _normalise_blood_group(incoming_health.get("blood_group")),
-            }
-            if profile_refreshed:
-                # Login refresh is a complete profile snapshot.  Explicitly
-                # clear fields no longer returned by the account API so a
-                # renamed/edited Profile never displays stale health facts.
-                profile.update(optional_health_fields)
-                profile["age_is_estimated"] = incoming_health.get("age_years") is None
-            else:
-                # /users/me failed after identity Login.  Preserve only the
-                # last verified health facts and expose that they are cached.
-                for field, value in optional_health_fields.items():
-                    if value is not None:
-                        profile[field] = value
-        if auth and profile_refreshed:
-            profile["health_reference_source"] = incoming_health.get("source") or "zeep_profile"
-            profile["health_reference_refresh_status"] = "live_login"
-            profile["health_reference_updated_at_utc"] = health_reference_now
-        elif auth:
-            profile.setdefault("health_reference_source", "zeep_login_identity")
-            profile["health_reference_refresh_status"] = "cached"
-            profile.setdefault("health_reference_updated_at_utc", None)
-        else:
-            profile["health_reference_source"] = incoming_health.get("source") or "local_profile"
-            profile["health_reference_refresh_status"] = "local_login"
-            profile["health_reference_updated_at_utc"] = health_reference_now
-        if auth:
-            # Email is the data key. publicId remains the immutable authorization
-            # subject, while displayName/username are refreshed presentation data.
-            profile["zeep_public_id"] = auth.get("public_id")
-            profile["zeep_email"] = email
-            profile["email"] = email
-            profile["display_name"] = auth.get("display_name")
-        session_health_reference = _health_reference_from_profile(profile)
-        session_wellness_context = session_context_snapshot(profile)
-        profiles[key] = profile
-        _save_profiles(profiles)
-
-    display_name = (auth or {}).get("display_name") or username
-    rest_baseline = rest_window(baselines, key, rest_mode, target["seconds"])
-    session_id = f"s-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:6]}"
-    # This is the cross-pod atomic gate.  With a remote coordinator configured,
-    # the same immutable ZEEP subject cannot acquire a second pod concurrently.
-    try:
-        lease = occupancy_client.acquire(
-            subject=owner.subject,
-            pod_id=POD_ID,
-            pod_session_id=session_id,
-            username=username,
-        )
-    except OccupancyConflict as exc:
-        code = exc.reason
-        message = "บัญชีนี้กำลังใช้งานตู้อื่นอยู่" if code == "account_already_in_use" else "ตู้นี้กำลังมีผู้ใช้งาน"
-        raise HTTPException(409, {"code": code, "message": message, "pod_id": exc.pod_id}) from exc
-    except CoordinatorUnavailable as exc:
-        # Fail closed for a new occupant. Existing occupants continue locally
-        # even if the coordinator/network later becomes unavailable.
-        raise HTTPException(
-            503,
-            {
-                "code": "occupancy_coordinator_unavailable",
-                "message": "ยังตรวจสอบการใช้งานซ้ำระหว่างตู้ไม่ได้ จึงยังไม่เริ่ม Session ใหม่",
-            },
-        ) from exc
-
-    safety_context = _current_safety_checkpoint_context()
-    with state_lock:
-        vital_gate_start_packet_count = int(state["sensor"]["bcg"].get("packets") or 0)
-    new_session = {
-        "record": {
-            "session_id": session_id,
-            "username": username,
-            "username_key": key,
-            "display_name": display_name,
-            "gender": profile["gender"],
-            "age": profile.get("age"),
-            "age_group": profile.get("age_group") or _age_group(profile.get("age")),
-            "health_reference": session_health_reference,
-            "wellness_context": session_wellness_context,
-            "rest_mode": rest_mode,
-            "target_duration_s": target["seconds"],
-            "auth_source": "zeep" if auth else "local",
-            "zeep_public_id": (auth or {}).get("public_id"),
-            "identity_subject": owner.subject,
-            "pod_id": POD_ID,
-            "armed_at_utc": datetime.now(timezone.utc).isoformat(),
-            "started_at_utc": None,  # ตั้งค่าเมื่อยืนยันนอนครบ BED_START_SECONDS
-            "started_monotonic": None,
-            "sample_interval_s": SESSION_SAMPLE_SECONDS,
-            "sample_cadence_segments": [],
-        },
-        # identity + token ของ ZEEP อยู่นอก "record" เพื่อไม่ให้ติดไปกับ record ที่
-        # ลง DB / คืนให้ client ตอน logout
-        "auth": auth,
-        "owner_auth_session_id": owner.session_id,
-        "occupancy_lease": lease,
-        "last_lease_renew": time.monotonic(),
-        "samples": [],
-        "counters": {},
-        "last_sample": float("-inf"),
-        "phase": "waiting_bed",  # ยังไม่เริ่มนับจนกว่าจะนอนครบตามเกณฑ์
-        "safety_context": safety_context,
-        "onbed_since": None,
-        "vital_gate_start_packet_count": vital_gate_start_packet_count,
-    }
-    with session_lock:
-        if _active_session is not None:
-            occupancy_client.release(lease)
-            raise HTTPException(409, "มี session อื่นเพิ่งเริ่มพร้อมกัน — ลองใหม่")
-        _active_session = new_session
-    try:
-        # Persist before returning Login success so an update/reboot cannot
-        # forget a user who is still in the waiting-for-bed phase.
-        _save_active_session_checkpoint(new_session)
-    except Exception as exc:
-        with session_lock:
-            if _active_session is new_session:
-                _active_session = None
-        try:
-            occupancy_client.release(lease)
-        except (CoordinatorUnavailable, OccupancyConflict):
-            pass
-        raise HTTPException(500, "บันทึกสถานะ Login สำหรับกู้คืนไม่สำเร็จ") from exc
-    # A new sleeper/session must build its own independent 36-sample window.
-    _reset_live_sleep_inference(session_id)
-    # DB session_start + BCG storage จะเริ่มตอน _begin_recording (นอนครบ 20 วิ)
-    log_event(
-        "session",
-        "login_waiting_bed",
-        session_id=session_id,
-        user=username,
-        bed_start_s=BED_START_SECONDS,
-        monitor_only=monitor_only,
-        safety_level=safety.get("level"),
+    """Compatibility facade preserving Login inputs, HTTP errors and ownership."""
+    request = StartRequest(
+        username,
+        gender,
+        age,
+        age_group,
+        owner,
+        auth=auth,
+        health_reference=health_reference,
         rest_mode=rest_mode,
-        target_duration_s=target["seconds"],
-        auth_source=new_session["record"]["auth_source"],
-        pod_id=POD_ID,
+        target_duration_minutes=target_duration_minutes,
     )
-    vital_gate = session_vital_gate_now(new_session)
-    with state_lock:
-        _replace_session_projection_locked(
-            active_session_projection(
-                SessionPublicIdentity(
-                    username=username,
-                    account_key=key,
-                    email=email,
-                    display_name=display_name,
-                    auth_source=new_session["record"]["auth_source"],
-                    gender=profile["gender"],
-                    age=profile.get("age"),
-                    age_group=profile.get("age_group")
-                    or _age_group(profile.get("age")),
-                    health_reference=session_health_reference,
-                ),
-                session_id=session_id,
-                rest_mode=rest_mode,
-                target_duration_s=target["seconds"],
-                started_at=time.time(),
-                samples=0,
-                recording=False,
-                vital_gate=vital_gate,
-                wellness_context_available=bool(session_wellness_context),
-                personal_rest_baseline=rest_baseline,
-            )
-        )
-    return {
-        "ok": True,
-        "session": snapshot()["session"],
-        "pod_id": POD_ID,
-        "occupancy": {
-            "mode": occupancy_client.mode,
-            "lease_expires_at": lease.expires_at,
-        },
-        "monitor_only": monitor_only,
-        "warning": ("Session เริ่มใน Monitor Mode — ระบบตอบสนองฉุกเฉินอัตโนมัติยังไม่ทำงาน" if monitor_only else None),
-    }
+    try:
+        return _session_starter().start(request)
+    except SessionStartRejected as exc:
+        raise HTTPException(exc.status_code, exc.detail) from exc
 
 
 # Password and QR login bind an account identically; only the HTTP client, the

@@ -23,8 +23,8 @@ label จากค่า dBA เพียงค่าเดียว
 
 `app.py` เป็น **legacy composition root**: Sensor-frame sampler, Live Sleep estimator,
 waiting-bed/recording sampler และ GPIO pulse routes ถูกย้ายออกแล้ว โดยเหลือ compatibility
-facade กับ dependency wiring; resume/finalize แยกเป็น service แล้ว แต่ Login orchestration
-และ routes บางส่วนยังอยู่ เป้าหมายที่
+facade กับ dependency wiring; Login/start/resume/finalize แยกเป็น service แล้ว
+แต่ account binding และ routes บางส่วนยังอยู่ เป้าหมายที่
 บังคับด้วย architecture ratchet คือให้เหลือเฉพาะการสร้าง FastAPI
 app, ต่อ lifecycle, ประกอบ dependency และเรียก adapters เท่านั้น กฎ deterministic
 ใหม่ต้องอยู่ใน pure module เพื่อให้ทดสอบได้โดยไม่เปิด GPIO, Serial, MQTT หรือเสียง
@@ -47,6 +47,7 @@ app, ต่อ lifecycle, ประกอบ dependency และเรียก
 | Live Sleep estimator | `sessions/live_sleep_estimator.py`, `sessions/live_sleep_runtime.py` | สูตรเดิมรับ dependency contract แบบ explicit ต่อรอบคำนวณ; คง object identity ของ state/lock และ threshold/output เดิม |
 | Live Session sampling lifecycle | `sessions/live_sampler.py` | รอ Bed+HR+RR gate, promote เป็น recording และ persist Timeline ผ่าน explicit ports |
 | Recording start | `sessions/recording_start.py` | Recheck HR/RR, flush Session row, เริ่ม BCG แล้ว publish/checkpoint recording ตามลำดับเดิม |
+| Login/start Session | `sessions/start.py`, `start_contracts.py`, `start_profile.py` | ตรวจ input, Profile refresh, baseline, occupancy lease และ durable waiting checkpoint; app แปล domain rejection เป็น HTTP contract เดิม |
 | Session restart | `sessions/restart.py`, `restart_contracts.py`, `restart_timeline.py` | คืน waiting/recording ผ่าน explicit ports; reconcile checkpoint กับ DB, คืน owner/mode/onset/reference และรักษา cadence เดิมของแต่ละ sample |
 | Live Session projection | `sessions/live_projection.py` | Contract และ pure builders ของสถานะ Session 20 fields; Login, Restart และ Finalize ใช้ shape เดียวกัน |
 | Live API projection | `api/state_projection.py` | ประกอบ freshness/stale/fallback ของ Hub, BCG และ Control จาก detached snapshot โดยไม่แก้ live reader state |
@@ -210,8 +211,9 @@ Onboarding ใช้เอกสารนี้เป็น Roadmap ทางเ
 | R8a | เสร็จแล้ว | Session restart ใช้ service/ports/pure timeline builder; entry points เดิมเหลือ facade 3 บรรทัด และไม่เปลี่ยนสูตร/ผลย้อนหลัง |
 | R8b | เสร็จแล้ว | Finalization orchestrator และ report assembly แยกจาก app; facade 3 บรรทัดคง lifecycle lock และลำดับ durable commit/cleanup เดิม |
 | R8c | เสร็จแล้ว | Bed motion deadline แยกเป็น service; แก้ precommit recovery, postcommit cleanup และ safety recheck ก่อนทุก AC publish พร้อม regression จำลอง |
+| R8d | เสร็จแล้ว | Login/start-session orchestration แยกเป็น service/ports/profile helpers; คง account binding, owner lock, response และ rollback เดิม |
 
-`app.py` คงอยู่ที่ไม่เกิน 6,147 บรรทัด และเป็น composition root ต่อไป ส่วน API,
+`app.py` คงอยู่ที่ไม่เกิน 5,932 บรรทัด และเป็น composition root ต่อไป ส่วน API,
 Sensor contract/calibration/normalization/environment/sound และ value helpers อยู่ใน
 package ตามโดเมนแล้ว ไฟล์ชื่อเดิมที่ root เหลือเป็น facade บางเพื่อรักษา script/test
 เดิม การย้ายนี้ไม่เปลี่ยน Sleep/Score formula, Sensor cadence, ชื่อ public JSON key
@@ -253,8 +255,8 @@ Audio boundary ใช้รูปแบบเดียวกันโดยไ�
 
 ### 6.3 ลำดับถัดไป
 
-1. waiting-bed sampler, durable recording start, resume และ finalization แยกแล้ว
-   รวมถึง report assembly; ขั้นถัดไปคือ Login/start-session orchestration
+1. Login/start, waiting-bed sampler, durable recording start, resume และ finalization
+   แยกแล้ว รวมถึง report assembly; ขั้นถัดไปคือ account binding และ Session routes
 2. คง public facade, lock และลำดับ checkpoint/DB commit เมื่อแยก lifecycle ส่วนที่เหลือ
 3. Sleep estimator มี compatibility facade และย้ายสูตรเดิมออกแล้ว; ขั้นถัดไปคือแบ่ง
    typed input/context ออกจาก orchestration พร้อม golden replay โดยห้ามเปลี่ยน threshold
@@ -332,3 +334,20 @@ Transport, ownership และ failure behavior ของอุปกรณ์�
 - RR ที่ fallback มาจาก personal sleep history ระบุ provenance ตามจริง ไม่อ้างว่า
   เป็น same-mode history; ไม่เปลี่ยนค่า HR/RR หรือสูตรคะแนน
 - รายงานการตรวจและข้อจำกัด: [Runtime audit · 19 September 2026](reviews/2026-09-19-runtime-audit.md)
+
+### 6.7 Login/start boundary และหลักฐาน Refactor
+
+- `StartRequest`/`StartPolicy`/`StartPorts` ระบุ intent, deployment values และ
+  dependency ที่ผูกใหม่ทุกครั้ง; service ไม่ import app/FastAPI และไม่เปิด I/O ตอน import
+- `_start_pod_session()` คง signature และแปลง `SessionStartRejected` เป็น HTTP
+  status/detail เดิม; Password/QR/local login ยังใช้ owner/lifecycle lock เดิม
+- ตรวจ input และ occupancy ก่อนแก้ Profile; บันทึก Profile ก่อนขอ cross-Pod lease
+  จากนั้นตรวจ owner ซ้ำและบันทึก checkpoint ก่อน publish waiting/ตอบ Login success
+- Checkpoint ล้มคืน owner และ release lease ตามพฤติกรรมเดิม; token อยู่ใน auth
+  นอก record; ยังไม่สร้าง DB Session หรือเริ่ม BCG จน recording gate ผ่าน
+- Profile สดล้าง optional fields ที่บัญชีเอาออก ส่วน cached Profile คงข้อเท็จจริงเดิม
+  พร้อม provenance; ไม่เพิ่ม Safety block สำหรับ Login
+- Exact trace 24 สถานการณ์เทียบกับ `42e0324`: response/error, owner/record/Profile
+  และลำดับ side effects ตรงกัน โดยกำหนด clock/UUID และใช้ข้อมูลจำลอง
+- Regression ถาวร: `test_session_start.py`, auth/RBAC/QR/occupancy tests และ
+  architecture ratchet; ไม่ replay หรือเขียนผลย้อนหลังในงานนี้

@@ -24,7 +24,7 @@ DOMAIN_PACKAGE_NAMES = (
 DOMAIN_PACKAGES = tuple(ROOT / name for name in DOMAIN_PACKAGE_NAMES)
 MAX_PACKAGE_FILE_LINES = 500
 MAX_FUNCTION_LINES = 90
-MAX_APP_LINES = 6_948
+MAX_APP_LINES = 6_839
 MAX_SNAPSHOT_FUNCTION_LINES = 118
 MAX_BCG_READER_FACADE_LINES = 31
 MAX_SENSOR_FRAME_SAMPLER_FACADE_LINES = 27
@@ -91,7 +91,7 @@ LEGACY_FUNCTION_LINE_CAPS = {
     "reclassify_sleep_history.py:rescore_event": 239,
     "sessions/live_sleep_estimator.py:estimate_sleep_state": 1_156,
     "sessions/live_sleep_estimator.py:carry_occupied_epoch": 134,
-    "app.py:_finalize_active_session": 464,
+    "app.py:_finalize_active_session": 349,
     "sleep_session_report.py:_build_awake_rest_quality": 447,
     "sleep_session_report.py:build_session_report": 588,
     "sleep_stage_scoring.py:score_sleep_evidence": 421,

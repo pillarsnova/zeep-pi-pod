@@ -130,6 +130,7 @@ from sessions.finalization_commit import (
     FinalizationPorts,
     commit_live_session_finalization as commit_session_finalization,
 )
+from sessions.finalization_summary import build_final_summary, build_night_summary
 from sessions.live_sleep_estimator import (
     estimate_sleep_state as _estimate_sleep_state_impl,
 )
@@ -146,9 +147,9 @@ from sessions.live_projection import (
     SessionPublicIdentity,
     active_session_projection,
     inactive_session_projection,
-    recording_vital_gate,
 )
 from sessions.live_sampler import LiveSamplerPorts, LiveSessionSampler
+from sessions.recording_start import RecordingStartPorts, begin_recording
 from sessions.sleep_context import (
     checkpoint_sleep_context,
     restore_session_sleep_context,
@@ -172,7 +173,6 @@ from sessions.history_sleep_timeline import (
 from sessions import report_projection
 from sessions.ingest_payload import (
     build_ingest_payload as _build_account_ingest_payload,
-    sample_off_bed as _sample_off_bed,
 )
 from sessions.ingest_outbox import IngestOutbox
 from sessions.sleep_between_epochs import (
@@ -3381,66 +3381,29 @@ def session_vital_gate_now(active: Optional[Dict[str, Any]] = None) -> Dict[str,
     )
 
 
-def _begin_recording(active: Dict[str, Any]):
-    """ยืนยันเตียง + HR/RR สดครบเกณฑ์ → เริ่มนับเวลาและบันทึกจริง"""
-    record = active["record"]
-    vital_gate = session_vital_gate_now(active)
-    if not vital_gate["ready"]:
-        raise RuntimeError(f"cannot start Session before HR/RR gate: {vital_gate['reason']}")
-    now_iso = datetime.now(timezone.utc).isoformat()
-    with session_lock:
-        active["last_sample"] = float("-inf")  # เก็บ sample แรกทันที
-        record["started_at_utc"] = now_iso
-        record["started_monotonic"] = time.monotonic()
-        record["sample_cadence_segments"] = [
-            {
-                "start_at_utc": now_iso,
-                "sample_interval_s": _sample_interval_seconds(record.get("sample_interval_s"), SESSION_SAMPLE_SECONDS),
-            }
-        ]
-    database.enqueue(
-        "sessions",
-        "session_start",
-        {
-            "session_id": record["session_id"],
-            "user": record["username"],
-            "username_key": record["username_key"],
-            "gender": record["gender"],
-            "identity_subject": record.get("identity_subject"),
-            "pod_id": record.get("pod_id"),
-            "zeep_public_id": record.get("zeep_public_id"),
-            "rest_mode": record.get("rest_mode"),
-            "target_duration_s": record.get("target_duration_s"),
-            "start_time": now_iso,
-            "created_at": record["armed_at_utc"],
-        },
-    )
-    # Make the DB row durable before announcing the Recording phase.
-    if not database.flush(30):
-        raise RuntimeError("database writer did not flush Session start")
-    _reset_live_sleep_inference(record["session_id"], recording=True)
-    bcg_storage.start_session(record["session_id"])
-    with state_lock:
-        with session_lock:
-            if _active_session is not active:
-                raise RuntimeError("active Session changed during start")
-            active["phase"] = "recording"
-            _patch_session_projection_locked(
-                {
-                    "recording": True,
-                    "started_at": time.time(),
-                    "bed_wait_s": 0,
-                    "vital_gate": recording_vital_gate(vital_gate),
-                }
-            )
-    _save_active_session_checkpoint(active)
-    log_event(
-        "session",
-        "bed_confirmed_start",
-        session_id=record["session_id"],
-        user=record["username"],
-        required_s=BED_START_SECONDS,
-        vital_packets=SESSION_VITAL_START_PACKETS,
+def _begin_recording(active: Dict[str, Any]) -> None:
+    """Compose the durable recording-start service with live runtime ports."""
+    begin_recording(
+        active,
+        ports=RecordingStartPorts(
+            session_lock=session_lock,
+            state_lock=state_lock,
+            get_active=lambda: _active_session,
+            vital_gate=session_vital_gate_now,
+            enqueue=database.enqueue,
+            flush=database.flush,
+            reset_inference=_reset_live_sleep_inference,
+            start_bcg=bcg_storage.start_session,
+            patch_projection=_patch_session_projection_locked,
+            save_checkpoint=_save_active_session_checkpoint,
+            log_event=log_event,
+            clock=time.time,
+            monotonic=time.monotonic,
+            utc_now=lambda: datetime.now(timezone.utc),
+        ),
+        default_interval_s=SESSION_SAMPLE_SECONDS,
+        bed_start_seconds=BED_START_SECONDS,
+        required_packets=SESSION_VITAL_START_PACKETS,
     )
 
 
@@ -3854,59 +3817,12 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
     except Exception:
         _restore_active_after_finalization_failure(active)
         raise
-    # night summary (proxy จาก per-sample sleep state) — ป้อน baseline ส่วนบุคคล
-    sleep_like = {"n1", "n2", "n3", "rem", "nrem_light", "nrem_deep"}
-    onset_proxy_s = None
-    awakenings = 0
-    asleep = False
-    sleep_started = False
-    waso_seconds = 0.0
-    try:
-        started_epoch = datetime.fromisoformat(record["started_at_utc"]).timestamp()
-    except (TypeError, ValueError):
-        started_epoch = None
-    for smp in report_samples:
-        st = "off_bed" if _sample_off_bed(smp) else (smp.get("sleep") if smp.get("sleep_score_eligible") is not False else None)
-        if st in sleep_like:
-            if onset_proxy_s is None and started_epoch:
-                interval_s = _sample_interval_seconds(smp.get("sample_interval_s"), sample_interval_s)
-                onset_proxy_s = round(
-                    max(0.0, smp["t"] - interval_s - started_epoch),
-                    1,
-                )
-            asleep = True
-            sleep_started = True
-        elif st in ("wake", "off_bed"):
-            if sleep_started:
-                waso_seconds += _sample_interval_seconds(smp.get("sample_interval_s"), sample_interval_s)
-            if asleep:
-                awakenings += 1
-                asleep = False
-    total_sleep_samples = sum(v for k, v in record["summary"]["sleep_score_state_counts"].items() if k in sleep_like)
-    total_scored = total_sleep_samples + record["summary"]["sleep_score_state_counts"].get("wake", 0)
-    night_summary = {
-        "sleep_onset_proxy_s": onset_proxy_s,
-        "awakenings": awakenings,
-        "waso_proxy_s": round(waso_seconds, 1),
-        "estimated_sleep_s": round(min(duration, total_sleep_samples * sample_interval_s), 1),
-        "sleep_efficiency": (round(total_sleep_samples / total_scored, 3) if total_scored else None),
-        "deep_ratio": (
-            round(
-                (record["summary"]["sleep_score_state_counts"].get("n3", 0) + record["summary"]["sleep_score_state_counts"].get("nrem_deep", 0)) / total_sleep_samples,
-                3,
-            )
-            if total_sleep_samples
-            else None
-        ),
-        "rem_ratio": (
-            round(
-                record["summary"]["sleep_score_state_counts"].get("rem", 0) / total_sleep_samples,
-                3,
-            )
-            if total_sleep_samples
-            else None
-        ),
-    }
+    night_summary = build_night_summary(
+        record,
+        report_samples,
+        duration=duration,
+        sample_interval_s=sample_interval_s,
+    )
     # Persist final quality beside its factors for reproducible history.
     sleep_quality = build_sleep_quality(
         record["duration_s"],
@@ -3945,41 +3861,19 @@ def _finalize_active_session(reason: str = "logout") -> Optional[Dict[str, Any]]
         sleep_score_state_counts=record["summary"]["sleep_score_state_counts"],
     )
     record["session_report"] = session_report
-    final_summary = {
-        "bed_status_counts": record["summary"]["bed_status_counts"],
-        "sleep_state_counts": record["summary"]["sleep_state_counts"],
-        "sleep_score_state_counts": record["summary"]["sleep_score_state_counts"],
-        "sleep_estimator": record.get("sleep_estimator"),
-        "sleep_estimator_versions": record.get("sleep_estimator_versions") or {},
-        "sleep_provenance_complete": record.get("sleep_provenance_complete", False),
-        "sleep_evidence_version": record.get("sleep_evidence_version"),
-        "sleep_baseline_version": record.get("sleep_baseline_version"),
-        "sleep_transition_policy": record.get("sleep_transition_policy"),
-        "sleep_g2_ontology": record.get("sleep_g2_ontology"),
-        "terminal_wake_policy": record.get("terminal_wake_policy"),
-        "rest_mode": record.get("rest_mode") or "auto",
-        "target_duration_s": record.get("target_duration_s"),
-        "sample_interval_s": sample_interval_s,
-        "sensor_sample_interval_s": acquisition_interval_s,
-        "timeline_schema_version": SESSION_TIMELINE_SCHEMA_VERSION,
-        "sample_cadence_segments": record.get("sample_cadence_segments") or [],
-        "sample_cadence_summary": cadence_summary,
-        "report_sample_grid": sample_grid_summary,
-        # Snapshot the non-diagnostic Profile context used during this
-        # Session so later account edits do not rewrite historical reports.
-        "health_reference": record.get("health_reference") or {},
-        # Optional, consented lifestyle context is frozen separately from
-        # physiology. It may explain/report a Session but cannot create or
-        # modify W/N1/N2/N3/REM.
-        "wellness_context": record.get("wellness_context"),
-        "restore_context": restore_context,
-        "counters": record["counters"],
-        "armed_at_utc": record.get("armed_at_utc"),
-        "bed_start_s": BED_START_SECONDS,
-        "night_summary": night_summary,
-        "session_report": session_report,
-        "terminal_wake_transition": terminal_wake,
-    }
+    final_summary = build_final_summary(
+        record,
+        sample_interval_s=sample_interval_s,
+        acquisition_interval_s=acquisition_interval_s,
+        cadence_summary=cadence_summary,
+        sample_grid_summary=sample_grid_summary,
+        restore_context=restore_context,
+        night_summary=night_summary,
+        session_report=session_report,
+        terminal_wake=terminal_wake,
+        timeline_schema_version=SESSION_TIMELINE_SCHEMA_VERSION,
+        bed_start_seconds=BED_START_SECONDS,
+    )
     _commit_live_session_finalization(active, final_summary, terminal_wake)
     log_event(
         "session",

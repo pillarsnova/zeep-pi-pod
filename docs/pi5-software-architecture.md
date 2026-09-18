@@ -45,6 +45,7 @@ app, ต่อ lifecycle, ประกอบ dependency และเรียก
 | Sensor-frame sampling | `sessions/sensor_frame_sampler.py` | รวม BCG + canonical environment ตาม cadence 10 วินาที; ไม่ตัดสิน Sleep Stage |
 | Live Sleep estimator | `sessions/live_sleep_estimator.py`, `sessions/live_sleep_runtime.py` | สูตรเดิมรับ dependency contract แบบ explicit ต่อรอบคำนวณ; คง object identity ของ state/lock และ threshold/output เดิม |
 | Live Session sampling lifecycle | `sessions/live_sampler.py` | รอ Bed+HR+RR gate, promote เป็น recording และ persist Timeline ผ่าน explicit ports |
+| Recording start | `sessions/recording_start.py` | Recheck HR/RR, flush Session row, เริ่ม BCG แล้ว publish/checkpoint recording ตามลำดับเดิม |
 | Live Session projection | `sessions/live_projection.py` | Contract และ pure builders ของสถานะ Session 20 fields; Login, Restart และ Finalize ใช้ shape เดียวกัน |
 | Live API projection | `api/state_projection.py` | ประกอบ freshness/stale/fallback ของ Hub, BCG และ Control จาก detached snapshot โดยไม่แก้ live reader state |
 | Control transports | `hardware/controlhub1.py`, `controlhub2.py` | MQTT command/ACK ของแอร์และเตียง แยกจาก HTTP routes |
@@ -66,6 +67,7 @@ app, ต่อ lifecycle, ประกอบ dependency และเรียก
 | Final report | `sleep_session_report.py` | Mode-aware Sleep Score/Recovery Score และรายงานหลังจบ Session |
 | Account ingest outbox | `sessions/ingest_payload.py`, `ingest_outbox.py` | สร้าง payload แบบ allowlist, เขียนคิว atomic และ retry โดยไม่ทำให้ Session finalization ล้ม |
 | Atomic Session finalization | `sessions/finalization_commit.py` | commit ผลที่สร้างแล้วลง DB, กู้ live Session เมื่อ persistence ล้ม และลบ checkpoint หลัง durable flush เท่านั้น |
+| Finalization calculations | `sessions/finalization_summary.py` | Pure builders ของ onset/WASO/stage ratios และ final-summary payload โดยคงสูตรและ field เดิม |
 | Storage | `database.py`, `bcg_storage.py`, `backup.py` | SQLite writer, raw BCG และ Daily backup |
 | UI source | `static/index.template.html`, `static/partials/control/*`, `static/partials/app/*` | App shell, Control cards, Base CSS และ ordered JavaScript fragments |
 | UI bundle | `ui_composer.py`, `static/index.html` | ประกอบและตรวจ runtime HTML โดยไม่ fetch partial ตอนใช้งาน |
@@ -201,7 +203,7 @@ Onboarding ใช้เอกสารนี้เป็น Roadmap ทางเ
 | R7b | เสร็จแล้ว | Live Session ใช้ typed Contract + pure projection module + app Adapter/Facade; Restart รักษา Wellness context และ Logout ล้าง Personal context ครบ |
 | R7c | เสร็จแล้ว | Audio ใช้ pure Library + typed runtime Contract + system/process Adapter + lifecycle Facade; import ไม่ค้นหา player/ALSA หรือสร้าง music directory และ shutdown drain watcher แบบ bounded |
 
-`app.py` คงอยู่ที่ไม่เกิน 6,948 บรรทัด และเป็น composition root ต่อไป ส่วน API,
+`app.py` คงอยู่ที่ไม่เกิน 6,839 บรรทัด และเป็น composition root ต่อไป ส่วน API,
 Sensor contract/calibration/normalization/environment/sound และ value helpers อยู่ใน
 package ตามโดเมนแล้ว ไฟล์ชื่อเดิมที่ root เหลือเป็น facade บางเพื่อรักษา script/test
 เดิม การย้ายนี้ไม่เปลี่ยน Sleep/Score formula, Sensor cadence, ชื่อ public JSON key
@@ -243,10 +245,10 @@ Audio boundary ใช้รูปแบบเดียวกันโดยไ�
 
 ### 6.3 ลำดับถัดไป
 
-1. แยก waiting-bed → recording sampler แล้ว; ขั้นถัดไปคือย้าย resume และ finalize
-   โดยคง DB durability, gate recheck และ checkpoint ordering เดิม
-2. แยก resume และ finalize ออกจาก composition root โดยใช้ Live Session
-   contract ที่แยกแล้วและรักษา Restart continuity
+1. waiting-bed sampler และ durable recording-start service แยกแล้ว รวมถึง pure
+   finalization calculations; orchestrator ของ finalization ยังอยู่ใน `app.py`
+2. แยก resume และ finalization I/O ออกจาก composition root โดยใช้ Live Session
+   contract ที่แยกแล้วและรักษา Restart continuity กับลำดับ checkpoint/DB commit
 3. Sleep estimator มี compatibility facade และย้ายสูตรเดิมออกแล้ว; ขั้นถัดไปคือแบ่ง
    typed input/context ออกจาก orchestration พร้อม golden replay โดยห้ามเปลี่ยน threshold
 4. รวม report pipeline ที่ซ้ำระหว่าง Live, Replay, Rescore และ Trim ให้ใช้ contract เดียว

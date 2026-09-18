@@ -69,6 +69,8 @@ PROFILE_TESTS: dict[str, tuple[str, ...]] = {
     ),
     "session": (
         "test_session_lifecycle.py",
+        "test_recording_start.py",
+        "test_finalization_summary.py",
         "test_session_finalization_commit.py",
         "test_session_cadence.py",
         "test_occupancy_lifecycle.py",

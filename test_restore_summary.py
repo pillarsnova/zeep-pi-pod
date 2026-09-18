@@ -29,6 +29,7 @@ from sleep_system_policy import (
     SLEEP_SCORE_FORMULA_VERSION,
 )
 from sessions.history_quality import released_historical_quality
+from sessions.finalization_summary import build_final_summary
 from sessions.restore_summary import build_restore_summary
 
 
@@ -131,7 +132,18 @@ class RestoreSummaryTests(unittest.TestCase):
         source = Path("app.py").read_text(encoding="utf-8")
 
         self.assertIn("restore_context = baselines.behaviour_context(", source)
-        self.assertIn('"restore_context": restore_context', source)
+        context = {"prior_sessions": 3, "reference": {"heart_rate_bpm": 62.0}}
+        summary = build_final_summary(
+            {"summary": {"bed_status_counts": {}, "sleep_state_counts": {},
+                         "sleep_score_state_counts": {}}, "counters": {}},
+            sample_interval_s=30.0, acquisition_interval_s=10.0,
+            cadence_summary={}, sample_grid_summary={}, restore_context=context,
+            night_summary={}, session_report={}, terminal_wake=None,
+            timeline_schema_version=3, bed_start_seconds=20.0,
+        )
+        persisted = json.loads(json.dumps(summary))
+        context["reference"]["heart_rate_bpm"] = 99.0
+        self.assertEqual(persisted["restore_context"]["reference"]["heart_rate_bpm"], 62.0)
         self.assertIn("personal_context=restore_context", source)
         self.assertIn("trend_context=restore_context", source)
 

@@ -24,6 +24,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
@@ -36,3 +40,5 @@ jobs:
           ruff format --check acoustics adaptive api common hardware identity operations presentation safety sensors sessions
       - name: Run regression suite
         run: python -m unittest discover -q
+      - name: Check generated interface
+        run: python ui_composer.py check

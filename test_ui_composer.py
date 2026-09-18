@@ -7,6 +7,20 @@ import ui_composer
 
 
 class UiComposerTests(unittest.TestCase):
+    def test_shared_shell_is_one_build_time_partial(self):
+        template = ui_composer.TEMPLATE.read_text(encoding="utf-8")
+        runtime = ui_composer.render()
+        for name in ui_composer.HTML_PARTIALS:
+            self.assertEqual(
+                template.count(ui_composer.HTML_MARKER.format(name=name)), 1
+            )
+        self.assertEqual(runtime.count('id="connectionState"'), 1)
+        self.assertLess(runtime.index('class="top"'), runtime.index('<nav'))
+        self.assertGreater(
+            runtime.index('id="connectionState"'), runtime.index('</nav>')
+        )
+        self.assertIn('href="/static/styles/connection-state.css?', runtime)
+
     def test_generated_index_matches_template_and_partials(self):
         self.assertEqual(
             ui_composer.INDEX.read_text(encoding="utf-8"),

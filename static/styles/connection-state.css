@@ -1,0 +1,49 @@
+/* Shared status component. No device/session policy or legacy theme overrides. */
+.connection-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid #244352;
+  border-radius: 12px;
+  background: #0a1a26;
+  color: #d0e3eb;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.connection-state[hidden] { display: none; }
+.connection-state-heading { display: flex; align-items: center; gap: 9px; }
+.connection-state-heading strong { font-size: inherit; font-weight: 650; }
+#connectionStateDetail { color: #a1b9c5; font-variant-numeric: tabular-nums; }
+.connection-state-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: #72b8ce;
+}
+.connection-state[data-tone="connected"] .connection-state-dot { background: #57d3b0; }
+.connection-state:is([data-tone="offline"], [data-tone="stale"]) {
+  border-color: #866433;
+  background: #221e18;
+  color: #ffdaa0;
+}
+.connection-state:is([data-tone="offline"], [data-tone="stale"], [data-tone="fallback"]) .connection-state-dot {
+  background: #f2b861;
+}
+/* Cached values remain readable, but their previous live lamps stop implying freshness. */
+body:is([data-connection="offline"], [data-connection="stale"], [data-connection="waiting"]) .dash-sensor::after {
+  background: #a18c6c;
+  box-shadow: none;
+  animation: none;
+}
+body:is([data-connection="offline"], [data-connection="stale"], [data-connection="waiting"]) #pageMessage.success {
+  display: none;
+}
+@media (max-width: 520px) {
+  .connection-state { padding: 9px 12px; font-size: 11px; }
+  #connectionStateDetail { padding-left: 16px; }
+}

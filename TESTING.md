@@ -77,7 +77,13 @@ python -m unittest -q \
 ```bash
 python -m unittest -q test_ui_composer.py
 python ui_composer.py check
+node --test tests/frontend/*.test.cjs
 ```
+
+`test_frontend_runtime.py` เป็น wrapper สำหรับ Node built-in tests (ไม่มี npm
+dependency) ใช้ synthetic DOM/fetch ไม่อ่านข้อมูลจริง; CI ติดตั้ง Node 24
+และรันเมื่อ static/frontend tests เปลี่ยนด้วย หาก Pi ไม่มี Node ให้ใช้ browser
+smoke + UI composer แทนการติดตั้ง runtime ใหม่ และรายงาน skip ถ้ารัน wrapper
 
 เมื่อแก้การดึง snapshot จาก Pod ให้รันเพิ่ม (ใช้ข้อมูลจำลองใน temporary directory
 และไม่เชื่อมต่อ Production):

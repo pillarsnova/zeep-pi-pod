@@ -20,6 +20,7 @@
   <link rel="stylesheet" href="/static/styles/monitor.css?v=20260917-2" />
   <link rel="stylesheet" href="/static/styles/interface-consistency.css?v=20260916-2" />
   <link rel="stylesheet" href="/static/styles/sessions.css?v=20260917-2" />
+  <link rel="stylesheet" href="/static/styles/connection-state.css?v=20260919-1" />
 </head>
 <body>
 <!-- Shared line-icon library: every interactive view reuses the same 24 px
@@ -269,56 +270,7 @@
   </div>
 </div>
 <div class="wrap">
-  <div class="top">
-    <div class="brand">
-      <div class="reactor"></div>
-      <div>
-        <h1>ZEEP&nbsp;CONTROL</h1>
-        <div class="sub">Wellness Control</div>
-      </div>
-    </div>
-    <div id="userPill" class="top-user">
-      <div class="top-user-avatar" id="topUserAvatar">Z</div>
-      <div class="top-user-copy"><span id="topUserRole">USER</span><strong id="topUserName">พร้อมเริ่มการพัก</strong><small id="topUserMeta">เข้าสู่ระบบเพื่อดูข้อมูลการพักของคุณ</small></div>
-      <div class="top-session-state" id="topUserState">ยังไม่เริ่ม</div>
-    </div>
-    <div class="pills">
-      <div id="esp32Pill" class="pill"><span class="dot"></span>Pi5 Sensor Set 1</div>
-      <div id="hub2Pill" class="pill"><span class="dot"></span>ESP32 Air Sensor</div>
-      <div id="controlHubPill" class="pill"><span class="dot"></span>ESP32 Aircon</div>
-      <div id="controlHub2Pill" class="pill"><span class="dot"></span>ESP32 Bed</div>
-      <div id="bcgPill" class="pill"><span class="dot"></span>BCG</div>
-      <div id="wsStatus" class="pill"><span class="dot"></span>กำลังเชื่อมต่อ…</div>
-      <!-- USER is already shown inside the identity card. Keep this badge
-           hidden for regular users and reveal it only for an admin account. -->
-      <span id="roleBadge" class="role-badge" style="display:none">ADMIN</span>
-      <button id="logoutBtn" class="btn danger icon-only ui-icon-button" style="display:none" onclick="doLogout(this)" aria-label="จบ Session" title="จบ Session"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-stop"/></svg><span class="sr-only">จบ Session</span></button>
-      <button id="accountLogoutBtn" class="btn icon-only ui-icon-button" style="display:none" onclick="doAuthLogout(this)" aria-label="ออกจากบัญชี" title="ออกจากบัญชี"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-sign-out"/></svg><span class="sr-only">ออกจากบัญชี</span></button>
-      <div class="system-health">
-        <div id="wifiPill" class="pill health bad"><span class="wifi-signal level-0"><i></i><i></i><i></i><i></i></span><span>Wi‑Fi --</span></div>
-        <div id="ipPill" class="pill health"><svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-network"/></svg><span>IP --</span></div>
-      </div>
-    </div>
-  </div>
-
-  <nav class="main-nav" aria-label="ZEEP sections">
-    <a href="/dashboard" data-view="dashboard" aria-label="ภาพรวม" title="ภาพรวม"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10M9.5 20v-6h5v6"/></svg></span><span><b>ภาพรวม</b></span></a>
-    <a href="/control" data-view="control" aria-label="ควบคุม" title="ควบคุม"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M10 14v6"/></svg></span><span><b>ควบคุม</b></span></a>
-    <a href="/monitor" data-view="monitor" class="admin-only" aria-label="มอนิเตอร์" title="มอนิเตอร์"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h4l2.2-5 4.2 10 2.2-5H21"/><path d="M4 4h16v16H4z"/></svg></span><span><b>มอนิเตอร์</b></span></a>
-    <a href="/sessions" data-view="sessions" aria-label="ประวัติการใช้งาน" title="ประวัติการใช้งาน"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg></span><span><b>ประวัติใช้งาน</b></span></a>
-    <!-- This shared action stays available on every view, including Focus
-         Mode, so touch users always have an obvious way to exit fullscreen. -->
-    <button id="appFullscreenBtn" class="app-fullscreen-button" type="button" onclick="toggleAppFullscreen()" aria-pressed="false" aria-label="เปิดแอปแบบเต็มจอ" title="เปิดทุกหน้าแบบเต็มจอ"><span class="nav-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-fullscreen"/></svg></span><span><b data-fullscreen-label>เต็มจอ</b></span></button>
-  </nav>
-  <section class="page-heading" aria-labelledby="pageTitle">
-    <div>
-      <div class="page-kicker" id="pageKicker">ZEEP</div>
-      <h2 id="pageTitle">ภาพรวมระบบ</h2>
-      <p id="pageSubtitle">ข้อมูลสำคัญสำหรับ Session ปัจจุบัน</p>
-    </div>
-    <div class="page-context">LOCAL · RASPBERRY PI</div>
-  </section>
-  <div id="pageMessage" class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังเชื่อมต่อระบบ</b><span>รอข้อมูลสถานะล่าสุดจาก ZEEP</span></div></div>
+  <!-- ZEEP_PARTIAL:app/shell.html -->
   <div id="safetyUserAlert" class="safety-user-alert" role="alert" aria-live="assertive" hidden>
     <span class="safety-alert-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-alert"/></svg></span>
     <div><b id="safetyUserAlertTitle"></b><span id="safetyUserAlertDetail"></span></div>
@@ -1244,6 +1196,8 @@
 /* ZEEP_PARTIAL:app/scripts/11-usage-users.js */
 
 /* ZEEP_PARTIAL:app/scripts/12-history-report.js */
+
+/* ZEEP_PARTIAL:app/scripts/12-connection-state.js */
 
 /* ZEEP_PARTIAL:app/scripts/13-runtime-websocket.js */
 </script>

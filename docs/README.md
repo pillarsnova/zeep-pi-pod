@@ -49,6 +49,7 @@
 | Respiratory wellness | [Respiratory Wellness v1.2](zeep-respiratory-wellness-v1.md) | การสรุป HR/RR เชิง Wellness |
 | Product language | [Product Language Guideline v1](zeep-product-language-guideline-v1.md) | คำสั้น กระชับ เป็นมิตร และไม่วินิจฉัย |
 | Interface map และ UI | [Interface Map & UI Standard v1](zeep-interface-map-and-ui-standard-v1.md) | หน้าที่ทุกหน้า ลำดับข้อมูล Touch/Type/Icon และ viewport QA |
+| Interface development | [UI Development Roadmap](zeep-interface-development-roadmap.md) | สิ่งที่ทำแล้ว / แผน modern UI ทุกหน้า / ขอบเขต shell, component, presenter และ API |
 | Acoustic Intelligence | [หูอัจฉริยะ · DSP Plan](onboarding/smart-ear-dsp-plan.md) | P0.5 Admin level-only/capability contract อยู่ใน runtime; classifier, event และ user result ยังเป็น **ROADMAP/SHADOW** |
 | Pilot สองโหมด | [Pilot Two-Mode Protocol](zeep-pilot-two-mode-protocol.md) | Overnight Recovery และ Nap & Refresh |
 | Evidence library | [Research Evidence Library](../research/evidence-library/README.md) | แหล่งอ้างอิง, checksum และ verification |

@@ -44,9 +44,8 @@ function dismissBoot(){
 }
 
 function render(s, source='ws'){
+  if(!isLiveStateSnapshot(s))throw new Error('Invalid live state snapshot');
   dismissBoot();
-  lastServerUpdateAt = Date.now();
-  serverReachable = true;
   current = s;
   featureReportShare = !!s.features?.session_report_share;
   const e = s.sensor?.esp32 || {}, h2 = s.sensor?.sensorhub2 || {}, a = s.aircon || {}, bedctl = s.bed_control || {}, b = s.sensor?.bcg || {}, m = s.music || {}, sys = s.system || {};
@@ -336,12 +335,20 @@ function render(s, source='ws'){
   bt.className = 'v ' + (b.connected ? 'status-good' : bcgFallback ? 'status-warn' : 'status-bad');
   const cpu=document.getElementById('cpuTemp'),cpuValue=Number(sys.health?.cpu_temp_c);
   cpu.textContent=Number.isFinite(cpuValue)?`${cpuValue.toFixed(1)}°C`:'--';cpu.className=`v ${Number.isFinite(cpuValue)&&cpuValue<75?'status-good':'status-warn'}`;
+  lastServerUpdateAt = Date.now();
+  serverReachable = true;
 }
 
 function setConnectionStatus(mode){
+  renderConnectionState(mode);
   const el=document.getElementById('wsStatus'); if(!el)return;
   const age=lastServerUpdateAt?Math.max(0,Math.round((Date.now()-lastServerUpdateAt)/1000)):null;
   const adminView=currentPrincipal?.role==='admin';
+  if(mode==='connecting'){
+    el.className='pill warn';
+    el.innerHTML='<span class="dot"></span>เชื่อมต่อแล้ว · รอข้อมูล';
+    return;
+  }
   if(mode==='ws'){
     el.className='pill good';
     el.innerHTML=`<span class="dot"></span>${adminView?'Realtime · WebSocket':'เชื่อมต่อแล้ว'}`;
@@ -381,7 +388,7 @@ function connectWS(){
   }
   activeWS=ws;
   ws.onopen = ()=>{
-    stopRestFallback();setConnectionStatus('ws');
+    stopRestFallback();setConnectionStatus('connecting');
     if (wsWasDown){ toast('กลับมาเชื่อมต่อแล้ว', 'ok', 2200); loadTracks(); loadUsers(); }
     wsWasDown = false;
   };
@@ -427,6 +434,7 @@ function connectWS(){
 updateDashboardClock();
 setInterval(updateDashboardClock,1000);
 setInterval(()=>{
+  renderConnectionState();
   if(sessionEndShown)return;
   if(lastServerUpdateAt&&Date.now()-lastServerUpdateAt>12000){
     serverReachable=false;setConnectionStatus('offline');startRestFallback();

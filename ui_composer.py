@@ -29,6 +29,8 @@ PARTIALS = {
     "aroma-zone": "aroma.html",
 }
 MARKER = "<!-- ZEEP_PARTIAL:control/{name} -->"
+HTML_PARTIALS = ("app/shell.html",)
+HTML_MARKER = "<!-- ZEEP_PARTIAL:{name} -->"
 INLINE_MARKER = "/* ZEEP_PARTIAL:{name} */"
 STYLE_PARTIAL = "app/styles.css"
 SCRIPT_PARTIALS = (
@@ -58,6 +60,7 @@ SCRIPT_PARTIALS = (
         "/* ---------- Admin person-level usage directory ---------- */",
     ),
     ("app/scripts/12-history-report.js", "const REPORT_STAGE_META="),
+    ("app/scripts/12-connection-state.js", "/* ---------- shared live status"),
     ("app/scripts/13-runtime-websocket.js", "/* ---------- audio visualizer:"),
 )
 INLINE_PARTIALS = (STYLE_PARTIAL,) + tuple(name for name, _ in SCRIPT_PARTIALS)
@@ -168,6 +171,12 @@ def _validate_inline_layout(text: str) -> None:
 def render() -> str:
     text = TEMPLATE.read_text(encoding="utf-8")
     _validate_inline_layout(text)
+    for name in HTML_PARTIALS:
+        marker = HTML_MARKER.format(name=name)
+        if text.count(marker) != 1:
+            raise ValueError(f"Expected one marker for {name}")
+        partial = (STATIC / "partials" / name).read_text(encoding="utf-8")
+        text = text.replace(marker, partial.rstrip("\n"))
     for filename in PARTIALS.values():
         marker = MARKER.format(name=filename)
         if text.count(marker) != 1:

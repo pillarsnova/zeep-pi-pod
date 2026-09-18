@@ -97,6 +97,7 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 | Test/release gate | [TESTING.md](../../TESTING.md) |
 | Pull, Sync, Deploy, Backup | [Pi 5 Operations Runbook](../pi5-operations-runbook.md) |
 | คำที่แสดงต่อผู้ใช้ | [Product Language Guideline](../zeep-product-language-guideline-v1.md) |
+| การพัฒนา Interface | [UI Development Roadmap](../zeep-interface-development-roadmap.md) และ [UI partials](../../static/partials/app/README.md); แยกสิ่งที่ทำแล้วจากแผนถัดไป |
 
 ถ้าเอกสาร, runtime model, OpenAPI หรือ approved replay evidence ขัดกัน
 ให้ **หยุดการเผยแพร่ผล** บันทึก version/SHA ที่พบ และส่งให้ owner แก้ความขัดแย้ง

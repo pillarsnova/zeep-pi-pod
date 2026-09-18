@@ -1,0 +1,43 @@
+name: Frontend contracts and behavior
+
+on:
+  pull_request:
+    paths:
+      - "static/**"
+      - "tests/frontend/**"
+      - "ui_composer.py"
+      - "test_ui_composer.py"
+      - "test_product_language.py"
+      - "test_frontend_runtime.py"
+      - ".github/workflows/frontend-quality.yml"
+  push:
+    branches: [develop]
+    paths:
+      - "static/**"
+      - "tests/frontend/**"
+      - "ui_composer.py"
+      - "test_ui_composer.py"
+      - "test_product_language.py"
+      - "test_frontend_runtime.py"
+      - ".github/workflows/frontend-quality.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Check UI assembly and synthetic behavior
+        run: |
+          python ui_composer.py check
+          python -m unittest -q test_ui_composer test_product_language test_frontend_runtime

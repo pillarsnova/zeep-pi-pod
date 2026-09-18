@@ -40,6 +40,7 @@ PROFILE_TESTS: dict[str, tuple[str, ...]] = {
     "ui": (
         "test_ui_composer.py",
         "test_product_language.py",
+        "test_frontend_runtime.py",
     ),
     "sensor": (
         "test_sensor_contract.py",
@@ -124,7 +125,7 @@ FULL_TRIGGER_FILES = {
 }
 
 PROFILE_PATTERNS: dict[str, tuple[str, ...]] = {
-    "ui": ("static/", "ui_composer.py"),
+    "ui": ("static/", "ui_composer.py", "tests/frontend/"),
     "sensor": (
         "sensor",
         "calibration",

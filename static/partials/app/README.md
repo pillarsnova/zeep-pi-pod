@@ -19,6 +19,7 @@
 
 | Source | หน้าที่หลัก |
 | --- | --- |
+| `shell.html` | Header, identity, navigation, fullscreen, page heading และสถานะข้อมูลร่วม |
 | `styles.css` | Base layout และ component styles ก่อน theme overrides |
 | `scripts/00-product-copy-alerts.js` | Product copy, icon helpers และ alert presentation |
 | `scripts/01-runtime-safety.js` | Runtime state, safety, profile และ sleep presentation |
@@ -33,6 +34,7 @@
 | `scripts/10-session-end-report.js` | End-of-session report, PNG/QR และ auth bootstrap |
 | `scripts/11-history-list.js` | Usage history list และ Restore Summary helpers |
 | `scripts/12-history-report.js` | Detailed Overnight/Nap report rendering |
+| `scripts/12-connection-state.js` | Pure connection/freshness presenter และ shared status renderer |
 | `scripts/13-runtime-websocket.js` | Audio visualizer, WebSocket rendering และ app bootstrap |
 
 ## ขั้นตอนแก้ไขและตรวจสอบ
@@ -41,7 +43,13 @@
 python ui_composer.py build
 python ui_composer.py check
 python -m unittest -q test_ui_composer
+node --test tests/frontend/*.test.cjs
 ```
 
 `build` เขียน bundle แบบ atomic และ `check` จะหยุดงานหาก source กับ
 `static/index.html` ไม่ตรงกัน
+
+HTML partials เพิ่มผ่าน `ui_composer.HTML_PARTIALS`; CSS component ที่แยกใหม่
+ต้อง scope ด้วย class ของตัวเอง ไม่เพิ่ม override ต่อท้าย theme โดยไม่มี owner
+อ่าน [Interface development roadmap](../../../docs/zeep-interface-development-roadmap.md)
+ก่อนย้าย feature ระหว่างชั้น โครงสร้างเป้าหมายยังไม่ใช่การย้ายเสร็จทั้งระบบ

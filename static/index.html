@@ -869,6 +869,7 @@
   <link rel="stylesheet" href="/static/styles/monitor.css?v=20260917-2" />
   <link rel="stylesheet" href="/static/styles/interface-consistency.css?v=20260916-2" />
   <link rel="stylesheet" href="/static/styles/sessions.css?v=20260917-2" />
+  <link rel="stylesheet" href="/static/styles/connection-state.css?v=20260919-1" />
 </head>
 <body>
 <!-- Shared line-icon library: every interactive view reuses the same 24 px
@@ -1118,12 +1119,12 @@
   </div>
 </div>
 <div class="wrap">
-  <div class="top">
+    <div class="top">
     <div class="brand">
       <div class="reactor"></div>
       <div>
-        <h1>ZEEP&nbsp;CONTROL</h1>
-        <div class="sub">Wellness Control</div>
+        <h1>ZEEP</h1>
+        <div class="sub">Wellness &amp; Rest</div>
       </div>
     </div>
     <div id="userPill" class="top-user">
@@ -1167,6 +1168,10 @@
     </div>
     <div class="page-context">LOCAL · RASPBERRY PI</div>
   </section>
+  <aside id="connectionState" class="connection-state" hidden aria-label="สถานะการเชื่อมต่อข้อมูล">
+    <div class="connection-state-heading"><span class="connection-state-dot" aria-hidden="true"></span><strong id="connectionStateTitle" role="status" aria-live="polite">กำลังเชื่อมต่อข้อมูล</strong></div>
+    <span id="connectionStateDetail"></span>
+  </aside>
   <div id="pageMessage" class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังเชื่อมต่อระบบ</b><span>รอข้อมูลสถานะล่าสุดจาก ZEEP</span></div></div>
   <div id="safetyUserAlert" class="safety-user-alert" role="alert" aria-live="assertive" hidden>
     <span class="safety-alert-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-alert"/></svg></span>
@@ -7431,6 +7436,22 @@ function historyScrollBehavior(){
     ?'auto':'smooth';
 }
 
+function setHistoryListBusy(busy){
+  for(const id of ['sessionList','historySummary']){
+    document.getElementById(id).setAttribute('aria-busy',String(busy));
+  }
+}
+
+function showHistoryListError(message){
+  const list=document.getElementById('sessionList');
+  // Keep server error details out of the page, including HTML and user data.
+  list.innerHTML='<div class="history-empty" role="alert"><b>ยังโหลดประวัติการใช้งานไม่ได้</b><span>ตรวจการเชื่อมต่อแล้วลองอีกครั้ง</span><button class="btn" type="button">ลองอีกครั้ง</button></div>';
+  const retry=list.querySelector('button');
+  retry.onclick=()=>refreshHistory(retry);
+  document.getElementById('historySummary').innerHTML='<div class="history-empty"><b>ยังสรุปช่วงที่เลือกไม่ได้</b><span>โหลดรายการอีกครั้งเพื่อดูผลสรุป</span></div>';
+  toast(message,'error');
+}
+
 async function refreshHistory(btn){
   ensureHistoryFilterDefaults();
   const user=currentPrincipal
@@ -7443,7 +7464,8 @@ async function refreshHistory(btn){
   const run = async ()=>{
     const requestSeq=++historyRequestSeq;
     const adminView=currentPrincipal?.role==='admin';
-    list.innerHTML=`<div class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังโหลดประวัติการใช้งาน</b><span>${adminView?'กำลังอ่าน Session จากเครื่อง Pi':'กำลังเตรียมรายการย้อนหลังของคุณ'}</span></div></div>`;
+    setHistoryListBusy(true);
+    list.innerHTML=`<div class="flat-message loading" role="status"><span class="flat-icon"></span><div><b>กำลังโหลดประวัติการใช้งาน</b><span>${adminView?'กำลังอ่าน Session จากเครื่อง Pi':'กำลังเตรียมรายการย้อนหลังของคุณ'}</span></div></div>`;
     document.getElementById('historySummary').innerHTML='<div class="mini">กำลังสรุปช่วงเวลาที่เลือก…</div>';
     historyDetailRequestSeq+=1;
     const historyDetail=document.getElementById('sessionDetail');
@@ -7454,22 +7476,28 @@ async function refreshHistory(btn){
     const path=currentPrincipal?.role==='admin'
       ? `/api/admin/history?${params}`
       : `/api/history/${encodeURIComponent(user)}?${params}`;
-    let r;
-    try { r=await fetch(path,{cache:'no-store'}); }
-    catch {
-      if(requestSeq===historyRequestSeq){
-        toast(adminView?'เชื่อมต่อ server ไม่ได้':'ยังเชื่อมต่อระบบไม่ได้ กรุณาลองอีกครั้ง', 'error');
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),15000);
+    let failureMessage='ยังโหลดประวัติไม่ได้ กรุณาลองอีกครั้ง';
+    try {
+      const r=await fetch(path,{cache:'no-store',signal:controller.signal});
+      if(requestSeq!==historyRequestSeq)return;
+      if(!r.ok){
+        if(adminView)failureMessage=`โหลดประวัติไม่ได้ · HTTP ${r.status}`;
+        throw new Error('History request failed');
       }
-      return;
+      const data=await r.json();
+      if(requestSeq!==historyRequestSeq)return;
+      if(!data||!Array.isArray(data.sessions))throw new Error('Invalid history list');
+      renderSessionList(data);
+    }catch{
+      if(requestSeq===historyRequestSeq)showHistoryListError(failureMessage);
+      return null; // withBusy must show failure, not a successful button flash.
+    }finally{
+      clearTimeout(timeout);
+      // An obsolete request must never clear the newer request's loading state.
+      if(requestSeq===historyRequestSeq)setHistoryListBusy(false);
     }
-    if(requestSeq!==historyRequestSeq)return;
-    if (!r.ok){
-      let detail='';try{detail=(await r.json()).detail||'';}catch{}
-      toast(adminView?(detail||`โหลดประวัติไม่ได้ · HTTP ${r.status}`):'ยังโหลดประวัติไม่ได้ กรุณาลองอีกครั้ง','error');return;
-    }
-    const data=await r.json();
-    if(requestSeq!==historyRequestSeq)return;
-    renderSessionList(data);
   };
   return btn ? withBusy(btn, run) : run();
 }
@@ -8821,6 +8849,71 @@ async function deleteUser(btn){
   });
 }
 
+/* ---------- shared live status: transport is not sensor quality ---------- */
+function connectionPresentation({mode, receivedAt, frame, now, authenticated}) {
+  const age = Number.isFinite(receivedAt) && receivedAt > 0
+    ? Math.max(0, Math.floor((now - receivedAt) / 1000)) : null;
+  const last = age == null ? 'ยังไม่ได้รับข้อมูล' : `รับข้อมูลล่าสุด ${age} วินาทีที่แล้ว`;
+  if (!authenticated) return {hidden: true, tone: 'waiting', title: '', detail: ''};
+  if (mode === 'offline' || (age != null && age > 12)) {
+    return {
+      tone: 'offline', title: age == null ? 'กำลังเชื่อมต่อข้อมูล' : 'ขาดการเชื่อมต่อ · แสดงค่าล่าสุด',
+      detail: `${last} · ระบบกำลังเชื่อมต่อใหม่`,
+    };
+  }
+  if (mode === 'connecting') {
+    return {tone: 'waiting', title: 'เชื่อมต่อแล้ว · รอข้อมูลใหม่', detail: last};
+  }
+  if (age == null || !frame || frame.sequence == null || frame.data_age_s == null) {
+    return {
+      tone: 'waiting', title: 'กำลังรอข้อมูลรอบแรก',
+      detail: 'เชื่อมต่อกับระบบแล้ว · รอข้อมูลจาก Sensor',
+    };
+  }
+  const frameAge = frame.data_age_s;
+  const sensorAge = Number.isFinite(frameAge) && frameAge >= 0
+    ? `${Math.floor(frameAge + age)} วินาทีที่แล้ว` : 'ไม่ทราบเวลา';
+  // Mirror the server frame-expiry window for display only; never a control gate.
+  const expiry = Number.isFinite(frame.refresh_s) ? Math.max(15, frame.refresh_s * 3) : 30;
+  if (frame.stale !== false || !Number.isInteger(frame.sequence) || frame.sequence < 0
+      || !Number.isFinite(frameAge) || frameAge < 0 || frameAge + age > expiry) {
+    return {
+      tone: 'stale', title: 'ข้อมูล Sensor ยังไม่อัปเดต · แสดงค่าล่าสุด',
+      detail: `ข้อมูลรอบล่าสุด ${sensorAge} · รอข้อมูลรอบใหม่`,
+    };
+  }
+  return {
+    tone: mode === 'rest' ? 'fallback' : 'connected',
+    title: mode === 'rest' ? 'เชื่อมต่อผ่านช่องทางสำรอง' : 'เชื่อมต่อแล้ว',
+    detail: `ข้อมูลรอบล่าสุด ${sensorAge} · ตรวจคุณภาพแยกแต่ละ Sensor`,
+  };
+}
+
+function isLiveStateSnapshot(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+    && !!value.sensor && typeof value.sensor === 'object' && !Array.isArray(value.sensor)
+    && !!value.session && typeof value.session === 'object' && !Array.isArray(value.session);
+}
+
+let connectionTransport = 'offline';
+function renderConnectionState(mode = connectionTransport) {
+  connectionTransport = mode;
+  const banner = document.getElementById('connectionState');
+  if (!banner) return;
+  const state = connectionPresentation({
+    mode, receivedAt: lastServerUpdateAt, frame: current.sensor_frame,
+    now: Date.now(), authenticated: !!currentPrincipal && !sessionEndShown,
+  });
+  banner.hidden = !!state.hidden;
+  banner.dataset.tone = state.tone;
+  document.body.dataset.connection = state.hidden ? 'hidden' : state.tone;
+  const title = document.getElementById('connectionStateTitle');
+  const detail = document.getElementById('connectionStateDetail');
+  // Announce transitions only; the one-second age ticker is not a live region.
+  if (title.textContent !== state.title) title.textContent = state.title;
+  if (detail.textContent !== state.detail) detail.textContent = state.detail;
+}
+
 /* ---------- audio visualizer: Spotify-style animated bars ---------- */
 const vizPhases = Array.from({length:44}, ()=>Math.random()*Math.PI*2);
 let vizLevel = 0;
@@ -8867,9 +8960,8 @@ function dismissBoot(){
 }
 
 function render(s, source='ws'){
+  if(!isLiveStateSnapshot(s))throw new Error('Invalid live state snapshot');
   dismissBoot();
-  lastServerUpdateAt = Date.now();
-  serverReachable = true;
   current = s;
   featureReportShare = !!s.features?.session_report_share;
   const e = s.sensor?.esp32 || {}, h2 = s.sensor?.sensorhub2 || {}, a = s.aircon || {}, bedctl = s.bed_control || {}, b = s.sensor?.bcg || {}, m = s.music || {}, sys = s.system || {};
@@ -9159,12 +9251,20 @@ function render(s, source='ws'){
   bt.className = 'v ' + (b.connected ? 'status-good' : bcgFallback ? 'status-warn' : 'status-bad');
   const cpu=document.getElementById('cpuTemp'),cpuValue=Number(sys.health?.cpu_temp_c);
   cpu.textContent=Number.isFinite(cpuValue)?`${cpuValue.toFixed(1)}°C`:'--';cpu.className=`v ${Number.isFinite(cpuValue)&&cpuValue<75?'status-good':'status-warn'}`;
+  lastServerUpdateAt = Date.now();
+  serverReachable = true;
 }
 
 function setConnectionStatus(mode){
+  renderConnectionState(mode);
   const el=document.getElementById('wsStatus'); if(!el)return;
   const age=lastServerUpdateAt?Math.max(0,Math.round((Date.now()-lastServerUpdateAt)/1000)):null;
   const adminView=currentPrincipal?.role==='admin';
+  if(mode==='connecting'){
+    el.className='pill warn';
+    el.innerHTML='<span class="dot"></span>เชื่อมต่อแล้ว · รอข้อมูล';
+    return;
+  }
   if(mode==='ws'){
     el.className='pill good';
     el.innerHTML=`<span class="dot"></span>${adminView?'Realtime · WebSocket':'เชื่อมต่อแล้ว'}`;
@@ -9204,7 +9304,7 @@ function connectWS(){
   }
   activeWS=ws;
   ws.onopen = ()=>{
-    stopRestFallback();setConnectionStatus('ws');
+    stopRestFallback();setConnectionStatus('connecting');
     if (wsWasDown){ toast('กลับมาเชื่อมต่อแล้ว', 'ok', 2200); loadTracks(); loadUsers(); }
     wsWasDown = false;
   };
@@ -9250,6 +9350,7 @@ function connectWS(){
 updateDashboardClock();
 setInterval(updateDashboardClock,1000);
 setInterval(()=>{
+  renderConnectionState();
   if(sessionEndShown)return;
   if(lastServerUpdateAt&&Date.now()-lastServerUpdateAt>12000){
     serverReachable=false;setConnectionStatus('offline');startRestFallback();

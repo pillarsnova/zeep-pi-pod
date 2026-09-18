@@ -129,6 +129,22 @@ function historyScrollBehavior(){
     ?'auto':'smooth';
 }
 
+function setHistoryListBusy(busy){
+  for(const id of ['sessionList','historySummary']){
+    document.getElementById(id).setAttribute('aria-busy',String(busy));
+  }
+}
+
+function showHistoryListError(message){
+  const list=document.getElementById('sessionList');
+  // Keep server error details out of the page, including HTML and user data.
+  list.innerHTML='<div class="history-empty" role="alert"><b>ยังโหลดประวัติการใช้งานไม่ได้</b><span>ตรวจการเชื่อมต่อแล้วลองอีกครั้ง</span><button class="btn" type="button">ลองอีกครั้ง</button></div>';
+  const retry=list.querySelector('button');
+  retry.onclick=()=>refreshHistory(retry);
+  document.getElementById('historySummary').innerHTML='<div class="history-empty"><b>ยังสรุปช่วงที่เลือกไม่ได้</b><span>โหลดรายการอีกครั้งเพื่อดูผลสรุป</span></div>';
+  toast(message,'error');
+}
+
 async function refreshHistory(btn){
   ensureHistoryFilterDefaults();
   const user=currentPrincipal
@@ -141,7 +157,8 @@ async function refreshHistory(btn){
   const run = async ()=>{
     const requestSeq=++historyRequestSeq;
     const adminView=currentPrincipal?.role==='admin';
-    list.innerHTML=`<div class="flat-message loading"><span class="flat-icon"></span><div><b>กำลังโหลดประวัติการใช้งาน</b><span>${adminView?'กำลังอ่าน Session จากเครื่อง Pi':'กำลังเตรียมรายการย้อนหลังของคุณ'}</span></div></div>`;
+    setHistoryListBusy(true);
+    list.innerHTML=`<div class="flat-message loading" role="status"><span class="flat-icon"></span><div><b>กำลังโหลดประวัติการใช้งาน</b><span>${adminView?'กำลังอ่าน Session จากเครื่อง Pi':'กำลังเตรียมรายการย้อนหลังของคุณ'}</span></div></div>`;
     document.getElementById('historySummary').innerHTML='<div class="mini">กำลังสรุปช่วงเวลาที่เลือก…</div>';
     historyDetailRequestSeq+=1;
     const historyDetail=document.getElementById('sessionDetail');
@@ -152,22 +169,28 @@ async function refreshHistory(btn){
     const path=currentPrincipal?.role==='admin'
       ? `/api/admin/history?${params}`
       : `/api/history/${encodeURIComponent(user)}?${params}`;
-    let r;
-    try { r=await fetch(path,{cache:'no-store'}); }
-    catch {
-      if(requestSeq===historyRequestSeq){
-        toast(adminView?'เชื่อมต่อ server ไม่ได้':'ยังเชื่อมต่อระบบไม่ได้ กรุณาลองอีกครั้ง', 'error');
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),15000);
+    let failureMessage='ยังโหลดประวัติไม่ได้ กรุณาลองอีกครั้ง';
+    try {
+      const r=await fetch(path,{cache:'no-store',signal:controller.signal});
+      if(requestSeq!==historyRequestSeq)return;
+      if(!r.ok){
+        if(adminView)failureMessage=`โหลดประวัติไม่ได้ · HTTP ${r.status}`;
+        throw new Error('History request failed');
       }
-      return;
+      const data=await r.json();
+      if(requestSeq!==historyRequestSeq)return;
+      if(!data||!Array.isArray(data.sessions))throw new Error('Invalid history list');
+      renderSessionList(data);
+    }catch{
+      if(requestSeq===historyRequestSeq)showHistoryListError(failureMessage);
+      return null; // withBusy must show failure, not a successful button flash.
+    }finally{
+      clearTimeout(timeout);
+      // An obsolete request must never clear the newer request's loading state.
+      if(requestSeq===historyRequestSeq)setHistoryListBusy(false);
     }
-    if(requestSeq!==historyRequestSeq)return;
-    if (!r.ok){
-      let detail='';try{detail=(await r.json()).detail||'';}catch{}
-      toast(adminView?(detail||`โหลดประวัติไม่ได้ · HTTP ${r.status}`):'ยังโหลดประวัติไม่ได้ กรุณาลองอีกครั้ง','error');return;
-    }
-    const data=await r.json();
-    if(requestSeq!==historyRequestSeq)return;
-    renderSessionList(data);
   };
   return btn ? withBusy(btn, run) : run();
 }

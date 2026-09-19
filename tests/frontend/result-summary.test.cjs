@@ -118,7 +118,7 @@ test('unknown mode stays neutral and does not borrow an Overnight interpretation
   payload.rest_mode = 'unknown';
   const html = render(context, payload);
   assert.match(html, /mode-unknown/);
-  assert.match(html, /ข้อมูลที่บันทึกได้ในครั้งนี้/);
+  assert.match(html, /ยังไม่ได้ระบุรูปแบบการพัก จึงแสดงเฉพาะข้อมูลที่บันทึกได้/);
   assert.doesNotMatch(html, /ภาพรวมจากการนอนครั้งนี้|result-emotion positive|<meter/);
 });
 
@@ -152,8 +152,8 @@ test('measured zero feedback is retained and explicitly identified as self-repor
   };
   const html = render(context, payload);
   assert.match(html, /ความสดชื่นใกล้เคียงก่อนพัก/);
-  assert.match(html, /ความพร้อมทำกิจกรรม 0\/10/);
-  assert.match(html, /จากแบบประเมินของผู้ใช้ · ไม่ได้อนุมานจาก Sensor/);
+  assert.match(html, /ความพร้อมทำกิจกรรมต่อ 0\/10/);
+  assert.match(html, /จากคำตอบในแบบประเมินของคุณ/);
 });
 
 test('measured positive and negative freshness keep their direction', () => {
@@ -267,7 +267,8 @@ test('Session End renders user copy after principal is cleared', () => {
   const payload = fixture();
   const html = render(context, payload);
   assert.match(html, /Recovery Score/);
-  assert.match(html, /ผล Wellness เฉพาะการพักครั้งนี้/);
+  assert.match(html, /ผลประเมินการพักครั้งนี้/);
+  assert.match(html, /ไม่ใช่การวินิจฉัยโรค/);
   assert.doesNotMatch(html, /result-evidence-details|Confidence H \/ M \/ L/);
 });
 
@@ -277,8 +278,8 @@ test('missing baseline and trends do not generate a fictional history chart', ()
   delete payload.restore_summary.personal_baseline;
   delete payload.restore_summary.trend;
   const html = render(context, payload);
-  assert.match(html, /กำลังเรียนรู้รูปแบบของคุณ/);
-  assert.doesNotMatch(html, /จากการพัก \d+ ครั้ง|<canvas|<polyline/);
+  assert.match(html, /ยังไม่มีข้อมูลครั้งก่อนที่ใช้เปรียบเทียบได้/);
+  assert.doesNotMatch(html, /ใช้ข้อมูลการพัก \d+ ครั้ง|<canvas|<polyline/);
 });
 
 test('canonical next-session recommendation appears once', () => {
@@ -287,4 +288,26 @@ test('canonical next-session recommendation appears once', () => {
   const advice = payload.restore_summary.recommendation.primary;
   const html = render(context, payload);
   assert.equal(html.split(advice).length - 1, 1);
+});
+
+test('result headings describe the data without learning metaphors', () => {
+  const context = runtime();
+  for (const name of ['nap', 'sleep']) {
+    const html = render(context, fixture(name));
+    assert.match(html, /รายละเอียดคะแนน/);
+    assert.match(html, /จุดเด่นของการพัก/);
+    assert.match(html, /ข้อมูลอ้างอิงส่วนบุคคล/);
+    assert.doesNotMatch(html, /อะไรช่วยให้พักได้ดี|บรรยากาศที่ช่วยพัก|YOUR REST|เริ่มเห็นรูปแบบ|กำลังเรียนรู้รูปแบบ/);
+  }
+});
+
+test('baseline copy reports the actual count without claiming comparison is ready', () => {
+  const context = runtime();
+  const payload = fixture();
+  payload.restore_summary.personal_baseline = {
+    maturity: {key: 'early', sessions_used: 3}, comparison: {available: false},
+  };
+  const html = render(context, payload);
+  assert.match(html, /ใช้ข้อมูลการพัก 3 ครั้งประกอบการประเมิน/);
+  assert.doesNotMatch(html, /พร้อมเทียบ|รูปแบบของคุณชัดเจน/);
 });

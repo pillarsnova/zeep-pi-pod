@@ -54,7 +54,7 @@ class PostRestAdviceTests(unittest.TestCase):
             "available": True, "label": "ใกล้รูปแบบเดิม",
         }})
         self.assertEqual(tip["basis"], "personal_baseline")
-        self.assertIn("โหมดและเป้าหมายเดียวกัน", tip["reason"])
+        self.assertIn("รูปแบบและเป้าหมายเดียวกัน", tip["reason"])
 
     def test_safety_precedes_general_tips(self):
         tip = build_post_rest_advice("sleep", 90, {"attention": [{
@@ -70,7 +70,7 @@ class PostRestAdviceTests(unittest.TestCase):
             "label": metric,
         }]}) for metric in ("sound", "lux", "co2")]
         self.assertEqual(len({tip["primary"] for tip in tips}), 3)
-        self.assertTrue(all("ไม่ได้ยืนยัน" in tip["reason"] for tip in tips))
+        self.assertTrue(all("ยังไม่ยืนยันว่าเป็นสาเหตุ" in tip["reason"] for tip in tips))
 
     def test_score_and_input_are_not_changed(self):
         quality = _sleep_quality(82)

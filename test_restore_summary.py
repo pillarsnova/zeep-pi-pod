@@ -191,7 +191,7 @@ class RestoreSummaryTests(unittest.TestCase):
 
         self.assertEqual(summary["source_score"]["type"], "recovery_score")
         self.assertEqual(summary["source_score"]["value"], 74)
-        self.assertEqual(summary["status"]["label"], "ช่วงพักนี้เป็นไปได้ดี")
+        self.assertEqual(summary["status"]["label"], "ภาพรวมการพักครั้งนี้ดี")
         self.assertEqual(summary["session_scope"]["mode"], "nap_recovery")
         self.assertEqual(summary["subjective_outcome"]["status"], "not_measured")
         self.assertIsNone(summary["subjective_outcome"]["activity_readiness"])

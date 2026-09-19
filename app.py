@@ -168,6 +168,7 @@ from sessions.history import (
 )
 from sessions.history_service import SessionHistoryService, local_history_day
 from sessions.history_service import resolve_history_window, safe_account_profile
+from sessions.report_copy import refresh_report_copy
 from sessions.history_quality import (
     released_historical_quality as _released_historical_quality,
 )
@@ -5786,6 +5787,16 @@ def history_detail(
         session_report["display_recomputed"] = True
         session_report["display_recomputed_from_version"] = persisted_report_version
         session_report["persisted_record_unchanged"] = True
+    session_report = refresh_report_copy(
+        {
+            "rest_mode": history_rest_mode,
+            "target_duration_s": history_target_duration_s,
+            "ended_at_utc": row["end_time"],
+            "duration_s": row["duration"],
+            "sleep_quality": sleep_quality,
+            "session_report": session_report,
+        }
+    )
     canonical_key = str(authorized.get("account_key") or key)
     canonical_email = authorized.get("email") or profile.get("email") or profile.get("zeep_email")
     return {

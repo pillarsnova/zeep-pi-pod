@@ -23,7 +23,7 @@ function resultEmotion(tone, available, safety, limited=false){
   if(!available)return {symbol:'—',label:'ยังไม่สรุประดับผลการพัก',tone:'neutral'};
   if(limited)return {symbol:'◌',label:'ข้อมูลประกอบมีจำกัด',tone:'neutral'};
   if(['very_good','good'].includes(tone))return {symbol:'☺',label:'ผลการพักอยู่ในระดับดี',tone:'positive'};
-  return {symbol:'🌿',label:'ยังเติมช่วงพักที่สบายได้',tone:'gentle'};
+  return {symbol:'🌿',label:'ยังปรับให้พักสบายขึ้นได้',tone:'gentle'};
 }
 
 const RESULT_COMPONENTS=Object.freeze({
@@ -34,7 +34,7 @@ const RESULT_COMPONENTS=Object.freeze({
   goal_duration:{label:'เวลาพักตามเป้าหมาย',icon:'sun',modes:['recovery']},
   physiological_response:{label:'ชีพจรและการหายใจ',icon:'chart',modes:['sleep','recovery']},
   rest_continuity:{label:'พักต่อเนื่อง',icon:'check',modes:['recovery']},
-  environment_support:{label:'บรรยากาศที่ช่วยพัก',icon:'sun',modes:['sleep','recovery']},
+  environment_support:{label:'สภาพแวดล้อม',icon:'sun',modes:['sleep','recovery']},
 });
 
 function resultComponentRows(quality,presentation){
@@ -56,12 +56,12 @@ function resultComponentsMarkup(quality,presentation,available){
   const rows=resultComponentRows(quality,presentation);
   if(!rows.length)return '';
   return `<section class="result-components" aria-label="องค์ประกอบคะแนนการพัก">
-    <div class="result-section-title">${resultIcon('chart')}<div><h4>อะไรช่วยให้พักได้ดี</h4><p>คะแนนย่อยจากการพักครั้งนี้</p></div></div>
+    <div class="result-section-title">${resultIcon('chart')}<div><h4>รายละเอียดคะแนน</h4><p>คะแนนที่ได้ / คะแนนเต็ม</p></div></div>
     <div class="result-bars">${rows.map(row=>`<div class="result-bar-row">
       <div><span>${row.label}</span><small>${row.earned} / ${row.maximum}</small></div>
       <meter min="0" max="${row.maximum}" value="${row.earned}" aria-label="${row.label}: ${row.earned} จาก ${row.maximum} คะแนน">${row.earned} / ${row.maximum}</meter>
     </div>`).join('')}</div>
-    <small class="result-chart-note">ความยาวแถบเทียบคะแนนเต็มของแต่ละด้าน · ไม่ใช่เปอร์เซ็นต์การฟื้นตัวของร่างกาย</small>
+    <small class="result-chart-note">คะแนนแต่ละด้าน ไม่ใช่ร้อยละการฟื้นตัวของร่างกาย</small>
   </section>`;
 }
 
@@ -85,7 +85,7 @@ function renderRestoreSummary(source,presentation,ended=true){
     low:'ให้เวลากับการพักเพิ่ม',sleep_restore_very_good:'ดีมาก',
     sleep_restore_good:'ดี',pace_morning:'ได้พักในระดับหนึ่ง',
     prioritise_rest:'ให้เวลากับการพักเพิ่ม',rest_goal_full:'พักได้ดีมาก',
-    rest_good:'ช่วงพักเป็นไปได้ดี',rest_partial:'ได้พักในระดับหนึ่ง',
+    rest_good:'พักได้ดี',rest_partial:'ได้พักในระดับหนึ่ง',
     rest_more:'ลองปรับให้สบายขึ้น',
   };
   const statusLabel=scoreAvailable&&safetyReviewRequired
@@ -118,19 +118,19 @@ function renderRestoreSummary(source,presentation,ended=true){
     return `<div class="restore-driver-group ${tone}"><b>${resultIcon(tone==='positive'?'check':'adjust')}${title}</b><ul>${rows.map(row=>`<li>${row}</li>`).join('')}</ul></div>`;
   };
   const driverMarkup=presentation==='unknown'
-    ?'<div class="restore-summary-empty">แสดงเฉพาะข้อมูลที่บันทึก โดยยังไม่ตีความเป็น Overnight หรือ Nap & Refresh</div>'
+    ?'<div class="restore-summary-empty">ยังไม่ได้ระบุรูปแบบการพัก จึงแสดงเฉพาะข้อมูลที่บันทึกได้</div>'
     :summary.available===false||!Object.keys(summary).length
-    ?`<div class="restore-summary-empty">${!ended?'รายละเอียดจะพร้อมหลังจบการพัก':'ยังดูข้อมูลการพักและ Sensor ที่บันทึกไว้ได้ตามปกติ'}</div>`
+    ?`<div class="restore-summary-empty">${!ended?'ดูผลสรุปได้หลังจบการพัก':'ยังดูรายละเอียดการพักที่บันทึกไว้ได้'}</div>`
     :[
-      driverGroup('สิ่งที่ทำได้ดี',positives,'positive'),
-      driverGroup('สิ่งที่ลองปรับได้',attentions,'attention'),
-    ].join('')||'<div class="restore-summary-empty">ยังไม่มีปัจจัยที่ต้องดูแลเป็นพิเศษ</div>';
+      driverGroup('จุดเด่นของการพัก',positives,'positive'),
+      driverGroup('ข้อสังเกต',attentions,'attention'),
+    ].join('')||'<div class="restore-summary-empty">ครั้งนี้ไม่มีข้อแนะนำเพิ่มเติม</div>';
   const canonicalRecommendation=restorePlainText(summary.recommendation,['primary'])
     ||restorePlainText(report.post_session_guidance,['primary']);
   const recommendation=presentation==='unknown'
     ?'ตรวจสอบรูปแบบการพักก่อนนำผลครั้งนี้ไปเปรียบเทียบ'
     :canonicalRecommendation||(presentation==='recovery'
-      ?'ครั้งถัดไปเลือกเวลาที่สบาย แล้วปล่อยให้ร่างกายพักโดยไม่ต้องบังคับให้หลับ'
+      ?'ครั้งถัดไป เลือกเวลาที่สะดวกและพักในท่าที่สบาย ไม่จำเป็นต้องหลับ'
       :'รักษาเวลาเข้านอนให้สม่ำเสมอ และค่อย ๆ ปรับสิ่งรบกวนทีละอย่าง');
   const tip=ended&&presentation!=='unknown'?(summary.recommendation||{}):{};
   const tipTitle=restorePlainText(tip,['title']);
@@ -152,29 +152,23 @@ function renderRestoreSummary(source,presentation,ended=true){
     }
     const readiness=resultNumber(subjective.activity_readiness,10);
     if(readiness!==null){
-      subjectiveRows.push(`ความพร้อมทำกิจกรรม ${readiness.toFixed(1).replace(/\.0$/,'')}/10`);
+      subjectiveRows.push(`ความพร้อมทำกิจกรรมต่อ ${readiness.toFixed(1).replace(/\.0$/,'')}/10`);
     }
   }
   const subjectiveMarkup=subjectiveRows.length
-    ?`<div class="restore-subjective-outcome"><b>ความรู้สึกก่อน–หลังพัก</b><span>${subjectiveRows.map(row=>historyEscape(row)).join(' · ')}</span><small>จากแบบประเมินของผู้ใช้ · ไม่ได้อนุมานจาก Sensor</small></div>`
+    ?`<div class="restore-subjective-outcome"><b>ความรู้สึกหลังพัก</b><span>${subjectiveRows.map(row=>historyEscape(row)).join(' · ')}</span><small>จากคำตอบในแบบประเมินของคุณ</small></div>`
     :'';
   const personalBaseline=summary.personal_baseline||{};
   const maturity=personalBaseline.maturity||personalBaseline;
-  const maturityKey=String(maturity.key||personalBaseline.status||'learning');
-  const userMaturityLabel={
-    learning:'กำลังเรียนรู้รูปแบบของคุณ',early:'เริ่มเห็นรูปแบบของคุณ',
-    active:'พร้อมเทียบกับรูปแบบของคุณ',stable:'รูปแบบของคุณชัดเจนขึ้น',
-  }[maturityKey]||'กำลังเรียนรู้รูปแบบของคุณ';
-  const maturityLabel=adminView
-    ?restorePlainText(maturity)||userMaturityLabel:userMaturityLabel;
   const sessionsUsed=Number(maturity.sessions_used??personalBaseline.sessions_used);
   const baselineText=Number.isFinite(sessionsUsed)&&sessionsUsed>0
-    ?`${maturityLabel} · จากการพัก ${Math.round(sessionsUsed)} ครั้ง`:maturityLabel;
+    ?`ใช้ข้อมูลการพัก ${Math.round(sessionsUsed)} ครั้งประกอบการประเมิน`
+    :'ยังไม่มีข้อมูลครั้งก่อนที่ใช้เปรียบเทียบได้';
   const confidence=summary.confidence||payload.data_quality?.confidence
     ||report.data_quality?.confidence||{};
   const confidenceLabel=restorePlainText(confidence)||'ยังไม่ระบุ';
   const confidenceDisplay=scoreAvailable
-    ?(adminView?confidenceLabel:userConfidenceLevelLabel(confidence.level))
+    ?(adminView?confidenceLabel:confidence.level==='low'?'มีข้อมูลประกอบจำกัด':userConfidenceLevelLabel(confidence.level))
     :!ended?'กำลังบันทึกข้อมูล':'ข้อมูลยังไม่พอสรุปคะแนน';
   const scope=summary.session_scope||summary.scope||{};
   const scopeLabel=adminView
@@ -190,7 +184,7 @@ function renderRestoreSummary(source,presentation,ended=true){
     ?`<div class="result-safety-review"><b>ควรให้ทีมตรวจสอบ</b><span>มีค่าสภาพแวดล้อมบางช่วงแตะเกณฑ์ความปลอดภัย ${scoreAvailable?'คะแนนยังแสดงได้ แต่ควรตรวจรายละเอียด':'ควรตรวจรายละเอียด'}ก่อนใช้งานครั้งถัดไป</span></div>`
     :'';
   return `<section class="restore-summary-card result-summary-card result-app mode-${presentation} quality-${scoreTone}" style="--quality-score:${scoreValue??0}">
-    <div class="result-app-header"><span>${resultIcon(presentation==='sleep'?'moon':'sun')}${historyEscape(scopeLabel)}</span><small>YOUR REST · สรุปการพัก</small></div>
+    <div class="result-app-header"><span>${resultIcon(presentation==='sleep'?'moon':'sun')}${historyEscape(scopeLabel)}</span><small>สรุปผลการพัก</small></div>
     ${safetyBanner}
     <div class="result-app-overview">
     <div class="result-summary-primary">
@@ -199,15 +193,15 @@ function renderRestoreSummary(source,presentation,ended=true){
         <span class="sleep-quality-eyebrow">${historyEscape(scoreTitle)}</span>
         <h3><span class="result-emotion ${emotion.tone}" role="img" aria-label="สัญลักษณ์ระดับผลการพัก: ${emotion.label}">${emotion.symbol}</span>${historyEscape(statusLabel)}</h3>
         ${statusMeaning?`<p>${historyEscape(statusMeaning)}</p>`:''}
-        <small>${presentation==='recovery'?'การพักมีคุณค่า แม้ไม่หลับ':presentation==='sleep'?'ภาพรวมจากการนอนครั้งนี้':'ข้อมูลที่บันทึกได้ในครั้งนี้'}</small>
+        ${presentation==='recovery'?'<small>พักได้ แม้ไม่หลับ</small>':''}
       </div>
     </div>
     ${components}
     </div>
-    <div class="result-summary-actions"><div class="restore-drivers">${driverMarkup}</div><div class="restore-recommendation"><span class="result-next-icon">${resultIcon('arrow')}</span><div><b>คำแนะนำสำหรับคุณ</b>${tipWhen?`<small class="result-tip-when">${historyEscape(tipWhen)} · อ้างอิงการพักครั้งนี้</small>`:''}${tipTitle?`<h4>${historyEscape(tipTitle)}</h4>`:''}<p>${recommendation?historyEscape(recommendation):'ใช้งานตามปกติและสังเกตความรู้สึกหลังพัก'}</p>${tipReason?`<details class="result-tip-reason"><summary>เหตุผลที่แนะนำ</summary><p>${historyEscape(tipReason)}</p></details>`:''}</div></div></div>
+    <div class="result-summary-actions"><div class="restore-drivers">${driverMarkup}</div><div class="restore-recommendation"><span class="result-next-icon">${resultIcon('arrow')}</span><div><b>คำแนะนำสำหรับคุณ</b>${tipWhen?`<small class="result-tip-when">${historyEscape(tipWhen)}</small>`:''}${tipTitle?`<h4>${historyEscape(tipTitle)}</h4>`:''}<p>${recommendation?historyEscape(recommendation):'ค่อย ๆ กลับไปทำกิจกรรมเมื่อรู้สึกพร้อม'}</p>${tipReason?`<details class="result-tip-reason"><summary>เหตุผลที่แนะนำ</summary><p>${historyEscape(tipReason)}</p></details>`:''}</div></div></div>
     ${subjectiveMarkup}
-    <div class="restore-summary-meta"><span><b>รูปแบบของคุณ</b>${historyEscape(baselineText)}</span><span><b>${adminView?'ความมั่นใจ':'ความชัดเจนของข้อมูล'}</b>${historyEscape(confidenceDisplay)}</span></div>
+    <div class="restore-summary-meta"><span><b>ข้อมูลอ้างอิงส่วนบุคคล</b>${historyEscape(baselineText)}</span><span><b>${adminView?'ความมั่นใจ':'ข้อมูลที่ใช้ประเมิน'}</b>${historyEscape(confidenceDisplay)}</span></div>
     ${adminView?adminResultEvidence(report,quality,summary,presentation):''}
-    <div class="restore-claim-note">${adminView?'ผลสรุปสำหรับตรวจสอบระบบและพัฒนาต่อ':'ผล Wellness เฉพาะการพักครั้งนี้ · ดูร่วมกับความรู้สึกของคุณ · ไม่ใช่การวินิจฉัย'}</div>
+    <div class="restore-claim-note">${adminView?'ผลสรุปสำหรับตรวจสอบระบบและพัฒนาต่อ':'ผลประเมินการพักครั้งนี้ ใช้ดูแลสุขภาพเบื้องต้น ไม่ใช่การวินิจฉัยโรค'}</div>
   </section>`;
 }

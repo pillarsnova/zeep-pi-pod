@@ -350,10 +350,10 @@ function renderRespiratoryWellness(report,adminView=false){
     ?`${Number(vital.respiration_rate_brpm).toFixed(1)} ครั้ง/นาที`:'ไม่มีข้อมูลสำหรับครั้งนี้';
   const currentResult=pairedAvailable&&typeof vital.summary==='string'&&vital.summary.trim()
     ?vital.summary
-    :'ครั้งนี้ช่วงที่วัดชีพจรและการหายใจพร้อมกันยังไม่ต่อเนื่องพอ จึงยังสรุปแนวโน้มไม่ได้';
+    :'ข้อมูลชีพจรและการหายใจครั้งนี้ยังไม่ต่อเนื่องพอสำหรับสรุปผล';
   const currentAction=pairedAvailable&&typeof vital.recommendation==='string'&&vital.recommendation.trim()
     ?vital.recommendation
-    :'ครั้งถัดไปลองพักให้นิ่งและจัดท่านอนให้สบาย เพื่อให้เซนเซอร์เก็บข้อมูลได้ต่อเนื่องขึ้น';
+    :'พักในท่าที่สบาย หากข้อมูลขาดต่อเนื่อง กรุณาให้ทีมงานตรวจเซนเซอร์';
   const median=finite(observations.median_rr_brpm)
     ?`${Number(observations.median_rr_brpm).toFixed(1)} ครั้ง/นาที`:'—';
   const baselineSessions=currentContract&&finite(baseline.sessions_used)
@@ -484,7 +484,7 @@ function renderSessionOverview(report,hasRestoreSummary=false,presentationOverri
   const guidanceHtml=!hasRestoreSummary&&guidance.primary
     ?adminView
       ?`<div class="report-context-note"><b>คำแนะนำหลังออกจาก ZEEP</b> · ${historyEscape(guidance.primary)}${guidance.next_session?` · ${historyEscape(guidance.next_session)}`:''}${guidance.self_check?`<br><b>เช็กความพร้อม</b> · ${historyEscape(guidance.self_check)}`:''}</div>`
-      :`<div class="report-context-note"><b>คำแนะนำหลังพัก</b> · ${presentation==='recovery'?'ค่อย ๆ กลับไปทำกิจกรรม และสังเกตว่ารู้สึกสดชื่นขึ้นเพียงใด':'เริ่มวันตามจังหวะที่สบาย และดูความรู้สึกของคุณร่วมกับผลคืนนี้'}</div>`
+      :`<div class="report-context-note"><b>คำแนะนำหลังพัก</b> · ${presentation==='recovery'?'ค่อย ๆ กลับไปทำกิจกรรมเมื่อรู้สึกพร้อม หากยังง่วงให้พักต่อ':'ดูผลการนอนควบคู่กับความรู้สึกหลังตื่น ก่อนวางแผนกิจกรรมวันนี้'}</div>`
     :'';
   const headline=presentation==='recovery'
     ?'ภาพรวมการพักตามเป้าหมายที่เลือก'
@@ -555,11 +555,11 @@ function renderReport(rec){
     const start=new Date(period.start_time),end=new Date(period.end_time),m=period.metrics||{},prob=period.probabilities||{};
     if(period.decision_kind==='terminal_wake_boundary'){
       const time=start.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-      const source=period.confirmed_by==='confirmed_terminal_bed_exit'?'ก่อนออกจาก ZEEP':'ก่อนจบ Session';
+      const source=period.confirmed_by==='confirmed_terminal_bed_exit'?'ก่อนออกจาก ZEEP':'ก่อนจบการพัก';
       if(!adminView){
         return '';
       }
-      return `<div class="sleep-period terminal-wake-period"><div>${time}<div class="mini">เหตุการณ์เปลี่ยนสถานะ</div></div><div class="stage">W · ตื่น</div><div>${source}<div class="mini">ไม่นับเวลา/สัดส่วน Sleep Stage</div></div><div class="reason"><div class="sleep-period-note">${period.reason||'สิ้นสุดลำดับการนอนก่อนจบ Session'} · เป็น Operational marker ไม่ใช่ผล AASM/PSG</div></div></div>`;
+      return `<div class="sleep-period terminal-wake-period"><div>${time}<div class="mini">เหตุการณ์เปลี่ยนสถานะ</div></div><div class="stage">W · ตื่น</div><div>${source}<div class="mini">ไม่นับเวลา/สัดส่วน Sleep Stage</div></div><div class="reason"><div class="sleep-period-note">${period.reason||'สิ้นสุดลำดับการนอนก่อนจบการพัก'} · เป็น Operational marker ไม่ใช่ผล AASM/PSG</div></div></div>`;
     }
     const temperatureAvg=averageTemperature(period.start_time,period.end_time);
     const humidityAvg=averageHumidity(period.start_time,period.end_time);
@@ -617,7 +617,7 @@ function renderReport(rec){
   }).join('');
   const sessionEnded=rec.ended_at_utc
     ?(adminView
-      ? `<div class="sleep-period terminal-occupancy-period"><div>${new Date(rec.ended_at_utc).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}<div class="mini">เหตุการณ์สุดท้าย</div></div><div class="stage">END · จบ Session</div><div>${rec.end_reason==='logout'?'ผู้ใช้กดจบ':'ผู้ดูแล/ระบบบันทึกการจบ'}</div><div class="reason"><div class="sleep-period-note">${terminalOccupancy?'Session จบหลังลำดับ Wake → ออกจาก ZEEP':'Session จบหลังบันทึก Terminal Wake boundary'}</div></div></div>`
+      ? `<div class="sleep-period terminal-occupancy-period"><div>${new Date(rec.ended_at_utc).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}<div class="mini">เหตุการณ์สุดท้าย</div></div><div class="stage">END · จบการพัก</div><div>${rec.end_reason==='logout'?'ผู้ใช้กดจบ':'ผู้ดูแล/ระบบบันทึกการจบ'}</div><div class="reason"><div class="sleep-period-note">${terminalOccupancy?'Session จบหลังลำดับ Wake → ออกจาก ZEEP':'Session จบหลังบันทึก Terminal Wake boundary'}</div></div></div>`
       :`<div class="sleep-period user-sleep-period"><div>${new Date(rec.ended_at_utc).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}<div class="mini">สิ้นสุดการใช้งาน</div></div><div class="stage">สิ้นสุดการพัก</div><div class="user-period-summary">บันทึกผลเรียบร้อย</div></div>`):'';
   const resultSummaryHtml=renderRestoreSummary(
     rec,presentation,Boolean(rec.ended_at_utc),
@@ -632,13 +632,13 @@ function renderReport(rec){
     ?`<details class="report-details"><summary>${timelineTitle} · ${timelineMeta}</summary>${primaryTimeline?`<div class="sleep-timeline">${primaryTimeline}</div>`:`<div class="mini" style="padding:0 12px 12px">${timelineEmpty}</div>`}</details>`
     :'';
   const operationalNotes=adminView
-    ?`<div class="mini">สถานะเตียง: ${bedTxt}</div><div class="mini">การสั่งงานระหว่าง Session: ${cntTxt}</div>`
+    ?`<div class="mini">สถานะเตียง: ${bedTxt}</div><div class="mini">การสั่งงานระหว่างพัก: ${cntTxt}</div>`
     :'';
   const timeAccounting=classificationAccountingMarkup(
     rec.session_report,adminView,presentation,
   );
   const adminDiagnostics=adminView?`<details class="report-details admin-report-details">
-    <summary>ข้อมูล Sensor, Timeline และรายการสำหรับพัฒนา</summary>
+    <summary>ข้อมูลเซนเซอร์ ลำดับเหตุการณ์ และข้อมูลสำหรับพัฒนา</summary>
     <div class="admin-report-details-body">
       <div class="mini">${healthReferenceInline(rec)}</div>
       ${timeAccounting}
@@ -652,7 +652,7 @@ function renderReport(rec){
       </div>
       ${operationalNotes}
       ${timelineDetails}
-      ${terminalOccupancy||sessionEnded?`<details class="report-details"><summary>ลำดับจบ Session · Occupancy แยกจาก Sleep State</summary><div class="sleep-timeline">${terminalOccupancy}${sessionEnded}</div></details>`:''}
+      ${terminalOccupancy||sessionEnded?`<details class="report-details"><summary>ลำดับจบการพัก · แยกสถานะการอยู่ในตู้จากระยะการนอน</summary><div class="sleep-timeline">${terminalOccupancy}${sessionEnded}</div></details>`:''}
       ${hasChart?'<canvas id="histCanvas"></canvas><div class="legend-row"><span><i class="legend-dot" style="background:#19e3ff"></i>อุณหภูมิ</span><span><i class="legend-dot" style="background:#ffb02e"></i>ชีพจร</span></div>':''}
       <div class="mini">ค่าชีพจรและการหายใจเป็นค่าประเมินจาก BCG · ใช้ตรวจสอบระบบ ไม่ใช่การวินิจฉัย</div>
     </div>

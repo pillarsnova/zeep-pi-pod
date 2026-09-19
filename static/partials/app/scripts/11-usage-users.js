@@ -56,13 +56,13 @@ function renderUsageUserDirectory(payload){
     Array.isArray(usageUserDirectory.users)?usageUserDirectory.users:[],
   );
   if(!users.length){
-    grid.innerHTML='<div class="history-people-empty"><b>ยังไม่มีผู้ใช้งาน</b><span>บัญชีจะแสดงที่นี่หลังเชื่อมต่อ Profile</span></div>';
+    grid.innerHTML='<div class="history-people-empty"><b>ยังไม่มีผู้ใช้งาน</b><span>บัญชีจะแสดงที่นี่หลังเชื่อมต่อข้อมูลผู้ใช้งาน</span></div>';
     return;
   }
   grid.innerHTML=users.map((entry,index)=>{
     const user=entry.user||{};
     const account=user.canonical_identifier||'';
-    const email=user.email||account||'บัญชี Local';
+    const email=user.email||account||'บัญชีในเครื่อง';
     const displayName=user.display_name&&user.display_name!==email
       ?user.display_name:'';
     const count=Number(entry.usage_count||0);
@@ -71,7 +71,7 @@ function renderUsageUserDirectory(payload){
     const modes=entry.modes||{};
     return `<article class="history-person-card" data-account="${historyEscape(account)}" data-user-search="${historyEscape(`${email} ${displayName}`.toLowerCase())}" style="--person-order:${index}">
       <div class="history-person-identity"><span class="history-person-avatar" aria-hidden="true">${historyEscape((displayName||email).trim().slice(0,1).toUpperCase()||'Z')}</span><div><b title="${historyEscape(email)}">${historyEscape(email)}</b>${displayName?`<small>${historyEscape(displayName)}</small>`:''}</div><span class="history-person-count"><b>${count}</b><small>ครั้ง</small></span></div>
-      <div class="history-person-meta"><span>ล่าสุด ${historyEscape(last)}</span>${missing?`<span class="attention">Sensor ไม่ครบ ${missing}</span>`:''}</div>
+      <div class="history-person-meta"><span>ล่าสุด ${historyEscape(last)}</span>${missing?`<span class="attention">ไม่มีข้อมูลเซนเซอร์ ${missing} ครั้ง</span>`:''}</div>
       <div class="history-person-modes">${usageUserModeLine(modes.sleep,'Overnight','Sleep Score')}${usageUserModeLine(modes.nap_recovery,'Nap & Refresh','Recovery Score')}</div>
       <button type="button" class="history-person-action" data-account="${historyEscape(account)}" aria-label="${historyEscape(count?`ดูผลของ ${email}`:`ยังไม่มีประวัติของ ${email}`)}" aria-pressed="false" ${count?'':'disabled'} onclick="openUsageUserHistory(this.dataset.account)">${count?'ดูผล':'ยังไม่มีประวัติ'}</button>
     </article>`;
@@ -105,7 +105,7 @@ async function refreshUsageUserDirectory(force=false){
     usageUserDirectorySavedAt=Date.now();
     renderUsageUserDirectory(payload);
   }catch{
-    summaryRoot.innerHTML='<div class="history-people-empty"><b>ยังรวมข้อมูลผู้ใช้งานไม่ได้</b><span>รายการ Session ด้านล่างยังใช้งานได้ตามปกติ</span></div>';
+    summaryRoot.innerHTML='<div class="history-people-empty"><b>ยังรวมข้อมูลผู้ใช้งานไม่ได้</b><span>ยังดูรายการการพักด้านล่างได้</span></div>';
   }
 }
 

@@ -455,10 +455,10 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("<b>คำแนะนำ</b>", renderer)
         self.assertIn("<b>คำแนะนำสำหรับครั้งนี้</b>", renderer)
         self.assertIn(
-            "ครั้งนี้ช่วงที่วัดชีพจรและการหายใจพร้อมกันยังไม่ต่อเนื่องพอ",
+            "ข้อมูลชีพจรและการหายใจครั้งนี้ยังไม่ต่อเนื่องพอสำหรับสรุปผล",
             renderer,
         )
-        self.assertIn("ครั้งถัดไปลองพักให้นิ่งและจัดท่านอนให้สบาย", renderer)
+        self.assertIn("พักในท่าที่สบาย หากข้อมูลขาดต่อเนื่อง", renderer)
         self.assertIn("<h3>ชีพจรและการหายใจขณะพัก</h3>", renderer)
         self.assertIn('class="user-vitals-head"', renderer)
         self.assertIn('class="user-vitals-baseline"', renderer)
@@ -623,7 +623,7 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("if(!summary||typeof summary!=='object')return null;", template)
         self.assertNotIn("summary.available===false)return null", template)
         self.assertIn("['message','observation','name']", template)
-        self.assertIn("สิ่งที่ทำได้ดี", template)
+        self.assertIn("จุดเด่นของการพัก", template)
         self.assertIn("ไม่ยืนยันเหตุ–ผล", template)
         self.assertIn("ไม่ใช่ความพร้อมตลอดทั้งวัน", template)
         self.assertIn(
@@ -643,7 +643,7 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("subjective.status==='measured'", template)
         self.assertIn("subjective.freshness_delta", template)
         self.assertIn("subjective.activity_readiness", template)
-        self.assertIn("ไม่ได้อนุมานจาก Sensor", template)
+        self.assertIn("จากคำตอบในแบบประเมินของคุณ", template)
         self.assertIn(
             "restorePlainText(summary.recommendation,['primary'])",
             template,
@@ -971,7 +971,7 @@ class UiComposerTests(unittest.TestCase):
 
         self.assertIn("environmentMetrics[metricKey]", finding_renderer)
         self.assertNotIn("item.title", finding_renderer)
-        self.assertIn("จากการพัก ${Math.round(sessionsUsed)} ครั้ง", baseline_renderer)
+        self.assertIn("ใช้ข้อมูลการพัก ${Math.round(sessionsUsed)} ครั้ง", baseline_renderer)
         self.assertNotIn("${Math.round(sessionsUsed)} Session", baseline_renderer)
         self.assertIn("สิ่งที่อาจรบกวนการพัก", template)
         self.assertIn("ยังไม่มีปัจจัยที่ต้องดูแลเป็นพิเศษ", template)

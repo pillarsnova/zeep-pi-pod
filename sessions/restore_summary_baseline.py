@@ -27,13 +27,13 @@ def _session_count(context: Mapping[str, Any]) -> int:
 
 def _maturity(sessions: int) -> dict[str, Any]:
     if sessions >= RESTORE_BASELINE_STABLE_SESSIONS:
-        key, label, confidence = "stable", "รูปแบบของคุณชัดเจนขึ้น", "high"
+        key, label, confidence = "stable", "มีข้อมูลสำหรับเปรียบเทียบระยะยาว", "high"
     elif sessions >= RESTORE_BASELINE_MIN_COMPARISON_SESSIONS:
-        key, label, confidence = "active", "พร้อมเทียบกับรูปแบบของคุณ", "medium"
+        key, label, confidence = "active", "มีข้อมูลสำหรับเปรียบเทียบ", "medium"
     elif sessions >= 3:
-        key, label, confidence = "early", "เริ่มเห็นรูปแบบของคุณ", "low"
+        key, label, confidence = "early", "มีข้อมูลการพักเบื้องต้น", "low"
     else:
-        key, label, confidence = "learning", "กำลังเรียนรู้", "insufficient"
+        key, label, confidence = "learning", "ข้อมูลยังไม่พอเปรียบเทียบ", "insufficient"
     return {
         "key": key,
         "label": label,
@@ -126,13 +126,13 @@ def build_baseline_summary(
     comparison = {
         "available": False,
         "reason": (
-            "กำลังตรวจสอบรุ่น Baseline และสูตรคะแนนก่อนเปรียบเทียบ"
+            "ข้อมูลครั้งก่อนยังไม่พร้อมสำหรับเปรียบเทียบกับครั้งนี้"
             if not provenance_valid
-            else "ZEEP กำลังเรียนรู้รูปแบบของคุณจากการพักรูปแบบเดียวกัน และจะเปรียบเทียบได้ชัดขึ้นเมื่อมีข้อมูลจากหลายครั้ง"
+            else "จำนวนครั้งที่พักในรูปแบบเดียวกันยังไม่พอสำหรับเปรียบเทียบ"
             if sessions < RESTORE_BASELINE_MIN_COMPARISON_SESSIONS
-            else "กำลังเตรียมค่ากลางของรูปแบบการพักนี้"
+            else "ยังไม่มีคะแนนจากครั้งก่อนสำหรับเปรียบเทียบ"
             if median is None
-            else "กำลังเตรียมคะแนนของการพักครั้งนี้"
+            else "ยังไม่มีคะแนนครั้งนี้สำหรับเปรียบเทียบ"
         ),
     }
     if (
@@ -142,17 +142,17 @@ def build_baseline_summary(
     ):
         delta = round(score - median, 1)
         if typical and score < typical[0]:
-            key, label = "below_typical", "ต่ำกว่าช่วงที่พบเป็นประจำของคุณ"
+            key, label = "below_typical", "ต่ำกว่าช่วงคะแนนที่คุณมักได้"
         elif typical and score > typical[1]:
-            key, label = "above_typical", "สูงกว่าช่วงที่พบเป็นประจำของคุณ"
+            key, label = "above_typical", "สูงกว่าช่วงคะแนนที่คุณมักได้"
         elif typical:
-            key, label = "within_typical", "ใกล้ช่วงที่พบเป็นประจำของคุณ"
+            key, label = "within_typical", "อยู่ในช่วงคะแนนที่คุณมักได้"
         elif delta >= 5:
-            key, label = "above_typical", "สูงกว่าค่ากลางส่วนบุคคล"
+            key, label = "above_typical", "สูงกว่าคะแนนที่คุณมักได้"
         elif delta <= -5:
-            key, label = "below_typical", "ต่ำกว่าค่ากลางส่วนบุคคล"
+            key, label = "below_typical", "ต่ำกว่าคะแนนที่คุณมักได้"
         else:
-            key, label = "near_typical", "ใกล้ค่ากลางส่วนบุคคล"
+            key, label = "near_typical", "ใกล้เคียงคะแนนที่คุณมักได้"
         comparison = {
             "available": True,
             "key": key,

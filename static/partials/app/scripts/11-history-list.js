@@ -107,7 +107,7 @@ function userUnavailableScoreReason(q,presentation){
 }
 
 function sleepQualityCompact(q, ended, presentationOverride,safetyReviewOverride=false){
-  if (!ended) return `<span class="hist-quality quality-unavailable"><strong>LIVE</strong><span><b>กำลังบันทึก</b><small>${currentPrincipal?.role==='admin'?'คุณภาพหลังจบ Session':'ผลจะแสดงเมื่อจบการพัก'}</small></span></span>`;
+  if (!ended) return `<span class="hist-quality quality-unavailable"><strong>LIVE</strong><span><b>กำลังบันทึก</b><small>${currentPrincipal?.role==='admin'?'คุณภาพข้อมูลหลังจบการพัก':'ผลจะแสดงเมื่อจบการพัก'}</small></span></span>`;
   const presentation=presentationOverride||reportPresentationMode(q);
   const adminView=currentPrincipal?.role==='admin';
   const title=resultScoreTitle(q,presentation,adminView);
@@ -291,14 +291,14 @@ function restoreDriverText(value){
 }
 
 const USER_RESTORE_DRIVER_COPY=Object.freeze({
-  sleep_opportunity:['เวลาและการเริ่มหลับช่วยให้พักได้ดี','เวลาและช่วงเตรียมตัวก่อนนอนยังปรับได้'],
+  sleep_opportunity:['ระยะเวลานอนและการเริ่มหลับอยู่ในเกณฑ์ดี','เวลาและช่วงเตรียมตัวก่อนนอนยังปรับได้'],
   sleep_stability:['นอนต่อเนื่องได้ดี','นอนต่อเนื่องได้เป็นบางช่วง'],
-  restorative_architecture:['รูปแบบการนอนสนับสนุนผลครั้งนี้','รูปแบบการนอนครั้งนี้มีหลักฐานบางส่วน'],
+  restorative_architecture:['รูปแบบการนอนโดยประมาณอยู่ในเกณฑ์ดี','ดูรายละเอียดระยะการนอนประกอบผลครั้งนี้'],
   cycle_expression:['พบช่วงการนอนที่ต่อเนื่อง','ช่วงการนอนยังต่อเนื่องได้อีก'],
-  goal_duration:['เวลาพักสนับสนุนเป้าหมายครั้งนี้','เวลาพักยังสั้นกว่าเป้าหมายที่เลือก'],
+  goal_duration:['ระยะเวลาพักอยู่ในเกณฑ์ดีตามเป้าหมายที่เลือก','เวลาพักยังสั้นกว่าเป้าหมายที่เลือก'],
   physiological_response:['ชีพจรและการหายใจค่อนข้างนิ่ง','ชีพจรและการหายใจเปลี่ยนแปลงบางช่วง'],
   rest_continuity:['พักต่อเนื่องและขยับไม่มาก','มีการขยับหรือลุกระหว่างพัก'],
-  environment_support:['บรรยากาศเหมาะกับการพัก','บรรยากาศบางด้านยังปรับให้สบายขึ้นได้'],
+  environment_support:['สภาพแวดล้อมอยู่ในเกณฑ์ที่กำหนด','สภาพแวดล้อมบางช่วงอยู่นอกเกณฑ์ที่กำหนด'],
 });
 function userRestoreDriverText(value,tone){
   const key=String(value?.key||'').toLowerCase();
@@ -307,17 +307,17 @@ function userRestoreDriverText(value,tone){
     return tone==='positive'?`${metric}เหมาะกับการพักครั้งนี้`:`${metric}ยังปรับให้สบายขึ้นได้`;
   }
   return USER_RESTORE_DRIVER_COPY[key]?.[tone==='positive'?0:1]
-    ||(tone==='positive'?'มีปัจจัยที่ช่วยให้การพักครั้งนี้เป็นไปได้ดี':'มีบางจุดที่ลองปรับให้การพักครั้งถัดไปสบายขึ้นได้');
+    ||(tone==='positive'?'ภาพรวมการพักครั้งนี้ดี':'ยังมีบางจุดที่ปรับให้พักสบายขึ้นได้');
 }
 
 function userRestoreMeaning(statusKey,presentation,unavailable){
   if(unavailable)return 'ครั้งนี้ยังไม่มีคะแนน แต่ยังดูรายละเอียดการพักที่บันทึกไว้ได้';
   const meanings={
     safety_review:'พบค่าสภาพแวดล้อมบางช่วงที่ควรให้ทีมตรวจสอบก่อนใช้งานครั้งถัดไป',
-    limited_evidence:'เวลาบันทึกครบขั้นต่ำ แต่ข้อมูล Sensor ครั้งนี้มีจำกัด',
-    sleep_restore_very_good:'ภาพรวมการนอนคืนนี้เป็นไปได้ดีมาก',sleep_restore_good:'ภาพรวมการนอนคืนนี้เป็นไปได้ดี',
+    limited_evidence:'บันทึกเวลาพักได้แล้ว แต่ข้อมูลจากเซนเซอร์ยังไม่ครบ',
+    sleep_restore_very_good:'ประเมินจากเวลา ความต่อเนื่อง และรูปแบบการนอนโดยประมาณ',sleep_restore_good:'ประเมินจากเวลา ความต่อเนื่อง และรูปแบบการนอนโดยประมาณ',
     pace_morning:'คืนนี้ได้พักในระดับหนึ่ง',prioritise_rest:'ครั้งนี้ยังมีบางจุดที่ช่วยให้การพักสบายขึ้นได้',
-    rest_goal_full:'ช่วงพักนี้เป็นไปได้ดีมาก',rest_good:'ช่วงพักนี้เป็นไปได้ดี',
+    rest_goal_full:'ประเมินจากเวลาพัก ความต่อเนื่อง และข้อมูลที่วัดได้',rest_good:'ประเมินจากเวลาพัก ความต่อเนื่อง และข้อมูลที่วัดได้',
     rest_partial:'ภาพรวมช่วงพักนี้พอใช้',rest_more:'ครั้งนี้ยังมีบางจุดที่ลองปรับให้สบายขึ้นได้',
   };
   return meanings[statusKey]||(presentation==='recovery'?'ดูผลช่วงพักนี้ร่วมกับความรู้สึกหลังพัก':'ดูภาพรวมคืนนี้ร่วมกับความรู้สึกหลังตื่น');
@@ -508,7 +508,7 @@ async function loadDetail(user, sid, row){
     toast(message,'error');
   };
   detail.setAttribute('aria-busy','true');
-  detail.innerHTML=`<div class="flat-message loading" role="status" aria-live="polite"><span class="flat-icon"></span><div><b>กำลังเตรียมผลการพัก</b><span>${adminView?'กำลังอ่านผลและ Timeline ของ Session':'กำลังเรียบเรียงรายละเอียดการพักของคุณ'}</span></div></div>`;
+  detail.innerHTML='<div class="flat-message loading" role="status" aria-live="polite"><span class="flat-icon"></span><div><b>กำลังโหลดผลการพัก</b></div></div>';
   const legacyPath=`/api/history/${encodeURIComponent(user)}/${encodeURIComponent(sid)}`;
   let r;
   // The local Pi report retains the confirmed Sleep State sequence. The new

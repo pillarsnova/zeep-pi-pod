@@ -11,6 +11,7 @@ from acoustics import (
     build_acoustic_monitor_snapshot,
     build_acoustic_timeline_snapshot,
 )
+from acoustics.label_events import detect_label_events, latest_classification
 
 
 def live_snapshot(sound_dba: object = 43.2) -> dict:
@@ -39,6 +40,48 @@ def live_snapshot(sound_dba: object = 43.2) -> dict:
 
 
 class AcousticContractTests(unittest.TestCase):
+    def test_display_names_match_live_and_timeline_without_changing_keys(self):
+        names = {
+            "quiet": "ค่อนข้างเงียบ",
+            "steady_equipment_like": "เสียงต่อเนื่องคล้ายอุปกรณ์",
+            "speech_like": "คล้ายเสียงพูด",
+            "snore_like": "คล้ายเสียงกรน",
+            "impact_like": "คล้ายเสียงกระแทก",
+        }
+        for key, name in names.items():
+            with self.subTest(label=key):
+                snapshot = live_snapshot()
+                snapshot["sensor"]["environment"]["acoustic"] = {
+                    "label": key,
+                    "state": "provisional",
+                    "confidence": 0.82,
+                    "classifier_version": "zeep-dsp-rule-v0.1-shadow",
+                }
+                live = build_acoustic_monitor_snapshot(snapshot)
+                self.assertEqual(live["results"]["shapes"][0]["label"], name)
+                self.assertEqual(live["results"]["shapes"][0]["key"], key)
+                self.assertEqual(live["level"]["sound_dba"], 43.2)
+                self.assertFalse(any(live["impact"].values()))
+                samples = [{
+                    "t": 1000.0,
+                    "acoustic_label": key,
+                    "acoustic_state": "provisional",
+                    "acoustic_confidence": 0.82,
+                    "acoustic_classifier_version": "zeep-dsp-rule-v0.1-shadow",
+                }]
+                latest = latest_classification(samples)
+                self.assertEqual(latest["display_name"], name)
+                self.assertEqual(latest["label"], key)
+                self.assertEqual(latest["confidence"], 0.82)
+                events = detect_label_events(samples, cadence_s=10.0)
+                if key == "quiet":
+                    self.assertEqual(events, [])
+                else:
+                    self.assertEqual(events[0]["label"], name)
+                    self.assertEqual(events[0]["key"], key)
+                    self.assertEqual(events[0]["duration_s"], 10.0)
+                    self.assertFalse(events[0]["contributes_to_primary_score"])
+
     def test_contract_exposes_candidates_without_claiming_capability(self) -> None:
         contract = acoustic_contract_snapshot()
         encoded = json.dumps(contract, ensure_ascii=False)

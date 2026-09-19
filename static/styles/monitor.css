@@ -195,6 +195,12 @@ body[data-view="monitor"] .acoustic-shadow-card {
   white-space: nowrap;
 }
 .acoustic-summary-grid span { margin-top: 3px; color: #8da9b4; font-size: 10px; line-height: 1.45; }
+#acousticPattern,
+#acousticLatestLabel {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
 .acoustic-shadow-card.level-unavailable .acoustic-summary-grid article:first-child b { color: #e9b85c; }
 
 .acoustic-live-console {

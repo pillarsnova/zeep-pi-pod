@@ -409,13 +409,13 @@ def _event_summary(
 
 def _message(status: str, summary: Mapping[str, Any]) -> str:
     if status == "no_session":
-        return "เริ่ม Session เพื่อดูภาพระดับเสียงตลอดช่วงที่ระบบบันทึก"
+        return "เริ่มการพักเพื่อดูประวัติเสียงตามเวลา"
     if status == "waiting_for_recording":
-        return "รอ Session เริ่มบันทึกหลัง HR และ RR ผ่านเกณฑ์"
+        return "รอเริ่มบันทึกเมื่อสัญญาณชีพจรและการหายใจพร้อม"
     if status == "no_data":
-        return "Session เริ่มแล้ว แต่ยังไม่ได้รับ sound_dba ที่ใช้ได้"
+        return "เริ่มบันทึกแล้ว แต่ยังไม่มีค่าระดับเสียงที่ใช้ได้"
     if status == "collecting":
-        return "กำลังสะสมข้อมูลระดับเสียงเพื่อสร้าง Timeline"
+        return "กำลังรวบรวมข้อมูลเพื่อแสดงกราฟเสียง"
     count = int(summary.get("observed_event_count") or 0)
     return (
         f"พบช่วงระดับเสียงที่ควรย้อนดู {count} ช่วง"

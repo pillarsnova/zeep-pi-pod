@@ -7,11 +7,11 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 LABELS = {
-    "quiet": ("เงียบ", "quiet"),
-    "steady_equipment_like": ("เสียงคงที่คล้ายอุปกรณ์", "equipment_like"),
-    "speech_like": ("รูปแบบคล้ายเสียงพูด", "human_sound_like"),
-    "snore_like": ("รูปแบบคล้ายเสียงกรน", "human_sound_like"),
-    "impact_like": ("เสียงกระทบ", "impact"),
+    "quiet": ("ค่อนข้างเงียบ", "quiet"),
+    "steady_equipment_like": ("เสียงต่อเนื่องคล้ายอุปกรณ์", "equipment_like"),
+    "speech_like": ("คล้ายเสียงพูด", "human_sound_like"),
+    "snore_like": ("คล้ายเสียงกรน", "human_sound_like"),
+    "impact_like": ("คล้ายเสียงกระแทก", "impact"),
 }
 MIN_CONFIDENCE = 0.35
 
@@ -48,7 +48,7 @@ def latest_classification(samples: Sequence[Mapping[str, Any]]) -> dict[str, Any
         return {
             "state": "insufficient_input",
             "label": "unknown",
-            "display_name": "ยังไม่มีป้ายเสียงจาก DSP",
+            "display_name": "ยังจำแนกเสียงไม่ได้",
             "confidence": None,
             "confidence_band": "unavailable",
             "sound_source": "unknown",

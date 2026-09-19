@@ -352,6 +352,21 @@ let acousticLiveState={};
 let acousticLiveLevels=[];
 let acousticLastPacketKey='';
 
+const acousticLabelDescriptions=Object.freeze({
+  quiet:'เสียงเบาในช่วงที่วัด ไม่ได้หมายถึงไม่มีเสียง',
+  steady_equipment_like:'เสียงต่อเนื่อง เช่น พัดลมหรือแอร์',
+  speech_like:'จังหวะเสียงคล้ายคำพูด ไม่ถอดคำหรือระบุผู้พูด',
+  snore_like:'จังหวะเสียงคล้ายการกรน ไม่ใช่ผลวินิจฉัย',
+  impact_like:'เสียงฉับพลัน เช่น ประตูหรือวัตถุกระทบ',
+});
+
+function acousticClassificationDetail(key,confidence){
+  const value=acousticFinite(confidence);
+  const description=acousticLabelDescriptions[key]||'ยังจำแนกลักษณะเสียงไม่ได้';
+  const certainty=value==null?'ไม่ระบุความมั่นใจ':`ความมั่นใจของระบบ ${Math.round(value*100)}%`;
+  return `${description} · ${certainty}`;
+}
+
 function renderAcousticFeatureConsole(data={},currentLevel=null){
   const root=document.getElementById('acousticLiveConsole'),bars=document.getElementById('acousticLiveBars');
   if(!root||!bars)return;
@@ -370,8 +385,8 @@ function renderAcousticFeatureConsole(data={},currentLevel=null){
   root.classList.toggle('no-data',currentLevel==null);
   const observed=data.observed_at?new Date(data.observed_at):null;
   document.getElementById('acousticPacketStatus').textContent=currentLevel==null
-    ?'ยังไม่มีข้อมูลสดจาก Sensor'
-    :`รับข้อมูล ${observed&&!Number.isNaN(observed.getTime())?observed.toLocaleTimeString('th-TH',{hour12:false}):'ล่าสุด'} · ${acousticLiveLevels.length}/24 windows`;
+    ?'ยังไม่มีข้อมูลสดจากเซนเซอร์'
+    :`รับข้อมูล ${observed&&!Number.isNaN(observed.getTime())?observed.toLocaleTimeString('th-TH',{hour12:false}):'ล่าสุด'} · ${acousticLiveLevels.length}/24 รอบ`;
   const value=(key,digits=3,suffix='')=>{
     const number=acousticFinite(features[key]);return number==null?'--':`${number.toFixed(digits)}${suffix}`;
   };
@@ -394,22 +409,22 @@ function renderAcousticLiveObservation(data={}){
   const level=data.level||{},shape=Array.isArray(data.results?.shapes)?data.results.shapes[0]:null;
   const evidence=data.evidence||{},features=evidence.features||{};
   const currentLevel=acousticFinite(level.sound_dba),confidence=acousticFinite(shape?.confidence);
-  document.getElementById('acousticStatusBadge').textContent=data.status==='dsp_shadow'?'SMART EAR · DSP LIVE':evidence.feature_telemetry_available?'SMART EAR · FEATURE LIVE':'SOUND · REALTIME';
+  document.getElementById('acousticStatusBadge').textContent=data.status==='dsp_shadow'?'จำแนกเสียง · สด':evidence.feature_telemetry_available?'สัญญาณเสียง · สด':'ระดับเสียง · สด';
   document.getElementById('acousticAverage').textContent=currentLevel==null?'-- dBA':`${acousticFixed(currentLevel)} dBA`;
-  document.getElementById('acousticAverageMeta').textContent=currentLevel==null?'รอค่าจาก Sensor':'ค่าที่ตรวจได้ขณะนี้';
+  document.getElementById('acousticAverageMeta').textContent=currentLevel==null?'รอค่าจากเซนเซอร์':'ค่าที่วัดได้ขณะนี้';
   document.getElementById('acousticPeak').textContent='ไม่บันทึก';
   document.getElementById('acousticPeakMeta').textContent='ZEEP ว่าง · แสดงผลสดเท่านั้น';
   document.getElementById('acousticPattern').textContent=shape?.label||'กำลังตรวจสอบเสียง';
   document.getElementById('acousticPatternMeta').textContent=shape
-    ?'ป้ายทดลองจาก DSP ณ เวลาปัจจุบัน'
+    ?'ผลเบื้องต้นจากสัญญาณเสียงล่าสุด'
     :evidence.feature_telemetry_available
-      ?'RMS / Peak พร้อม · ยังรอ spectral และจังหวะเสียง'
-      :'ระบบทำงานต่อเนื่องและรอ DSP feature จาก ESP32';
-  document.getElementById('acousticLatestLabel').textContent=shape?.label||'ยังไม่มีป้ายเสียง';
+      ?'รับสัญญาณแล้ว · ยังจำแนกเสียงไม่ได้'
+      :'รอข้อมูลจำแนกเสียงจากเซนเซอร์';
+  document.getElementById('acousticLatestLabel').textContent=shape?.label||'ยังจำแนกเสียงไม่ได้';
   document.getElementById('acousticLatestLabelMeta').textContent=shape
-    ?`ผลทดลอง · ความเชื่อมั่น ${Math.round((confidence||0)*100)}%`
-    :'Realtime · ไม่บันทึกเมื่อไม่มี Session';
-  document.getElementById('acousticCoverage').textContent='LIVE · ไม่บันทึก';
+    ?acousticClassificationDetail(shape.key,confidence)
+    :'แสดงผลสด · ไม่บันทึกเมื่อไม่มีการพัก';
+  document.getElementById('acousticCoverage').textContent='สด · ไม่บันทึก';
   renderAcousticFeatureConsole(data,currentLevel);
 }
 
@@ -426,12 +441,12 @@ function renderAcousticIntelligence(data={}){
     ?'รอค่า RMS / Peak'
     :`RMS ${rms==null?'--':rms.toFixed(4)} · Peak ${peak==null?'--':peak.toFixed(4)} · Crest ${crest==null?'--':crest.toFixed(1)}`;
   document.getElementById('acousticDspStatus').textContent=data.classification_state==='provisional'
-    ?'ป้ายทดลองพร้อมใช้งาน'
+    ?'มีผลจำแนกเบื้องต้น'
     :evidence.feature_telemetry_available
-      ?'รับ Window summary แล้ว · ยังไม่พอแยกกรน/พูด'
-      :'รอ feature สำหรับจำแนกเสียง';
+      ?'รับสัญญาณแล้ว · ยังจำแนกเสียงไม่ได้'
+      :'รอข้อมูลจำแนกเสียง';
   renderAcousticFeatureConsole(data,acousticFinite(data.level?.sound_dba));
-  document.getElementById('acousticGuardrail').textContent='Pi ตรวจเหตุการณ์จากระดับ dBA ได้ทันที · ป้าย DSP เป็นข้อมูลเสริม · ไม่บันทึก Raw audio';
+  document.getElementById('acousticGuardrail').textContent='ผลจำแนกเป็นข้อมูลเบื้องต้น ยังไม่ยืนยันต้นเสียงหรือการตื่น · ไม่บันทึกไฟล์เสียง';
   if(!current?.session?.active)renderAcousticLiveObservation(data);
 }
 
@@ -466,7 +481,7 @@ function acousticDuration(seconds){
 function acousticEventDetail(event={}){
   if(event.category==='dsp_label'){
     const confidence=acousticFinite(event.confidence);
-    return `${confidence==null?'ไม่ระบุความเชื่อมั่น':`ความเชื่อมั่น ${Math.round(confidence*100)}%`} · ${event.window_count||1} ช่วงวัด · Shadow label`;
+    return `${acousticClassificationDetail(event.key,confidence)} · ${event.window_count||1} ช่วงวัด`;
   }
   if(event.key==='rapid_change'){
     const delta=acousticFinite(event.delta_db);
@@ -475,7 +490,7 @@ function acousticEventDetail(event={}){
   if(event.key==='sustained_high'){
     return `${acousticFixed(event.minimum_dba)}–${acousticFixed(event.peak_dba)} dBA · ${acousticDuration(event.duration_s)}`;
   }
-  return `${acousticDuration(event.duration_s)} · Sensor ไม่ส่งค่าตามรอบ`;
+  return `${acousticDuration(event.duration_s)} · ไม่ได้รับค่าจากเซนเซอร์ตามรอบ`;
 }
 
 function acousticChartSize(svg){
@@ -519,7 +534,7 @@ function drawAcousticTimeline(data={}){
     if(!Number.isFinite(eventStart)||!Number.isFinite(eventEnd)||eventEnd<start||eventStart>end)return;
     const bandX=x(eventStart),bandWidth=Math.max(3,x(eventEnd)-bandX);
     if(event.category==='dsp_label'){
-      const symbols={snore_like:'Z',speech_like:'พูด',impact_like:'!',steady_equipment_like:'≈'};
+      const symbols={snore_like:'Z',speech_like:'…',impact_like:'!',steady_equipment_like:'≈'};
       const colors={snore_like:'#9b7cf4',speech_like:'#48d4e5',impact_like:'#ff6e6e',steady_equipment_like:'#6fd393'};
       const markerX=x(eventStart),markerY=top+14,symbol=symbols[event.key]||'•',color=colors[event.key]||'#f1bc55';
       eventMarkers.push(`<g><circle cx="${markerX.toFixed(1)}" cy="${markerY}" r="10" fill="${color}" stroke="#071923" stroke-width="2"><title>${escapeMarkup(event.label||'DSP event')}</title></circle><text x="${markerX.toFixed(1)}" y="${markerY+3}" text-anchor="middle" fill="#06151d" font-size="${symbol.length>1?7:10}" font-weight="800">${escapeMarkup(symbol)}</text></g>`);
@@ -560,35 +575,35 @@ function renderAcousticTimeline(data={}){
   const classification=data.classification||{};
   const ready=data.status==='ready';
   const sessionActive=Boolean(data.session?.active);
-  const badgeLabels={ready:'LEVEL TIMELINE · LIVE',no_session:'รอ SESSION',waiting_for_recording:'รอเริ่มบันทึก',collecting:'กำลังสะสมข้อมูล',no_data:'ไม่มี SOUND DATA',stale:'ข้อมูลไม่อัปเดต'};
-  document.getElementById('acousticStatusBadge').textContent=badgeLabels[data.status]||'LEVEL TIMELINE';
+  const badgeLabels={ready:'ประวัติเสียง · สด',no_session:'รอเริ่มการพัก',waiting_for_recording:'รอเริ่มบันทึก',collecting:'กำลังรวบรวมข้อมูล',no_data:'ยังไม่มีข้อมูลเสียง',stale:'ข้อมูลไม่อัปเดต'};
+  document.getElementById('acousticStatusBadge').textContent=badgeLabels[data.status]||'ประวัติเสียง';
   document.getElementById('acousticAverage').textContent=summary.average_dba==null?'-- dBA':`${acousticFixed(summary.average_dba)} dBA`;
-  document.getElementById('acousticAverageMeta').textContent=ready?`${summary.valid_sample_count||0} จุดที่ใช้ได้`:'ยังไม่มีข้อมูล Session';
+  document.getElementById('acousticAverageMeta').textContent=ready?`${summary.valid_sample_count||0} จุดที่ใช้ได้`:'ยังไม่มีข้อมูลการพัก';
   document.getElementById('acousticPeak').textContent=summary.peak_dba==null?'-- dBA':`${acousticFixed(summary.peak_dba)} dBA`;
-  document.getElementById('acousticPeakMeta').textContent=ready&&summary.minimum_dba!=null?`ต่ำสุด ${acousticFixed(summary.minimum_dba)} dBA`:'ยังไม่มีข้อมูล Session';
+  document.getElementById('acousticPeakMeta').textContent=ready&&summary.minimum_dba!=null?`ต่ำสุด ${acousticFixed(summary.minimum_dba)} dBA`:'ยังไม่มีข้อมูลการพัก';
   document.getElementById('acousticPattern').textContent=pattern.label||'กำลังรอข้อมูล';
-  document.getElementById('acousticPatternMeta').textContent=pattern.detail||data.message||'เริ่ม Session เพื่อวิเคราะห์';
-  document.getElementById('acousticLatestLabel').textContent=classification.display_name||'ยังไม่มีป้ายเสียง';
+  document.getElementById('acousticPatternMeta').textContent=pattern.detail||data.message||'เริ่มการพักเพื่อดูภาพรวม';
+  document.getElementById('acousticLatestLabel').textContent=classification.display_name||'ยังจำแนกเสียงไม่ได้';
   document.getElementById('acousticLatestLabelMeta').textContent=classification.state==='provisional'
-    ?`ผลทดลอง · ความเชื่อมั่น ${Math.round(Number(classification.confidence||0)*100)}%`
-    :'รอ DSP feature จาก ESP32';
-  document.getElementById('acousticCoverage').textContent=`Coverage ${acousticFixed(summary.coverage_pct||0,0)}%`;
+    ?acousticClassificationDetail(classification.label,classification.confidence)
+    :'รอข้อมูลจำแนกเสียงจากเซนเซอร์';
+  document.getElementById('acousticCoverage').textContent=`ข้อมูลครบ ${acousticFixed(summary.coverage_pct||0,0)}%`;
   const start=data.timeline?.start_epoch_s,end=data.timeline?.end_epoch_s;
   const cadences=Array.isArray(data.timeline?.cadences_s)?data.timeline.cadences_s:[];
   const cadenceLabel=cadences.length?cadences.map(value=>acousticFixed(value,0)).join('/'):`${acousticFixed(data.timeline?.cadence_s||10,0)}`;
   document.getElementById('acousticTimelineMeta').textContent=ready
     ?`${acousticClock(start)}–${acousticClock(end)} · รอบ ${cadenceLabel} วินาที`
-    :data.message||'ยังไม่มี Session ที่กำลังบันทึก';
+    :data.message||'ยังไม่มีการพักที่กำลังบันทึก';
   const counts=data.event_summary?.counts||{};
   const dsp=Number(counts.snore_like||0)+Number(counts.speech_like||0)+Number(counts.impact_like||0)+Number(counts.steady_equipment_like||0);
   const observed=Number(counts.rapid_change||0)+Number(counts.sustained_high||0)+dsp;
   const gaps=Number(counts.missing_data||0);
   const truncated=data.event_summary?.truncated?' · แสดงรายการล่าสุดบางส่วน':'';
   document.getElementById('acousticEventSummary').textContent=observed
-    ?`${observed} ช่วง${dsp?` · DSP label ${dsp}`:''}${gaps?` · ข้อมูลขาด ${gaps} ช่วง`:''}${truncated}`
+    ?`${observed} ช่วง${dsp?` · จำแนกเบื้องต้น ${dsp} ช่วง`:''}${gaps?` · ข้อมูลขาด ${gaps} ช่วง`:''}${truncated}`
     :gaps?`ยังไม่พบการเปลี่ยนระดับเสียงเด่น · ข้อมูลขาด ${gaps} ช่วง`:'ยังไม่พบช่วงที่เด่นชัด';
   const eventRoot=document.getElementById('acousticEventList');
-  const eventIcons={rapid_change:'↕',sustained_high:'≈',missing_data:'?',snore_like:'Z',speech_like:'พูด',impact_like:'!',steady_equipment_like:'≈'};
+  const eventIcons={rapid_change:'↕',sustained_high:'≈',missing_data:'?',snore_like:'Z',speech_like:'…',impact_like:'!',steady_equipment_like:'≈'};
   eventRoot.innerHTML=events.length?events.slice().reverse().map(event=>`<article class="${escapeMarkup(event.key||'unknown')}"><i class="acoustic-event-icon" aria-hidden="true">${escapeMarkup(event.marker||eventIcons[event.key]||'•')}</i><div><time>${escapeMarkup(acousticClock(event.start_epoch_s,{seconds:true}))}${Number(event.end_epoch_s)>Number(event.start_epoch_s)?`–${escapeMarkup(acousticClock(event.end_epoch_s,{seconds:true}))}`:''}</time><b>${escapeMarkup(event.label||'เหตุการณ์ระดับเสียง')}</b><span>${escapeMarkup(acousticEventDetail(event))}</span></div></article>`).join(''):`<div class="acoustic-empty">${escapeMarkup(data.message||'ยังไม่มีเหตุการณ์ระดับเสียง')}</div>`;
   document.getElementById('acousticDetectorVersion').textContent=data.detector?.version||'rule --';
   drawAcousticTimeline(data);
@@ -608,7 +623,7 @@ async function fetchAcousticTimeline({force=false}={}){
     acousticTimelineSessionId=liveSessionId;
     acousticTimelineFetchedAt=0;
     acousticTimelineLastSuccessAt=0;
-    renderAcousticTimeline({status:liveSessionId?'collecting':'no_session',message:liveSessionId?'กำลังโหลด Timeline ของ Session นี้':'Realtime ทำงานอยู่ · ไม่บันทึกเมื่อไม่มี Session',session:{active:Boolean(liveSessionId)},summary:{},timeline:{points:[]},events:[],event_summary:{counts:{}}});
+    renderAcousticTimeline({status:liveSessionId?'collecting':'no_session',message:liveSessionId?'กำลังโหลดประวัติเสียงของการพักครั้งนี้':'แสดงผลสด · ไม่บันทึกเมื่อไม่มีการพัก',session:{active:Boolean(liveSessionId)},summary:{},timeline:{points:[]},events:[],event_summary:{counts:{}}});
     force=true;
   }
   const now=Date.now();
@@ -623,7 +638,7 @@ async function fetchAcousticTimeline({force=false}={}){
     if(returned!==acousticTimelineSessionId)throw new Error('session_mismatch');
     renderAcousticTimeline(data);
     acousticTimelineLastSuccessAt=Date.now();
-  }catch{acousticTimelineUnavailable('โหลด Timeline ล่าสุดไม่ได้');}
+  }catch{acousticTimelineUnavailable('โหลดประวัติเสียงล่าสุดไม่ได้');}
   finally{acousticTimelineLoading=false;}
 }
 

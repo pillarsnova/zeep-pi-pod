@@ -667,17 +667,17 @@
     </section>
     <section class="card acoustic-shadow-card" id="acousticIntelligenceCard" data-pages="monitor" data-admin-panel aria-labelledby="acousticIntelligenceTitle">
       <div class="acoustic-card-head">
-        <div class="acoustic-card-title"><span class="acoustic-orb" aria-hidden="true">⌁</span><div><em>SMART EAR</em><h3 id="acousticIntelligenceTitle">เหตุการณ์เสียงตลอด Session</h3><p>วางป้ายตามเวลาเมื่อระดับเสียงเปลี่ยนเด่น ดังต่อเนื่อง หรือข้อมูลขาดช่วง</p></div></div>
-        <span class="acoustic-status-badge" id="acousticStatusBadge">รอ SESSION</span>
+        <div class="acoustic-card-title"><span class="acoustic-orb" aria-hidden="true">⌁</span><div><em>SMART EAR</em><h3 id="acousticIntelligenceTitle">เหตุการณ์เสียงภายใน ZEEP</h3><p>ดูระดับเสียงและลักษณะเสียงที่ตรวจพบ พร้อมเวลาที่เกิด</p></div></div>
+        <span class="acoustic-status-badge" id="acousticStatusBadge">รอข้อมูลเสียง</span>
       </div>
       <div class="acoustic-summary-grid" aria-live="polite">
         <article><small>เฉลี่ยช่วงบันทึก</small><b id="acousticAverage">-- dBA</b><span id="acousticAverageMeta">ยังไม่มีข้อมูล</span></article>
         <article><small>สูงสุด</small><b id="acousticPeak">-- dBA</b><span id="acousticPeakMeta">ยังไม่มีข้อมูล</span></article>
-        <article><small>ลักษณะโดยรวม</small><b id="acousticPattern">กำลังรอข้อมูล</b><span id="acousticPatternMeta">เริ่ม Session เพื่อวิเคราะห์</span></article>
-        <article><small>ป้ายเสียงล่าสุด</small><b id="acousticLatestLabel">ยังไม่มีป้ายเสียง</b><span id="acousticLatestLabelMeta">รอ DSP จาก ESP32</span></article>
+        <article><small>ลักษณะโดยรวม</small><b id="acousticPattern">กำลังรอข้อมูล</b><span id="acousticPatternMeta">เริ่มการพักเพื่อดูภาพรวม</span></article>
+        <article><small>ลักษณะเสียงล่าสุด</small><b id="acousticLatestLabel">ยังจำแนกเสียงไม่ได้</b><span id="acousticLatestLabelMeta">รอข้อมูลจำแนกเสียงจากเซนเซอร์</span></article>
       </div>
       <section class="acoustic-live-console" id="acousticLiveConsole" aria-label="สัญญาณเสียงสดจาก SPH0645">
-        <header><div><b>SPH0645 · LIVE WINDOW</b><span id="acousticPacketStatus">กำลังรอ packet</span></div><i aria-hidden="true"></i></header>
+        <header><div><b>SPH0645 · สัญญาณล่าสุด</b><span id="acousticPacketStatus">กำลังรอข้อมูล</span></div><i aria-hidden="true"></i></header>
         <div class="acoustic-live-bars" id="acousticLiveBars" aria-hidden="true"></div>
         <div class="acoustic-feature-grid" id="acousticFeatureGrid">
           <span><em>Centroid</em><b>-- Hz</b></span><span><em>Flux</em><b>--</b></span><span><em>Bands L/M/H</em><b>--</b></span><span><em>Modulation</em><b>--</b></span><span><em>Periodicity</em><b>--</b></span>
@@ -685,29 +685,29 @@
       </section>
       <div class="acoustic-timeline-layout">
         <section class="acoustic-chart-panel" aria-labelledby="acousticTimelineHeading">
-          <header><div><b id="acousticTimelineHeading">ระดับเสียงตามเวลา · dBA</b><span id="acousticTimelineMeta">ยังไม่มี Session ที่กำลังบันทึก</span></div><span id="acousticCoverage">Coverage --</span></header>
+          <header><div><b id="acousticTimelineHeading">ระดับเสียงตามเวลา · dBA</b><span id="acousticTimelineMeta">ยังไม่มีการพักที่กำลังบันทึก</span></div><span id="acousticCoverage">ข้อมูลครบ --</span></header>
           <svg id="acousticTimelineSvg" viewBox="0 0 900 280" preserveAspectRatio="xMidYMid meet" role="img" aria-label="กราฟระดับเสียงใน ZEEP">
             <title>กราฟระดับเสียงใน ZEEP</title>
-            <desc>เริ่ม Session เพื่อดูระดับเสียงตามเวลา</desc>
+            <desc>เริ่มการพักเพื่อดูระดับเสียงตามเวลา</desc>
           </svg>
           <div class="acoustic-chart-legend"><span><i class="level-line"></i>ค่าจาก Sensor</span><span><i class="event-mark"></i>เหตุการณ์จากระดับเสียง</span><span><i class="gap-mark"></i>ข้อมูลขาดช่วง</span></div>
         </section>
         <section class="acoustic-event-panel" aria-labelledby="acousticEventHeading">
           <header><div><b id="acousticEventHeading">ช่วงเสียงที่เด่น</b><span id="acousticEventSummary">ยังไม่พบเหตุการณ์</span></div></header>
-          <div class="acoustic-event-list" id="acousticEventList"><div class="acoustic-empty" id="acousticEventEmpty">เริ่ม Session เพื่อดูเหตุการณ์ตามเวลา</div></div>
+          <div class="acoustic-event-list" id="acousticEventList"><div class="acoustic-empty" id="acousticEventEmpty">เริ่มการพักเพื่อดูเหตุการณ์ตามเวลา</div></div>
         </section>
       </div>
-      <div class="acoustic-guardrail" id="acousticGuardrail">Pi ตรวจเหตุการณ์จากระดับ dBA ได้ทันที · ป้าย DSP เป็นข้อมูลเสริม · ไม่บันทึก Raw audio</div>
+      <div class="acoustic-guardrail" id="acousticGuardrail">ผลจำแนกเป็นข้อมูลเบื้องต้น ยังไม่ยืนยันต้นเสียงหรือการตื่น · ไม่บันทึกไฟล์เสียง</div>
       <details class="acoustic-technical" id="acousticTechnicalDetails">
         <summary><span>ข้อมูลวิศวกรรม</span><small>Version, ขอบเขต และที่มาของข้อมูล</small><i aria-hidden="true">⌄</i></summary>
         <div class="acoustic-technical-grid">
-          <div><span>ขอบเขต</span><b>Sound level pattern only</b></div>
+          <div><span>ขอบเขต</span><b>ระดับเสียงและผลจำแนกเบื้องต้น</b></div>
           <div><span>Sound source</span><b id="acousticSoundSource">ESP32 sound_dba direct</b></div>
           <div><span>Firmware</span><b id="acousticFirmware">ยังไม่ยืนยัน</b></div>
           <div><span>Contract</span><b id="acousticContractVersion">contract --</b></div>
           <div><span>Level detector</span><b id="acousticDetectorVersion">rule --</b></div>
           <div><span>SPH0645 window</span><b id="acousticWindowFeatures">รอค่า RMS / Peak</b></div>
-          <div><span>DSP classifier</span><b id="acousticDspStatus">รอ feature สำหรับจำแนกเสียง</b></div>
+          <div><span>DSP classifier</span><b id="acousticDspStatus">รอข้อมูลจำแนกเสียง</b></div>
           <div><span>ผลต่อคะแนน/Control</span><b>ไม่มี</b></div>
         </div>
         <p class="acoustic-metrology-note">ค่าเฉลี่ยคำนวณจากพลังงานของค่าที่ Sensor ส่งในแต่ละรอบ ไม่ใช่ค่า LAeq(A) จากเครื่องวัดที่ผ่านการรับรอง</p>

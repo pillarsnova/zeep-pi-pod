@@ -149,12 +149,12 @@ class UiComposerTests(unittest.TestCase):
             "acousticTechnicalDetails",
         ):
             self.assertIn(f'id="{element_id}"', template)
-        self.assertIn("เหตุการณ์เสียงตลอด Session", template)
-        self.assertIn("Pi ตรวจเหตุการณ์จากระดับ dBA ได้ทันที", template)
+        self.assertIn("เหตุการณ์เสียงภายใน ZEEP", template)
+        self.assertIn("ยังไม่ยืนยันต้นเสียงหรือการตื่น", template)
         self.assertIn('id="acousticLatestLabel"', template)
         self.assertIn("function renderAcousticIntelligence(data={})", template)
         self.assertIn("function renderAcousticLiveObservation(data={})", template)
-        self.assertIn("Realtime · ไม่บันทึกเมื่อไม่มี Session", template)
+        self.assertIn("แสดงผลสด · ไม่บันทึกเมื่อไม่มีการพัก", template)
         self.assertIn("const eventIcons={rapid_change:'↕'", template)
         self.assertIn("เหตุการณ์จากระดับเสียง", template)
         self.assertIn("function renderAcousticTimeline(data={})", template)
@@ -163,7 +163,7 @@ class UiComposerTests(unittest.TestCase):
             "renderAcousticIntelligence(s.acoustic_intelligence||{})",
             template,
         )
-        self.assertIn("ไม่บันทึก Raw audio", template)
+        self.assertIn("ไม่บันทึกไฟล์เสียง", template)
         self.assertIn("data.event_summary?.counts", template)
         self.assertIn("acousticTimelineUnavailable", template)
         self.assertNotIn('id="acousticLevel"', template)

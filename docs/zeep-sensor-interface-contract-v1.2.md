@@ -1,6 +1,6 @@
 # ZEEP Sensor Interface Contract v1.2
 
-สถานะ: Approved runtime contract · 2026-09-16
+สถานะ: Approved runtime contract · ทบทวน 2026-09-19
 ขอบเขต: ESP32 Sensor Hub 1 → Pi5 ผ่าน USB Serial JSONL @ 115200 baud
 
 ## หลักการ
@@ -107,40 +107,18 @@ Sleep State, Sleep Score, Recovery Score หรือสั่ง Control อั
 หรือ classifier หาย ค่า temperature/humidity/lux และ `sound_dba` ต้องทำงานต่อได้
 ตามปกติ ป้ายจะเปลี่ยนเป็น `not_evaluated` โดยไม่สร้าง label จาก dBA เพียงค่าเดียว
 
-Firmware candidate ใน repository ผ่าน build แล้ว แต่ยังไม่ใช่หลักฐานว่าติดตั้งอยู่
-บน Production Hub การ Flash เป็นขั้นตอนของ physical validation ได้เมื่อมี owner
+มีหลักฐาน DSP telemetry บน Pod 1 ตาม [Current Status](current-status.md)
+และ Hardware Audit แต่ build ผ่านเพียงอย่างเดียวไม่ยืนยันการติดตั้งทุกเครื่อง
+การ Flash เป็นขั้นตอนของ physical validation ได้เมื่อมี owner
 approval, Pod ว่าง, backup/rollback และ board identity ส่วน privacy/consent,
 field comparison และ CEM ใช้ตัดสินการรับรองหลังเก็บผลจริง
 
-## ภาคผนวกประวัติ Firmware ทดลอง
+## Firmware และการสอบเทียบ
 
-ส่วนนี้เป็นหลักฐานย้อนหลังของ Firmware candidate แต่ละรุ่น ไม่ใช่ Runtime gate
-ค่า Runtime ฝั่ง Pi ยึด `sound_dba` ตามกติกาด้านบนเพียงเส้นทางเดียว
-
-Firmware candidate เดิมทำงานตามลำดับนี้ก่อนสร้าง Packet:
-
-1. อ่าน I2S ด้วย sample rate คงที่ (แนะนำ 48 kHz) และตรวจจำนวน sample จริง
-2. แก้ word alignment ของ SPH0645 ตาม ESP32/ESP-IDF รุ่นที่ใช้งานจริง
-3. sign-extend PCM 24-bit อย่างถูกต้อง; ห้ามใช้ absolute value กับ sample
-4. ตรวจ stuck-at-zero, clipping, short read, DMA overflow และ discontinuity
-5. ตัด DC component / high-pass ต่ำกว่าย่านเสียงที่วัด
-6. ใช้ digital A-weighting filter ที่ตรวจ frequency response แล้ว
-7. สะสม mean-square energy ของสัญญาณหลัง filter ตลอด integration window
-8. แปลงเป็น LAeq ด้วย sensitivity/reference calibration ของไมโครโฟน
-9. ตรวจ noise floor, acoustic overload, finite value และ sample coverage
-10. ส่ง `sound_valid=true` เฉพาะเมื่อทุกข้อผ่าน; ไม่เช่นนั้นส่ง false พร้อม
-    `sound_invalid_reason`
-
-สมการแกนกลางคือ
-
-```text
-mean_square = sum(a_weighted_sample²) / valid_sample_count
-LAeq = calibration_reference_dba + 10 × log10(mean_square / reference_energy)
-```
-
-ค่าคงที่อ้างอิงต้องมาจาก sensitivity ของ SPH0645 และการสอบเทียบกับแหล่งเสียง
-ที่ทราบระดับ ไม่ใช่การใช้ `abs(dBFS)` ค่าชดเชย enclosure/port ให้ version และ
-เก็บ provenance แยกต่อบอร์ด
+ขั้นตอน I²S, A-weighting, 32 kHz, reference `94 - (-26) = 120 dB`,
+CEM residual offset และ backup/Flash อยู่ใน
+[Firmware Guide](../firmware/sensorhub1-esp32s3/README.md) เพียงแหล่งเดียว
+เอกสารนี้กำหนดขอบเขต packet ที่ Pi รับ ไม่ทำสำเนาสูตร/QA ของ candidate ที่ยกเลิก
 
 ## สาเหตุ Invalid ของ Pi Runtime
 
@@ -150,26 +128,13 @@ LAeq = calibration_reference_dba + 10 × log10(mean_square / reference_energy)
 - `non_finite_sound_dba` — ค่าเป็น NaN หรือ infinity
 - `sound_dba_out_of_range` — ค่านอกช่วง 30–130 dBA
 
-## ภาคผนวก Offline QA เดิม (ยกเลิกจาก Production flow)
-
-รายการนี้เก็บเพื่อ Audit เท่านั้น ไม่ใช่เงื่อนไขอนุมัติ/บล็อกค่าของ Pi:
-
-1. ทดสอบ digital silence และ quiet room: ไม่มี sign/overflow spike
-2. ป้อน sine/pink noise หลายระดับและยืนยัน response เพิ่มตามระดับแบบ monotonic
-3. ตรวจ A-weighting response ที่อย่างน้อย 125 Hz, 1 kHz และ 4 kHz
-4. เทียบ CEM DT-8852 แบบ A/SLOW หรือ datalogging ที่ช่วง 30–80 dBA โดยวาง
-   microphone ใกล้กันและเทียบหน้าต่างเวลาเดียวกัน
-5. ใช้อย่างน้อย 5 ระดับ ครอบคลุม 35–70 dBA; ห้ามใช้ค่าที่ Meter ขึ้น UNDER/OVER
-6. ยอมรับค่า Production หลังมี regression test, firmware version และผล field
-   calibration ที่ย้อนตรวจได้
-
 ## Reference
 
 - Knowles SPH0645LM4H-B datasheet: digital sensitivity และ I2S format
   <https://www.knowles.com/docs/default-source/model-downloads/sph0645lm4h-b-datasheet-rev-c.pdf>
 - Espressif I2S Programming Guide: driver/slot configurationของ ESP32
   <https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/i2s.html>
-- CEM DT-8852 field protocol ใช้ A/SLOW และช่วง 30–130 dBA ตามขั้นตอนด้านบน;
+- CEM DT-8852 field protocol ใช้ A/SLOW และช่วง 30–130 dBA ตาม Firmware Guide;
   observation รุ่นเก่าตรวจสอบได้จาก Git history และไม่ใช่ runtime input
 - `ikostoski/esp32-i2s-slm` ใช้ศึกษา architecture A/C weighting และ Leq เท่านั้น;
   เป็น GPL-3.0 จึงห้ามคัดลอกเข้า Firmware ปิดของ ZEEP โดยไม่ผ่าน license review

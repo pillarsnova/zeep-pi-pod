@@ -1,6 +1,9 @@
 # ZEEP Pi5 Software Architecture
 
 สถานะ: **Current implementation**
+
+ทบทวนเอกสาร: 19 กันยายน 2026 · [Current Status](current-status.md)
+ระบุรุ่นที่ติดตั้งและขอบเขตหลักฐานล่าสุด
 ขอบเขต: `/home/pod1/pi5` · branch `origin/develop`
 
 เอกสารนี้เป็นแผนที่กลางสำหรับพัฒนาและตรวจสอบ Pi5 runtime ของ ZEEP ทุกตู้
@@ -69,6 +72,8 @@ app, ต่อ lifecycle, ประกอบ dependency และเรียก
 | Advisory AI projection | `sessions/user_ai_context.py`, `user_profile_api.py` | Positive allowlist ที่ตัด direct identifiers; ยังคงเป็น Personal Wellness Data และไม่สั่งอุปกรณ์ |
 | Identity erasure | `identity/account_erasure.py`, `account_erasure_api.py` | ลบ local active store ของ canonical account/aliases, Session, BCG, Baseline, checkpoint และ capability ที่ค้าง |
 | Final report | `sleep_session_report.py` | Mode-aware Sleep Score/Recovery Score และรายงานหลังจบ Session |
+| After-rest advice | `sessions/post_rest_advice.py`, `advice_response_models.py` | Pure policy เลือกหนึ่ง action พร้อมเหตุผล/ช่วงเวลา; legacy, Usage API และ HTML ใช้ร่วมกัน |
+| Verified workstation sync | `operations/workstation_approval.py`, `developer_workstation.py`, `secure_paths.py` | แยก team encrypted approval จาก owner-approved Mac exception; ตรวจ frozen SQLite โดยไม่สร้าง sidecar |
 | Account ingest outbox | `sessions/ingest_payload.py`, `ingest_outbox.py` | สร้าง payload แบบ allowlist, เขียนคิว atomic และ retry โดยไม่ทำให้ Session finalization ล้ม |
 | Atomic Session finalization | `sessions/finalization_commit.py` | commit ผลลง DB, กู้ live Session เมื่อ persistence ล้ม และแยก committed-but-cleanup-failed ออกจาก precommit failure |
 | Finalization orchestration | `sessions/finalization.py`, `finalization_contracts.py` | แยก waiting/recorded close, flush ก่อน projection/หลัง BCG, commit แล้วจึง logout/upload/learn ผ่าน explicit ports; caller คง lifecycle lock |
@@ -243,7 +248,7 @@ Audio boundary ใช้รูปแบบเดียวกันโดยไ�
 - **Facade** — `AudioPlayer` serialize play กับ shutdown และใช้ watcher registry
   เพื่อ teardown แบบมีเวลาสิ้นสุด
 
-### 6.2 Working candidate ที่ยังไม่ใช่ Release fact
+### 6.2 ข้อกำหนด initialization ที่ต้องรักษาระหว่าง Refactor
 
 - Constructor ของ Database, Auth, Occupancy, Personal Baseline, GPIO และ Audio ไม่เปิด
   I/O ตอน import; Production initialize ตามลำดับที่ระบุใน §3.1
@@ -252,6 +257,10 @@ Audio boundary ใช้รูปแบบเดียวกันโดยไ�
 - Guarded lazy initialization มีไว้เพื่อ compatibility ของ direct caller/test เดิม;
   Production ใช้ explicit lifespan initialization
 - Candidate ต้องผ่าน Review และ Release gate ก่อนจึงเขียนสถานะเป็น “เสร็จแล้ว”
+
+งาน UI shell และ Shared result presenter อยู่ใน
+[UI Source Guide](../static/partials/app/README.md); คำแนะนำ v1.2 อยู่ใน
+[Post-rest Advice](zeep-post-rest-advice.md) แยกจาก estimator/score formula
 
 ### 6.3 ลำดับถัดไป
 
@@ -268,8 +277,8 @@ Audio boundary ใช้รูปแบบเดียวกันโดยไ�
 Acoustic Intelligence ที่เสนอใน
 [DSP Plan](onboarding/smart-ear-dsp-plan.md) มี `acoustics/` รุ่น P1-shadow:
 contract validation, event grouping, Timeline persistence, Admin API และ Monitor
-marker พร้อมแล้ว ส่วน Firmware candidate ยังไม่ถือเป็น Production จนผ่าน
-physical validation/installation gate
+marker พร้อมแล้ว และมีหลักฐาน Firmware DSP บน Pod 1 ตาม Current Status
+การติดตั้งไม่รับรองความแม่นยำของ class; controlled validation และ user result ยังเป็นงานถัดไป
 
 แต่ละขั้นต้องเป็น behavior-preserving commit ขนาดเล็กที่ย้อนกลับได้ ห้ามรวมการจูน
 Health threshold, เปลี่ยน Schema หรือ Flash Firmware ไว้ใน Refactor commit เดียวกัน

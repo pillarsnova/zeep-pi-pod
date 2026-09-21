@@ -1,6 +1,6 @@
 # ZEEP v1 — API, Data และ Privacy
 
-สถานะ: **Internal Wellness API / Internal Pilot**
+สถานะ: **Internal Wellness API / Internal Pilot** · ทบทวน 19 กันยายน 2026
 
 Contract หลัก: [ZEEP API v1](../zeep-api-v1.md) และ
 [API Schema Reference v1](../zeep-api-schema-reference-v1.md)
@@ -47,6 +47,10 @@ ingest, report share, snapshot sync หรือ tunnel ต้องระบุ
 ### Usage Session API — เส้นทางใหม่สำหรับ App
 
 Base path คือ `/api/v1/usage-sessions` และอ่านเฉพาะ Session ที่ finalize แล้ว
+
+คำแนะนำหลังพักรุ่น v1.2 อยู่ใน `restore_summary.recommendation` ของ summary/detail
+มีหนึ่ง action พร้อมหัวข้อและเหตุผล ส่วน presentation ยังคงข้อความ string เดิม
+ดู [API Schema](../zeep-api-schema-reference-v1.md) ไม่สร้างคำแนะนำอีกชุดจากคะแนน
 
 | Endpoint | ข้อมูลที่ได้ | สิทธิ์ |
 |---|---|---|
@@ -177,8 +181,9 @@ privacy-first boundary ดังนี้:
   account-erasure contract และทดสอบ public redaction
 
 Smart Ear P1-shadow อยู่ใน API v1 แบบ Admin-only แล้ว โดย Pi/API/UI และ
-Timeline persistence รองรับ label แต่ Firmware candidate ยังต้องผ่าน physical
-validation/installation gate; user-facing summary ยังเป็น `ROADMAP` Client ต้องตรวจ
+Timeline persistence รองรับ label และมีหลักฐาน Firmware DSP บน Pod 1 แล้ว
+ตาม [Current Status](../current-status.md) แต่ยังไม่รับรองความแม่นยำราย class;
+user-facing summary ยังเป็น `ROADMAP` Client ต้องตรวจ
 `contract_version`, `classification_state` และห้ามเปลี่ยน candidate เป็นผลตรวจ
 
 ## Data ที่ออกจาก Pod

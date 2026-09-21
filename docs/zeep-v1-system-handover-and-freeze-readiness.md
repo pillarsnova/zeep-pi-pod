@@ -5,6 +5,8 @@
 > **ขอบเขต:** ZEEP Wellness & Longevity · Pi 5 runtime · สองรูปแบบการพัก
 >
 > **วันที่ตรวจ:** 16 กันยายน 2569 (Asia/Bangkok)
+> **ทบทวนสถานะเอกสาร:** 19 กันยายน 2026; ผลตรวจเดิมเป็น snapshot ของรอบนั้น
+> รุ่นติดตั้งและงานที่ทำเพิ่มยึด [Current Status](current-status.md)
 >
 > **ผู้อนุมัติ Freeze:** Product Owner ต้องตรวจผล Regression, Production smoke,
 > ประเด็นคงค้าง และระบุ Git SHA/Tag ใน Closure record ก่อนประกาศ v1
@@ -360,9 +362,9 @@ Hardware experiment แยก release record จาก v1 Pi Product Gate
 
 ### P1 — บันทึกเป็นหนี้เทคนิคได้หากไม่เปลี่ยน behavior
 
-- BCG reader, 10-second Sensor sampler และ live projection แยกแล้วบน
-  `origin/develop`; `app.py` ยังใหญ่และควรทยอยแยก Session lifecycle กับ route wiring
-  ด้วย characterization tests โดยห้ามรวม Refactor กับการเปลี่ยนสูตร
+- BCG reader, 10-second sampler, live projection และ start/restart/finalize
+  orchestration แยกแล้ว; `app.py` ยังมี account binding, routes และ Aircon policy
+  ที่ควรแยกต่อด้วย characterization tests โดยไม่เปลี่ยนสูตร ดู Architecture เป็นหลัก
 - Personal Baseline จำกัด expensive detail reads ต่อ cohort แล้ว แต่ metadata query
   ยังอ่านทุก Session ในครั้งเดียว ควรย้ายเป็น indexed/window query เมื่อปริมาณข้อมูลจริง
   โตจนมีหลักฐานว่า query นี้เป็นคอขวด
@@ -387,10 +389,10 @@ Hardware experiment แยก release record จาก v1 Pi Product Gate
 
 ### Defer ไป v2
 
-- Acoustic Intelligence DSP classifier, event persistence และ user-facing result;
-  v1 P0.5 มีเพียงระดับเสียง, packet-level aggregation, Admin capability contract/UI
-  ที่แสดง `not_evaluated` ความสามารถจำแนกต้องผ่าน P1–P4 ใน
-  [DSP Plan](onboarding/smart-ear-dsp-plan.md) และไม่อยู่ใน v1 Code Freeze scope
+- การรับรองความแม่นยำ Acoustic classifier และ user-facing result;
+  Level Timeline, optional DSP marker และการเก็บช่วง Recording มีแล้วใน
+  P1 Admin shadow แต่ยังไม่ใช่ผลสุขภาพสำหรับผู้ใช้ รายละเอียด/validation ที่ยังเหลือ
+  อยู่ใน [DSP Plan](onboarding/smart-ear-dsp-plan.md)
 - Personal Baseline เปลี่ยน Sleep State โดยตรง
 - Closed-loop automatic control จาก Sleep State
 - Whole-day readiness, training load และ wearable integration
@@ -402,14 +404,13 @@ Hardware experiment แยก release record จาก v1 Pi Product Gate
 
 ```bash
 # Mac / CI
-pi5/.venv/bin/python -m unittest discover -q
-pi5/.venv/bin/python ui_composer.py check
-pi5/.venv/bin/ruff check acoustics adaptive api common hardware identity operations presentation safety sensors sessions
-pi5/.venv/bin/ruff format --check acoustics adaptive api common hardware identity operations presentation safety sensors sessions
-pi5/.venv/bin/python -m py_compile app.py *.py
-pi5/.venv/bin/python research/evidence-library/update_research_library.py check
+pi5/.venv/bin/python quality_gate.py full
 git diff --check
 ```
+
+ใช้ command กลางตาม [TESTING.md](../TESTING.md) ไม่ทำสำเนารายชื่อชุดทดสอบหรือ
+Ruff scope ไว้ที่นี่ งานเอกสารทั่วไปใช้ focused checks; Full ใช้เมื่อมี trigger
+หรือก่อน Freeze ไม่รันซ้ำบน Pi เพียงเพราะเอกสารเปลี่ยน
 
 บันทึกเมื่อพร้อม Freeze:
 
@@ -441,5 +442,6 @@ git diff --check
 - [Research Evidence Library](../research/evidence-library/README.md)
 
 หากข้อความในเอกสารรองขัดกับ `sleep_system_policy.py`, versioned API contract หรือ
-approved replay manifest ให้หยุดการเผยแพร่และแก้ความขัดแย้งก่อน Freeze ห้ามเลือก
-ข้อความที่ดูเหมาะกว่าโดยไม่มี version/audit trail
+approved replay manifest ให้ระบุ SHA และแก้ความขัดแย้งก่อนเผยแพร่ข้อความ/contract
+ใหม่หรือก่อน Freeze ไม่หยุดผลที่ใช้อยู่เพียงเพราะเอกสารเก่า และไม่เปลี่ยน runtime
+โดยไม่มีคำสั่ง/ขอบเขต/version/audit ที่เหมาะสม

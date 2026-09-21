@@ -1,6 +1,6 @@
 # ZEEP Pi 5 Operations Runbook
 
-สถานะ: **Current operations**
+สถานะ: **Current operations** · ทบทวน 19 กันยายน 2026
 
 ขอบเขต: Pod 1 · `/home/pod1/pi5` · `origin/develop`
 
@@ -75,9 +75,10 @@ marker และตรวจซ้ำทั้ง volume ปลายทาง�
 หรือคัดลอก Marker ไปใช้กับเครื่องอื่นได้ หากตรวจสถานะไม่ได้ การเข้ารหัสปิดอยู่ หรือ
 เจ้าของ/สิทธิ์ไฟล์ไม่ตรง ระบบจะหยุดก่อนดาวน์โหลดข้อมูลแบบ fail closed
 
-รุ่นนี้รองรับเฉพาะ macOS ที่เปิด FileVault และ Linux ที่ใช้ LUKS/dm-crypt เท่านั้น
+ขั้นตอนอนุมัติปกติรองรับ macOS ที่เปิด FileVault และ Linux ที่ใช้ LUKS/dm-crypt
 Windows ยังถูกปิดจนกว่าจะมี BitLocker + ACL + transport tests ครบ ห้ามอนุมัติ
-ข้อยกเว้นด้วยการสร้าง Marker เอง
+ข้อยกเว้นด้วยการสร้าง Marker เองนอกขั้นตอนที่เจ้าของอนุมัติ ข้อยกเว้น Mac
+ด้านบนเป็นอีกเส้นทางหนึ่ง ไม่ใช่การปิดการตรวจสำหรับเครื่องทีมทั้งหมด
 
 Marker เป็น operational approval record บนเครื่อง ไม่ใช่ลายเซ็นจากศูนย์กลาง
 บัญชี OS administrator (`root`) คือ trust boundary ของรุ่นนี้ ส่วน `approved_by`
@@ -110,9 +111,14 @@ Snapshot ผูกกับ `pod_id` และ Git commit; ค่า `--pod-id` 
 command ให้เรียก exporter นี้ได้อย่างเดียว และจำกัดด้วย Tailscale ACL; บัญชี `pod1`
 ทั่วไปยังเป็นสิทธิ์ดูแลระบบและไม่ใช่ least-privilege credential สำหรับแจกทีม
 
-ห้ามส่งต่อ snapshot, ห้ามตั้ง snapshot เป็น `DATA_DIR` และห้ามสร้าง marker บน
-เครื่องส่วนตัวหรือเครื่องที่ไม่ได้เข้ารหัสดิสก์ การลบข้อมูลผู้ใช้ต้องครอบคลุมสำเนา
-บน workstation ตามขอบเขต PDPA ด้วย
+ห้ามส่งต่อ snapshot หรือใช้เป็น `DATA_DIR` และห้ามอนุมัติเครื่องส่วนตัว/เครื่องที่
+ไม่เข้ารหัสนอกข้อยกเว้นที่ระบุไว้ การลบข้อมูลผู้ใช้ต้องครอบคลุมสำเนาบน workstation
+ตาม workflow ของทีมด้วย
+
+ตรวจสำเนาด้วย `python sync_pod_data.py --check-latest` ก่อนวิเคราะห์ และคัดลอก DB
+ออกไปยังพื้นที่ทำงานหากเครื่องมือจะเขียนข้อมูล ตัวตรวจใช้ SQLite
+`mode=ro&immutable=1` เฉพาะ backup ที่ปิดนิ่งแล้ว เพื่อไม่สร้าง WAL/SHM เปลี่ยน
+Snapshot ห้ามใช้ `immutable=1` กับฐานข้อมูลสดที่บริการกำลังเขียน
 
 สำหรับ Pod อื่นให้ระบุทั้ง identity และ host ชัดเจน เช่น:
 

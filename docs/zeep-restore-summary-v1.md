@@ -6,12 +6,13 @@
 > **Positioning:** ZEEP Wellness & Longevity · ไม่ใช่การวินิจฉัย
 > หรือการประเมินความพร้อมทั้งวัน
 >
-> **Status:** Implementation specification · 2026-09-16
+> **Status:** Implementation specification · ทบทวน 2026-09-19
 > **Code:**
 > [`restore_summary.py`](../sessions/restore_summary.py) ·
 > [`restore_summary_baseline.py`](../sessions/restore_summary_baseline.py) ·
 > [`sleep_session_report.py`](../sleep_session_report.py) ·
 > [`restore_response_models.py`](../sessions/restore_response_models.py)
+> · [`post_rest_advice.py`](../sessions/post_rest_advice.py)
 >
 > **API schema:**
 > [Usage Session API Schema Reference v1](zeep-api-schema-reference-v1.md) ·
@@ -25,6 +26,8 @@
   สถานะ จุดแข็ง จุดที่ควรปรับ Baseline ความมั่นใจ และคำแนะนำหนึ่งข้อ
 - Personal Baseline แยกตามผู้ใช้และโหมด เริ่มเปรียบเทียบเมื่อมีอย่างน้อย
   7 Session และแสดงว่าเสถียรมากขึ้นตั้งแต่ 14 Session
+- เกณฑ์นี้ใช้กับ **คะแนน**; ไม่ใช่ HR/RR reference ที่ใช้ 3 ครั้ง หรือ Best rest
+  window ที่เริ่มจาก prior Session 1 ครั้ง ดู [Current Status](current-status.md)
 - สิ่งแวดล้อมไม่สร้าง Sleep State แต่เป็นองค์ประกอบสนับสนุน
   แบบจำกัดสูงสุด 10 คะแนนในทั้ง Sleep Score และ Recovery Score
 - ตอนนี้ใช้ชื่อที่สื่อถึงผลจากการพักใน ZEEP โดยตรง และสงวนชื่อ
@@ -189,6 +192,12 @@ policy แต่ `status.key=safety_review` ต้องมาก่อน band 
 
 ## 9. Contract ที่ส่งให้ UI/API
 
+ส่วน `recommendation` ใช้ object รุ่น v1.2: หนึ่งการกระทำพร้อมหัวข้อ ช่วงเวลา
+เหตุผล และแหล่งหลักฐาน ข้อมูลเก่ายอมให้ field เพิ่มเป็น null/ละเว้นได้
+รูปแบบเต็มอยู่ใน [API Schema](zeep-api-schema-reference-v1.md) และ
+[คำแนะนำหลังพัก](zeep-post-rest-advice.md) ส่วน `/presentation` ยังคงส่ง string
+ตัวอย่างโครงสร้างด้านล่างเป็นฉบับย่อ ไม่ใช่ response fixture เต็ม
+
 ```json
 {
   "version": "zeep-restore-summary-v1.0",
@@ -235,7 +244,7 @@ Historical `auto/unknown_legacy` ต้องส่ง `unresolved_score` แล
 | Driver policy | `zeep-restore-drivers-v1.0` |
 | Baseline comparison | `zeep-restore-personal-baseline-v1.0` |
 | Recommendation | `zeep-restore-recommendation-v1.2-after-rest` · [คำแนะนำหลังพัก](zeep-post-rest-advice.md) |
-| Product language | `zeep-product-language-v1.1` |
+| Product language | `zeep-product-language-v1.2` · ถ้อยคำใน source; ดู deployment แยกใน Current status |
 | Sleep Score formula | `zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10` |
 | Recovery Score formula | `zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10` |
 
@@ -247,10 +256,12 @@ history สำหรับเปิดรายงานเก่าโดยไ
 
 ## 11. ขอบเขตการพัฒนาถัดไป
 
-1. Finalization แช่แข็ง `personal_context` จาก Session ก่อนหน้าไว้ใน
-   `final_summary`; รายงานย้อนหลังใช้ snapshot เดิม จึงไม่มีข้อมูลอนาคตไหลย้อน
-2. เพิ่ม Pre/Post questionnaire API พร้อม provenance และ timestamp
-3. ทดสอบ driver wording กับผู้ใช้และทีมสุขภาพ
-4. ทดลองสูตรใหม่ได้เฉพาะ Shadow Model จน Product Owner อนุมัติ
-5. Whole-day Readiness ต้องเป็นผลิตภัณฑ์อีกชั้นหนึ่งหลังเชื่อม wearable,
+สิ่งที่มีแล้ว: Finalization เก็บ `personal_context` จาก Session ก่อนหน้าไว้ใน
+`final_summary`; Rerun คงบริบทเดิมและคำตอบ subjective ที่มี provenance
+คำแนะนำหลังพักรุ่น v1.2 ใช้ได้แล้ว ไม่ใช่งานที่รอพัฒนา
+
+1. เพิ่ม Pre/Post questionnaire API พร้อม provenance และ timestamp
+2. ทดสอบ driver wording กับผู้ใช้และทีมสุขภาพ
+3. ทดลองสูตรใหม่ได้เฉพาะ Shadow Model จน Product Owner อนุมัติ
+4. Whole-day Readiness ต้องเป็นผลิตภัณฑ์อีกชั้นหนึ่งหลังเชื่อม wearable,
    activity/training load และ morning check-in ที่ผ่าน validation

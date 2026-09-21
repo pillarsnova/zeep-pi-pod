@@ -1,9 +1,14 @@
 # ZEEP v1 — Hardware และ Hub Map
 
 สถานะ: **Current implementation map · Internal Pilot / freeze candidate**
-ตรวจจาก source ใน branch `develop` เมื่อ 17 กันยายน 2026; Git SHA ที่ deploy จริง
+ทบทวน source และ Hardware Audit เมื่อ 19 กันยายน 2026; Git SHA ที่ deploy จริง
 ต้องตรวจจาก health/version response และ closure record ของ release นั้น
 ขอบเขต: Pi 5 runtime, Sensor Hub 1/2, BCG, Control Hub 1/2, Audio และ GPIO
+
+แผนรุ่นถัดไปแยกไว้ที่
+[เซนเซอร์สำรองและการขยายระบบอุปกรณ์](../zeep-redundant-sensors-and-device-expansion-v1.md)
+ครอบคลุม Hub/Power/Air/Film, Ion/Ozone, Foot Warmer และระบบน้ำ โดยมีสถานะ
+**DESIGN PROPOSAL** ไม่ใช่ความสามารถที่ติดตั้งหรือเปิดใช้งานแล้ว
 
 การสกัด BCG reader, 10-second Sensor-frame sampler และ live-device projection
 เข้า module เฉพาะถูก push อยู่ใน baseline นี้แล้ว เป็น behavior-preserving refactor
@@ -433,7 +438,10 @@ Freshness ของ Hub 1/2, BCG และ Control Hub 1/2 ถูก project บ
 
 รายการต่อไปนี้ **source ชุดนี้ยังตอบไม่ได้** และห้ามแต่งเติมใน onboarding:
 
-- Production Sensor Hub 1 firmware binary/version/checksum และ production board/pin map
+- Sensor Hub 1 มี board/pin map และ version ที่พบจริงแล้วใน
+  [Hardware Audit](../audits/pi5-esp-system-audit-2026-09-19.md) และ
+  [Firmware Guide](../../firmware/sensorhub1-esp32s3/README.md); ยังต้องเก็บ checksum
+  ของ binary ที่ติดตั้งและ calibration provenance รายบอร์ดให้ครบก่อนรับรอง release
 - Sensor Hub 2 board revision, sensor-to-hub pins/UART/I2C, firmware repository,
   cadence, retain/LWT และ broker security contract
 - Control Hub 1 IR code source/protocol, toggle/discrete power proof และ appliance feedback

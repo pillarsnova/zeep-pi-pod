@@ -2,6 +2,9 @@
 
 สถานะ: Implementation v1.2 · 19 กันยายน 2026
 
+ถ้อยคำใช้ [Product Language v1.2](zeep-product-language-guideline-v1.md)
+ใน source ล่าสุด การเปลี่ยนภาษาไม่เปลี่ยนลำดับเลือกคำแนะนำหรือสูตรคะแนน
+
 ## TL;DR
 
 หนึ่ง Session มีคำแนะนำหลักหนึ่งข้อ พร้อมหัวข้อ ช่วงเวลาที่เหมาะสม และเหตุผล
@@ -38,25 +41,26 @@
 
 ```json
 {
-  "primary": "วันทำงานถัดไป ลองเว้นช่วงพักจากหน้าจอโดยไม่ต้องบังคับให้หลับ แล้วสังเกตความรู้สึกหลังพัก",
+  "primary": "ลองวางหน้าจอและพักในมุมเงียบ ๆ โดยไม่ต้องฝืนให้ตัวเองหลับ",
   "source_driver_key": "estimated_sleep_s",
   "version": "zeep-restore-recommendation-v1.2-after-rest",
   "one_action_only": true,
   "automatic_actuation": false,
   "medical_advice": false,
   "tip_id": "quiet_awake_break",
-  "title": "รักษาช่วงพักเงียบระหว่างวัน",
+  "title": "พักสายตาระหว่างวัน",
   "when_label": "ก่อนพักครั้งถัดไป",
-  "reason": "ครั้งนี้ระบบยังไม่พบช่วงหลับชัดเจน จึงแนะนำการพักแบบตื่นได้ แทนการพยายามหลับลึก",
+  "reason": "ระบบยังไม่พบช่วงหลับที่ชัดเจนในครั้งนี้ แต่การพักระหว่างวันไม่จำเป็นต้องหลับ",
   "basis": "session_sensor",
   "historical_session_context": true,
   "whole_day_readiness_claim": false
 }
 ```
 
-ฟิลด์เดิมคงเดิม ส่วนฟิลด์เพิ่มเป็น optional ใน OpenAPI เพื่ออ่านรายงานเก่าได้
+ฟิลด์เดิมคงเดิม ส่วนฟิลด์เพิ่มเป็น optional/nullable ใน OpenAPI เพื่ออ่านรายงานเก่าได้
 `basis`: session_sensor / personal_baseline / self_report / limited_data / safety
-`primary`, `tip_id`, `title`, `when_label`, `reason`, `version`: string
+`primary`, `version`: required string; `tip_id`, `title`, `when_label`, `reason`:
+optional string หรือ null; builder ปัจจุบันส่งครบตามตัวอย่าง
 `source_driver_key`: string หรือ null; flags เป็น boolean ตามตัวอย่าง
 Compact presentation API ยังส่ง recommendation เป็นข้อความเดียวตาม contract เดิม
 รายงาน legacy ใช้ primary เดียวกัน ไม่มีคำแนะนำจากสูตรคะแนนอีกชุดหนึ่ง
@@ -69,6 +73,9 @@ Compact presentation API ยังส่ง recommendation เป็นข้อ
 ไม่ใช่ reclassify Sleep State; ไม่แก้ Raw BCG, Timeline, annotation หรือ stage events
 ผลเดิมทั้งหมดอยู่ใน `session_report_rescored.previous_final_summary` เพื่อ rollback
 ก่อน apply ทำ SQLite backup และตรวจ hash ของข้อมูลที่ต้องคงเดิม
+
+รอบนี้ทำเสร็จแล้ว ดู [รายงานก่อน–หลังและ Sync](reviews/2026-09-19-after-rest-rerun.md)
+การอนุมัติรอบนั้นไม่ใช่คำสั่งให้เครื่องมือรันซ้ำทุกครั้งที่แก้ข้อความ/เอกสาร
 
 ## หลักฐานอ้างอิง
 

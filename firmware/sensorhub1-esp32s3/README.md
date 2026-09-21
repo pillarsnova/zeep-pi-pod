@@ -1,8 +1,16 @@
-# ZEEP Sensor Hub 1 — DSP shadow research candidate
+# ZEEP Sensor Hub 1 — Sound Meter และ DSP Shadow
 
 > **PRODUCTION TEST CANDIDATE** · การ Flash คือส่วนหนึ่งของการตรวจบน Hardware
 > จริง ต้องมี owner approval, Full-Flash backup และ rollback path ที่ตรวจแล้ว
 > ผล CEM ใช้รับรอง calibration ภายหลัง ไม่ใช่เงื่อนไขก่อนเริ่ม Flash ทดสอบ
+
+ทบทวน 19 กันยายน 2026: source นี้ยังใช้พัฒนาต่อ มีหลักฐานรุ่น
+`sensorhub1-smart-ear-v0.5.3-debug` บน Pod 1 ใน
+[Hardware Audit](../../docs/audits/pi5-esp-system-audit-2026-09-19.md)
+ตรวจ version/checksum ของเครื่องเป้าหมายก่อน Flash ทุกครั้ง ไม่ใช้ชื่อไฟล์แทนหลักฐาน
+ประวัติการเทียบ Firmware เดิมและแต่ละรอบทดลองอยู่ใน
+[Compatibility / Experiment Record](ORIGINAL_FIRMWARE_COMPATIBILITY.md)
+ไม่ใช่ขั้นตอนพัฒนาหรือ calibration policy ปัจจุบัน
 
 Firmware นี้ใช้กับ Sensor Hub 1 ที่ต่อกับ Pi ผ่าน USB Serial เท่านั้น และไม่รวม
 ระบบเล่นเพลงหรือ Control Deck
@@ -54,9 +62,9 @@ Target board ที่ตรวจจากอุปกรณ์จริงค�
    reference range ของ CEM 30–130 dBA ค่า signed `sound_dbfs` คงไว้เป็น
    diagnostics และไม่ถูก `abs()` หรือใช้แทน dBA
 
-ใน Candidate ที่ยกเลิกนี้เคยกำหนด `sound_laeq_dba`, weighting, metric และ
-window metadata ไว้ แต่ Pi Runtime ปัจจุบันไม่อ่านเงื่อนไขเหล่านั้นและยึด
-`sound_dba` ตาม Sensor Interface Contract v1.2 เท่านั้น
+Pi ใช้ `sound_dba` เป็นค่าระดับเสียง และรับ window metadata เป็น diagnostics
+ไม่ได้ใช้ metadata เป็นเงื่อนไขแทนค่าดังกล่าว Offset ที่เก็บใน NVS เป็นการสอบเทียบ
+ฝั่ง Firmware; Pi ไม่หัก Bias หรือคำนวณ dBFS ซ้ำ อ่าน validity ฝั่ง Pi จาก Contract
 
 ## DSP shadow label candidate v0.3
 
@@ -139,14 +147,14 @@ CAL SOUND OFFSET <ค่า>
 
 แล้วทำ CEM validation ซ้ำเพื่อสร้างผล PASS ที่ผูกกับ SHA-256 ของ binary
 
-## Production Flash status
+## Production Flash workflow
 
-Candidate v0.2 และ v0.3.0–v0.3.4 เคยผ่าน build/unit test แต่ไม่ผ่าน SPH0645
-hardware parity จึง rollback กลับ Full Flash เดิม การทดสอบรอบใหม่ทำได้เมื่อมี
-owner approval โดยใช้ `flash_candidate.sh`; CEM result เป็น optional ระหว่าง
-development และจำเป็นเมื่อจะประกาศค่าที่ calibrate แล้วเท่านั้น
+ขั้นตอนและผล rollback ของ candidate รุ่นที่ยกเลิกให้ย้อนดู Git history
+ไม่ใช้เป็นสถานะอุปกรณ์ปัจจุบัน การทดสอบรุ่นถัดไปต้องมี owner approval
+และใช้สคริปต์ Flash/restore ในโฟลเดอร์ `tools/` ตาม artifact ที่เลือก
+CEM result เป็นหลักฐานรับรอง calibration หลัง Flash ไม่ใช่เงื่อนไขก่อนทดลอง
 
-เมื่ออนุมัติรุ่นใหม่ในอนาคต สคริปต์ยังต้องบังคับตรวจ:
+สคริปต์ตรวจ:
 
 - Pod ว่างและ API ยืนยันได้
 - chip และ MAC ตรงกับเครื่องเป้าหมาย

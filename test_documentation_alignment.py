@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import unittest
 from pathlib import Path
@@ -48,6 +49,125 @@ class DocumentationAlignmentTests(unittest.TestCase):
 
         self.assertIn("docs/onboarding/README.md", root_readme)
         self.assertIn("onboarding/README.md", docs_index)
+
+    def test_current_domain_documents_are_indexed(self) -> None:
+        index = (ROOT / "docs" / "README.md").read_text(encoding="utf-8")
+        for document in (ROOT / "docs").glob("*.md"):
+            if document.name == "README.md":
+                continue
+            with self.subTest(document=document.name):
+                self.assertIn(f"({document.name})", index)
+
+    def test_core_guide_tables_have_consistent_columns(self) -> None:
+        documents = (
+            "onboarding/README.md",
+            "README.md",
+            "zeep-interface-map-and-ui-standard-v1.md",
+            "zeep-session-result-presentation-v1.md",
+            "zeep-api-schema-reference-v1.md",
+        )
+        for name in documents:
+            fenced = False
+            columns = 0
+            content = (ROOT / "docs" / name).read_text(encoding="utf-8")
+            for number, line in enumerate(content.splitlines(), 1):
+                if line.startswith("```"):
+                    fenced = not fenced
+                    columns = 0
+                    continue
+                if fenced:
+                    continue
+                if not line.startswith("|"):
+                    columns = 0
+                    continue
+                count = len(re.split(r"(?<!\\)\|", line)) - 2
+                if not columns:
+                    columns = count
+                with self.subTest(document=name, line=number):
+                    self.assertEqual(columns, count)
+
+    def test_current_status_tracks_runtime_versions(self) -> None:
+        from presentation.language import PRODUCT_LANGUAGE_VERSION
+        from sleep_system_policy import (
+            RECOVERY_SCORE_FORMULA_VERSION,
+            RESTORE_RECOMMENDATION_VERSION,
+            SESSION_REPORT_VERSION,
+            SLEEP_ESTIMATOR_VERSION,
+            SLEEP_SCORE_FORMULA_VERSION,
+        )
+
+        content = (ROOT / "docs" / "current-status.md").read_text(encoding="utf-8")
+        for version in (
+            PRODUCT_LANGUAGE_VERSION,
+            RECOVERY_SCORE_FORMULA_VERSION,
+            RESTORE_RECOMMENDATION_VERSION,
+            SESSION_REPORT_VERSION,
+            SLEEP_ESTIMATOR_VERSION,
+            SLEEP_SCORE_FORMULA_VERSION,
+        ):
+            with self.subTest(version=version):
+                self.assertIn(version, content)
+
+    def test_schema_examples_match_models_and_advice_policy(self) -> None:
+        from presentation.language import PRODUCT_LANGUAGE_VERSION
+        from sessions.post_rest_advice import build_post_rest_advice
+        from sessions.usage_response_models import UsageSessionSummaryResponse
+
+        document = ROOT / "docs" / "zeep-api-schema-reference-v1.md"
+        content = document.read_text(encoding="utf-8")
+        modes = set()
+        for block in re.findall(r"```json\n(.*?)\n```", content, re.DOTALL):
+            example = json.loads(block)
+            data = example.get("data", {})
+            restore = data.get("restore_summary", {})
+            if "recommendation" not in restore:
+                continue
+            UsageSessionSummaryResponse.model_validate(example)
+            mode = data["mode"]["key"]
+            modes.add(mode)
+            with self.subTest(mode=mode):
+                self.assertEqual(
+                    data["versions"]["product_language"], PRODUCT_LANGUAGE_VERSION
+                )
+                self.assertEqual(
+                    restore["recommendation"],
+                    build_post_rest_advice(
+                        mode,
+                        data["score"]["value"],
+                        restore["drivers"],
+                        baseline=restore.get("personal_baseline"),
+                        subjective=restore.get("subjective_outcome"),
+                    ),
+                )
+        self.assertEqual(modes, {"sleep", "nap_recovery", "unknown"})
+
+    def test_recommendation_fields_are_all_documented(self) -> None:
+        from sessions.advice_response_models import RestoreRecommendation
+
+        content = (ROOT / "docs" / "zeep-api-schema-reference-v1.md").read_text(
+            encoding="utf-8"
+        )
+        section = content.split("### 8.5 Recommendation,", 1)[1].split(
+            "`confidence` มี", 1
+        )[0]
+        for field in RestoreRecommendation.model_fields:
+            with self.subTest(field=field):
+                self.assertIn(f"| `{field}` |", section)
+
+    def test_obsolete_firmware_status_is_not_current_guidance(self) -> None:
+        retired_claims = (
+            "P0.5 Admin level-only/capability contract อยู่ใน runtime",
+            "FIRMWARE CANDIDATE NOT INSTALLED",
+            "Production firmware ยังไม่ส่ง spectral",
+            "ไม่มีแผน Flash จากชุดนี้",
+        )
+        for document in current_markdown_files():
+            if "reviews" in document.parts or "audits" in document.parts:
+                continue
+            content = document.read_text(encoding="utf-8")
+            for claim in retired_claims:
+                with self.subTest(document=document, claim=claim):
+                    self.assertNotIn(claim, content)
 
     def test_retired_documents_are_absent_and_unreferenced(self) -> None:
         self.assertFalse((ROOT / "REMOTE-ACCESS.md").exists())

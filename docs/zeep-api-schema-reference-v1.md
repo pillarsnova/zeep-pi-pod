@@ -4,7 +4,7 @@
 
 **สถานะ:** Integration contract v1 (read-only, raw-free)
 
-**ปรับปรุงล่าสุด:** 2026-09-16
+**ปรับปรุงล่าสุด:** 2026-09-19 · เทียบ source หลัง `c75edcd`
 **ฐานข้อมูล:** ผล Session ที่ Finalize แล้วเท่านั้น
 
 เอกสารนี้เป็นคู่มืออ้างอิงสำหรับทีม Backend, Mobile, Web และ QA ของ
@@ -12,6 +12,7 @@
 ชนิดข้อมูล, enum, nullable rules และกฎการแสดงผล `restore_summary` อย่างเป็น
 ทางการ หาก implementation และเอกสารขัดกัน ให้ยึด Pydantic models ใน
 [`restore_response_models.py`](../sessions/restore_response_models.py),
+[`advice_response_models.py`](../sessions/advice_response_models.py),
 [`usage_response_models.py`](../sessions/usage_response_models.py),
 [`presentation_response_models.py`](../sessions/presentation_response_models.py) และ
 [`user_profile_response_models.py`](../sessions/user_profile_response_models.py)
@@ -346,7 +347,7 @@ purpose-specific inference consent จึงห้ามใช้กับ AI in
 | `session_closed` | `boolean` | ไม่ได้ | true เมื่อมี `ended_at_utc` |
 | `score_revision_policy` | `string` | ไม่ได้ | ปัจจุบัน `versioned_recalculation_with_audit` |
 | `report` | `Report` | มีเฉพาะ detail; อาจเป็น `{}` ในข้อมูล legacy | report แบบ compact, raw-free |
-| `sleep_policy_versions` | `SleepPolicyVersions` | มีเฉพาะ detail; อาจว่าง | field คงที่ `evidence`, `baseline`, `transition`, `g2_ontology`, `terminal_wake`; แต่ละค่าเป็น `string|null` |
+| `sleep_policy_versions` | `SleepPolicyVersions` | มีเฉพาะ detail; อาจว่าง | field คงที่ `evidence`, `baseline`, `transition`, `g2_ontology`, `terminal_wake`; แต่ละค่าเป็น `string\|null` |
 | `sleep_estimator_versions` | `object<string, integer>` | มีเฉพาะ detail; อาจว่าง | key เป็นชื่อ/version ของ estimator และ value เป็นจำนวน sample ที่ไม่ติดลบ |
 
 `sleep_policy_versions` ไม่ใช่ map ที่เพิ่ม key ได้อิสระ ส่วน
@@ -601,9 +602,9 @@ Client ต้องรองรับ subkey ที่อนุมัติแ�
 | `attainment_pct` | `number` | nullable | 0–100; มีเมื่อ score component |
 | `severity` | `enum<string>` | nullable | environment: `excellent`, `good`, `fair`, `poor`, `critical`, `unavailable` |
 | `action` | `string` | nullable | การกระทำที่แนะนำ |
-| `affects_source_score` | `boolean` | ไม่ได้ |
+| `affects_source_score` | `boolean` | ไม่ได้ | ระบุว่าเป็นองค์ประกอบของคะแนนหรือเพียงบริบท |
 | `relationship` | `enum<string>` | nullable | `session_context_only`, `recovery_score_component_and_session_context` |
-| `causal_claim` | `boolean` | ไม่ได้; false |
+| `causal_claim` | `boolean` | ไม่ได้ | false; ไม่ยืนยันเหตุและผล |
 | `priority` | `string` | nullable | เช่น `safety_review` |
 
 องค์ประกอบ score ที่รองรับ: Overnight (`sleep_opportunity`,
@@ -623,13 +624,13 @@ State และ event เป็น association ไม่ใช่ causation Clie
 
 | Field | Type | Nullable | ค่า/กฎ |
 |---|---|---|---|
-| `version` | `string` | ไม่ได้ |
+| `version` | `string` | ไม่ได้ | รุ่นนโยบาย Baseline comparison |
 | `mode` | `enum<string>` | ไม่ได้ | `sleep`, `nap_recovery`, `unknown` |
-| `maturity` | `BaselineMaturity` | ไม่ได้ |
-| `comparison` | `BaselineComparison` | ไม่ได้ |
-| `affects_source_score` | `boolean` | ไม่ได้; false |
-| `population_prior_is_cold_start_only` | `boolean` | ไม่ได้; true |
-| `must_not_mix_sleep_and_nap_sessions` | `boolean` | ไม่ได้; true |
+| `maturity` | `BaselineMaturity` | ไม่ได้ | ระดับความพร้อมของฐานคะแนน |
+| `comparison` | `BaselineComparison` | ไม่ได้ | ผลเทียบหรือเหตุผลที่ยังเทียบไม่ได้ |
+| `affects_source_score` | `boolean` | ไม่ได้ | false; ไม่เปลี่ยนคะแนนต้นทาง |
+| `population_prior_is_cold_start_only` | `boolean` | ไม่ได้ | true |
+| `must_not_mix_sleep_and_nap_sessions` | `boolean` | ไม่ได้ | true; แยก cohort |
 
 `maturity.key` คือ `learning` (0–2 sessions), `early` (3–6), `active` (7–13)
 หรือ `stable` (>=14) และมี `confidence` เป็น `insufficient|low|medium|high`.
@@ -639,14 +640,14 @@ State และ event เป็น association ไม่ใช่ causation Clie
 
 | Field | Type | Nullable | ค่า/กฎ |
 |---|---|---|---|
-| `available` | `boolean` | ไม่ได้ |
+| `available` | `boolean` | ไม่ได้ | พร้อมเปรียบเทียบหรือไม่ |
 | `key` | `enum<string>` | nullable | `below_typical`, `near_typical`, `within_typical`, `above_typical` |
-| `label` | `string` | nullable |
-| `current_score` | `number` | nullable |
-| `baseline_median` | `number` | nullable |
-| `delta_points` | `number` | nullable |
-| `typical_range` | `array<number>` length 2 | nullable |
-| `mode_specific` | `boolean` | nullable; true เมื่อมี comparison |
+| `label` | `string` | nullable | ข้อความผลเทียบ |
+| `current_score` | `number` | nullable | คะแนน Session ปัจจุบัน |
+| `baseline_median` | `number` | nullable | ค่ากลางจาก cohort ก่อนหน้า |
+| `delta_points` | `number` | nullable | ส่วนต่างคะแนนจากฐาน |
+| `typical_range` | `array<number>` length 2 | nullable | ขอบล่าง/บนของช่วงอ้างอิง |
+| `mode_specific` | `boolean` | nullable | true เมื่อมี comparison |
 | `reason` | `string` | nullable | มักใช้เมื่อ `available=false` |
 
 `trend` ใช้ field `available:boolean`, `unit:"sessions"`, `windows:object`,
@@ -661,12 +662,28 @@ State และ event เป็น association ไม่ใช่ causation Clie
 
 | Field | Type | Nullable | ค่า/กฎ |
 |---|---|---|---|
-| `primary` | `string` | ไม่ได้ |
-| `source_driver_key` | `string` | nullable |
-| `version` | `string` | ไม่ได้ |
-| `one_action_only` | `boolean` | ไม่ได้; true |
-| `automatic_actuation` | `boolean` | ไม่ได้; false |
-| `medical_advice` | `boolean` | ไม่ได้; false |
+| `primary` | `string` | ไม่ได้ | การกระทำหลักหนึ่งข้อ |
+| `source_driver_key` | `string` | nullable | องค์ประกอบที่ใช้เลือกคำแนะนำ |
+| `version` | `string` | ไม่ได้ | เวอร์ชันนโยบายคำแนะนำ |
+| `one_action_only` | `literal<true>` | ไม่ได้ | หนึ่งการกระทำหลัก |
+| `automatic_actuation` | `literal<false>` | ไม่ได้ | ไม่สั่งอุปกรณ์ |
+| `medical_advice` | `literal<false>` | ไม่ได้ | คำแนะนำ Wellness |
+| `tip_id` | `string` | optional / nullable | รหัสคำแนะนำ เช่น `quiet_awake_break`, `environment_sound`, `check_feeling`; ไม่ใช้เป็น enum ปิดตาย |
+| `title` | `string` | optional / nullable | หัวข้อสั้นของคำแนะนำ |
+| `when_label` | `string` | optional / nullable | ช่วงเวลาที่นำไปใช้ เช่น “หลังพัก”, “ก่อนพักครั้งถัดไป” |
+| `reason` | `string` | optional / nullable | เหตุผลที่เลือกคำแนะนำนี้จาก Session |
+| `basis` | `enum<string>` | optional / nullable | `session_sensor`, `personal_baseline`, `self_report`, `limited_data`, `safety` |
+| `historical_session_context` | `literal<true>` | optional / nullable | อ้างอิง Session นั้น ไม่ใช่สถานะสุขภาพปัจจุบัน |
+| `whole_day_readiness_claim` | `literal<false>` | optional / nullable | ไม่อ้างความพร้อมทั้งวัน |
+
+ฟิลด์เพิ่มข้างต้นเป็น additive compatibility ของ
+`zeep-restore-recommendation-v1.2-after-rest` โมเดลยอมรับการละเว้น/`null` จากผลเก่า
+แต่ builder ปัจจุบันส่งครบ Client เก่าใช้ `primary` ต่อได้ Client ใหม่ให้แสดง
+`title` → `primary` → `when_label` และพับ `reason` ไว้ ไม่สร้างคำแนะนำเองจากคะแนน
+นโยบายและตัวอย่างอยู่ที่ [คำแนะนำหลังพัก](zeep-post-rest-advice.md)
+
+`/presentation` คืน `recommendation:string` เท่ากับ `primary` เท่านั้น หากต้องการ
+หัวข้อ/เหตุผลให้ใช้ object จาก `/summary` หรือ detail endpoint ของ Session เดียวกัน
 
 `confidence` มี `level: high|medium|low|unknown`, `label:string` และ
 `session_coverage_pct:number|null`, `paired_hr_rr_coverage_pct:number|null`,
@@ -677,11 +694,11 @@ State และ event เป็น association ไม่ใช่ causation Clie
 | Field | Type | Nullable | ค่า/กฎ |
 |---|---|---|---|
 | `status` | `enum<string>` | ไม่ได้ | `measured`, `not_measured` |
-| `label` | `string` | ไม่ได้ |
+| `label` | `string` | ไม่ได้ | ข้อความสถานะแบบประเมิน |
 | `freshness_delta` | `number` | nullable | มีเฉพาะ questionnaire จริง |
 | `activity_readiness` | `number` | nullable | มีเฉพาะ questionnaire จริง; โดยปกติ 0–10 |
 | `source` | `string` | nullable | เช่น `session_questionnaire` |
-| `sensor_inferred` | `boolean` | ไม่ได้; false |
+| `sensor_inferred` | `boolean` | ไม่ได้ | false; ไม่อนุมานจาก Sensor |
 
 ห้ามอนุมาน `freshness_delta` หรือ `activity_readiness` จาก HR/RR, BCG หรือ
 คะแนนหลัก หากไม่มีคำตอบจริงให้ส่ง `status=not_measured` และค่าเป็น null
@@ -705,7 +722,7 @@ State และ event เป็น association ไม่ใช่ causation Clie
 | `version` | `string` | nullable |
 | `product_positioning` | `string` | nullable |
 | `intended_use` | `string` | nullable |
-| `timeline_schema_version` | `integer\|string` | nullable | รองรับทั้งเลข schema และ legacy string |
+| `timeline_schema_version` | `integer\|string` | nullable; รองรับทั้งเลข schema และ legacy string |
 | `estimator_version` | `string` | nullable |
 | `headline` | `string` | nullable; Session ที่ปิดแล้วและ unavailable ใช้ “ครั้งนี้ยังไม่มีคะแนน”; “กำลังเตรียมผลสรุป” ใช้เฉพาะ Session ที่ยังไม่ปิด |
 | `insight` | `string` | nullable |
@@ -718,6 +735,7 @@ State และ event เป็น association ไม่ใช่ causation Clie
 | `findings` | `array<PublicFinding>` | nullable/อาจถูกละเว้น; เมื่อคะแนน unavailable จะคงเฉพาะ `decision=safety_review` |
 | `post_session_guidance` | `object` | nullable; unavailable มี `available=false` |
 | `restore_summary` | `RestoreSummary` | nullable/อาจถูกละเว้นใน legacy report |
+| `respiratory_wellness` | `RespiratoryWellness` | nullable/อาจถูกละเว้น; สรุป HR/RR ไม่ใช่ค่าความฟิตของปอด |
 | `data_quality` | `PublicReportDataQuality` | nullable/อาจถูกละเว้น |
 | `disclaimer` | `string` | nullable |
 
@@ -728,6 +746,10 @@ Session ที่ปิดแล้วใช้ `headline="ครั้งนี
 ข้อความเชิงบวกจาก report เก่าหรือ field ภายใน อย่างไรก็ตาม Safety evidence
 เป็นคนละชั้นกับคะแนน จึงยังคง `safety_review`, directional threshold,
 ค่าต่ำสุด/สูงสุด และจำนวนรอบที่พบไว้เสมอ
+
+การระงับข้อความที่อิงคะแนนไม่ระงับคำแนะนำแบบข้อมูลจำกัด:
+`restore_summary.recommendation` และ `/presentation.recommendation` ยังมีข้อความ
+หลังพักได้ โดยไม่สร้างตัวเลขคะแนนหรือความสดชื่นที่ไม่ได้วัด
 
 ### 9.1 Environment และ Safety provenance
 
@@ -984,7 +1006,7 @@ engineering shadow score
         "comparison": {
           "available": true,
           "key": "within_typical",
-          "label": "ใกล้รูปแบบที่พบเป็นประจำของคุณ",
+          "label": "อยู่ในช่วงคะแนนที่คุณมักได้",
           "current_score": 76,
           "baseline_median": 75,
           "delta_points": 1,
@@ -1015,12 +1037,19 @@ engineering shadow score
         "target_key": "overnight_7h"
       },
       "recommendation": {
-        "primary": "รักษารูปแบบที่ได้ผลและติดตามแนวโน้มจากหลายคืน",
-        "source_driver_key": null,
+        "primary": "เข้านอนและตื่นใกล้เวลาเดิมในแต่ละวัน",
+        "source_driver_key": "personal_baseline",
         "version": "zeep-restore-recommendation-v1.2-after-rest",
         "one_action_only": true,
         "automatic_actuation": false,
-        "medical_advice": false
+        "medical_advice": false,
+        "tip_id": "regular_sleep_routine",
+        "title": "รักษาเวลาเข้านอนให้สม่ำเสมอ",
+        "when_label": "ก่อนนอนครั้งถัดไป",
+        "reason": "คะแนนครั้งนี้อยู่ในช่วงคะแนนที่คุณมักได้ เมื่อเทียบกับการพักรูปแบบและเป้าหมายเดียวกัน",
+        "basis": "personal_baseline",
+        "historical_session_context": true,
+        "whole_day_readiness_claim": false
       },
       "confidence": {
         "level": "high",
@@ -1081,7 +1110,7 @@ engineering shadow score
       "score_formula": "zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10",
       "score_quality_model": "zeep-rest-quality-v8.10-minimum-only-score-release",
       "restore_summary": "zeep-restore-summary-v1.0",
-      "product_language": "zeep-product-language-v1.1"
+      "product_language": "zeep-product-language-v1.2"
     },
     "result_provenance": {
       "source": "persisted_final_summary",
@@ -1146,7 +1175,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       "title": "Recovery Score",
       "value": 74,
       "available": true,
-      "level": "ช่วงพักนี้เป็นไปได้ดี",
+      "level": "ภาพรวมการพักครั้งนี้ดี",
       "formula_version": "zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10",
       "quality_model_version": "zeep-rest-quality-v8.10-minimum-only-score-release",
       "validation_status": "preliminary_wellness_estimate",
@@ -1169,7 +1198,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       },
       "status": {
         "key": "rest_good",
-        "label": "ช่วงพักนี้เป็นไปได้ดี",
+        "label": "ภาพรวมการพักครั้งนี้ดี",
         "min_score": 70,
         "max_score": 84,
         "meaning": "ร่างกายได้หยุดพักอย่างต่อเนื่องในระดับดี",
@@ -1206,7 +1235,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
         "comparison": {
           "available": true,
           "key": "near_typical",
-          "label": "ใกล้ค่ากลางส่วนบุคคล",
+          "label": "ใกล้เคียงคะแนนที่คุณมักได้",
           "current_score": 74,
           "baseline_median": 73,
           "delta_points": 1,
@@ -1235,12 +1264,19 @@ Nap ไม่บังคับให้หลับและไม่ควร�
         "target_key": "nap_30"
       },
       "recommendation": {
-        "primary": "รักษารูปแบบการพักที่ได้ผลและบันทึกความรู้สึกหลังพัก",
-        "source_driver_key": null,
+        "primary": "เว้นช่วงพักจากงานหรือหน้าจอในเวลาที่สะดวก",
+        "source_driver_key": "personal_baseline",
         "version": "zeep-restore-recommendation-v1.2-after-rest",
         "one_action_only": true,
         "automatic_actuation": false,
-        "medical_advice": false
+        "medical_advice": false,
+        "tip_id": "rest_routine",
+        "title": "จัดเวลาพักระหว่างวัน",
+        "when_label": "ก่อนพักครั้งถัดไป",
+        "reason": "คะแนนครั้งนี้ใกล้เคียงคะแนนที่คุณมักได้ เมื่อเทียบกับการพักรูปแบบและเป้าหมายเดียวกัน",
+        "basis": "personal_baseline",
+        "historical_session_context": true,
+        "whole_day_readiness_claim": false
       },
       "confidence": {
         "level": "medium",
@@ -1303,7 +1339,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       "score_formula": "zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10",
       "score_quality_model": "zeep-rest-quality-v8.10-minimum-only-score-release",
       "restore_summary": "zeep-restore-summary-v1.0",
-      "product_language": "zeep-product-language-v1.1"
+      "product_language": "zeep-product-language-v1.2"
     },
     "result_provenance": {
       "source": "persisted_final_summary",
@@ -1436,12 +1472,19 @@ Nap ไม่บังคับให้หลับและไม่ควร�
         "target_key": null
       },
       "recommendation": {
-        "primary": "ระบุรูปแบบการพักและตรวจความพร้อมของ Sensor ก่อนครั้งถัดไป",
+        "primary": "หากยังรู้สึกง่วง ให้พักต่อก่อนเริ่มกิจกรรมที่ต้องใช้สมาธิ",
         "source_driver_key": null,
         "version": "zeep-restore-recommendation-v1.2-after-rest",
         "one_action_only": true,
         "automatic_actuation": false,
-        "medical_advice": false
+        "medical_advice": false,
+        "tip_id": "check_feeling",
+        "title": "ค่อย ๆ กลับไปทำกิจกรรม",
+        "when_label": "หลังพัก",
+        "reason": "ข้อมูลครั้งนี้มีจำกัด ควรพิจารณาความรู้สึกหลังพักร่วมด้วย",
+        "basis": "limited_data",
+        "historical_session_context": true,
+        "whole_day_readiness_claim": false
       },
       "confidence": {
         "level": "unknown",
@@ -1496,7 +1539,7 @@ Nap ไม่บังคับให้หลับและไม่ควร�
       "score_formula": null,
       "score_quality_model": null,
       "restore_summary": "zeep-restore-summary-v1.0",
-      "product_language": "zeep-product-language-v1.1"
+      "product_language": "zeep-product-language-v1.2"
     },
     "result_provenance": {
       "source": "persisted_final_summary",
@@ -1521,6 +1564,11 @@ Nap ไม่บังคับให้หลับและไม่ควร�
 Overnight จึงจะแสดง W/N1/N2/N3/REM ได้ สำหรับ Nap ใช้ `rest_profile`
 สามกลุ่ม ได้แก่ `awake_rest`, `drowsy` และ `estimated_sleep` โดยไม่บังคับ
 ว่าผู้ใช้ต้องหลับ และ Driver ไม่มี action แยกแข่งกับ `recommendation`
+
+`recommendation` ของ view นี้เป็น string; ไม่เปลี่ยนเป็น object ตาม §8.5
+และยังไม่มี numeric component-bars DTO เพิ่มใน presentation contract
+Pi HTML presenter อ่าน `component_points` / `component_max_points` จาก quality
+เดิม ทีม App ห้าม hard-code น้ำหนักหรือคำนวณคะแนนใหม่จากกราฟ
 
 `usage_session_development` ฝัง `user_summary` ชุดเดียวกันและเพิ่มเฉพาะข้อมูล
 Admin ได้แก่ `score_release`, `data_quality`, `score_components`,
@@ -1605,13 +1653,14 @@ Client ควร parse `detail` ได้ทั้ง `string` และ object,
 Restore Summary และ public report แล้วในโมดูลต่อไปนี้:
 
 - `sessions/restore_response_models.py`
+- `sessions/advice_response_models.py`
 - `sessions/usage_response_models.py`
 - `sessions/presentation_response_models.py`
 - `sessions/user_profile_response_models.py`
 - `sessions/response_models.py` สำหรับ public re-export
 
-FastAPI ผูก model เหล่านี้เป็น `response_model` ของ Usage Session ทั้งเจ็ด
-endpoint และสร้าง machine-readable schema ที่ `/openapi.json` อัตโนมัติ
+FastAPI ผูก model เหล่านี้เป็น `response_model` ของ Usage Session ทั้งแปด
+endpoint ใน §2 และสร้าง machine-readable schema ที่ `/openapi.json` อัตโนมัติ
 
 หลักที่ models บังคับใช้:
 

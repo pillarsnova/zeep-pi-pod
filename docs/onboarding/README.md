@@ -6,6 +6,9 @@
 
 ปรับปรุงล่าสุด: 22 กันยายน 2026
 
+อ่าน [สถานะระบบและรุ่นที่ตรวจล่าสุด](../current-status.md) ก่อนเริ่มงาน เพื่อแยก
+ความสามารถที่ติดตั้งแล้ว งาน Shadow และแผนที่ยังไม่ได้พัฒนา
+
 > ชุด Onboarding นี้เป็น **ประตูหลักสำหรับค้นหาเอกสาร v1** แล้วจึงตามลิงก์ไปยัง
 > contract/runtime source ที่มีอำนาจของแต่ละ domain; ไม่ได้แทนหลักฐานอนุมัติ release
 > Production ปัจจุบัน v1 ยังเป็น **freeze candidate** และยังต้องปิดรายการ P0/
@@ -20,6 +23,10 @@
 โค้ด `eaccf32` อยู่บน `origin/develop` และ GitHub CI ผ่านทั้ง Python/Frontend
 แต่ยังไม่ได้ Deploy/Restart ในรอบนี้ ไม่เปลี่ยน Raw สูตรคะแนน หรือเปิด Auto Control
 ให้แยกสถานะใน Git ออกจากสถานะบนเครื่องจริงเสมอ
+
+รอบรวมงานที่ค้าง: [บันทึก 22 กันยายน](../reviews/2026-09-22-pending-work-integration.md)
+รวมข้อความ Backend/หน้าจอและเอกสารให้ตรงกับรุ่นล่าสุด ไม่เปลี่ยนสูตรคะแนน
+ไม่รวมข้อมูลผู้ทดสอบขึ้น Git และไม่ได้ Restart ในรอบนี้
 
 อ่านเอกสารหลักตามลำดับนี้ในวันแรก:
 
@@ -38,13 +45,13 @@
 
 สำหรับทีม Sensor, Firmware, Data/ML, Monitor หรือ Product ที่จะพัฒนาเสียง ให้อ่าน
 [หูอัจฉริยะ · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md) เพิ่ม เอกสารนี้
-มี **P1 ADMIN SHADOW** สำหรับ level timeline และ optional Firmware DSP marker;
-Pi/API/UI พร้อมแล้ว แต่ classifier ยังไม่ถือว่า LIVE/Production จน Firmware ผ่าน
-physical validation และติดตั้งจริง
+มี **P1 ADMIN SHADOW** สำหรับ level timeline และ Firmware DSP marker;
+มีหลักฐานติดตั้ง Firmware และรับ features บน Pod 1 แล้ว แต่ป้ายแหล่งเสียงยังเป็น
+ผลชั่วคราว ไม่ใช่ classifier ที่ยืนยันความแม่นยำหรือผลสุขภาพสำหรับผู้ใช้
 
 หากต้องตอบคำถามส่งมอบ v1 ให้เริ่มจาก
 [v1 System Handover and Freeze Readiness](../zeep-v1-system-handover-and-freeze-readiness.md)
-และตรวจสถานะล่าสุดที่ closure record ก่อนเสมอ
+และตรวจ closure record ของ release นั้นก่อนเสมอ ผล test เก่าไม่รับรอง release ใหม่
 
 ## สถานะที่ทุกคนต้องเข้าใจ
 
@@ -96,6 +103,7 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 | เรื่อง | แหล่งที่มีอำนาจ |
 |---|---|
 | แผนที่เอกสารปัจจุบัน | [Documentation Index](../README.md) |
+| รุ่นที่ติดตั้ง/ผลตรวจล่าสุด | [Current Status](../current-status.md); ระบุ SHA และวันที่ ไม่แทนการอ่านสถานะตู้สด |
 | มาตรฐานเขียนโค้ดและส่ง Review | [CONTRIBUTING.md](../../CONTRIBUTING.md) |
 | Lifecycle, invariant และสถานะ Freeze | [v1 System Handover](../zeep-v1-system-handover-and-freeze-readiness.md) |
 | ขอบเขต module และลำดับ refactor | [Pi 5 Software Architecture](../pi5-software-architecture.md) |
@@ -107,12 +115,15 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 | Test/release gate | [TESTING.md](../../TESTING.md) |
 | Pull, Sync, Deploy, Backup | [Pi 5 Operations Runbook](../pi5-operations-runbook.md) |
 | คำที่แสดงต่อผู้ใช้ | [Product Language Guideline](../zeep-product-language-guideline-v1.md) |
+| หน้าจอและสิทธิ์ | [Interface Map](../zeep-interface-map-and-ui-standard-v1.md) |
+| ผลการพักและคำแนะนำ | [Result Presentation](../zeep-session-result-presentation-v1.md), [คำแนะนำหลังพัก](../zeep-post-rest-advice.md) และ [API Schema](../zeep-api-schema-reference-v1.md) |
 | การพัฒนา Interface | [UI Development Roadmap](../zeep-interface-development-roadmap.md) และ [UI partials](../../static/partials/app/README.md); แยกสิ่งที่ทำแล้วจากแผนถัดไป |
 | งาน Adaptive ล่าสุดและ BOM | [สรุปสำหรับทีม](adaptive-journey-and-sensor-expansion.md); contract หลักอยู่ที่ [Adaptive Journey](../zeep-adaptive-journey-v1.md) และ [Sensor BOM](../zeep-sensor-expansion-bom-v1.md) |
 
 ถ้าเอกสาร, runtime model, OpenAPI หรือ approved replay evidence ขัดกัน
-ให้ **หยุดการเผยแพร่ผล** บันทึก version/SHA ที่พบ และส่งให้ owner แก้ความขัดแย้ง
-ใน release เดียวกัน ห้ามเลือกคำตอบที่ดูสมเหตุผลกว่าเอง
+ให้บันทึก version/SHA และขอบเขตที่ขัดกัน แล้วแก้เอกสารหรือเสนอแก้โค้ดกับ owner
+ก่อนเผยแพร่ข้อความ/contract ส่วนนั้นใหม่ ไม่หยุดบริการหรือซ่อนผลที่เผยแพร่แล้ว
+เพียงเพราะเอกสารเก่า และไม่เปลี่ยนสูตรหรือสิทธิ์เงียบ ๆ ตามข้อความในเอกสาร
 
 ## เส้นทางตามบทบาท
 
@@ -122,7 +133,7 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 | Pi / Backend | [Software Architecture](../pi5-software-architecture.md), [API v1](../zeep-api-v1.md) | [`app.py`](../../app.py), [`api/`](../../api/), [`sessions/`](../../sessions/), [`hardware/`](../../hardware/) |
 | Mobile / Web integration | [API Schema Reference](../zeep-api-schema-reference-v1.md) | [`sessions/usage_api.py`](../../sessions/usage_api.py), response models |
 | Hardware / Firmware | [Hardware และ Hub map](hardware-hub-map.md), [Sensor Interface Contract](../zeep-sensor-interface-contract-v1.2.md) | `sensor_*`, `control_protocol.py`, `hardware/` |
-| Acoustics / Data / Monitor | [หูอัจฉริยะ · DSP Plan](smart-ear-dsp-plan.md), [API/Data/Privacy](api-data-and-privacy.md) | Current: `sensors/`, `sessions/sensor_frame_sampler.py`, `acoustics/`; Planned: feature parser/classifier/event tracker |
+| Acoustics / Data / Monitor | [หูอัจฉริยะ · DSP Plan](smart-ear-dsp-plan.md), [API/Data/Privacy](api-data-and-privacy.md) | Current: `sensors/`, `sessions/sensor_frame_sampler.py`, `acoustics/`, Firmware DSP; Planned: controlled class validation และ user-facing interpretation |
 | QA / Data | [TESTING.md](../../TESTING.md), [Sleep History Promotion Policy](../sleep-history-promotion-policy-v2.md) | `test_*.py`, [`maintenance_registry.py`](../../maintenance_registry.py) |
 | Operations / Safety | [Operations Runbook](../pi5-operations-runbook.md), [TESTING.md](../../TESTING.md) | [`start_work.sh`](../../start_work.sh), service units, `operations/` |
 

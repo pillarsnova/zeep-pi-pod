@@ -1,6 +1,6 @@
 # ZEEP v1 — Operations และ First-week Checklist
 
-สถานะ: **ขั้นตอนสำหรับ Internal Pilot**
+สถานะ: **ขั้นตอนสำหรับ Internal Pilot** · ทบทวน 19 กันยายน 2026
 
 Runbook หลัก: [Pi 5 Operations Runbook](../pi5-operations-runbook.md)
 
@@ -34,7 +34,8 @@ Release gate หลัก: [TESTING.md](../../TESTING.md)
 
 ขั้นตอนอนุมัติเครื่อง ตำแหน่ง marker, ระบบปฏิบัติการที่รองรับ และคำสั่งล่าสุดอยู่ใน
 [Pi 5 Operations Runbook](../pi5-operations-runbook.md) เท่านั้น ห้ามสร้าง approval
-marker เองหรือคัดลอกจากเครื่องอื่น
+marker เองนอกกระบวนการอนุมัติ หรือคัดลอกจากเครื่องอื่น ข้อยกเว้น Mac ไม่อนุมัติ
+เครื่องทีมใหม่โดยอัตโนมัติ
 
 ## เริ่มงานประจำวัน
 

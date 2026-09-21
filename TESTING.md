@@ -120,6 +120,10 @@ python -m unittest -q \
 และไม่ต้องรัน Sleep/Sensor suite ปัจจุบัน `quality_gate.py changed` ยังไม่เลือก
 docs-only profile จึงต้องรันคำสั่งเอกสารนี้ตรง ๆ จนกว่าจะเพิ่ม automated gate
 
+Documentation alignment ตรวจ local links, เอกสาร Current ในสารบัญ, version ledger
+เทียบ `sleep_system_policy.py` และตัวอย่างคำแนะนำใน API Schema เทียบ Pydantic/
+pure advice policy ไม่ import `app.py`, ไม่เชื่อม Pod และไม่อ่านฐานผู้ใช้
+
 ## Application Full Gate
 
 Pi application suite เก็บไฟล์ `test_*.py` ที่ root ชุดเต็มใช้ตามเงื่อนไขด้านบน

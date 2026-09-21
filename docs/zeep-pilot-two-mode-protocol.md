@@ -3,6 +3,10 @@
 สถานะ: เอกสารใช้งานปัจจุบัน  
 ขอบเขต: ZEEP Sleep Wellness Pilot; ไม่ใช่การวินิจฉัยหรือการรักษา
 
+ทบทวน 19 กันยายน 2026: ผลทั้งสองโหมดมี
+[คำแนะนำหลังพัก](zeep-post-rest-advice.md) หนึ่งข้อจากข้อมูล Session
+แบบประเมินก่อน–หลังเป็น workflow ทีมแยกต่างหาก ไม่เติมคำตอบย้อนหลังจาก Sensor
+
 Runtime: `zeep-session-report-v10.12-minimum-only-score-release` /
 `zeep-rest-quality-v8.10-minimum-only-score-release`; สูตรคะแนน
 `zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10` และ

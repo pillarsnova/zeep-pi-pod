@@ -2,6 +2,8 @@
 
 สถานะ: **Integration contract v1 · Internal Wellness API**
 
+ทบทวน: 19 กันยายน 2026 · รุ่นที่ตรวจและหลักฐานอยู่ใน [Current Status](current-status.md)
+
 เจ้าของข้อมูล: ZEEP Platform + Pi Team
 เส้นทางหลัก: `/api/v1/usage-sessions`
 
@@ -31,6 +33,9 @@ Raw BCG, Sensor Timeline หรือคำตอบ Profile ผู้ใช้
 - Overnight Recovery ใช้ `sleep_score` / **Sleep Score**
 - Nap & Refresh ใช้ `recovery_score` / **Recovery Score**
 - `restore_summary` อธิบายคะแนนเดิม ไม่สร้างคะแนนที่สาม
+- `restore_summary.recommendation` มีคำแนะนำหลังพักหนึ่งข้อ พร้อมหัวข้อ/เหตุผล/
+  ช่วงเวลาแบบ optional; `/presentation.recommendation` ยังเป็น string
+  ดู [Post-rest Advice](zeep-post-rest-advice.md) และ Schema §8.5 ก่อนผูก UI
 - User เห็นเฉพาะ Session ของอีเมลตนเองโดยไม่รับชื่อผู้ใช้ใน path
 - Admin ที่ Login แล้วเห็นหลายบัญชีและกรองด้วยอีเมลได้
 - รายงานรวมรายบุคคลสำหรับ Admin อยู่ที่

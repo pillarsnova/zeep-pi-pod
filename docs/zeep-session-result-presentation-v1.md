@@ -7,7 +7,8 @@
 > **Product position:** ZEEP Wellness & Longevity · ผลเป็นการประเมิน
 > เชิงสุขภาพจาก Sensor ไม่ใช่การวินิจฉัยหรือผล AASM/PSG
 >
-> **Status:** Implemented presentation contract · visual update 2026-09-19
+> **Status:** Implemented presentation contract · ทบทวน 2026-09-19 หลัง `c75edcd`
+> ไม่ใช่การรับรอง visual/keyboard QA ใหม่ทุกหน้า
 >
 > **Related specification:**
 > [ZEEP Restore Summary v1](zeep-restore-summary-v1.md) ·
@@ -48,7 +49,7 @@ Wellness boundary ทำให้ผู้ใช้ต้องอ่านซ�
 2. Sleep Score หรือ Recovery Score พร้อมสถานะและความหมาย
 3. สิ่งที่ทำได้ดีไม่เกินสองข้อ
 4. สิ่งที่ลองปรับได้ไม่เกินสองข้อ
-5. คำแนะนำครั้งถัดไปหนึ่งข้อ
+5. คำแนะนำสำหรับคุณหนึ่งข้อ พร้อมช่วงเวลาที่นำไปใช้และเหตุผลแบบเปิดเพิ่ม
 6. Personal Baseline และความชัดเจนของข้อมูลในภาษาที่เข้าใจง่าย
 7. รายละเอียดการพักและ Timeline แบบพับเก็บ
 8. ข้อความกำกับ Wellness หนึ่งบรรทัด
@@ -74,10 +75,25 @@ Wellness boundary ทำให้ผู้ใช้ต้องอ่านซ�
 - จอใหญ่แบ่งผลหลักและกราฟเป็นสองส่วน มือถือเรียงลงล่าง; การ์ดปัจจัยและ
   คำแนะนำใช้พื้นที่เต็มเมื่อไม่มีการ์ดคู่ ไม่มี animation ตกแต่งสัญญาณ
 
-ขอบเขตรอบนี้คือ HTML ของ Pi UI เท่านั้น ไม่เปลี่ยน API schema, สูตรคะแนน,
-Sleep State หรือข้อมูลย้อนหลัง ภาพ PNG/QR export ยังใช้ Canvas เดิม
+Shared visual summary เริ่มที่ `9516413`; ต่อมา `94bb0e0`/`b2ce19b` เพิ่ม
+คำแนะนำหลังพักและ optional API fields โดยไม่เปลี่ยนสูตรหรือ Sleep State
+ภาพ PNG/QR export ยังใช้ Canvas เดิม
 ทีม App ใช้ presentation API เดิมได้ แต่กราฟคะแนนย่อยใน Pi UI รอบนี้อ่านจาก
 quality payload เดิม ไม่ได้เพิ่ม numeric component contract ใน presentation API
+
+### 2.2 คำแนะนำหลังพัก — ใช้แล้วในรุ่น v1.2
+
+การ์ด **คำแนะนำสำหรับคุณ** แสดง `title`, `primary`, `when_label` และปุ่มเปิด
+**เหตุผลที่แนะนำ** จาก `restore_summary.recommendation` ไม่ทวนข้อเดียวกันใน
+การ์ด drivers ไม่สุ่มคำแนะนำให้ดูต่างคน และไม่อนุมานความสดชื่นจาก HR/RR
+
+หัวข้อ/เหตุผลเป็น optional สำหรับข้อมูลเก่า: ถ้าไม่มีให้แสดง `primary` ได้ตามเดิม
+ส่วน `/presentation.recommendation` ยังคงเป็น string ไม่ใช่ object
+รายละเอียดการตัดสินใจและตัวอย่างครบอยู่ใน [คำแนะนำหลังพัก](zeep-post-rest-advice.md)
+ฟิลด์/ชนิดข้อมูลอยู่ใน [API Schema §8.5](zeep-api-schema-reference-v1.md#85-recommendation-confidence-และ-subjective-outcome)
+
+Session สั้นจนไม่มีคะแนนยังมีคำแนะนำที่เหมาะกับข้อมูลจำกัด; ไม่สร้างคะแนนหรือ
+คำตอบแบบสอบถามย้อนหลัง การวัดรอบนั้นไม่ยืนยันสภาพร่างกายในวันนี้
 
 Session ที่จบแล้วแต่คะแนนไม่ผ่านเงื่อนไขเผยแพร่ต้องใช้ข้อความ
 “ครั้งนี้ยังไม่มีคะแนน” พร้อมเหตุผลที่ทำให้ผู้ใช้เข้าใจได้ ห้ามใช้
@@ -143,7 +159,7 @@ Session ที่จบแล้วแต่คะแนนไม่ผ่าน
 - Development endpoint ไม่ส่ง Raw BCG, Raw packet หรือ Timeline samples
 - Response ใช้ typed schema และปรากฏใน `/openapi.json`
 
-## 6. Rerun policy
+## 6. Rerun policy และผลรอบล่าสุด
 
 ไม่ Rerun เพียงเพราะเปลี่ยนถ้อยคำ การจัดวาง หรือเพิ่ม Presentation API
 เนื่องจากการทำเช่นนั้นไม่ควรเปลี่ยน Sleep State หรือคะแนนที่อนุมัติแล้ว
@@ -155,6 +171,11 @@ Rerun เฉพาะเมื่อ:
 3. พบ invariant ผิดจริงและมีขอบเขต Session ที่ตรวจสอบแล้ว
 
 ทุกกรณีต้องไม่แก้ Raw file และต้องเก็บผลเดิมไว้ย้อนกลับได้
+
+เจ้าของอนุมัติรอบ 19 ก.ย. ให้สร้างคะแนน/คำแนะนำย้อนหลังตั้งแต่ 1 ก.ย.
+จึง Rescore 43 Session แล้ว โดยไม่ Reclassify State และไม่แตะข้อมูลก่อนขอบเขต
+ดู [ผลก่อน–หลังและการตรวจ](reviews/2026-09-19-after-rest-rerun.md)
+จำนวนดังกล่าวไม่ใช่ตัวเลขสดหรือคำสั่งให้ Rerun ทุกครั้งที่แก้เอกสาร
 
 ## 7. Acceptance criteria
 

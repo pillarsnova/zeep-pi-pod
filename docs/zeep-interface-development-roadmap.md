@@ -1,136 +1,210 @@
 # ZEEP Interface — Development Roadmap
 
-สถานะ: **Internal Pilot · แยกสิ่งที่ทำแล้วจาก ROADMAP**  
-ทบทวน: 19 กันยายน 2026 · Owner: Product / Frontend / Pi Backend
+สถานะ: **แผนพัฒนาที่ผ่านการทบทวน · ยังไม่ใช่การอนุมัติ Deploy**
+
+ปรับปรุง: 22 กันยายน 2026 · ฐาน review เดิม `9516413`; รวมงานถึง `fa7bd07`
+และรอบปรับภาษา โดยไม่ Deploy บน Pod ในรอบนี้
+
+ผู้รับผิดชอบ: Product, Frontend, Pi Backend, Data, Design และ QA
 
 ## สรุปสำหรับทีม
 
-คง Javis โทนมืด แต่ลดแสงเรืองและกรอบซ้อน ใช้พื้นที่กับข้อมูลสำคัญและ
-ภาพจากข้อมูลจริง ไม่เพิ่มกราฟเคลื่อนไหวที่ดูเหมือน Sensor ทั้งที่เป็นภาพตกแต่ง
-เริ่มจากความน่าเชื่อถือของสถานะข้อมูล ก่อนปรับการเล่าเรื่องในแต่ละหน้า
-ยังไม่เปลี่ยน framework, สูตรคะแนน, Sleep State, Raw หรือผลย้อนหลัง
+**ทิศทาง: สงบ ชัดเจน ทันสมัย — เข้าใจผลก่อน เปิดรายละเอียดเมื่อสนใจ**
 
-## สิ่งที่ทำในรอบนี้
+- ผู้ใช้เห็นผลการพัก เหตุผลสำคัญ และคำแนะนำสั้นหนึ่งข้อ
+- ผู้ดูแลเห็นความพร้อมระบบ คุณภาพข้อมูล และหลักฐานที่ตรวจสอบได้
+- Overnight Recovery ใช้ **Sleep Score**; Nap & Refresh ใช้ **Recovery Score**
+- ใช้ไอคอน สี และกราฟเสริมความหมาย ไม่ใช้แทนข้อมูลหรือสร้างข้อสรุปใหม่
+- แก้ความสอดคล้องของข้อมูลและความเป็นส่วนตัวก่อนเพิ่มกราฟหรือภาพเคลื่อนไหว
 
-- แยก Header, identity, navigation, fullscreen และ page heading เป็น
-  [`app/shell.html`](../static/partials/app/shell.html) ประกอบตอน build
-- เพิ่ม component สถานะการเชื่อมต่อทุกหน้าหลักและ Focus/Fullscreen:
-  รอข้อมูล / เชื่อมต่อ / ช่องทางสำรอง / ค่าล่าสุด / ขาดการเชื่อมต่อ
-- เวลา WebSocket เปิดสำเร็จยังไม่แสดงว่าข้อมูลใหม่มาแล้ว ต้องรับ snapshot
-  ที่มีโครงสร้างถูกต้องและ render สำเร็จก่อนปรับเวลาที่รับข้อมูล
-- คุณภาพของ Sensor ยังเป็นรายอุปกรณ์ การเชื่อมต่อได้ไม่เท่ากับทุก Sensor พร้อม
-  ข้อมูลหลัง restart ที่ backend ระบุ stale ต้องแสดงว่าเป็นค่าล่าสุด
-- Sessions: network/HTTP/JSON/ข้อมูลผิดรูปแบบ/timeout ต้องจบสถานะโหลด
-  มีปุ่มลองใหม่ และคำตอบเก่าห้ามทับตัวกรองใหม่
-- เพิ่ม Node built-in behavioral tests บนเครื่องพัฒนา/CI เท่านั้น ไม่มี Node,
-  npm dependency หรือ runtime ใหม่ที่ต้องเพิ่มใน Pi
-- ปรับ Shared Result Summary ของ Sessions/Session End: วงแหวนคะแนนเดียว,
-  สัญลักษณ์ระดับผลการพัก, กราฟคะแนนย่อยจริง, ปัจจัยสำคัญและคำแนะนำหนึ่งข้อ
-  แยก presenter/CSS ออกจาก history list โดยไม่เปลี่ยนสูตรหรือผลย้อนหลัง
+แผนเดิมมาจากการตรวจเทคนิค UX ข้อมูล และศิลปะร่วมสมัย งานเอกสารรอบปัจจุบัน
+ไม่เปลี่ยนสูตร Sleep State, Sensor, Raw, ผลย้อนหลัง, สิทธิ์ หรือ Safety Policy
+อ่านหลักฐานและข้อจำกัดที่ [บันทึกการทบทวน](reviews/2026-09-19-interface-roadmap-review.md)
+และ [สถานะปัจจุบัน](current-status.md) ไม่ถือว่ารายการที่มีแผนคือทำเสร็จแล้ว
 
-## ทุกหน้ามีหน้าที่ชัดเจน
+## 1. สิ่งที่มีแล้ว และขอบเขตที่ยังไม่ครบ
 
-| หน้า | คำถามที่ต้องตอบ | รูปแบบแสดงผลที่เสนอ — ROADMAP |
+| ส่วน | สิ่งที่ตรวจพบในโค้ด | งานที่ยังเหลือ |
 | --- | --- | --- |
-| `/login` | เริ่มพักอย่างไร | 3 ขั้น: เข้าบัญชี → เลือกรูปแบบ → พร้อมพัก; คำแนะนำย่อ ขยายได้ |
-| `/login/qr` | เชื่อมโทรศัพท์อย่างไร | QR เด่น อายุ QR และสถานะเชื่อมต่อชัด; ไม่แสดงข้อมูลผู้ใช้ก่อนยืนยัน |
-| `/admin/login` | ทีมเข้าใช้งานอย่างไร | ฟอร์มกระชับ แยกจากผู้พัก ข้อผิดพลาดสุภาพแต่ไม่เผยรายละเอียดบัญชี |
-| `/dashboard` | ตอนนี้พักเป็นอย่างไร | สถานะพักหนึ่งจุด, HR/RR คู่กัน, บรรยากาศ, คำแนะนำสำคัญหนึ่งข้อ; แตะเปิดแนวโน้มและช่วงประจำ |
-| `/control` | สั่งอะไรไปแล้ว อุปกรณ์ตอบหรือยัง | 6 การ์ด 2 คอลัมน์ × 3 แถว; สั่ง / กำลังส่ง / ACK / feedback จริงแยกกัน; เป้าสัมผัส ≥44px |
-| `/monitor` | ทีมควรดูแลอะไรตอนนี้ | Version & Provenance บนสุด → System Health → ผู้ใช้/Reference → สิ่งแวดล้อม → Smart Ear; diagnostics พับ |
-| `/sessions` | คนนี้เคยมาพักอย่างไร ได้ผลอะไร | รายชื่ออีเมล A–Z ขนาดย่อ → วันที่/โหมด → สรุป → รายการ → รายละเอียด; แนวโน้มแยก Sleep/Recovery |
-| `/control-debug` | คำสั่งติดตรงไหน | Request/ACK/feedback timeline, เวลาและเหตุปฏิเสธ; Admin เท่านั้น ไม่ทำภาพตกแต่งเหมือนการยืนยันอุปกรณ์ |
+| Shell | แยก Header, navigation, fullscreen, page heading และสถานะเชื่อมต่อ | วงจรเข้า–ออกหน้าและการย้าย focus ยังไม่ครบ |
+| ข้อมูลสด | แยกการเชื่อมต่อออกจากอายุข้อมูล Sensor; แสดงค่าล่าสุดเมื่อ stale | ขยายความหมายนี้ไปถึงแต่ละกราฟและตัวชี้วัด |
+| รายการประวัติ | `refreshHistory` มี timeout, cancel, retry และป้องกันคำตอบเก่าทับใหม่ | Detail, directory และ journey ยังมีการจัดการคำขอไม่ครบเท่ากัน |
+| รายชื่อและแนวโน้ม | มีอีเมล A–Z, selected state และแยก Sleep/Nap แล้ว | ปรับความกระชับและทดสอบการสลับบริบททุก panel |
+| ผลการพัก | Shared presenter ใช้ร่วมกับ History/Session End; วงคะแนนเดียวและแถบคะแนนย่อย | PNG/QR ยังใช้ Canvas เดิม; component DTO ของ presentation API ยังไม่เพิ่ม |
+| คำแนะนำหลังพัก | v1.2 มีหัวข้อ ช่วงเวลา และเหตุผลจากข้อมูล Session; API/HTML ใช้นโยบายเดียวกัน | ยังไม่เพิ่มคำถามกิจกรรมถัดไป; export และ client ใหม่ต้องเลือกใช้ฟิลด์เพิ่ม |
+| Adaptive Journey | มี Timeline, ก่อน–หลังคำสั่ง, ความเห็นเรื่องความสบาย และรับ/ปฏิเสธคำแนะนำใน `eaccf32` | ยังไม่ Deploy; ไม่ใช่แบบสอบถามความพร้อมทั้งวันและไม่สั่งอุปกรณ์อัตโนมัติ |
+| Control | มีหกส่วน ลำดับปุ่มร่วม และ feedback ระหว่างส่งคำสั่ง; ข้อความแอร์ระบุว่าเป็นคำสั่งล่าสุด | ยังไม่มี physical feedback จากตัวแอร์ และต้องตรวจหน้าจอจริงหลัง Deploy |
+| โครงสร้าง UI | แยก source ตอน build ด้วย ordered classic-script fragments | ยังไม่ใช่การแยก runtime module อย่างสมบูรณ์ |
+| Tests | มี behavioral tests แบบ synthetic และ UI composer check | ไม่ทดแทน browser, keyboard, screen reader หรือ performance test |
 
-`/` เป็น redirect และ `/admin` เป็น alias ของ Control ไม่ใช่ feature page เพิ่ม
-รายการ route/สิทธิ์อ้างอิง [Interface Map](zeep-interface-map-and-ui-standard-v1.md)
-และ [`api/shell_routes.py`](../api/shell_routes.py)
+คำว่า “มีแล้ว” หมายถึงตรวจพบในฐานโค้ดที่ระบุ ไม่ใช่การรับรองทุกบทบาท ทุกจอ
+หรือทุกข้อมูลจริง ผลตรวจภาพของ release เก่าใช้แทนผลของ release ใหม่ไม่ได้
 
-## แนวทางที่ทำให้ดูล้ำสมัยโดยยังอ่านง่าย
+## 2. หน้าที่ของแต่ละหน้า
 
-1. **หนึ่งข้อเท็จจริง หนึ่งเจ้าของ:** live cards แสดงค่าปัจจุบัน; insight แสดง
-   ความหมาย/สิ่งที่ต่างจากช่วงประจำ; reference แสดงเกณฑ์; diagnostics แสดงหลักฐาน
-   ไม่คัดค่าชุดเดิมมาใส่ซ้ำทุกการ์ด
-2. **ข้อมูลจริงเคลื่อนไหว:** sparkline ต้องมีช่วงเวลา หน่วย และช่องข้อมูลขาด
-   ห้ามต่อเส้นผ่านช่องว่างโดยไม่บอก; Smart Ear ใช้ marker ตามเหตุการณ์ที่รับจริง
-3. **เปรียบเทียบอย่างตรงเรื่อง:** คืนค้างคืนใช้ Sleep Score; Nap & Refresh ใช้
-   Recovery Score ตาม API ปัจจุบัน ไม่เฉลี่ยสองคะแนนรวมเป็น trend เดียว
-4. **เป็นมิตร:** สรุปสุขภาพสั้นหนึ่งประโยค + สิ่งที่ทำได้หนึ่งข้อ; technical copy
-   และ confidence ไปอยู่รายละเอียด Admin ไม่กล่าวว่าเหตุการณ์ที่เกิดพร้อมกันเป็นสาเหตุ
-5. **เคลื่อนไหวน้อยแต่มีความหมาย:** feedback เมื่อข้อมูล/คำสั่งเปลี่ยน ไม่ pulse
-   ทั้งจอตลอดเวลา; เคารพ reduced-motion และหยุด canvas ที่ซ่อน/แท็บไม่ active
-6. **Touch-first:** ตัวเลข tabular, line icon ชุดเดียว, spacing 8/12/16/24,
-   minimum touch 44px, ไม่ใช้สีอย่างเดียวบอกสถานะ, keyboard/focus ใช้ได้ครบ
-
-## แยกการพัฒนาให้ชัด
-
-| ชั้น | รับผิดชอบ | ห้ามทำ |
+| หน้า / ผู้ใช้ | ลำดับเนื้อหาเป้าหมาย | หัวข้อไทย |
 | --- | --- | --- |
-| Shell / navigation | route, role presentation, fullscreen, connection status | คำนวณคะแนนหรือสั่งอุปกรณ์เอง |
-| Shared components | metric, section heading, empty/error/loading, trend, timeline | fetch หรือ policy ที่ซ่อนอยู่ใน component |
-| Page controller | รับ event, โหลดข้อมูล, loading/error/race, เรียก presenter | ผสม SQL/serial/MQTT หรือคัดสูตรจาก Python |
-| Presenter / view model | แปลง API เป็นข้อความ/หน่วย/กราฟ, pure function ทดสอบได้ | กลบ missing เป็นศูนย์ หรือเปลี่ยน derived result |
-| API adapter | REST/WebSocket/auth/cancellation/error contract | ยืนยันอุปกรณ์สำเร็จแทน physical feedback |
-| Backend domain | คะแนน, Baseline, Session, Safety, hardware adapter | ฝากสิทธิ์หรือ Safety ไว้เฉพาะ JavaScript |
+| `/login` ผู้ใช้ | บัญชี → รูปแบบและเวลาเป้าหมาย → พร้อมเริ่มพัก | เข้าสู่ระบบ |
+| `/login/qr` ผู้ใช้ | QR → อายุและสถานะการยืนยัน → ขอรหัสใหม่ | เชื่อมต่อแอป |
+| `/admin/login` ผู้ดูแล | บัญชีผู้ดูแล → สถานะการเข้าใช้งาน | เข้าสู่ระบบผู้ดูแล |
+| `/dashboard` ตามสิทธิ์ | สถานะพัก → ชีพจรและการหายใจ → บรรยากาศ → ข้อแนะนำหนึ่งข้อ; รูปแบบประจำเปิดเพิ่ม | ภาพรวมการพัก |
+| `/control` ตามสิทธิ์ | ประตู → แสง → แอร์ → กลิ่นและไอน้ำ → เตียง → เสียง | ควบคุมอุปกรณ์ |
+| `/monitor` ผู้ดูแล | รุ่นระบบและที่มาข้อมูล → Safety/ความพร้อม Sensor → ผู้ใช้และข้อมูลสด → Reference/คำแนะนำ → สิ่งแวดล้อม/Smart Ear → ข้อมูลเชิงเทคนิค | ติดตามระบบและการพัก |
+| `/sessions` ผู้ใช้ | ตัวกรองเวลา/โหมด → สรุปแยกโหมด → รายการ → ผลที่เลือก → แนวโน้มแบบพับ | ประวัติการใช้งาน |
+| `/sessions` ผู้ดูแล | เพิ่มรายชื่ออีเมล A–Z แบบย่อและค้นหาก่อนตัวกรอง; รายละเอียดเทคนิคพับได้ | ประวัติการใช้งาน |
+| `/control-debug` ผู้ดูแล | ขอบเขตทดสอบ/Safety → อุปกรณ์ → คำสั่งและผลตอบรับ → รายละเอียด | ทดสอบอุปกรณ์ |
 
-โครงสร้างเป้าหมายแบบ incremental:
+`/` เป็น redirect; `/admin` เป็น alias ไม่ใช่ feature page เพิ่ม
+Boot, Profile, Session End, Confirm และ Safety เป็น surface ร่วมที่ต้องตรวจด้วย
+รายการสิทธิ์ยึด [Interface Map](zeep-interface-map-and-ui-standard-v1.md)
+และ server-side authorization ไม่ใช้การซ่อนเมนูแทนสิทธิ์
 
-```text
-static/partials/app/
-  shell.html                 # ทำแล้ว
-  scripts/                   # legacy ordered fragments; ค่อยลดหน้าที่
-  components/                # ROADMAP: shared markup/presenter
-  pages/{dashboard,control,monitor,sessions}/  # ROADMAP
-static/styles/
-  connection-state.css       # ทำแล้ว: scoped component
-  result-summary.css         # ทำแล้ว: scoped shared result component
-  monitor.css, sessions.css  # มีแล้ว; ค่อยย้าย legacy overrides
-tests/frontend/              # ทำแล้ว: synthetic behavioral tests
-```
+Safety จริงต้องเห็นได้ทุกหน้าและเต็มจอ ไม่ถูกพับหรือย้ายไว้ใต้คำแนะนำ
+การวาง Version & Provenance บนสุดของ Monitor ไม่ลดลำดับความสำคัญของคำเตือนนี้
 
-ไม่เพิ่ม ES module/import หรือ framework พร้อมการย้ายครั้งใหญ่ เพราะ classic
-script เดิมยังพึ่ง globals/inline handler; ย้ายหนึ่ง feature พร้อม adapter
-และ characterization test ก่อน แล้วจึงเปลี่ยน bootstrap เมื่อ dependency ชัด
+## 3. หน้าสรุปผล: สี่ส่วนที่เข้าใจได้ทันที
 
-## ลำดับพัฒนาถัดไปและเกณฑ์รับงาน
+| ส่วน | สิ่งที่แสดง | ขอบเขต |
+| --- | --- | --- |
+| 1 · ผลการพัก | คะแนนหลักหนึ่งวง ชื่อคะแนน ระดับผล และไอคอน | ประเมินการพักครั้งนี้ ไม่ใช่ความฟิตหรือความพร้อมทั้งวัน |
+| 2 · สิ่งที่ช่วยให้พักได้ดี | แถบคะแนนย่อย พร้อมคะแนนที่ได้/คะแนนเต็ม | อ่านจาก Server; ค่าทดแทนต้องไม่ดูเหมือนการวัดจริง |
+| 3 · คำแนะนำ | จุดเด่นไม่เกินสองข้อ สิ่งที่ปรับได้ไม่เกินสองข้อ และข้อแนะนำหนึ่งข้อ | ไม่สรุปเหตุ–ผลเพียงเพราะเหตุการณ์อยู่ใกล้กัน |
+| 4 · รายละเอียด | รูปแบบประจำ แนวโน้ม เวลา HR/RR และสิ่งแวดล้อม | เปิดเมื่อสนใจ; QA, version และ raw terminology อยู่ฝั่งผู้ดูแล |
 
-### 1. Monitor information architecture
+Nap ต้องสื่อว่า **“การพักมีคุณค่า แม้ไม่หลับ”** ไม่ใช้หลับลึกเป็นเป้าหมายบังคับ
+Overnight อธิบายการนอนจากข้อมูลที่มี ไม่รับรองการฟื้นตัวของอวัยวะหรือผลทางการแพทย์
+อ้างอิง [Result Presentation](zeep-session-result-presentation-v1.md)
 
-ย้าย section heading ให้อยู่ข้าง content ใน DOM จริง ไม่พึ่ง CSS `order`:
-ลำดับอ่าน/Tab/ภาพต้องตรงกัน ลดข้อมูลซ้ำ และปรับข้อความ 7.5–9.5px ที่ยังพบ
-ใน Adaptive/Smart Ear ให้ใช้งานได้บนจอจริง ห้ามย้าย Safety ลงใต้ข้อมูลเชิงลึก
+## 4. ทิศทางศิลปะและระบบภาพ — ข้อเสนอ
 
-### 2. Dashboard และ Control feedback
+คง Javis โทนเข้ม แต่ลดแสงเรือง เส้นกรอบซ้อน และหัวข้ออังกฤษที่ไม่เพิ่มความหมาย
+ใช้พื้นที่ว่างแบ่งเนื้อหา ไม่บังคับทุกการ์ดให้สูงเท่ากันเมื่อข้อมูลต่างกัน
 
-Dashboard ลดพื้นที่ empty card เมื่อไม่มี Session; แสดงคู่ HR/RR กับ Reference
-พร้อมจำนวนครั้งและโหมดที่เทียบ Control แยก requested/acknowledged/physical
-เมื่อมีหลักฐานจริงเท่านั้น รักษาปุ่มประตูฉุกเฉินที่เข้าถึงได้ง่าย
+| องค์ประกอบ | แนวทางเป้าหมาย |
+| --- | --- |
+| สีพื้น | น้ำเงินดำ `#0B1724`; พื้นการ์ด `#10232F`; หนึ่งการ์ดหลักต่อหนึ่งเรื่อง |
+| สีข้อความ | หลัก `#E7F3F5`, รอง `#B5CBD5`; ตรวจ contrast จากสีจริงหลัง CSS cascade |
+| สีโหมด | Nap สี mint `#65DCC4`; Overnight สีม่วงอ่อน `#A9B6FF`; ต้องมีชื่อโหมดกำกับ |
+| สีสถานะ | กลางใช้เทา, ต้องตรวจใช้ amber, เหตุ Safety ใช้สีเตือนตาม severity จาก Server; ไม่ใช้สีคะแนนแทนระดับอันตราย |
+| ตัวอักษร | ใช้ฟอนต์ไทย/ละตินเดิมที่รองรับออฟไลน์; เป้าหมายเนื้อหา 14–16 px, คำประกอบ 12–13 px, หัวข้อ 18–22 px, คะแนน 32–48 px |
+| การจัดตัวเลข | เลขความกว้างคงที่ หน่วยอยู่ใกล้ค่า; ไม่แยกเลขออกจากหน่วยเมื่อตัดบรรทัด |
+| ไอคอน | SVG line ชุดกลาง 24 px / stroke 1.8; ชื่อหรือ accessible label ชัดเจน |
+| Emotion | สัญลักษณ์ระดับผลหนึ่งจุด ไม่ใช่ผลตรวจอารมณ์; ใช้ SVG เพื่อหน้าตาคงที่ ไม่ผสม emoji ต่างระบบ |
+| ระยะและปุ่ม | spacing 8/12/16/24 px; radius 16/24 px ตามลำดับการ์ด; ปุ่มหลักอย่างน้อย 44 × 44 px |
+| การเคลื่อนไหว | feedback สั้นเมื่อข้อมูล/คำสั่งเปลี่ยน; ไม่กระพริบทั้งจอ; รองรับ reduced-motion และหยุด canvas ที่ซ่อน |
 
-### 3. Sessions visual summary
+ขนาดตัวอักษรข้างต้นเป็นเป้าหมายรอบใหม่ ไม่ใช่คำรับรองว่าโค้ดปัจจุบันผ่านแล้ว
+เกณฑ์เดิมอยู่ใน Interface Map; ปรับมาตรฐานพร้อม component ที่ผ่านการตรวจจริง
+ความกว้างบรรทัดและความชัดเจนสำคัญกว่าการบังคับข้อความไทยอยู่บรรทัดเดียว
 
-ส่วน summary ทำแล้วตาม [Result presentation](zeep-session-result-presentation-v1.md)
-ใช้ร่วมกับ Session End; ภาพ PNG/QR และ numeric component API สำหรับ App
-ยังไม่อยู่ในขอบเขตการเปลี่ยนรอบนี้
+Emotion ใช้หน้าบวกได้เมื่อผลและหลักฐานรองรับ; ข้อมูลจำกัดใช้สัญลักษณ์กลาง
+ไม่ใช้หน้าเศร้าตัดสินสุขภาพ และไม่แสดง “สดชื่นขึ้น” หากไม่มีแบบประเมินจริง
+สีโหมดใช้บอกบริบท ส่วนสถานะข้อมูลและคำเตือนใช้ข้อความ/ไอคอนแยกเสมอ
+คำเตือนจากรายงานย้อนหลังต้องแยกจากเหตุฉุกเฉินที่กำลังเกิด ไม่ใช้สีอันตราย
+ทั้งรายงานจนผู้ใช้อ่านผิดเวลาและความหมาย
 
-รายชื่อ compact, selected row ชัด, selected report หนึ่งจุด แยก trend ตามโหมด
-รักษา denominator/coverage/provisional ตาม API ไม่คำนวณคะแนนซ้ำใน browser
-ทดสอบ long email, ไม่มีรายการ, error, เปิดรายงานเก่าสลับเร็วและมือถือ
+## 5. หลักข้อมูลสำหรับกราฟและคำอธิบาย
 
-### 4. Accessibility / performance
+| ข้อมูล | วิธีนำเสนอ |
+| --- | --- |
+| คะแนน | ใช้ค่าที่ Server เผยแพร่ ไม่สร้าง Restore Score ที่สามและไม่คำนวณสูตรใน browser |
+| ค่าหายกับศูนย์ | `null`/invalid แสดง “—” พร้อมเหตุผล; ค่าที่วัดได้เป็น 0 ต้องคง 0 |
+| ข้อมูลสด | ใช้ timestamp/อายุข้อมูลจริง; transport connected ไม่เท่ากับทุก Sensor พร้อม |
+| ช่วงต่อเนื่อง | แยก “เวลาที่ระบุสถานะได้” กับ “เวลาที่มีหลักฐาน HR/RR”; continuity carry ไม่ใช่การวัดใหม่ |
+| Baseline | แสดงผลเทียบเมื่อ API อนุญาต พร้อมโหมด เป้าหมาย จำนวนครั้ง และเหตุผลเมื่อเทียบไม่ได้ |
+| แนวโน้ม | แยกบุคคล โหมด เป้าหมาย และสูตรที่เปรียบเทียบได้; หน้าต่างปัจจุบันเป็น 7/14/30 **ครั้ง** ไม่ใช่วัน |
+| กราฟเวลา | มีหน่วยและเวลา; ไม่ลากเส้นผ่านช่วงข้อมูลขาดโดยไม่บอก; provisional/stale ต้องแยกจากข้อมูลยืนยัน |
+| Smart Ear | marker จากเหตุการณ์จริงตาม capability; candidate ต้องติดป้าย “อยู่ระหว่างทดสอบ” ไม่ยกระดับเป็นข้อสรุปผู้ใช้ |
+| ความรู้สึก | แบบประเมินเป็นอีกแหล่งข้อมูล แสดงเฉพาะคำตอบจริง ไม่แทนด้วย Sensor |
+| คำแนะนำอุปกรณ์ | AI แนะนำก่อน คำสั่งผ่านผู้ใช้/ผู้ดูแลและ Safety Policy; ไม่สั่งจาก State รอบเดียว |
 
-Confirm dialog ต้องมี focus trap/คืน focus, SPA เปลี่ยนหน้าต้องย้าย focus
-อย่างเหมาะสม, canvas หยุดเมื่อไม่แสดง, ค่อยแยก theme ใหญ่ตาม owner
-วัดก่อน/หลังจริง ไม่ยกการลดจำนวนบรรทัดเป็นหลักฐานว่าระบบเร็วขึ้น
+Live card เป็นเจ้าของค่าปัจจุบัน; insight เพิ่มความหมาย; reference แสดงเกณฑ์;
+diagnostics แสดงหลักฐาน ไม่ทวนตัวเลขชุดเดียวกันทุกหมวด
+เวลาหรือจำนวนข้อมูลที่ไม่พอใช้คำอธิบายจากผลจริง ไม่ตั้งเกณฑ์ระงับคะแนนใหม่ใน UI
 
-ทุกขั้นต้องผ่าน User/Admin, 1440×900, 1280×720, 800×1280, 390×844,
-Focus Mode, keyboard, reduced-motion, no horizontal overflow และ failure states
-ไม่ทดสอบด้วยการสั่งประตู/เตียง/แอร์บนตู้จริงโดยไม่มีแผนทดสอบอุปกรณ์
+## 6. ลำดับงานและเกณฑ์รับงาน
 
-## การตรวจสอบและแหล่งอ้างอิง
+P0/P1/P2 คือความสำคัญต่อ release ของ Interface ไม่ใช่ระดับเหตุฉุกเฉินของตู้
+Owner เป็นบทบาทรับผิดชอบ ทีมต้องระบุผู้รับงานจริงก่อนเริ่มแต่ละรายการ
 
-- [UI source/build guide](../static/partials/app/README.md)
-- [Testing policy](../TESTING.md), [Product language](zeep-product-language-guideline-v1.md)
-- [Current result presentation](zeep-session-result-presentation-v1.md)
-- [Official setup-node](https://github.com/actions/setup-node): ใช้ v7 และ Node 24
-  สำหรับ CI behavioral tests; ไม่ใช่ runtime ของตู้
-- Evidence รอบนี้: UI source audit + synthetic frontend tests + browser smoke
-  บน Pod หลัง deploy; ผล test/restart บันทึกใน release review แยกจาก roadmap
+| รหัส | งาน / ผู้รับผิดชอบ | เกณฑ์รับงาน |
+| --- | --- | --- |
+| P0-01 | แยกเวลาปิดหน้าผลกับอายุ QR · Product/Privacy/Frontend | ปิดผลและตัวตนเมื่อหมดเวลา กดปิด หรือเริ่มใช้ใหม่; ไม่ยืดจอรวมตาม link TTL; ทดสอบ fake timers |
+| P0-02 | ให้ HTML/PNG ใช้ความหมายค่าชุดเดียวกัน · Frontend/Data/API | 0, null, invalid, unknown mode, limited evidence และ Safety แสดงตรงกัน; Admin ไม่แปลง null เป็น 0; ไม่เปลี่ยนสูตร |
+| P0-03 | ยืนยันขอบเขตข้อมูลและคำสั่ง · Frontend/Pi Backend/Hardware | ทุกสถานะระบุข้อมูลจริง/ค่าประมาณ/ยังไม่ยืนยัน; ACK ไม่เท่ากับอุปกรณ์ทำสำเร็จ; ไม่ auto-retry hardware เมื่อผลไม่แน่ชัด |
+| P1-01 | Request lifecycle ครบทุกส่วนของ Sessions · Frontend | timeout/cancel/error/retry, rapid switching, route leave และ logout ไม่ทิ้ง loading หรือแสดงข้อมูลข้ามคน |
+| P1-02 | Monitor DOM และ focus · Frontend/QA | heading อยู่กับเนื้อหา; ลำดับภาพ/อ่าน/Tab ตรง; dialog trap/restore focus; SPA/back-forward มี focus policy |
+| P1-03 | Design tokens และคำไทย · Design/Product/Frontend | ปุ่ม/ตัวอักษร/ไอคอนเป็นชุดเดียว; label ไทยสั้น; ตรวจ computed style และ contrast ทุกสถานะ; Safety ยังชัด |
+| P1-04 | Baseline และแนวโน้มที่อธิบายได้ · Data/API/Frontend | แสดงเฉพาะ comparison/window ที่ Server อนุญาต; ระบุจำนวนครั้งจริงและเหตุผลเมื่อเทียบไม่ได้ |
+| P1-05 | Page lifecycle และต้นทุนการวาด · Frontend/QA | canvas ที่ซ่อนหยุด; ไม่มี timer/listener ซ้ำ; resume ได้; วัด render/CPU/คำขอก่อน–หลังบนเครื่องเดียวกัน |
+| P2-01 | แยก feature และ CSS owner ต่อ · Frontend | ย้ายทีละส่วนพร้อม characterization test; ลบ legacy หลังตรวจ consumer; ไม่เพิ่ม override ซ้อนโดยไร้ owner |
+| P2-02 | ความสอดคล้อง Pi/App/ภาพรายงาน · Product/API/App | ตกลง additive DTO ของคะแนนย่อยก่อนพัฒนา; test fixtures ร่วม; ไม่มีกราฟที่ App ต้องเดาน้ำหนักเอง |
+
+เริ่ม **P0-01 และ P0-02** ก่อน จากนั้น P1-01/P1-02/P1-03 ทำร่วมกันได้เมื่อกำหนด
+shared contract แล้ว ส่วนกราฟเพิ่มและ module migration ต้องไม่ขวางการแก้ข้อมูลที่สื่อผิด
+
+## 7. โครงสร้างการพัฒนา
+
+| ชั้น | รับผิดชอบ | ขอบเขต |
+| --- | --- | --- |
+| Shell | navigation, fullscreen, focus, page enter/leave | ไม่คำนวณคะแนนหรือสั่งอุปกรณ์เอง |
+| Component | score ring, metric, timeline, message, dialog | ไม่มี fetch/policy แฝง |
+| Page controller | โหลดข้อมูลและวงจรหน้า | ยกเลิกคำขออ่านได้ แต่ไม่ถือว่ายกเลิกคำสั่งอุปกรณ์แล้ว |
+| Presenter | แปลงข้อมูลเป็นข้อความ/กราฟแบบ pure function | ไม่กลบ missing เป็นศูนย์หรือแต่งผลย้อนหลัง |
+| API adapter | auth, schema, request identity, error/cancel | ไม่แปลง ACK เป็น physical feedback |
+| Backend domain | คะแนน Baseline Session Safety และ hardware | สิทธิ์และ Safety ยังคงบังคับที่ Server |
+
+คง ordered fragments ระหว่างย้าย ไม่เปลี่ยน framework/bootstrap พร้อมกัน
+ใช้ component CSS ที่ scope ชัด และทยอยแยกเป็น `pages/`, `components/`,
+`adapters/` เมื่อ dependency พร้อม โฟลเดอร์เหล่านี้เป็นเป้าหมาย ไม่ใช่สถานะที่ทำครบแล้ว
+ขั้นตอน build และ inventory อยู่ที่ [UI Source Guide](../static/partials/app/README.md)
+
+## 8. ภาษาไทย: สั้น ทางการ และเป็นมิตร
+
+ใช้ [Product Language Guideline](zeep-product-language-guideline-v1.md)
+เป็นแหล่งคำกลาง ไม่คัดสำเนาตารางคำไปดูแลหลายที่ ตัวอย่างทิศทาง:
+
+- “ติดตามระบบ” แทนหัวข้ออังกฤษหรือศัพท์ภายใน
+- “ชีพจรและการหายใจ” รวม HR/RR ในหมวดเดียว
+- “รูปแบบประจำของคุณ” แทน Personal Baseline บนหน้าผู้ใช้
+- “แสดงค่าล่าสุด ข้อมูลยังไม่อัปเดต” แยกจากข้อมูลสด
+- “ผลการพักครั้งนี้” ไม่ใช่ “ร่างกายฟื้นตัวสมบูรณ์”
+- “ซ่อนผลจากหน้าจอ” ไม่สื่อว่าเป็นการลบรายงานหรือเพิกถอนลิงก์
+
+หนึ่งหัวข้อบอกหนึ่งเรื่อง หนึ่งคำแนะนำบอกหนึ่งการกระทำ
+ไม่แปล stable key/route/API enum และไม่ทำข้อความ Safety ให้นุ่มจนคลุมเครือ
+
+## 9. การตรวจรับและหลักฐาน
+
+ตรวจเฉพาะส่วนที่เปลี่ยนตาม [TESTING.md](../TESTING.md) ไม่รัน Full ซ้ำโดยไร้เหตุผล
+
+- Viewport: 1440×900, 1280×720, 800×1280 และ 390×844; ตรวจ zoom 200% เพิ่ม
+- User/Admin ตามสิทธิ์ รวม Focus Mode, keyboard, reduced-motion และหน้าจบรอบ
+- กรณีปกติ/ไม่มีข้อมูล/ข้อมูลช้า/error/คะแนน 0/ค่า invalid/ข้อความไทยยาว/อีเมลยาว
+- ไม่มีกรอบหรือปุ่มทับกัน ไม่มี horizontal overflow; คำเตือนสำคัญไม่ถูกตัด
+- Safety, identity, selected report และ active filter ไม่เปลี่ยนความหมายเมื่อสลับหน้า
+- ใช้ fixture กับคำสั่งอุปกรณ์ ไม่สั่งประตู เตียง หรือแอร์จริงเพื่อทดสอบหน้าตา
+- บันทึก SHA, วันที่, role, viewport, fixture, ผลที่ผ่านและส่วนที่ยังไม่ได้ตรวจ
+- ก่อนอ้างว่าใช้ง่าย ให้ทดลองกับผู้ใช้จริง: ให้ระบุโหมด ผลการพัก และคำแนะนำได้
+  โดยไม่ต้องเปิดข้อมูลเทคนิค; บันทึกจุดสับสน ไม่ใช้จำนวน tests แทน usability
+
+เกณฑ์ contrast ใช้ WCAG 2.2: ข้อความทั่วไปอย่างน้อย 4.5:1 และข้อความขนาดใหญ่
+3:1 ตามนิยามมาตรฐาน เป้าสัมผัส 44×44 px เป็นเกณฑ์ผลิตภัณฑ์ ZEEP ที่เลือกให้
+เหมาะกับ Touch Screen ไม่ใช่การกล่าวว่า WCAG AA กำหนดขั้นต่ำ 44 px
+
+## 10. แหล่งอ้างอิงและการดูแลเอกสาร
+
+| แหล่ง | ใช้อ้างอิงเรื่อง |
+| --- | --- |
+| [Onboarding](onboarding/README.md) / [Documentation Index](README.md) | จุดเริ่มทีมและลำดับอำนาจเอกสาร |
+| [Interface Map](zeep-interface-map-and-ui-standard-v1.md) | หน้า สิทธิ์ และเกณฑ์เดิม; ไม่ใช้ผล audit เก่ารับรอง release ใหม่ |
+| [Result Presentation](zeep-session-result-presentation-v1.md) / [API Schema](zeep-api-schema-reference-v1.md) | การเผยแพร่ผล โหมด คุณภาพข้อมูล และ contract ของทีม App |
+| [Post-rest Advice](zeep-post-rest-advice.md) / [Current Status](current-status.md) | กฎคำแนะนำที่ใช้แล้วและขอบเขต deployment/replay ล่าสุด |
+| [W3C · Contrast](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html) | ความต่างสีข้อความและพื้นหลัง |
+| [W3C · Target Size](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum) | เป้าสัมผัสขั้นต่ำ AA 24×24 CSS px พร้อมข้อยกเว้น; แยกจากเกณฑ์ ZEEP |
+| [W3C · Modal Dialog](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/) | focus ภายใน dialog, Escape และการคืน focus |
+
+Product ดูแลลำดับงาน; Design ดูแลภาพและภาษา; Data/Pi Backend ดูแลความหมายและ
+contract; QA บันทึกหลักฐาน ก่อนเปลี่ยนสถานะเป็น “ทำแล้ว” ต้องแนบผลตรวจของ SHA นั้น
+การทบทวนเอกสารนี้ไม่ยืนยัน compliance ทั้งระบบและไม่มีการ Deploy, Restart หรือ Rerun เพิ่ม
+ผลการติดตั้งและ Rerun ของงานก่อนหน้าอ่านจาก Current Status ไม่คัดลอกผลทดสอบเก่ามารับรอง UI ใหม่

@@ -6,6 +6,10 @@ Contract: `zeep.adaptive-learning-live.v1`
 
 ขอบเขต: Pi5 `/monitor` และ `GET /api/v1/admin/adaptive/live`
 
+คำแนะนำสดในเอกสารนี้แยกจาก [คำแนะนำหลังพัก](zeep-post-rest-advice.md)
+ที่อยู่ในผล Session ย้อนหลัง ไม่ใช้ผลย้อนหลังแทน Sensor live เพื่อสั่งอุปกรณ์
+ดู [Current Status](current-status.md) สำหรับรุ่นและหลักฐาน deployment
+
 ## 1. เป้าหมาย
 
 ระบบรุ่นนี้ทำให้ทีมเห็นข้อมูลสด, คุณภาพข้อมูล, Personal Baseline, สถานะ

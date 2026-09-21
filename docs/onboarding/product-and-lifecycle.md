@@ -2,6 +2,8 @@
 
 สถานะ: **Internal Pilot / freeze candidate**
 
+ทบทวนเอกสาร: 19 กันยายน 2026 · ดู [Current Status](../current-status.md)
+
 เอกสารหลัก: [v1 System Handover](../zeep-v1-system-handover-and-freeze-readiness.md)
 และ [Sleep System Current](../zeep-sleep-system-current.md)
 
@@ -45,6 +47,12 @@ Mode และ target ถูกตรึงก่อน Recording เวลา�
 รายละเอียดการทดสอบผู้ใช้และภาษาที่ใช้ใน Pilot อยู่ที่
 [Two-Mode Test Protocol](../zeep-pilot-two-mode-protocol.md) ส่วนสูตรและข้อยกเว้น
 อยู่ที่ [Sleep System Current](../zeep-sleep-system-current.md)
+
+เมื่อจบรอบ ทั้งสองโหมดมี **คำแนะนำสำหรับคุณ** หนึ่งข้อพร้อมเหตุผลจากข้อมูลครั้งนั้น
+แม้ Session สั้นจนไม่มีคะแนนก็ยังมีคำแนะนำแบบข้อมูลจำกัด ไม่สร้างความสดชื่นขึ้นเอง
+แอปอ่าน `restore_summary.recommendation` ตาม
+[Result Presentation](../zeep-session-result-presentation-v1.md) และ
+[Post-rest Advice](../zeep-post-rest-advice.md)
 
 ## งานต่อยอด: Adaptive Journey
 
@@ -197,7 +205,7 @@ hardware behavior ใน commit เดียวกัน
 | Signal gap continuity | carry State เดิมแบบ low confidence; เข้า score แต่ไม่เข้า baseline | Product/Safety owner ต้องยอมรับ optimistic-risk เมื่อสัญญาณขาดนาน หรืออนุมัติ cap ใหม่พร้อม regression |
 | Fire/gas alarm | v1 software ไม่มี smoke/CO input หรือ alarm output | ห้ามอ้างว่ามี; standalone device ต้องมี owner และ functional test แยก |
 | Tablet history | Legacy route ยังทำงาน | เทียบ parity กับ canonical Usage API, migrate client และประกาศ deprecation |
-| Code structure | BCG reader, 10-second sampler, live projection, Hardware adapters และ outbox แยกแล้ว; package boundary มี guard | แยก Session lifecycle/checkpoint และ route wiring ต่อทีละ behavior-preserving change |
+| Code structure | BCG reader, sampler, start/record/restart/finalize orchestration, Hardware adapters และ outbox แยกแล้ว; package boundary มี guard | แยก account binding, routes และ Aircon sequence policy ที่เหลือตาม Architecture |
 | v2 concepts | Shadow recommendation และ Personal Baseline ใช้เป็น context | Closed-loop control, baseline-driven State, whole-day readiness, wearable/clinical claims ยังอยู่นอก v1 |
 
 รายการ P0/P1 ล่าสุดและช่องสำหรับ Git SHA/tag/owner approval อยู่ใน

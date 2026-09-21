@@ -3,11 +3,15 @@
 > **Purpose:** เอกสารหลักฉบับเดียวของ Sleep State, Historical Replay, Sleep Score และ Session Report ที่ใช้งานจริงใน ZEEP Pod  
 > **Positioning:** Sleep Wellness · EEG-free exploratory telemetry · ไม่ใช่ PSG/การวินิจฉัย/คำสั่งรักษา  
 > **Status:** Wellness release candidate · guarded derived-result replay/promotion · G2 paired-PSG validation open
-> **Updated:** 2026-09-16
+> **Updated:** 2026-09-19 · การทบทวนนี้ไม่เปลี่ยนสูตรหรือ State
 > **Code manifest:** [`sleep_system_policy.py`](../sleep_system_policy.py)
 > **Related:** [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.8.md) · [ZEEP Restore Summary v1](zeep-restore-summary-v1.md) · [Resting Heart & Breathing Wellness v1.2](zeep-respiratory-wellness-v1.md) · [Historical Promotion Policy v2](sleep-history-promotion-policy-v2.md)
 
 ## TL;DR
+
+การติดตั้งและผล Rerun ล่าสุดดู [Current Status](current-status.md) รอบ 19 ก.ย.
+คำนวณคะแนนและคำแนะนำใหม่ 43 Session ตั้งแต่ 1 ก.ย. ไม่ Reclassify State
+คำแนะนำหลังพัก v1.2 ใช้ [นโยบายกลาง](zeep-post-rest-advice.md) ไม่ใช่ score formula ใหม่
 
 - ระบบเก็บ Sensor ทุก 10 วินาที สรุป `sleep_stage_evidence` ทุก 30 วินาที และเปลี่ยน State เมื่อผู้ท้าชิงผ่าน Gate พร้อมยืนยัน 2 epoch/60 วินาที (N2 ใช้ 4 epoch/120 วินาที) เมื่อเริ่ม Recording ระบบยึด `W` เป็น State แรกทันที; ทุกช่วงที่ยังไม่ยืนยัน `OFF BED` ต้องมี W/N1/N2/N3/REM โดยผู้ท้าชิงที่ยังไม่ชัดจะคง State ก่อนหน้าและนับคะแนนให้ State เดิมจนกว่าจะยืนยัน State ใหม่สำเร็จ
 - Sleep-onset Guard คง W อย่างน้อย 5 นาทีแรก; หลังจากนั้น N1 ต้องมีเตียงนิ่ง ไม่มี vital rise และ HR/RR แสดงการลดลงหรือ plateau ที่ต่ำกว่าช่วงตั้งต้นอย่างสอดคล้องกัน เวลาเพียงอย่างเดียวสร้าง N1 ไม่ได้
@@ -53,7 +57,7 @@
 | Personal behaviour baseline | `zeep-personal-behaviour-baseline-v1.4-paired-vitals-three-session-reference` |
 | Personal rest-window baseline | `zeep-personal-rest-window-v1.2-bounded-partitioned-finite` |
 | Restore recommendation | `zeep-restore-recommendation-v1.2-after-rest` · [คำแนะนำหลังพัก](zeep-post-rest-advice.md) |
-| Product language | `zeep-product-language-v1.1` |
+| Product language | `zeep-product-language-v1.2` · ถ้อยคำใน source; ดู deployment แยกใน Current status |
 | Environment context | `zeep-environment-context-v2.1-optional-acoustic-input` |
 | Environment Session aggregation | `zeep-environment-session-v1.0-sustained-decile` |
 | Terminal Wake boundary | `zeep-terminal-wake-boundary-v1.0` |

@@ -1,6 +1,11 @@
 # ZEEP User Learning Profile v1
 
 สถานะ: ใช้งานบน Pi · Wellness only · Recommendation-first
+
+ความต่างของ Best rest window, HR/RR reference และ score comparison ดู
+[Current Status](current-status.md) เกณฑ์ 1/3/7 ครั้งใช้คนละข้อมูล ไม่แทนกัน
+คำแนะนำของ Session เดียวใช้ [Post-rest Advice](zeep-post-rest-advice.md)
+ส่วน AI context ในเอกสารนี้เป็นภาพรวมสะสม ไม่ใช่ตัวเรียกอุปกรณ์
 Contract: `zeep.user-learning-profile.v1`
 Policy: `zeep.user-learning-policy.v1`
 

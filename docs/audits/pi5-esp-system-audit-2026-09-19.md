@@ -1,5 +1,10 @@
 # ZEEP Pod 01 — Pi 5 และ ESP System Audit
 
+สถานะเอกสาร: **AUDIT SNAPSHOT** ของ SHA/เวลาที่ระบุด้านล่าง ไม่ใช่สถานะตู้สด
+ข้อแก้ไขหลัง Audit เช่น refactor, retained topic และ lifecycle ให้ดู
+[Current Status](../current-status.md) และ [Architecture](../pi5-software-architecture.md)
+คงผลตรวจเดิมเพื่อเปรียบเทียบก่อน–หลัง ไม่ใช้รับรอง release ใหม่
+
 วันที่ตรวจ: 19 กันยายน 2026 (Asia/Bangkok)  
 Git: `develop` · `f570a68`  
 ขอบเขต: ตรวจแบบ read-only จาก source, service, USB, MQTT, GPIO, network และ telemetry จริง

@@ -1,8 +1,13 @@
 # Sensor Hub 1 original-firmware compatibility baseline
 
-> Status: **Production baseline restored; replacement candidate under iterative test**
+> Status: **HISTORICAL COMPARISON / EXPERIMENT RECORD — ไม่ใช่ขั้นตอน Flash ปัจจุบัน**
 > Captured: 2026-09-17 (Asia/Bangkok)  
 > Scope: ESP32-S3 Sensor Hub 1 on ZEEP Pod 01
+
+ข้อเท็จจริงด้าน packet, pin map และผลทดลองเก็บเพื่อย้อนตรวจเท่านั้น
+ขั้นตอนพัฒนาปัจจุบันยึด [Firmware Guide](README.md) และ
+[Current Status](../../docs/current-status.md) ไม่ต้องทำให้สูตรใหม่เลียนแบบค่า offset
+111.93 dB ที่ไม่ทราบที่มาของ Firmware เดิม
 
 ## Decision
 
@@ -114,38 +119,7 @@ drop-in replacement การทดลองถัดไปต้องใช้
 | Serial | JSONL สะอาด | core debug เปิด | Wire error ปะปนใน JSONL |
 | Partition | OTA 3 MB + FFat | default 16 MB layout | ไม่เข้ากับ Production layout |
 
-## Compatibility-first development plan
-
-1. เก็บ Production Firmware เดิมเป็น Golden Oracle และห้ามแก้ Raw backup
-2. สร้าง Legacy Core ให้ reproduce packet เดิมที่ 32 kHz/1 วินาที
-3. ยืนยัน GPIO, I²C address และ startup order จาก source เดิมหรือ bench scan;
-   ห้ามใช้ datasheet default เป็นข้อสรุปแทนบอร์ดจริง
-4. เทียบ signed PCM, dBFS, A-weighted dBFS, dBA และ QA counters กับ Golden
-   ด้วยสัญญาณเดียวกัน
-5. เพิ่ม DSP Tap แบบ read-only หลัง Legacy Core โดยไม่เปลี่ยน accumulator เดิม
-6. ส่ง feature เป็น nullable additive fields; ถ้าคำนวณไม่ทันให้ packet เดิมมาก่อน
-7. ปิด SDK debug บน USB JSONL (`CORE_DEBUG_LEVEL=0`)
-8. ระหว่าง iterative test ให้เขียนเฉพาะส่วนที่จำเป็น; ถ้าเปลี่ยน bootloader หรือ
-   partition ต้องบันทึกเหตุผลและมี Full-Flash rollback โดยไม่เขียน NVS/FFat ทับ
-9. Flash บนบอร์ดที่ owner อนุมัติ แล้วเทียบ CEM และ Sensor ทั้งสามจากผลจริง
-
-## ลำดับตรวจเพื่อพัฒนาและรับรองผล
-
-Production Flash ใช้เก็บหลักฐานจริงได้ก่อน CEM เมื่อ owner อนุมัติ ส่วนรายการ
-ต่อไปนี้ต้องครบก่อนประกาศเป็น Firmware ใช้งานถาวรหรืออ้างว่า dBA calibrated:
-
-- Legacy packet 100%: field, type, unit และ 1-second cadence ตรง
-- SHT31 parity: อุณหภูมิ/ความชื้นต่อเนื่องและ recovery ตรง
-- OPT3001: fault เดิมต้องไม่ทำให้ SHT31 หรือ SPH0645 ล้ม
-- SPH0645 parity: dBA ต่างจาก Golden/CEM ไม่เกินเกณฑ์ที่อนุมัติ
-- PCM health: zero/change/clip/read-error ผ่านแบบเดิม
-- DSP load: ไม่ทำ packet ขาด, ไม่มี watchdog/reset, ไม่มี non-JSON output
-- Flash safety: partition เดิม, NVS/FFat คงเดิม, rollback digest ผ่าน
-- Soak test: อย่างน้อย 2 ชั่วโมงบน bench และ 1 session จำลอง
-- Admin UI: แสดง heartbeat จาก packet จริง; feature ไม่มีให้ขึ้น “กำลังรอข้อมูล”
-  ไม่สร้าง animation ที่ทำให้เข้าใจว่ามี event ปลอม
-
-## Production state ล่าสุด
+## บันทึกสถานะหลังทดลอง · 17 กันยายน 2026
 
 - ติดตั้ง `sensorhub1-smart-ear-v0.5.3-debug` เฉพาะ app partition และ verify
   digest สำเร็จ; NVS, partition table และ FFat ไม่ถูกเขียนทับ

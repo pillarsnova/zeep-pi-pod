@@ -2,10 +2,20 @@
 
 สถานะ: **Current**  
 เจ้าของ: Pi 5 application team  
-อัปเดตล่าสุด: 17 กันยายน 2026
+อัปเดตล่าสุด: 19 กันยายน 2026
 
 เอกสารนี้เป็นแผนที่หน้าจอและเกณฑ์ตรวจ UX/UI ของ Pi 5 สำหรับผู้ใช้ ผู้ดูแล
 และทีมทดสอบอุปกรณ์ โดยไม่เปลี่ยนสิทธิ์หรือ Logic ของ Session
+
+ลำดับข้อมูลด้านล่างเป็นมาตรฐานเป้าหมาย ไม่ใช่คำรับรองว่า DOM/keyboard ของทุกหน้า
+ผ่านแล้ว ข้อจำกัดที่ตรวจจาก `9516413` และเกณฑ์รุ่นถัดไปอยู่ใน
+[Interface Roadmap](zeep-interface-development-roadmap.md)
+การอัปเดตหลังจากนั้น เช่นคำแนะนำ v1.2 ให้ดู [Current Status](current-status.md)
+และ [Result Presentation](zeep-session-result-presentation-v1.md)
+
+ข้อความรอบ 19 ก.ย. ปรับใน source ตั้งแต่ Login, Dashboard, Control, Monitor,
+Sessions และ Session End แล้ว ดู [ผลตรวจเนื้อหา](reviews/2026-09-19-interface-content-review.md)
+ยังไม่ใช่การรับรอง deploy หรือการตรวจทุกขนาดหน้าจอ
 
 ## 1. แผนที่หน้า Interface
 
@@ -15,10 +25,10 @@
 | `/login` | ผู้ทดสอบ | เข้าสู่ระบบ เลือก Nap & Refresh หรือ Overnight Recovery และเวลาเป้าหมาย | บัญชี รูปแบบการพัก และคำแนะนำก่อนเริ่ม |
 | `/login/qr` | ผู้ทดสอบ | เข้าสู่ระบบผ่าน QR จากแอป ZEEP | QR และสถานะการยืนยัน |
 | `/admin/login` | ผู้ดูแล | เข้าสู่ระบบสำหรับทีมงาน | ขอบเขตสิทธิ์ผู้ดูแลและสถานะระบบ |
-| `/dashboard` | ผู้ทดสอบ/ผู้ดูแล | ภาพรวม Session ปัจจุบัน | HR, RR, สถานะเตียง, Sleep State และสภาพแวดล้อมสด ก่อน Baseline/Profile |
+| `/dashboard` | ผู้ทดสอบ/ผู้ดูแล | ภาพรวมการพัก | HR, RR, สถานะเตียง, Sleep State และสภาพแวดล้อมสด ก่อน Baseline/Profile |
 | `/control` | ผู้ทดสอบ/ผู้ดูแล | ควบคุมอุปกรณ์ภายใน ZEEP | ประตู, แสง, แอร์, กลิ่น/ไอน้ำ, เตียง และเสียง พร้อม Sensor ที่เกี่ยวข้อง |
 | `/control-debug` | ผู้ดูแล | Commissioning และทดสอบ Hardware จริง | Controller, คำสั่ง, Request/Payload/ACK/Response และ Safety warning |
-| `/monitor` | ผู้ดูแล | ดูความปลอดภัย สุขภาพ Sensor ข้อมูลสด และ Personal Reference | Version/Provenance, Safety, Sensor integrity และ Live physiology |
+| `/monitor` | ผู้ดูแล | ติดตามระบบและการพัก | Version/Provenance, Safety, Sensor integrity และ Live physiology |
 | `/sessions` | ผู้ทดสอบ/ผู้ดูแล | ดูประวัติการใช้งานและผลราย Session | User เห็นของตนเอง; Admin เห็นผู้ใช้ทั้งหมด จำนวนครั้ง แยกโหมด ตัวกรอง รายการพัก และรายงานที่เลือก |
 | `/admin` | ผู้ดูแล | Alias เข้าหน้า Control หลังยืนยันสิทธิ์ | Control deck เดียวกับผู้ใช้ พร้อมทางเข้า Debug |
 
@@ -63,24 +73,24 @@ User และ Admin ใช้ Control deck เดียวกัน Admin เ�
 3. Live physiology และคำอธิบายเฉพาะข้อสังเกต
 4. Personal Reference/Adaptive recommendation
 5. สภาพแวดล้อม
-6. Smart Ear · Level Only และ Candidate ที่กำลังพิสูจน์
+6. Smart Ear · Level Timeline และ DSP markers แบบชั่วคราวสำหรับผู้ดูแล
 7. ข้อมูลเชิงเทคนิค (Advanced Diagnostics) เมื่อผู้ดูแลเปิดดู
 
 Live strip เป็นแหล่งค่าปัจจุบันหลัก ส่วนคำอธิบายและ Reference ต้องไม่ทวนค่าชุดเดิม
 โดยไม่มีบริบทเพิ่ม
 
-ตำแหน่ง “หูอัจฉริยะ” ที่เสนอใน
-[Acoustic Intelligence DSP Plan](onboarding/smart-ear-dsp-plan.md) เป็น
-**P0.5 ADMIN SHADOW**: summary อยู่หมวดสภาพแวดล้อมและ proof/feature readiness อยู่
-Advanced เป็น surface LIVE แบบ level-only ส่วน classifier/event/user result ยังไม่ LIVE
+“หูอัจฉริยะ” ตาม [Acoustic Intelligence DSP Plan](onboarding/smart-ear-dsp-plan.md)
+มี Level Timeline และ optional DSP marker แบบ **P1 ADMIN SHADOW** แล้ว
+นอก Session แสดงสดแต่ไม่บันทึก เมื่อไม่มี features กลับเป็น level-only;
+ป้ายเสียงยังไม่ใช่ผลจำแนกที่รับรองความแม่นยำหรือผลสุขภาพในหน้า User
 
 ### Sessions
 
 1. เลือกช่วงเวลา/ผู้ใช้งานตามสิทธิ์
 2. สรุป Sleep Score และ Recovery Score แยกตาม Mode
 3. รายการการพัก
-4. แนวโน้มรายบุคคล
-5. ผลของ Session ที่เลือก โดยรายละเอียดเทคนิคอยู่ในส่วนพับได้
+4. ผลของ Session ที่เลือก โดยรายละเอียดเทคนิคอยู่ในส่วนพับได้
+5. แนวโน้มรายบุคคลแบบพับ โดยแยก Sleep Score และ Recovery Score
 
 ภาษาและลำดับภาพของ Monitor กับ Sessions ใช้หลักเดียวกัน: แสดงภาพรวมที่ตัดสินใจ
 ได้ก่อน ใช้คำไทยเป็นหัวข้อหลัก และเก็บคำวิศวกรรมหรือภาษาอังกฤษไว้เป็นคำรองหรือ
@@ -88,8 +98,13 @@ Advanced เป็น surface LIVE แบบ level-only ส่วน classifier/
 Card เพราะ Page heading ของ Shell ทำหน้าที่นี้อยู่แล้ว
 
 ผู้ใช้เห็นเฉพาะข้อมูลของตน ผู้ดูแลจึงเห็นตัวกรองชื่อ/อีเมลและคำสั่งจัดการข้อมูล
+ผลที่เลือกแสดง **คำแนะนำสำหรับคุณ** หนึ่งข้อจาก Session พร้อมเหตุผลแบบพับเก็บ
+ไม่รวมคำแนะนำสดจาก Monitor เข้าไปในผลย้อนหลัง และไม่แสดงว่าเป็นสภาพร่างกายวันนี้
 
 ## 3. UI Standard กลาง
+
+รายการนี้เป็นเกณฑ์ฐานเดิมของ v1; เป้าหมาย typography/token รอบใหม่ใน Roadmap
+ต้องทยอยตรวจและปรับ component ก่อนประกาศว่าใช้ครบทั้งระบบ
 
 - Touch target สำหรับคำสั่งหลักไม่น้อยกว่า `44 × 44 px`
 - ข้อความประกอบผู้ใช้ทั่วไปไม่น้อยกว่า `11 px`; label `12 px`; หัวข้อย่อย
@@ -116,38 +131,16 @@ Card เพราะ Page heading ของ Shell ทำหน้าที่น
 
 ทุก Route ต้องตรวจทั้ง User/Admin ที่เกี่ยวข้อง รวมถึง Login และ Session End
 
-ผลตรวจรอบวันที่ 16 กันยายน 2026: ตรวจ 9 surface ที่เกี่ยวข้องกับสิทธิ์ผู้ใช้และ
-ผู้ดูแล ครบทั้ง 4 viewport รวม 36 รูปแบบ ไม่พบ horizontal overflow หรือคำสั่งที่
-มีพื้นที่แตะต่ำกว่าเกณฑ์ ข้อความที่มีความหมายต่อผู้ใช้ไม่น้อยกว่า 10 px
-(ไม่นับจุดสีตกแต่งระดับสถานะ)
+## 5. Verification และงานคงค้าง
 
-## 5. ผล Audit รอบนี้
+ยกเลิกการนำตารางผ่าน Audit วันที่ 16–17 ก.ย. มาแสดงเป็นผลรับรองปัจจุบัน
+ประวัติเดิมย้อนดูได้จาก Git; เกณฑ์ขนาดขั้นต่ำใน §3 ยังใช้ตรวจรอบใหม่
+ต้องแนบ SHA, บทบาท, viewport และ computed geometry ของ release ที่ตรวจจริง
 
-แก้ไขแล้ว:
+[Interface Review ที่ `9516413`](reviews/2026-09-19-interface-roadmap-review.md)
+เป็นหลักฐานเฉพาะ source/test รอบนั้น ไม่ใช่ browser/keyboard/ทุก viewport acceptance
+ส่วน [Rerun Review](reviews/2026-09-19-after-rest-rerun.md) ยืนยันข้อมูลและ API
+ไม่ได้แทน visual QA หลังเพิ่มคำแนะนำ
 
-- เพิ่ม final consistency stylesheet เพื่อลดผลกระทบจาก legacy override
-- Control มือถือเป็นหนึ่งคอลัมน์ และ Tablet/Desktop เป็นสองคอลัมน์ × สามแถว
-- ลำดับ DOM/Tab ของ Control ตรงกับลำดับที่มองเห็น
-- Dashboard แสดงข้อมูลสดก่อน Personal Baseline/Profile
-- Control Debug และ Advanced Monitor เพิ่มขนาดข้อความ/ปุ่มที่เล็กเกินไป
-- Sessions ลดหัวข้อ/กรอบซ้ำและใช้ตัวกรองสูง 44 px ทุก viewport
-- Monitor และ Sessions ใช้ลำดับ “ภาพรวมก่อน–รายละเอียดเมื่อเปิดดู” ร่วมกัน พร้อม
-  เปลี่ยน Gate/Personal Reference ที่อยู่ในพื้นที่สรุปให้เป็นภาษาที่อ่านได้ทันที
-- Login มี label ถาวร ส่งด้วย Enter ได้ และเปิดให้ผู้ใช้ซูมหน้าเว็บ
-- Icon ระบบ, Safety และ Debug ใช้ภาษาภาพเดียวกันมากขึ้น
-- Navigation ประกาศ `aria-current` และ Control Debug รองรับ Focus/fullscreen
-- Session End ใช้ Card language เดียวกับระบบ และวาง QR ก่อนรายละเอียดบนจอแคบ
-- Regression/Safety test ให้รายงานจากผลจริงพร้อม Git SHA; UI bundle ต้องตรงกับ
-  source partial ตาม `ui_composer.py check`
-
-งานลดหนี้โครงสร้างหลัง v1 ที่ต้องทำแบบแยก Release:
-
-1. ย้าย heading ของ Monitor ให้อยู่กับ section ใน DOM แทนการกระจายด้วย CSS order
-2. ลบ Control cards รุ่นเก่าที่ซ่อนอยู่หลังยืนยันว่าไม่มี runtime consumer
-3. แยก `theme-modern.css` เป็น `shell`, `dashboard`, `control`, `reports` และ
-   `overlays` แล้วลบ override รุ่นเก่า
-4. เพิ่ม visual regression ที่ตรวจ computed geometry, touch target และ overflow
-   อัตโนมัติใน CI
-
-การแยกงานเหล่านี้ออกจากรอบปรับภาพช่วยไม่ให้การลบ CSS/DOM เก่ากระทบคำสั่งอุปกรณ์
-จริงก่อน Code Freeze
+งานคงค้าง UI/DOM/CSS, export parity และ accessibility ให้ติดตามที่
+[Roadmap](zeep-interface-development-roadmap.md) เพียงแหล่งเดียว ไม่ทำรายการซ้ำที่นี่

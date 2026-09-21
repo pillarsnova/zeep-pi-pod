@@ -86,6 +86,11 @@ MPV, ALSA และ `lgpio` เป็น OS/deployment dependency ที่ต�
 - ห้ามแก้ generated `static/index.html` เพียงไฟล์เดียว เพราะ build ครั้งถัดไปจะทับ
 - Fetch ใช้กับ REST และ WebSocket ใช้รับ live state; UI ต้องแสดง canonical value
   จาก Backend และไม่คำนวณ Sensor, Sleep State หรือคะแนนขึ้นใหม่เอง
+- Header/navigation/fullscreen อยู่ใน shared shell; ผล Session ใช้ shared presenter
+  [`11-result-summary.js`](../../static/partials/app/scripts/11-result-summary.js)
+  Node built-in tests ใช้บนเครื่องพัฒนา/CI ไม่ได้เพิ่ม Node runtime บน Pi
+- คำแนะนำหลังพักใช้ `sessions/post_rest_advice.py`; API ใช้
+  `sessions/advice_response_models.py` ไม่สร้าง logic จากคะแนนซ้ำใน UI
 
 ## Database และ Storage
 
@@ -237,5 +242,5 @@ backup, deploy, restart และ recovery ให้ยึด
 - Deploy/Ops: [Pi 5 Operations Runbook](../pi5-operations-runbook.md)
 - Release fact: deployed health/version response และ signed closure record
 
-เมื่อ narrative ขัดกับ executable contract ให้หยุดการเผยแพร่ผลและแก้เอกสารกับ
-contract ใน release เดียวกัน ไม่เลือกข้อความที่ดูสมเหตุผลกว่าเอง
+เมื่อ narrative ขัดกับ executable contract ให้ระบุ SHA/ส่วนที่ขัดกันและแก้เอกสาร
+หรือเสนอแก้ runtime ก่อนเผยแพร่ส่วนนั้นใหม่ ไม่หยุดบริการหรือซ่อนผลเดิมเพราะเอกสารเก่า

@@ -33,7 +33,8 @@ ZEEP v1 มีรูปแบบการพักที่ผู้ใช้เ
 Hardware ที่ไม่มีบนเครื่องพัฒนาต้องแสดง `Unavailable/Disconnected` ตามจริง;
 ผล local ไม่ใช่หลักฐานว่าเครื่องจริงผ่าน
 
-สำหรับเครื่องทีมที่ได้รับอนุมัติและเปิด disk encryption แล้ว:
+สำหรับเครื่องทีมที่ได้รับอนุมัติและเปิด disk encryption แล้ว หรือ Mac เครื่องพัฒนา
+ที่มีข้อยกเว้นเฉพาะเครื่องซึ่งเจ้าของอนุมัติไว้ใน Runbook:
 
 ```bash
 ./start_work.sh
@@ -59,6 +60,7 @@ Tailscale หรือ reverse proxy ที่ใช้ HTTPS, access policy แ
 | ต้องการทราบ | เปิดเอกสาร/แหล่งนี้ |
 |---|---|
 | เริ่มงานและเลือกเส้นทางตามบทบาท | [Team Onboarding](docs/onboarding/README.md) |
+| สารบัญและสถานะที่ตรวจล่าสุด | [Documentation Index](docs/README.md) · [Current Status](docs/current-status.md) |
 | Product, Mode และ Session lifecycle | [Product and Lifecycle](docs/onboarding/product-and-lifecycle.md) |
 | Tech stack, database และเครื่องมือ | [Technology Stack, Data และเครื่องมือ](docs/onboarding/technology-stack-and-tools.md) |
 | Hardware, transport และ failure boundary | [Hardware and Hub Map](docs/onboarding/hardware-hub-map.md) |
@@ -67,6 +69,7 @@ Tailscale หรือ reverse proxy ที่ใช้ HTTPS, access policy แ
 | Pull, test, deploy, backup และ recovery | [Operations and First Week](docs/onboarding/operations-and-first-week.md) |
 | Sleep State, score และ version ปัจจุบัน | [Sleep System Current](docs/zeep-sleep-system-current.md) และ [`sleep_system_policy.py`](sleep_system_policy.py) |
 | API field/enum | [API Schema Reference](docs/zeep-api-schema-reference-v1.md), Pydantic models และ `/openapi.json` ของ release ที่ deploy |
+| ผลการพักและคำแนะนำหลังออกจากตู้ | [Result Presentation](docs/zeep-session-result-presentation-v1.md) · [คำแนะนำหลังพัก](docs/zeep-post-rest-advice.md) |
 | Sensor field/calibration | [Sensor Interface Contract](docs/zeep-sensor-interface-contract-v1.2.md), [`sensors/contracts.py`](sensors/contracts.py), [`catalog.py`](sensors/catalog.py) และ [`calibration.json`](calibration.json) |
 | Test และ release gate | [TESTING.md](TESTING.md) |
 | Code ownership/refactor | [Pi 5 Software Architecture](docs/pi5-software-architecture.md) และ [CONTRIBUTING.md](CONTRIBUTING.md) |

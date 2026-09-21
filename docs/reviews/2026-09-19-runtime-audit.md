@@ -2,6 +2,9 @@
 
 สถานะ: **Verified change record — Internal Pilot**
 
+บันทึกผลตาม SHA/เวลาในเอกสาร ไม่ใช่การรับรอง release ปัจจุบันทุกส่วน
+งานที่ทำต่อจากรอบนี้ดู [Current Status](../current-status.md); ไม่แก้ตัวเลขผลตรวจเก่า
+
 ขอบเขต: Pi5 runtime บน `origin/develop` ต่อจาก `b74905f`; ตรวจโดยสาม Agent
 แยกด้าน Session lifecycle, Hardware control และ Adaptive/API quality gate
 พร้อมผู้พัฒนาหลักตรวจรวมและตรวจเอกสาร ไม่ใช่การรับรองทางการแพทย์หรือ Hardware

@@ -3,6 +3,12 @@
 สถานะ: **Admin observability contract · ไม่มีสิทธิ์สั่งอุปกรณ์**  
 API: `GET /api/v1/admin/fleet/health`
 
+การรองรับ sensor ชนิดเดียวกันหลายตัวและการสลับใช้ตัวสำรองยังเป็น
+[ข้อเสนอรุ่นถัดไป](zeep-redundant-sensors-and-device-expansion-v1.md)
+ต้องเพิ่ม identity/quality ระดับ sensor instance และ decision provenance;
+health ของ Hub ใน contract นี้เพียงอย่างเดียวไม่ยืนยันความแม่นยำของ measurement
+หรือความพร้อมของระบบสำรอง
+
 ## เป้าหมาย
 
 ทำให้อุปกรณ์ ESP/BCG ทุกชุดรายงานสุขภาพด้วยโครงเดียวกัน เพื่อให้ Admin เปรียบเทียบ
@@ -97,4 +103,3 @@ GPIO, MQTT หรือ Audio controller โดยตรง
 Topic รุ่นถัดไปควรเป็น
 `zeep/v1/{pod_id}/{device_id}/{telemetry|status|event|command}` พร้อม LWT, ACL,
 command ID, expiry และ idempotency
-

@@ -1,13 +1,14 @@
 # ZEEP หูอัจฉริยะ — Acoustic Intelligence DSP Plan
 
-สถานะ: **P1 SHADOW PIPELINE IMPLEMENTED · FIRMWARE CANDIDATE NOT INSTALLED**
+สถานะ: **P1 ADMIN SHADOW · DSP telemetry พบแล้วบน Pod 1 · ยังไม่รับรอง class accuracy**
 
 ขอบเขต: จำแนกลักษณะและบริบทของเสียงเพื่อช่วยทีมดูแล Pod
 
 ข้อบังคับ: `clinical_validated=false` · `automatic_actuation=false` ·
 ไม่กระทบ Sleep State, Sleep Score หรือ Recovery Score ในระยะแรก
 
-ปรับปรุงล่าสุด: 17 กันยายน 2026
+ปรับปรุงล่าสุด: 19 กันยายน 2026 · เทียบ source และ
+[Pi/ESP audit ที่ `f570a68`](../audits/pi5-esp-system-audit-2026-09-19.md)
 
 ## คำแสดงผลใน Monitor — ปรับปรุง 20 กันยายน 2026
 
@@ -56,9 +57,10 @@ WebSocket และไม่แก้ Raw timeline ผลจำแนกแห�
 
 รุ่น P1-shadow เพิ่มเส้นทางรองรับ `sound_class`, confidence, classifier version,
 window sequence และ DSP features ตั้งแต่ Sensor contract → Session Timeline → API
-→ สัญลักษณ์บน Monitor แล้ว พร้อม migration ฐานข้อมูลแบบ additive อย่างไรก็ตาม
-Firmware ที่ build ได้ยังเป็น **validation candidate และยังไม่ได้ Flash ลงอุปกรณ์**
-หน้า Monitor จึง fail-soft กลับเป็น Level Timeline เดิมจนได้รับ packet รุ่นใหม่จริง
+→ สัญลักษณ์บน Monitor แล้ว พร้อม migration ฐานข้อมูลแบบ additive และมีหลักฐาน
+Firmware `sensorhub1-smart-ear-v0.5.3-debug` ส่ง DSP features บน Pod 1 แล้ว
+การติดตั้งไม่เท่ากับการรับรองป้ายเสียง: ทุก class ยังเป็น provisional สำหรับ Admin
+หน้า Monitor fail-soft กลับเป็น Level Timeline เมื่อ packet ไม่มี features ที่ใช้ได้
 
 SMART EAR ตรวจและแสดงค่าปัจจุบันได้ตลอดเวลาที่ Sensor พร้อม แม้ไม่มีผู้ใช้หรือ
 Session แต่ข้อมูลนอก Session เป็น **ephemeral live observation** เท่านั้น: ไม่เพิ่ม
@@ -90,10 +92,9 @@ marker ตามเวลาจะเริ่มเมื่อ Session อย�
 
 - แหล่งกำเนิดจริงของเสียงจาก microphone เดียว
 - ตำแหน่ง ทิศทาง ผู้พูด หรือเนื้อหาคำพูด
-- Production firmware ที่ติดตั้งอยู่ยังไม่มี DSP class/version ตาม contract ใหม่
-- Production firmware ยังไม่ส่ง spectral centroid/flatness/flux, band ratios,
-  syllabic modulation หรือ breathing periodicity จึงยังแยก `snore_like` กับ
-  `speech_like` ไม่ได้อย่างรับผิดชอบ
+- ความแม่นยำของ `snore_like` กับ `speech_like` และ class อื่นในสถานการณ์จริง:
+  มี spectral centroid/flatness/flux, band ratios, modulation และ periodicity แล้ว
+  แต่ยังไม่มี controlled class-level validation ที่รับรองผลเหล่านี้
 - ค่าปัจจุบันเป็น certified LAeq(A) หรือผ่านมาตรฐานเครื่องวัด Class 1/2 หรือไม่
 - ACK ของแอร์/พัดลมหมายความว่าอุปกรณ์กายภาพกำลังสร้างเสียงจริงหรือไม่
 
@@ -103,8 +104,8 @@ marker ตามเวลาจะเริ่มเมื่อ Session อย�
 ตรวจคุณภาพและรูปทรง amplitude window แต่ไม่เพียงพอระบุแหล่งเสียง รุ่น P0.6 มี
 event detector สำหรับ **รูปแบบระดับเสียง** และ event-bout แบบ deterministic แล้ว
 แต่ scalar dBA เพียงค่าเดียวยังไม่อาจแยก compressor, airflow, door, music หรือ
-external noise ได้อย่างน่าเชื่อถือ ส่วน P1-shadow candidate คำนวณ FFT/features
-บน ESP32 และส่งเฉพาะผลย่อ แต่ยังต้องผ่าน controlled physical validation
+external noise ได้อย่างน่าเชื่อถือ ส่วน P1-shadow คำนวณ FFT/features บน ESP32
+และส่งเฉพาะผลย่อแล้ว แต่ยังต้องเก็บ controlled physical validation เพื่อวัดความแม่นยำ
 
 ### กฎ Level Timeline ที่ LIVE
 

@@ -45,7 +45,7 @@ class ProductLanguageTests(unittest.TestCase):
     def test_unknown_copy_is_calm_and_honest(self):
         self.assertEqual(
             user_environment_level("unknown"),
-            "กำลังรวบรวมข้อมูล",
+            "ยังไม่มีข้อมูล",
         )
         self.assertEqual(
             user_score_level("custom", "ควรปรับปรุง"),
@@ -57,13 +57,13 @@ class ProductLanguageTests(unittest.TestCase):
         )
         self.assertEqual(
             user_environment_level("future", "แย่"),
-            "กำลังรวบรวมข้อมูล",
+            "ยังไม่มีข้อมูล",
         )
         self.assertEqual(
             user_confidence_level("future", "ข้อมูลไม่พอ"),
             "ข้อมูลยังไม่พอสรุป",
         )
-        self.assertEqual(user_confidence_level("low"), "กำลังรวบรวมข้อมูลเพิ่ม")
+        self.assertEqual(user_confidence_level("low"), "ข้อมูลประกอบจำกัด")
 
     def test_safety_review_stays_direct_without_engineering_jargon(self):
         title, detail, action, safety_review = user_environment_finding_copy(
@@ -217,7 +217,7 @@ class ProductLanguageTests(unittest.TestCase):
         )
 
         self.assertEqual(assessment["mode_label"], "รูปแบบการพักครั้งนี้")
-        self.assertEqual(assessment["acceptable_min_label"], "กำลังรวบรวมข้อมูล")
+        self.assertEqual(assessment["acceptable_min_label"], "ยังไม่มีข้อมูล")
         self.assertNotIn("Gate", str(assessment))
         self.assertNotIn("firmware", str(assessment))
 

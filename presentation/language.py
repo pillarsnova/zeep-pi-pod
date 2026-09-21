@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-PRODUCT_LANGUAGE_VERSION = "zeep-product-language-v1.1"
+PRODUCT_LANGUAGE_VERSION = "zeep-product-language-v1.2"
 
 USER_SCORE_LEVELS = {
     "very_good": "ดีมาก",
@@ -28,14 +28,14 @@ USER_ENVIRONMENT_LEVELS = {
     "fair": "พอใช้",
     "poor": "ควรปรับ",
     "critical": "แนะนำให้ปรับตอนนี้",
-    "unavailable": "กำลังรวบรวมข้อมูล",
-    "unknown": "กำลังรวบรวมข้อมูล",
+    "unavailable": "ยังไม่มีข้อมูล",
+    "unknown": "ยังไม่มีข้อมูล",
 }
 
 USER_CONFIDENCE_LEVELS = {
     "high": "ข้อมูลชัดเจน",
     "medium": "ข้อมูลเพียงพอ",
-    "low": "กำลังรวบรวมข้อมูลเพิ่ม",
+    "low": "ข้อมูลประกอบจำกัด",
     "unknown": "ข้อมูลยังไม่พอสรุป",
 }
 
@@ -150,7 +150,7 @@ def user_environment_finding_copy(
         message = "มีค่าบางช่วงแตะเกณฑ์ความปลอดภัย กรุณาแจ้งทีมงานก่อนใช้งานครั้งถัดไป"
         action = "กรุณาแจ้งทีมงาน"
     elif level_key == "unavailable":
-        message, action = "ZEEP กำลังรวบรวมข้อมูลส่วนนี้", None
+        message, action = "ข้อมูลส่วนนี้ยังไม่เพียงพอสำหรับสรุปผล", None
     elif level_key in {"good", "excellent"}:
         message, action = "อยู่ในช่วงที่เหมาะกับการพักครั้งนี้", None
     elif level_key == "fair":
@@ -195,8 +195,8 @@ def user_report_finding_copy(
     level_key = str(severity or "").strip().casefold()
     if level_key == "unavailable":
         return (
-            "ข้อมูลประกอบ · กำลังรวบรวมข้อมูล",
-            "ZEEP กำลังรวบรวมข้อมูลส่วนนี้",
+            "ข้อมูลประกอบ · ยังไม่มีข้อมูล",
+            "ข้อมูลส่วนนี้ยังไม่เพียงพอสำหรับสรุปผล",
             None,
         )
     if level_key in {"good", "excellent"}:

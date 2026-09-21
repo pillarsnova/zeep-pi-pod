@@ -1192,7 +1192,7 @@ class UsageSessionApiTests(unittest.TestCase):
         )
         self.assertEqual(
             payload["report"]["findings"][0]["title"],
-            "อุณหภูมิ · กำลังรวบรวมข้อมูล",
+            "อุณหภูมิ · ยังไม่มีข้อมูล",
         )
         self.assertEqual(
             payload["sleep_policy_versions"], {"evidence": "evidence-v-test"}

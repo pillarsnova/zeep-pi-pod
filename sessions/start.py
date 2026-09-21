@@ -168,7 +168,7 @@ class SessionStarter:
                 503,
                 {
                     "code": "occupancy_coordinator_unavailable",
-                    "message": "ยังตรวจสอบการใช้งานซ้ำระหว่างตู้ไม่ได้ จึงยังไม่เริ่ม Session ใหม่",
+                    "message": "ยังตรวจสอบการใช้งานระหว่างตู้ไม่ได้ กรุณาลองอีกครั้งก่อนเริ่มการพัก",
                 },
             ) from exc
 
@@ -230,7 +230,9 @@ class SessionStarter:
         with p.session_lock:
             if p.get_active() is not None:
                 p.release_lease(lease)
-                raise SessionStartRejected(409, "มี session อื่นเพิ่งเริ่มพร้อมกัน — ลองใหม่")
+                raise SessionStartRejected(
+                    409, "มีการพักอื่นเริ่มขึ้นแล้ว กรุณาตรวจสอบสถานะอีกครั้ง"
+                )
             p.set_active(active)
         try:
             p.save_checkpoint(active)
@@ -242,7 +244,9 @@ class SessionStarter:
                 p.release_lease(lease)
             except (CoordinatorUnavailable, OccupancyConflict):
                 pass
-            raise SessionStartRejected(500, "บันทึกสถานะ Login สำหรับกู้คืนไม่สำเร็จ") from exc
+            raise SessionStartRejected(
+                500, "ยังบันทึกสถานะการเข้าสู่ระบบไม่ได้ กรุณาลองอีกครั้ง"
+            ) from exc
 
     def _publish(
         self,

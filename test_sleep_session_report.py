@@ -1,12 +1,12 @@
 import unittest
 
+from sessions.report_publication import public_report_field
 from sleep_session_report import (
     analyse_sleep_cycles,
     build_session_report,
     build_sleep_quality,
     normalise_rest_mode,
 )
-from sessions.report_publication import public_report_field
 
 
 class SleepSessionReportTests(unittest.TestCase):

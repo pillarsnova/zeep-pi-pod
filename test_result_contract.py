@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import unittest
 
+from sessions.result_contract import build_result_contract
 from sleep_system_policy import (
     PERSONAL_BEHAVIOUR_BASELINE_VERSION,
     RECOVERY_SCORE_FORMULA_VERSION,
     RESTORE_SUMMARY_VERSION,
     SLEEP_SCORE_FORMULA_VERSION,
 )
-from sessions.result_contract import build_result_contract
 
 
 class SessionResultContractTests(unittest.TestCase):
@@ -44,11 +44,11 @@ class SessionResultContractTests(unittest.TestCase):
         self.assertFalse(result["data_quality"]["coverage_can_hide_score"])
         self.assertEqual(
             result["data_quality"]["label"],
-            "กำลังรวบรวมข้อมูลเพิ่ม",
+            "ข้อมูลประกอบจำกัด",
         )
         self.assertEqual(
             result["data_quality"]["confidence"]["label"],
-            "กำลังรวบรวมข้อมูลเพิ่ม",
+            "ข้อมูลประกอบจำกัด",
         )
         self.assertEqual(
             result["score_revision_policy"],

@@ -34,10 +34,14 @@ class PostRestAdviceTests(unittest.TestCase):
         self.assertEqual(tip["tip_id"], "check_feeling")
 
     def test_valid_self_report_changes_action(self):
-        tip = self.advice(subjective={
-            "status": "measured", "freshness_delta": -2,
-            "source": "session_questionnaire", "sensor_inferred": False,
-        })
+        tip = self.advice(
+            subjective={
+                "status": "measured",
+                "freshness_delta": -2,
+                "source": "session_questionnaire",
+                "sensor_inferred": False,
+            }
+        )
         self.assertEqual(tip["basis"], "self_report")
         self.assertIn("ขับรถ", tip["primary"])
 
@@ -50,27 +54,69 @@ class PostRestAdviceTests(unittest.TestCase):
         self.assertEqual(tip["basis"], "session_sensor")
 
     def test_valid_prior_baseline_is_explained(self):
-        tip = self.advice("sleep", baseline={"comparison": {
-            "available": True, "label": "ใกล้รูปแบบเดิม",
-        }})
+        tip = self.advice(
+            "sleep",
+            baseline={
+                "comparison": {
+                    "available": True,
+                    "label": "ใกล้รูปแบบเดิม",
+                }
+            },
+        )
         self.assertEqual(tip["basis"], "personal_baseline")
         self.assertIn("รูปแบบและเป้าหมายเดียวกัน", tip["reason"])
 
     def test_safety_precedes_general_tips(self):
-        tip = build_post_rest_advice("sleep", 90, {"attention": [{
-            "key": "environment_co2", "priority": "safety_review",
-            "action": "กรุณาแจ้งทีมงาน",
-        }]}, limited_evidence=True)
+        tip = build_post_rest_advice(
+            "sleep",
+            90,
+            {
+                "attention": [
+                    {
+                        "key": "environment_co2",
+                        "priority": "safety_review",
+                        "action": "กรุณาแจ้งทีมงาน",
+                    }
+                ]
+            },
+            limited_evidence=True,
+        )
         self.assertEqual(tip["basis"], "safety")
         self.assertEqual(tip["primary"], "กรุณาแจ้งทีมงาน")
 
     def test_different_observations_select_different_actions(self):
-        tips = [build_post_rest_advice("sleep", 80, {"attention": [{
-            "key": "environment_" + metric, "category": "environment",
-            "label": metric,
-        }]}) for metric in ("sound", "lux", "co2")]
+        tips = [
+            build_post_rest_advice(
+                "sleep",
+                80,
+                {
+                    "attention": [
+                        {
+                            "key": "environment_" + metric,
+                            "category": "environment",
+                            "label": metric,
+                        }
+                    ]
+                },
+            )
+            for metric in ("sound", "lux", "co2")
+        ]
         self.assertEqual(len({tip["primary"] for tip in tips}), 3)
         self.assertTrue(all("ยังไม่ยืนยันว่าเป็นสาเหตุ" in tip["reason"] for tip in tips))
+
+    def test_plain_language_keeps_the_action_and_evidence_separate(self):
+        tip = self.advice(quality={"estimated_sleep_s": 0})
+        self.assertEqual(tip["title"], "พักสายตาระหว่างวัน")
+        self.assertIn("ไม่ต้องฝืนให้หลับ", tip["primary"])
+        self.assertIn("ยังไม่พบช่วงหลับชัดเจน", tip["reason"])
+        self.assertNotIn("Sensor", tip["primary"] + tip["reason"])
+        self.assertFalse(tip["automatic_actuation"])
+
+    def test_short_session_tip_is_conditional_not_a_claim_of_drowsiness(self):
+        tip = build_post_rest_advice("nap_recovery", None, {})
+        self.assertIn("หากยังรู้สึกง่วง", tip["primary"])
+        self.assertEqual(tip["basis"], "limited_data")
+        self.assertFalse(tip["whole_day_readiness_claim"])
 
     def test_score_and_input_are_not_changed(self):
         quality = _sleep_quality(82)
@@ -81,16 +127,32 @@ class PostRestAdviceTests(unittest.TestCase):
         self.assertTrue(summary["recommendation"]["reason"])
 
     def test_report_metric_aliases_select_specific_actions(self):
-        for metric, expected in (("voc", "environment_voc_index"), ("pm25", "environment_pm2_5")):
-            tip = build_post_rest_advice("sleep", 80, {"attention": [{
-                "key": "environment_" + metric, "category": "environment",
-            }]})
+        for metric, expected in (
+            ("voc", "environment_voc_index"),
+            ("pm25", "environment_pm2_5"),
+        ):
+            tip = build_post_rest_advice(
+                "sleep",
+                80,
+                {
+                    "attention": [
+                        {
+                            "key": "environment_" + metric,
+                            "category": "environment",
+                        }
+                    ]
+                },
+            )
             self.assertEqual(tip["tip_id"], expected)
 
     def test_invalid_questionnaire_is_not_promoted_to_measured(self):
-        summary = build_restore_summary(_sleep_quality(), subjective_outcome={
-            "status": "measured", "freshness_delta": 2,
-        })
+        summary = build_restore_summary(
+            _sleep_quality(),
+            subjective_outcome={
+                "status": "measured",
+                "freshness_delta": 2,
+            },
+        )
         self.assertEqual(summary["subjective_outcome"]["status"], "not_measured")
 
 

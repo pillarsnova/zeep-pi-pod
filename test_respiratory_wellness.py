@@ -428,7 +428,7 @@ class RespiratoryWellnessTests(unittest.TestCase):
         self.assertIsNone(parsed.observations.median_hr_bpm)
         self.assertIsNone(parsed.observations.median_paired_rr_brpm)
         self.assertEqual(parsed.confidence.level, "low")
-        self.assertEqual(parsed.confidence.label, "กำลังรวบรวมข้อมูลเพิ่ม")
+        self.assertEqual(parsed.confidence.label, "ข้อมูลประกอบจำกัด")
 
     def test_malformed_public_source_returns_complete_unavailable_contract(self):
         public = public_report_field(

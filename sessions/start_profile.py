@@ -55,9 +55,9 @@ def _optional_health(start: ValidatedStart, ports: StartPorts) -> dict[str, Any]
 
 def _new_profile(start: ValidatedStart, ports: StartPorts) -> dict[str, Any]:
     if start.gender is None:
-        raise SessionStartRejected(422, "ผู้ใช้ใหม่ต้องเลือกเพศ (ชาย/หญิง/อื่น ๆ/ไม่ระบุ)")
+        raise SessionStartRejected(422, "กรุณาเลือกเพศ หรือเลือกไม่ระบุ")
     if start.age_group is None:
-        raise SessionStartRejected(422, "ผู้ใช้ใหม่ต้องเลือกช่วงอายุสำหรับ Baseline")
+        raise SessionStartRejected(422, "กรุณาเลือกช่วงอายุ เพื่อใช้ประกอบการประเมินการพัก")
     return {
         "username": start.username,
         "account_key": start.key,

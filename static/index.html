@@ -2931,16 +2931,43 @@ function renderSleepState(sl={},session={},bcg={}){
 }
 
 /* ---- track metadata: แสดงชื่อ/คำอธิบายภาษาคน แทนชื่อไฟล์ดิบ ---- */
+// mode ใช้ key เดียวกับ REST_MODE_PROTOCOLS ใน sleep_system_policy.py:
+// 'nap_recovery' · 'sleep' · 'both' (ใช้ได้ทั้งสองโหมด) · null (ยังไม่จัดกลุ่ม)
 const TRACK_META = [
-  {re:/Night-Delta-Mix/i,       title:'กลางดึก', desc:'เสียงสำหรับช่วงกลางดึก', badge:null},
-  {re:/WindDown-Theta-Mix/i,    title:'ก่อนนอน', desc:'เสียงสำหรับช่วงก่อนนอน', badge:null},
-  {re:/Nap-ThetaAlpha-Mix/i,    title:'งีบสั้น', desc:'เสียงสำหรับช่วงงีบ', badge:null},
-  {re:/Relax-Alpha-Mix/i,       title:'ผ่อนคลาย', desc:'เสียงสำหรับพักผ่อน', badge:null},
-  {re:/Rain-Pink-Mix/i,         title:'เสียงฝน', desc:'บรรยากาศเสียงฝน', badge:null},
+  {re:/Night-Delta-Mix/i,       title:'กลางดึก', desc:'เสียงสำหรับช่วงกลางดึก', badge:null, mode:'sleep'},
+  {re:/WindDown-Theta-Mix/i,    title:'ก่อนนอน', desc:'เสียงสำหรับช่วงก่อนนอน', badge:null, mode:'both'},
+  {re:/Nap-ThetaAlpha-Mix/i,    title:'งีบสั้น', desc:'เสียงสำหรับช่วงงีบ', badge:null, mode:'nap_recovery'},
+  {re:/Relax-Alpha-Mix/i,       title:'ผ่อนคลาย', desc:'เสียงสำหรับพักผ่อน', badge:null, mode:'nap_recovery'},
+  {re:/Rain-Pink-Mix/i,         title:'เสียงฝน', desc:'บรรยากาศเสียงฝน', badge:null, mode:'both'},
+  // ไฟล์ mp3: จัดกลุ่มจากผลวัดสเปกตรัม/ไดนามิก — ชื่อและคำอธิบายคงเดิมตาม fallback
+  {re:/Amber Slow/i,            title:'Amber Slow', desc:'ไฟล์เสียงในเครื่อง', badge:null, mode:'sleep'},
+  {re:/Glass Tide/i,            title:'Glass Tide', desc:'ไฟล์เสียงในเครื่อง', badge:null, mode:'sleep'},
+  {re:/Power Nap Recovery/i,    title:'Power Nap Recovery', desc:'ไฟล์เสียงในเครื่อง', badge:null, mode:'nap_recovery'},
+  {re:/Tibetan Sleep/i,         title:'Tibetan Sleep & Healing', desc:'ไฟล์เสียงในเครื่อง', badge:null, mode:'nap_recovery'},
+  {re:/Velvet Strings/i,        title:'Velvet Strings Calm', desc:'ไฟล์เสียงในเครื่อง', badge:null, mode:'nap_recovery'},
+  {re:/Zen Garden/i,            title:'Zen Garden Drizzle', desc:'ไฟล์เสียงในเครื่อง', badge:null, mode:'both'},
+  // Little Heartbeat ตั้งใจไม่ใส่: ไดนามิก 33 dB และยาว 3 นาที — ตกที่ fallback (mode:null)
 ];
 function trackMeta(name){
   for (const m of TRACK_META) if (m.re.test(name)) return m;
-  return {title: name.replace(/\.[^.]+$/,'').replace(/[-_]+/g,' '), desc:'ไฟล์เสียงในเครื่อง', badge:null};
+  return {title: name.replace(/\.[^.]+$/,'').replace(/[-_]+/g,' '), desc:'ไฟล์เสียงในเครื่อง', badge:null, mode:null};
+}
+// จัดกลุ่มรายการเสียงตาม mode; ป้ายกลุ่มใช้คำเดียวกับ REST_SESSION_GROUPS
+const TRACK_MODE_GROUPS = [
+  ['nap_recovery', 'Nap & Refresh · พักระหว่างวัน'],
+  ['sleep',        'Overnight Recovery · พักค้างคืน'],
+  ['both',         'ใช้ได้ทั้งสองโหมด'],
+  [null,           'ยังไม่จัดกลุ่ม'],
+];
+function fillTrackSelect(select, tracks){
+  select.replaceChildren();select.disabled=false;
+  TRACK_MODE_GROUPS.forEach(([mode,label])=>{
+    const inGroup=tracks.filter(t=>(trackMeta(t).mode??null)===mode);
+    if(!inGroup.length)return;
+    const group=document.createElement('optgroup');group.label=label;
+    inGroup.forEach(track=>{const option=document.createElement('option');option.value=track;option.textContent=trackMeta(track).title;group.appendChild(option);});
+    select.appendChild(group);
+  });
 }
 let selectedTrack = null;
 // The bedside player owns the playback policy. The Pi handles repeat-one
@@ -5370,6 +5397,73 @@ function setVolume(v){
   clearTimeout(volTimer);
   volTimer = setTimeout(()=>post('/api/music/volume', {volume:Number(v)}), 120);
 }
+// ไฟล์จาก /api/music ครั้งล่าสุด และ rest_mode ที่ใช้วาดรายการครั้งนั้น — เก็บไว้
+// เพื่อวาดใหม่ได้ทันทีที่ผู้ใช้ login โดยไม่ต้อง fetch ซ้ำ
+let trackFiles = [];
+let trackListRestMode;
+
+// รายการของผู้เข้าพัก: เอาเฉพาะกลุ่มที่ตรงโหมดที่เลือกตอน login บวกกลุ่ม both
+// ยังไม่มีใคร login (rest_mode = null) ให้เห็นทุกกลุ่มตามเดิม
+function tracksForRestMode(grouped){
+  const mode = current.session?.rest_mode;
+  if (!mode) return grouped;
+  const matched = grouped.filter(t=>{const m=trackMeta(t).mode;return m===mode||m==='both';});
+  return matched.length ? matched : grouped;
+}
+
+function renderTrackList(){
+  const root = document.getElementById('trackList');
+  root.innerHTML = '';
+  Object.keys(trackEls).forEach(k=>delete trackEls[k]);
+  trackListRestMode = current.session?.rest_mode ?? null;
+  // แสดงเฉพาะเสียงที่จัดกลุ่มโหมดไว้แล้ว — ไฟล์ที่ยังไม่ได้จัดกลุ่มจะถูกซ่อน
+  const grouped = trackFiles.filter(t=>trackMeta(t).mode);
+  const tracks = tracksForRestMode(grouped);
+  const unified=document.getElementById('unifiedTrackSelect');
+  const debug=document.getElementById('debugTrackSelect');
+  if (!tracks.length){
+    root.innerHTML = '<div class="mini" style="margin-top:2px">'
+      + (trackFiles.length ? 'ไฟล์เสียงใน music/ ยังไม่ได้จัดกลุ่มโหมด'
+                           : 'ไม่มีไฟล์เพลงในโฟลเดอร์ music/') + '</div>';
+    selectedTrack = null;
+    if(unified){unified.innerHTML='<option value="">ไม่มีไฟล์เสียง</option>';unified.disabled=true;}
+    if(debug){debug.innerHTML='<option value="">ไม่มีไฟล์เสียง</option>';debug.disabled=true;}
+    return;
+  }
+  const music = current.music||{};
+  if (music.playing&&tracks.includes(music.track)) selectedTrack=music.track;
+  else if (!tracks.includes(selectedTrack)) selectedTrack = tracks[0];
+  if(unified){
+    fillTrackSelect(unified, tracks);
+    unified.value=selectedTrack;
+  }
+  // ช่อง Admin Debug ไม่กรองตามโหมด — ใช้ทดสอบไฟล์ได้ทุกเพลงที่จัดกลุ่มแล้ว
+  if(debug){
+    fillTrackSelect(debug, grouped);
+    debug.value=selectedTrack;
+  }
+  tracks.forEach(t=>{
+    const meta = trackMeta(t);
+    const row = document.createElement('button'); row.className = 'track-row';
+    const info = document.createElement('div');
+    const title = document.createElement('b'); title.textContent = meta.title;
+    const desc = document.createElement('div'); desc.className = 'desc'; desc.textContent = meta.desc;
+    info.append(title, desc);
+    row.appendChild(info);
+    if (meta.badge){
+      const badge = document.createElement('span');
+      badge.className = 'badge' + (meta.head ? ' head' : '');
+      badge.textContent = meta.badge;
+      row.appendChild(badge);
+    }
+    row.onclick = ()=>unifiedSelectTrack(t,row);
+    if (t === selectedTrack) row.classList.add('sel');
+    root.appendChild(row);
+    trackEls[t] = {row};
+  });
+  renderUnifiedAudioPlayer(current.music||{},current.safety||{});
+}
+
 async function loadTracks(){
   const root = document.getElementById('trackList');
   if (!root.children.length){
@@ -5377,50 +5471,9 @@ async function loadTracks(){
   }
   try {
     const r = await fetch('/api/music'); const d = await r.json();
-    root.innerHTML = '';
-    Object.keys(trackEls).forEach(k=>delete trackEls[k]);
-    if (!d.tracks.length){
-      root.innerHTML = '<div class="mini" style="margin-top:2px">ไม่มีไฟล์เพลงในโฟลเดอร์ music/</div>';
-      selectedTrack = null;
-      const unified=document.getElementById('unifiedTrackSelect');if(unified){unified.innerHTML='<option value="">ไม่มีไฟล์เสียง</option>';unified.disabled=true;}
-      const debug=document.getElementById('debugTrackSelect');if(debug){debug.innerHTML='<option value="">ไม่มีไฟล์เสียง</option>';debug.disabled=true;}
-      return;
-    }
+    trackFiles = d.tracks;
     if(d.state&&typeof d.state==='object')current.music={...(current.music||{}),...d.state};
-    if (d.state?.playing&&d.tracks.includes(d.state.track)) selectedTrack=d.state.track;
-    else if (!d.tracks.includes(selectedTrack)) selectedTrack = d.tracks[0];
-    const unified=document.getElementById('unifiedTrackSelect');
-    if(unified){
-      unified.replaceChildren();unified.disabled=false;
-      d.tracks.forEach(track=>{const option=document.createElement('option');option.value=track;option.textContent=trackMeta(track).title;unified.appendChild(option);});
-      unified.value=selectedTrack;
-    }
-    const debug=document.getElementById('debugTrackSelect');
-    if(debug){
-      debug.replaceChildren();debug.disabled=false;
-      d.tracks.forEach(track=>{const option=document.createElement('option');option.value=track;option.textContent=trackMeta(track).title;debug.appendChild(option);});
-      debug.value=selectedTrack;
-    }
-    d.tracks.forEach(t=>{
-      const meta = trackMeta(t);
-      const row = document.createElement('button'); row.className = 'track-row';
-      const info = document.createElement('div');
-      const title = document.createElement('b'); title.textContent = meta.title;
-      const desc = document.createElement('div'); desc.className = 'desc'; desc.textContent = meta.desc;
-      info.append(title, desc);
-      row.appendChild(info);
-      if (meta.badge){
-        const badge = document.createElement('span');
-        badge.className = 'badge' + (meta.head ? ' head' : '');
-        badge.textContent = meta.badge;
-        row.appendChild(badge);
-      }
-      row.onclick = ()=>unifiedSelectTrack(t,row);
-      if (t === selectedTrack) row.classList.add('sel');
-      root.appendChild(row);
-      trackEls[t] = {row};
-    });
-    renderUnifiedAudioPlayer(current.music||{},current.safety||{});
+    renderTrackList();
   } catch {
     root.innerHTML = '<div class="mini" style="margin-top:2px">เชื่อมต่อ server ไม่ได้</div>';
   }
@@ -9052,6 +9105,9 @@ function render(s, source='ws'){
   if(!isLiveStateSnapshot(s))throw new Error('Invalid live state snapshot');
   dismissBoot();
   current = s;
+  // โหมดที่เลือกตอน login กำหนดว่ารายการเสียงโชว์กลุ่มไหน; loadTracks() ถูกเรียก
+  // แค่ตอน boot และตอน reconnect จึงต้องวาดรายการใหม่เองเมื่อโหมดเปลี่ยน
+  if (trackFiles.length && (s.session?.rest_mode ?? null) !== trackListRestMode) renderTrackList();
   featureReportShare = !!s.features?.session_report_share;
   const e = s.sensor?.esp32 || {}, h2 = s.sensor?.sensorhub2 || {}, a = s.aircon || {}, bedctl = s.bed_control || {}, b = s.sensor?.bcg || {}, m = s.music || {}, sys = s.system || {};
   const environment=renderEnvironmentSensors(s.sensor?.environment,e,h2,b);

@@ -47,6 +47,9 @@ function render(s, source='ws'){
   if(!isLiveStateSnapshot(s))throw new Error('Invalid live state snapshot');
   dismissBoot();
   current = s;
+  // โหมดที่เลือกตอน login กำหนดว่ารายการเสียงโชว์กลุ่มไหน; loadTracks() ถูกเรียก
+  // แค่ตอน boot และตอน reconnect จึงต้องวาดรายการใหม่เองเมื่อโหมดเปลี่ยน
+  if (trackFiles.length && (s.session?.rest_mode ?? null) !== trackListRestMode) renderTrackList();
   featureReportShare = !!s.features?.session_report_share;
   const e = s.sensor?.esp32 || {}, h2 = s.sensor?.sensorhub2 || {}, a = s.aircon || {}, bedctl = s.bed_control || {}, b = s.sensor?.bcg || {}, m = s.music || {}, sys = s.system || {};
   const environment=renderEnvironmentSensors(s.sensor?.environment,e,h2,b);

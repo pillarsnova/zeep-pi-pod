@@ -199,6 +199,73 @@ function setVolume(v){
   clearTimeout(volTimer);
   volTimer = setTimeout(()=>post('/api/music/volume', {volume:Number(v)}), 120);
 }
+// ไฟล์จาก /api/music ครั้งล่าสุด และ rest_mode ที่ใช้วาดรายการครั้งนั้น — เก็บไว้
+// เพื่อวาดใหม่ได้ทันทีที่ผู้ใช้ login โดยไม่ต้อง fetch ซ้ำ
+let trackFiles = [];
+let trackListRestMode;
+
+// รายการของผู้เข้าพัก: เอาเฉพาะกลุ่มที่ตรงโหมดที่เลือกตอน login บวกกลุ่ม both
+// ยังไม่มีใคร login (rest_mode = null) ให้เห็นทุกกลุ่มตามเดิม
+function tracksForRestMode(grouped){
+  const mode = current.session?.rest_mode;
+  if (!mode) return grouped;
+  const matched = grouped.filter(t=>{const m=trackMeta(t).mode;return m===mode||m==='both';});
+  return matched.length ? matched : grouped;
+}
+
+function renderTrackList(){
+  const root = document.getElementById('trackList');
+  root.innerHTML = '';
+  Object.keys(trackEls).forEach(k=>delete trackEls[k]);
+  trackListRestMode = current.session?.rest_mode ?? null;
+  // แสดงเฉพาะเสียงที่จัดกลุ่มโหมดไว้แล้ว — ไฟล์ที่ยังไม่ได้จัดกลุ่มจะถูกซ่อน
+  const grouped = trackFiles.filter(t=>trackMeta(t).mode);
+  const tracks = tracksForRestMode(grouped);
+  const unified=document.getElementById('unifiedTrackSelect');
+  const debug=document.getElementById('debugTrackSelect');
+  if (!tracks.length){
+    root.innerHTML = '<div class="mini" style="margin-top:2px">'
+      + (trackFiles.length ? 'ไฟล์เสียงใน music/ ยังไม่ได้จัดกลุ่มโหมด'
+                           : 'ไม่มีไฟล์เพลงในโฟลเดอร์ music/') + '</div>';
+    selectedTrack = null;
+    if(unified){unified.innerHTML='<option value="">ไม่มีไฟล์เสียง</option>';unified.disabled=true;}
+    if(debug){debug.innerHTML='<option value="">ไม่มีไฟล์เสียง</option>';debug.disabled=true;}
+    return;
+  }
+  const music = current.music||{};
+  if (music.playing&&tracks.includes(music.track)) selectedTrack=music.track;
+  else if (!tracks.includes(selectedTrack)) selectedTrack = tracks[0];
+  if(unified){
+    fillTrackSelect(unified, tracks);
+    unified.value=selectedTrack;
+  }
+  // ช่อง Admin Debug ไม่กรองตามโหมด — ใช้ทดสอบไฟล์ได้ทุกเพลงที่จัดกลุ่มแล้ว
+  if(debug){
+    fillTrackSelect(debug, grouped);
+    debug.value=selectedTrack;
+  }
+  tracks.forEach(t=>{
+    const meta = trackMeta(t);
+    const row = document.createElement('button'); row.className = 'track-row';
+    const info = document.createElement('div');
+    const title = document.createElement('b'); title.textContent = meta.title;
+    const desc = document.createElement('div'); desc.className = 'desc'; desc.textContent = meta.desc;
+    info.append(title, desc);
+    row.appendChild(info);
+    if (meta.badge){
+      const badge = document.createElement('span');
+      badge.className = 'badge' + (meta.head ? ' head' : '');
+      badge.textContent = meta.badge;
+      row.appendChild(badge);
+    }
+    row.onclick = ()=>unifiedSelectTrack(t,row);
+    if (t === selectedTrack) row.classList.add('sel');
+    root.appendChild(row);
+    trackEls[t] = {row};
+  });
+  renderUnifiedAudioPlayer(current.music||{},current.safety||{});
+}
+
 async function loadTracks(){
   const root = document.getElementById('trackList');
   if (!root.children.length){
@@ -206,50 +273,9 @@ async function loadTracks(){
   }
   try {
     const r = await fetch('/api/music'); const d = await r.json();
-    root.innerHTML = '';
-    Object.keys(trackEls).forEach(k=>delete trackEls[k]);
-    if (!d.tracks.length){
-      root.innerHTML = '<div class="mini" style="margin-top:2px">ไม่มีไฟล์เพลงในโฟลเดอร์ music/</div>';
-      selectedTrack = null;
-      const unified=document.getElementById('unifiedTrackSelect');if(unified){unified.innerHTML='<option value="">ไม่มีไฟล์เสียง</option>';unified.disabled=true;}
-      const debug=document.getElementById('debugTrackSelect');if(debug){debug.innerHTML='<option value="">ไม่มีไฟล์เสียง</option>';debug.disabled=true;}
-      return;
-    }
+    trackFiles = d.tracks;
     if(d.state&&typeof d.state==='object')current.music={...(current.music||{}),...d.state};
-    if (d.state?.playing&&d.tracks.includes(d.state.track)) selectedTrack=d.state.track;
-    else if (!d.tracks.includes(selectedTrack)) selectedTrack = d.tracks[0];
-    const unified=document.getElementById('unifiedTrackSelect');
-    if(unified){
-      unified.replaceChildren();unified.disabled=false;
-      d.tracks.forEach(track=>{const option=document.createElement('option');option.value=track;option.textContent=trackMeta(track).title;unified.appendChild(option);});
-      unified.value=selectedTrack;
-    }
-    const debug=document.getElementById('debugTrackSelect');
-    if(debug){
-      debug.replaceChildren();debug.disabled=false;
-      d.tracks.forEach(track=>{const option=document.createElement('option');option.value=track;option.textContent=trackMeta(track).title;debug.appendChild(option);});
-      debug.value=selectedTrack;
-    }
-    d.tracks.forEach(t=>{
-      const meta = trackMeta(t);
-      const row = document.createElement('button'); row.className = 'track-row';
-      const info = document.createElement('div');
-      const title = document.createElement('b'); title.textContent = meta.title;
-      const desc = document.createElement('div'); desc.className = 'desc'; desc.textContent = meta.desc;
-      info.append(title, desc);
-      row.appendChild(info);
-      if (meta.badge){
-        const badge = document.createElement('span');
-        badge.className = 'badge' + (meta.head ? ' head' : '');
-        badge.textContent = meta.badge;
-        row.appendChild(badge);
-      }
-      row.onclick = ()=>unifiedSelectTrack(t,row);
-      if (t === selectedTrack) row.classList.add('sel');
-      root.appendChild(row);
-      trackEls[t] = {row};
-    });
-    renderUnifiedAudioPlayer(current.music||{},current.safety||{});
+    renderTrackList();
   } catch {
     root.innerHTML = '<div class="mini" style="margin-top:2px">เชื่อมต่อ server ไม่ได้</div>';
   }

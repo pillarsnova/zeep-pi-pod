@@ -1,14 +1,41 @@
 /* ---- track metadata: แสดงชื่อ/คำอธิบายภาษาคน แทนชื่อไฟล์ดิบ ---- */
+// mode ใช้ key เดียวกับ REST_MODE_PROTOCOLS ใน sleep_system_policy.py:
+// 'nap_recovery' · 'sleep' · 'both' (ใช้ได้ทั้งสองโหมด) · null (ยังไม่จัดกลุ่ม)
 const TRACK_META = [
-  {re:/Night-Delta-Mix/i,       title:'กลางดึก', desc:'เสียงสำหรับช่วงกลางดึก', badge:null},
-  {re:/WindDown-Theta-Mix/i,    title:'ก่อนนอน', desc:'เสียงสำหรับช่วงก่อนนอน', badge:null},
-  {re:/Nap-ThetaAlpha-Mix/i,    title:'งีบสั้น', desc:'เสียงสำหรับช่วงงีบ', badge:null},
-  {re:/Relax-Alpha-Mix/i,       title:'ผ่อนคลาย', desc:'เสียงสำหรับพักผ่อน', badge:null},
-  {re:/Rain-Pink-Mix/i,         title:'เสียงฝน', desc:'บรรยากาศเสียงฝน', badge:null},
+  {re:/Night-Delta-Mix/i,       title:'กลางดึก', desc:'เสียงสำหรับช่วงกลางดึก', badge:null, mode:'sleep'},
+  {re:/WindDown-Theta-Mix/i,    title:'ก่อนนอน', desc:'เสียงสำหรับช่วงก่อนนอน', badge:null, mode:'both'},
+  {re:/Nap-ThetaAlpha-Mix/i,    title:'งีบสั้น', desc:'เสียงสำหรับช่วงงีบ', badge:null, mode:'nap_recovery'},
+  {re:/Relax-Alpha-Mix/i,       title:'ผ่อนคลาย', desc:'เสียงสำหรับพักผ่อน', badge:null, mode:'nap_recovery'},
+  {re:/Rain-Pink-Mix/i,         title:'เสียงฝน', desc:'บรรยากาศเสียงฝน', badge:null, mode:'both'},
+  // ไฟล์ mp3: จัดกลุ่มจากผลวัดสเปกตรัม/ไดนามิก — ชื่อและคำอธิบายคงเดิมตาม fallback
+  {re:/Amber Slow/i,            title:'Amber Slow', desc:'ไฟล์เสียงในเครื่อง', badge:null, mode:'sleep'},
+  {re:/Glass Tide/i,            title:'Glass Tide', desc:'ไฟล์เสียงในเครื่อง', badge:null, mode:'sleep'},
+  {re:/Power Nap Recovery/i,    title:'Power Nap Recovery', desc:'ไฟล์เสียงในเครื่อง', badge:null, mode:'nap_recovery'},
+  {re:/Tibetan Sleep/i,         title:'Tibetan Sleep & Healing', desc:'ไฟล์เสียงในเครื่อง', badge:null, mode:'nap_recovery'},
+  {re:/Velvet Strings/i,        title:'Velvet Strings Calm', desc:'ไฟล์เสียงในเครื่อง', badge:null, mode:'nap_recovery'},
+  {re:/Zen Garden/i,            title:'Zen Garden Drizzle', desc:'ไฟล์เสียงในเครื่อง', badge:null, mode:'both'},
+  // Little Heartbeat ตั้งใจไม่ใส่: ไดนามิก 33 dB และยาว 3 นาที — ตกที่ fallback (mode:null)
 ];
 function trackMeta(name){
   for (const m of TRACK_META) if (m.re.test(name)) return m;
-  return {title: name.replace(/\.[^.]+$/,'').replace(/[-_]+/g,' '), desc:'ไฟล์เสียงในเครื่อง', badge:null};
+  return {title: name.replace(/\.[^.]+$/,'').replace(/[-_]+/g,' '), desc:'ไฟล์เสียงในเครื่อง', badge:null, mode:null};
+}
+// จัดกลุ่มรายการเสียงตาม mode; ป้ายกลุ่มใช้คำเดียวกับ REST_SESSION_GROUPS
+const TRACK_MODE_GROUPS = [
+  ['nap_recovery', 'Nap & Refresh · พักระหว่างวัน'],
+  ['sleep',        'Overnight Recovery · พักค้างคืน'],
+  ['both',         'ใช้ได้ทั้งสองโหมด'],
+  [null,           'ยังไม่จัดกลุ่ม'],
+];
+function fillTrackSelect(select, tracks){
+  select.replaceChildren();select.disabled=false;
+  TRACK_MODE_GROUPS.forEach(([mode,label])=>{
+    const inGroup=tracks.filter(t=>(trackMeta(t).mode??null)===mode);
+    if(!inGroup.length)return;
+    const group=document.createElement('optgroup');group.label=label;
+    inGroup.forEach(track=>{const option=document.createElement('option');option.value=track;option.textContent=trackMeta(track).title;group.appendChild(option);});
+    select.appendChild(group);
+  });
 }
 let selectedTrack = null;
 // The bedside player owns the playback policy. The Pi handles repeat-one

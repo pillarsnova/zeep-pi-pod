@@ -200,7 +200,7 @@ async function post(url, body){
     if(adminView){
       try { const d=await r.json(),detail=d.detail;msg=typeof detail==='string'?detail:(detail?.message||JSON.stringify(detail)); } catch { msg = await r.text(); }
     }
-    if (r.status === 401) msg = adminView?'Session เข้าสู่ระบบหมดอายุ กรุณาเข้าสู่ระบบใหม่':'กรุณาเข้าสู่ระบบอีกครั้ง';
+    if (r.status === 401) msg = adminView?'การเข้าสู่ระบบหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง':'กรุณาเข้าสู่ระบบอีกครั้ง';
     if(!adminView)msg=({403:'บัญชีนี้ยังใช้คำสั่งนี้ไม่ได้',404:'ยังไม่พบฟังก์ชันที่เลือก',409:'สถานะเพิ่งเปลี่ยน กรุณาลองอีกครั้ง',422:'กรุณาตรวจค่าที่เลือกแล้วลองอีกครั้ง'})[r.status]
       ||(r.status>=500?'ระบบกำลังกลับมาทำงาน กรุณาลองอีกครั้ง':'ทำรายการไม่สำเร็จ กรุณาลองอีกครั้ง');
     toast(msg || `HTTP ${r.status}`, 'error');

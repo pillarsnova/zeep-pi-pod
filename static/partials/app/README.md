@@ -34,6 +34,7 @@
 | `scripts/10-session-end-report.js` | End-of-session report, PNG/QR และ auth bootstrap |
 | `scripts/11-result-summary.js` | Shared result presenter: score, emotion, component bars, drivers และ next step; ใช้ร่วมใน History/Session End |
 | `scripts/11-history-list.js` | Usage history list และ Restore Summary helpers |
+| `scripts/11-usage-users.js` | รายชื่อผู้ใช้ A–Z, การค้นหา การเลือก และสรุปจำนวนการใช้งานสำหรับผู้ดูแล |
 | `scripts/12-history-report.js` | Detailed Overnight/Nap report rendering |
 | `scripts/12-connection-state.js` | Pure connection/freshness presenter และ shared status renderer |
 | `scripts/13-runtime-websocket.js` | Audio visualizer, WebSocket rendering และ app bootstrap |

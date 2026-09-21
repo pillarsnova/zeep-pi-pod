@@ -16,7 +16,7 @@ function connectionPresentation({mode, receivedAt, frame, now, authenticated}) {
   if (age == null || !frame || frame.sequence == null || frame.data_age_s == null) {
     return {
       tone: 'waiting', title: 'กำลังรอข้อมูลรอบแรก',
-      detail: 'เชื่อมต่อกับระบบแล้ว · รอข้อมูลจาก Sensor',
+      detail: 'เชื่อมต่อกับระบบแล้ว · รอข้อมูลจากเซนเซอร์',
     };
   }
   const frameAge = frame.data_age_s;
@@ -27,14 +27,14 @@ function connectionPresentation({mode, receivedAt, frame, now, authenticated}) {
   if (frame.stale !== false || !Number.isInteger(frame.sequence) || frame.sequence < 0
       || !Number.isFinite(frameAge) || frameAge < 0 || frameAge + age > expiry) {
     return {
-      tone: 'stale', title: 'ข้อมูล Sensor ยังไม่อัปเดต · แสดงค่าล่าสุด',
+      tone: 'stale', title: 'ข้อมูลเซนเซอร์ยังไม่อัปเดต · แสดงค่าล่าสุด',
       detail: `ข้อมูลรอบล่าสุด ${sensorAge} · รอข้อมูลรอบใหม่`,
     };
   }
   return {
     tone: mode === 'rest' ? 'fallback' : 'connected',
     title: mode === 'rest' ? 'เชื่อมต่อผ่านช่องทางสำรอง' : 'เชื่อมต่อแล้ว',
-    detail: `ข้อมูลรอบล่าสุด ${sensorAge} · ตรวจคุณภาพแยกแต่ละ Sensor`,
+    detail: `ข้อมูลรอบล่าสุด ${sensorAge} · ตรวจคุณภาพแยกแต่ละเซนเซอร์`,
   };
 }
 

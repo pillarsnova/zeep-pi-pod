@@ -1,4 +1,4 @@
-const names = {led:'Lighting Room', star_light:'ไฟดาวบนท้องฟ้า', aroma1:'ลาเวนเดอร์', aroma2:'ยูคาลิปตัส', aroma3:'ส้ม', aroma4:'อากาศสดชื่น', steam:'ไอน้ำ'};
+const names = {led:'ไฟห้อง', star_light:'ไฟดาวบนท้องฟ้า', aroma1:'ลาเวนเดอร์', aroma2:'ยูคาลิปตัส', aroma3:'ส้ม', aroma4:'อากาศสดชื่น', steam:'ไอน้ำ'};
 const outputIcons = {led:'lamp', star_light:'star', aroma1:'flower', aroma2:'leaf', aroma3:'orange', aroma4:'air', steam:'steam'};
 function setUiIconReference(svg,name){
   const use=svg?.querySelector('use');
@@ -15,10 +15,10 @@ const USER_PRODUCT_COPY=Object.freeze({
   }),
   environmentLevels:Object.freeze({
     excellent:'ยอดเยี่ยม',good:'ดี',fair:'พอใช้',poor:'ควรปรับ',
-    critical:'แนะนำให้ปรับตอนนี้',unknown:'กำลังรวบรวมข้อมูล',
+    critical:'แนะนำให้ปรับตอนนี้',unknown:'ยังไม่มีข้อมูล',
   }),
   confidenceLevels:Object.freeze({
-    high:'ข้อมูลชัดเจน',medium:'ข้อมูลเพียงพอ',low:'กำลังรวบรวมข้อมูลเพิ่ม',
+    high:'ข้อมูลชัดเจน',medium:'ข้อมูลเพียงพอ',low:'ข้อมูลประกอบจำกัด',
     unknown:'ข้อมูลยังไม่พอสรุป',
   }),
   environmentMetrics:Object.freeze({
@@ -43,8 +43,8 @@ function userScoreMeaning(quality={},presentationOverride,safetyReviewOverride=f
   const recovery=presentationOverride==='recovery'
     ||(presentationOverride!=='sleep'&&quality.quality_type==='rest_goal');
   const meanings=recovery?{
-    very_good:'ช่วงพักนี้เป็นไปได้ดีมากตามเป้าหมายที่เลือก',
-    good:'ช่วงพักนี้เป็นไปได้ดีตามเป้าหมายที่เลือก',
+    very_good:'ภาพรวมการพักครั้งนี้ดีมากตามเป้าหมายที่เลือก',
+    good:'ภาพรวมการพักครั้งนี้ดีตามเป้าหมายที่เลือก',
     fair:'ภาพรวมช่วงพักนี้พอใช้ และยังมีบางจุดที่ลองปรับได้',
     low:'ครั้งนี้ยังมีบางจุดที่ช่วยให้ช่วงพักสบายขึ้นได้',
   }:{
@@ -63,11 +63,11 @@ function userReportFinding(item={}){
   const safetyReview=item.decision==='safety_review';
   const label=safetyReview
     ?'ควรให้ทีมตรวจสอบ'
-    :USER_PRODUCT_COPY.environmentLevels[severity]||'กำลังรวบรวมข้อมูล';
+    :USER_PRODUCT_COPY.environmentLevels[severity]||'ยังไม่มีข้อมูล';
   const detail=safetyReview
     ?'มีค่าบางช่วงแตะเกณฑ์ความปลอดภัย กรุณาแจ้งทีมงานก่อนใช้งานครั้งถัดไป'
     :severity==='unavailable'
-      ?'ZEEP กำลังรวบรวมข้อมูลส่วนนี้'
+      ?'ข้อมูลส่วนนี้ยังไม่เพียงพอสำหรับสรุปผล'
       :['good','excellent'].includes(severity)
         ?'อยู่ในช่วงที่เหมาะกับการพักครั้งนี้'
         :severity==='fair'

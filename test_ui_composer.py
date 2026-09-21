@@ -27,6 +27,28 @@ class UiComposerTests(unittest.TestCase):
             ui_composer.render(),
         )
 
+    def test_shared_navigation_uses_current_formal_product_labels(self):
+        shell = (ui_composer.STATIC / "app-shell.js").read_text(encoding="utf-8")
+        nav = (ui_composer.STATIC / "partials" / "app" / "shell.html").read_text(
+            encoding="utf-8"
+        )
+        for title in ("ภาพรวมการพัก", "ควบคุมอุปกรณ์", "ประวัติการใช้งาน"):
+            with self.subTest(title=title):
+                self.assertIn(f"title: '{title}'", shell)
+                self.assertIn(title, nav)
+        self.assertIn("ติดตามระบบ", nav)
+        self.assertIn("จบการพัก", nav)
+        self.assertNotIn("จบ Session", nav)
+
+    def test_copy_matches_device_limits_and_estimator_confirmation_window(self):
+        template = ui_composer.render()
+        self.assertIn("ส่งคำสั่งพ่นครั้งละ 5 วินาที", template)
+        self.assertNotIn("ทำงานครั้งละ 1 วินาที", template)
+        self.assertIn("ยืนยันแนวโน้ม 60–120 วินาที", template)
+        self.assertIn("N2 ใช้ 4 epoch/120 วินาที", template)
+        self.assertIn("5:'สัญญาณคล้ายกรน'", template)
+        self.assertNotIn("5:'มีเสียงกรน'", template)
+
     def test_nap_target_is_explicit_and_shared_by_every_user_login_path(self):
         runtime = ui_composer.render()
         target_start = runtime.index('id="loginNapTarget"')
@@ -192,9 +214,9 @@ class UiComposerTests(unittest.TestCase):
             "adaptiveReferenceOwner",
         ):
             self.assertIn(f'id="{element_id}"', template)
-        self.assertIn("Live เทียบ Reference ของ Session นี้", template)
+        self.assertIn("ข้อมูลปัจจุบันเทียบรูปแบบประจำของผู้ใช้", template)
         self.assertIn("Reference แยกตามข้อมูลแต่ละค่า", template)
-        self.assertIn("Sleep State ใช้ Age + Gender เป็นค่าเริ่มต้น", template)
+        self.assertIn("สถานะการนอนใช้อายุและเพศเป็นค่าเริ่มต้น", template)
         self.assertNotIn("ใช้ Personal Baseline ร่วมกับ Age Baseline", template)
         self.assertIn(
             'body[data-view="monitor"]:not(.show-advanced-monitor)',
@@ -582,14 +604,14 @@ class UiComposerTests(unittest.TestCase):
         shell = (ui_composer.STATIC / "app-shell.js").read_text(encoding="utf-8")
 
         self.assertIn("title: 'ประวัติการใช้งาน'", shell)
-        self.assertIn("ดูภาพรวมก่อน แล้วเปิดผลการพักแต่ละครั้งเมื่อจำเป็น", shell)
+        self.assertIn("ดูผลการพักแต่ละครั้งและเปรียบเทียบกับครั้งก่อน", shell)
         self.assertNotIn("ประวัติการนอน", shell)
         self.assertIn('id="historySelfContext"', template)
         self.assertNotIn('class="tablet-deck-head history-deck-head"', template)
         self.assertNotIn("<h3>ประวัติการนอน</h3>", template)
         self.assertIn("u.available_usage_sessions??", template)
         self.assertIn("u.current_sessions_without_data??0", template)
-        self.assertIn("ไม่มี Sensor", template)
+        self.assertIn("ไม่มีข้อมูลเซนเซอร์", template)
 
         for legacy_contract in (
             'id="historyCard"',

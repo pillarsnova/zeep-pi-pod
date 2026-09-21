@@ -79,12 +79,12 @@ function updateDashboardClock(){
 function renderSafety(sf={}){
   const card=document.getElementById('safetyCard'),level=sf.level||'initializing';
   const visualLevel=level==='monitor'?'ready':level;
-  const levelLabels={initializing:'กำลังเริ่มระบบ',monitor:'พร้อม',armed:'Auto เปิด',degraded:'เฝ้าระวัง',not_ready:'ยังไม่พร้อม',emergency:'ฉุกเฉิน'};
+  const levelLabels={initializing:'กำลังเริ่มระบบ',monitor:'พร้อม',armed:'ป้องกันอัตโนมัติ',degraded:'เฝ้าระวัง',not_ready:'ยังไม่พร้อม',emergency:'ฉุกเฉิน'};
   card.classList.remove('emergency','not_ready','degraded','armed','monitor','ready','initializing');
   card.classList.add(visualLevel);
   document.getElementById('safetyLevel').textContent=levelLabels[level]||'กำลังตรวจระบบ';
   const ready=document.getElementById('safetyReadiness');
-  ready.textContent=sf.latched?'ล็อกเหตุฉุกเฉิน':sf.armed?'Auto Response เปิด':sf.ready?'พร้อมใช้งาน':'ต้องตรวจสอบ';
+  ready.textContent=sf.latched?'ล็อกเหตุฉุกเฉิน':sf.armed?'เปิดการตอบสนองอัตโนมัติ':sf.ready?'พร้อมใช้งาน':'ต้องตรวจสอบ';
   ready.className=`status-chip ${sf.latched?'danger':sf.ready?'success':'warning'}`;
   const faults=Array.isArray(sf.faults)?sf.faults:[],root=document.getElementById('safetyFaults');
   const hasCriticalFault=faults.some(f=>f.severity==='critical');
@@ -95,19 +95,19 @@ function renderSafety(sf={}){
     'bad',
   );
   root.replaceChildren();
-  const severityLabels={critical:'ฉุกเฉิน',blocking:'ต้องแก้ก่อนเปิด Auto',warning:'ควรตรวจ'};
+  const severityLabels={critical:'ฉุกเฉิน',blocking:'ต้องแก้ก่อนเปิดการป้องกันอัตโนมัติ',warning:'ควรตรวจ'};
   faults.forEach(f=>{const el=document.createElement('div');el.className=`safety-fault ${f.severity||''}`;el.title=f.code||'';const tag=document.createElement('b');tag.textContent=severityLabels[f.severity]||'แจ้งเตือน';const message=document.createElement('span');message.textContent=f.message||f.code;el.append(tag,message);root.appendChild(el);});
   if(!faults.length){const el=document.createElement('div');el.className='safety-fault clear';el.innerHTML='<b>พร้อม</b><span>ไม่พบเหตุที่ต้องแก้ไข</span>';root.appendChild(el);}
   const last=sf.last_action;
   const summary=document.getElementById('safetySummary');
   summary.textContent=sf.latched
-    ? `โหมดปลอดภัยทำงานแล้ว · สาเหตุ ${last?.trigger||'สั่งจาก Admin'} · ตรวจสาเหตุก่อนปลดล็อก`
+    ? `โหมดปลอดภัยทำงานแล้ว · สาเหตุ ${last?.trigger||'ผู้ดูแลสั่งการ'} · ตรวจสาเหตุก่อนปลดล็อก`
     : level==='not_ready'
       ? `ต้องแก้ ${faults.filter(f=>['critical','blocking'].includes(f.severity)).length} รายการก่อนเปิดการป้องกันอัตโนมัติ`
       : level==='degraded'
-        ? `Pi ยังทำงาน Local ต่อ · มีคำเตือน ${faults.length} รายการ${sf.armed?' · Auto Response ยังเปิดอยู่':''}`
+        ? `Pi ยังคงทำงานภายในเครื่อง · มีคำเตือน ${faults.length} รายการ${sf.armed?' · ยังเปิดการตอบสนองอัตโนมัติ':''}`
         : sf.armed
-          ? 'พร้อมตอบสนองอัตโนมัติเมื่อพบเหตุ Critical'
+          ? 'พร้อมตอบสนองอัตโนมัติเมื่อพบเหตุฉุกเฉิน'
           : 'ระบบพร้อม · การตอบสนองอัตโนมัติยังปิดอยู่';
   const basis=sf.threshold_basis||{};
   const basisText=basis.version
@@ -190,22 +190,22 @@ function renderAdminOccupantActions(session={}){
 
 async function adminOccupantAction(action,btn){
   if(currentPrincipal?.role!=='admin'){
-    toast('คำสั่งนี้สำหรับ Admin เท่านั้น','error');
+    toast('คำสั่งนี้สำหรับผู้ดูแลเท่านั้น','error');
     return;
   }
   if(!sessionState.active){
-    toast('ยังไม่มีผู้ใช้งานหรือ Session ที่ต้องจบ','warning');
+    toast('ยังไม่มีการพักที่ต้องจบ','warning');
     renderAdminOccupantActions(sessionState);
     return;
   }
   const kick=action==='kick';
   const shownName=identityLabel(sessionState,'ผู้ใช้งานปัจจุบัน');
   const confirmed=await confirmAction({
-    title:kick?'จบการใช้งานและออกจากระบบ':'จบและบันทึก Session',
+    title:kick?'จบการใช้งานและออกจากระบบ':'จบและบันทึกการพัก',
     message:kick
-      ? `ระบบจะบันทึก W · ตื่นเป็นจุดจบของลำดับ จากนั้นจบ Session ของ “${shownName}” และยกเลิก Login ฝั่งผู้ใช้ทั้งหมด ต้องการดำเนินการหรือไม่?`
-      : `ระบบจะบันทึก W · ตื่นเป็นจุดจบของลำดับ จากนั้นจบ Session ของ “${shownName}” และนำหน้าจอผู้ใช้กลับไปหน้า Login ต้องการดำเนินการหรือไม่?`,
-    confirmText:kick?'จบและออกจากระบบ':'จบ Session',
+      ? `ระบบจะจบและบันทึกการพักของ “${shownName}” พร้อมออกจากระบบทุกหน้าจอของผู้ใช้นี้ ต้องการดำเนินการหรือไม่?`
+      : `ระบบจะจบและบันทึกการพักของ “${shownName}” แล้วกลับไปหน้าเข้าสู่ระบบ ต้องการดำเนินการหรือไม่?`,
+    confirmText:kick?'จบและออกจากระบบ':'จบการพัก',
     tone:kick?'danger':'warning',
     icon:kick?'↪':'■',
   });
@@ -223,8 +223,8 @@ async function adminOccupantAction(action,btn){
   renderAdminOccupantActions(sessionState);
   toast(
     kick
-      ? `จบ Session ของ ${identityLabel(result)} และออกจากระบบแล้ว`
-      : `จบและบันทึก Session ของ ${identityLabel(result)} แล้ว`,
+      ? `จบการพัก ของ ${identityLabel(result)} และออกจากระบบแล้ว`
+      : `จบและบันทึกการพัก ของ ${identityLabel(result)} แล้ว`,
     'ok',3600,
   );
 }
@@ -253,7 +253,7 @@ const BCG_STATUS_TH = {
 // complete bilingual BCG status above for analysis and troubleshooting.
 const BCG_STATUS_CONTROL_TH = {
   0:'มีผู้ใช้งาน', 1:'เตียงว่าง', 2:'กำลังขยับ',
-  3:'สัญญาณอ่อน', 4:'พบวัตถุ', 5:'มีเสียงกรน'
+  3:'สัญญาณอ่อน', 4:'พบวัตถุ', 5:'สัญญาณคล้ายกรน'
 };
 const USER_BED_STATUS_TH = {
   0:'ตรวจพบผู้ใช้งานบนเตียง', 1:'ไม่พบผู้ใช้งานบนเตียง',

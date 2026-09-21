@@ -2012,7 +2012,9 @@ class RbacApiTests(unittest.TestCase):
         self.assertIn("สถานะอ้างอิงคำสั่ง IR ที่ ESP32 ยืนยันล่าสุด", ui)
         self.assertNotIn('id="unifiedAirconOnBtn"', ui)
         self.assertNotIn('id="unifiedAirconOffBtn"', ui)
-        self.assertIn("แอร์เปิดอยู่", ui)
+        self.assertIn("คำสั่งล่าสุด · เปิดแอร์", ui)
+        self.assertIn("คำสั่งล่าสุด · ปิดแอร์", ui)
+        self.assertNotIn("แอร์เปิดอยู่", ui)
 
     def test_fullscreen_control_is_shared_by_every_primary_view(self) -> None:
         """One common dock control remains available across all app views."""

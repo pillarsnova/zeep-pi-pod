@@ -149,10 +149,10 @@
         <summary>ขั้นตอนก่อน–หลังการทดสอบ</summary>
         <ol>
           <li>ดาวน์โหลดแอป ZEEP เพื่อเชื่อมต่อระบบและดูผลหลังใช้งาน</li>
-          <li>เตรียมตัวให้พร้อม; หากพักค้างคืน ทีมงานจะช่วยแนะนำเรื่องชุด</li>
+          <li>จัดการธุระส่วนตัวให้เรียบร้อย หากพักค้างคืน ทีมงานจะแนะนำการเปลี่ยนชุด</li>
           <li>ทำแบบประเมินก่อนใช้และรับคำแนะนำจากทีมงาน</li>
           <li>พักอย่างเป็นธรรมชาติ และวางโทรศัพท์ไว้นอก ZEEP ระหว่างพัก</li>
-          <li>ทำแบบประเมินหลังใช้และรีวิวประสบการณ์เบื้องต้น</li>
+          <li>ทำแบบประเมินหลังใช้และแบ่งปันประสบการณ์กับทีมงาน</li>
         </ol>
         <p>ข้อมูลการใช้งานและความคิดเห็นของคุณจะช่วยให้ทีมพัฒนา ZEEP ได้ดียิ่งขึ้น และดูผลได้ผ่านแอป ZEEP</p>
       </details>
@@ -191,14 +191,14 @@
     <div class="session-end-body">
       <div id="sessionEndSummary"></div>
       <div class="session-end-share">
-        <h4>เก็บผลการพักไว้กับคุณ</h4>
-        <div class="mini" id="sessionEndShareNote">สแกนด้วยมือถือของคุณ (ใช้เน็ตมือถือ ไม่ใช่ Wi-Fi ของตู้)</div>
+        <h4>บันทึกผลลงโทรศัพท์</h4>
+        <div class="mini" id="sessionEndShareNote">สแกน QR ด้วยโทรศัพท์ที่เชื่อมต่ออินเทอร์เน็ต</div>
         <div class="mini session-end-save-hint">เปิดแล้ว <b>กดค้างที่รูป</b> → บันทึกลงในรูปภาพ</div>
         <div class="session-end-qr pending" id="sessionEndQr">กำลังสร้าง QR…</div>
       </div>
     </div>
     <div class="session-end-actions">
-      <button class="btn primary" id="sessionEndCloseBtn" onclick="closeSessionEndScreen()">ปิดและกลับหน้าเข้าสู่ระบบ</button>
+      <button class="btn primary" id="sessionEndCloseBtn" onclick="closeSessionEndScreen()">ซ่อนผลและกลับหน้าเข้าสู่ระบบ</button>
     </div>
   </div>
 </div>
@@ -218,7 +218,7 @@
 <div id="profileModal" class="modal-layer hide" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
   <div class="modal-card">
     <div class="modal-head"><div class="modal-icon">i</div><div id="profileTitle">กรอกข้อมูลก่อนเริ่มการพัก</div></div>
-    <div class="modal-message" id="profileIntro">บัญชี ZEEP ของคุณยังไม่มีข้อมูลสุขภาพพื้นฐาน · ZEEP ใช้ค่าเหล่านี้ตั้ง Baseline ให้ตรงกับคุณ</div>
+    <div class="modal-message" id="profileIntro">กรุณาเพิ่มข้อมูลพื้นฐาน เพื่อใช้ประกอบการประเมินการพักของคุณ</div>
     <div class="profile-form">
       <div class="muted">วันเกิด</div>
       <!-- ไม่ใช้ <input type=date>: ตัวย่อในช่องเป็นคำแปลของ browser ที่หน้าเว็บ
@@ -291,7 +291,7 @@
       <div class="adaptive-guardrail" id="adaptiveGuardrails"></div>
     </details>
     <header class="monitor-section-heading monitor-section-now" id="monitorNowHeading" data-pages="monitor">
-      <span>01</span><div><h3>ความพร้อมของระบบ</h3><p>ความปลอดภัย Session และ Sensor ที่ต้องติดตามตอนนี้</p></div>
+      <span>01</span><div><h3>ความพร้อมของระบบ</h3><p>สถานะความปลอดภัย การบันทึกการพัก และเซนเซอร์</p></div>
     </header>
     <header class="monitor-section-heading monitor-section-live" id="monitorLiveHeading" data-pages="monitor">
       <span>02</span><div><h3>ผู้ใช้งานและข้อมูลสด</h3><p>สัญญาณชีพ สถานะการพัก และข้อมูลอ้างอิงที่กำลังใช้</p></div>
@@ -300,14 +300,14 @@
       <span>03</span><div><h3>สภาพแวดล้อมและคำแนะนำ</h3><p>สิ่งที่ควรปรับตามรูปแบบการพักและข้อมูลอ้างอิงของผู้ใช้</p></div>
     </header>
     <header class="monitor-section-heading monitor-section-advanced" id="monitorAdvancedHeading" data-pages="monitor">
-      <span>04</span><div><h3>ข้อมูลเชิงเทคนิค</h3><p>Model, BCG, System, Calibration, Packet และหลักฐานสำหรับทีมพัฒนา</p></div>
+      <span>04</span><div><h3>ข้อมูลเชิงเทคนิค</h3><p>รุ่นโมเดล สัญญาณ BCG การปรับเทียบ และข้อมูลอุปกรณ์</p></div>
     </header>
 
     <section class="card monitor-live-summary" id="monitorLiveSummary" data-pages="monitor" data-admin-panel aria-labelledby="monitorLiveSummaryTitle">
       <div class="monitor-live-summary-head">
         <div class="monitor-live-summary-identity">
           <span class="ui-section-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-heart"/></svg></span>
-          <div><em>LIVE WELLNESS</em><h3 id="monitorLiveSummaryTitle">สัญญาณชีพขณะพัก</h3><p id="monitorLiveIdentity">ยังไม่มีผู้ใช้งานใน Session</p></div>
+          <div><em>LIVE WELLNESS</em><h3 id="monitorLiveSummaryTitle">สัญญาณชีพขณะพัก</h3><p id="monitorLiveIdentity">ขณะนี้ไม่มีผู้ใช้งาน</p></div>
         </div>
         <div class="monitor-live-summary-context"><span id="monitorLiveMode">รอรูปแบบการพัก</span><strong id="monitorLiveReference">เกณฑ์สถานะ · อายุและเพศ</strong></div>
       </div>
@@ -363,7 +363,7 @@
       <section class="dash-personal-rest-baseline idle" id="dashPersonalRestBaseline" aria-label="Baseline ช่วงเวลาพักส่วนบุคคล" aria-live="polite">
         <div class="dash-personal-rest-head">
           <span class="dash-personal-rest-icon" aria-hidden="true"><svg class="ui-icon" focusable="false"><use href="#ui-icon-diagnostics"/></svg></span>
-          <div><b id="dashPersonalRestTitle">Baseline ช่วงเวลาพักของคุณ</b><small id="dashPersonalRestEvidence">เข้าสู่ระบบเพื่อเริ่มเรียนรู้จากการพักของคุณ</small></div>
+          <div><b id="dashPersonalRestTitle">ช่วงเวลาพักที่เหมาะกับคุณ</b><small id="dashPersonalRestEvidence">เข้าสู่ระบบเพื่อเริ่มเรียนรู้จากการพักของคุณ</small></div>
           <span class="dash-personal-rest-status" id="dashPersonalRestStatus">รอเริ่ม</span>
         </div>
         <div class="dash-personal-rest-body">
@@ -374,13 +374,13 @@
           </div>
           <div class="dash-personal-rest-result">
             <b id="dashPersonalRestScore">กำลังรอผลการพักครั้งแรก</b>
-            <p id="dashPersonalRestAdvice">เมื่อกลับมาใช้ครั้งที่ 2 ZEEP จะเริ่มแนะนำช่วงเวลาที่เหมาะกับคุณ</p>
+            <p id="dashPersonalRestAdvice">ครั้งถัดไป ZEEP จะเริ่มเปรียบเทียบกับช่วงที่คุณพักได้ดี</p>
           </div>
         </div>
         <small class="dash-personal-rest-guardrail" id="dashPersonalRestGuardrail">คำแนะนำส่วนบุคคล · คุณยืนยันก่อนปรับอุปกรณ์</small>
       </section>
       <section class="dash-profile-reference idle" id="dashProfileReference" aria-label="ข้อมูลอ้างอิงสุขภาพของผู้ใช้งาน">
-        <div class="dash-profile-reference-head"><b>ข้อมูลสำหรับคำแนะนำของคุณ</b><small id="dashProfileSource">ข้อมูลจาก Profile ช่วยให้คำแนะนำเหมาะกับคุณมากขึ้น</small></div>
+        <div class="dash-profile-reference-head"><b>ข้อมูลสำหรับคำแนะนำของคุณ</b><small id="dashProfileSource">ข้อมูลพื้นฐานช่วยให้คำแนะนำเหมาะกับคุณมากขึ้น</small></div>
         <div class="dash-profile-reference-grid">
           <div class="dash-profile-fact" id="dashProfileGender"><span>เพศ</span><strong>—</strong></div>
           <div class="dash-profile-fact" id="dashProfileAge"><span>อายุ</span><strong>—</strong></div>
@@ -394,17 +394,17 @@
 
     <section class="card admin-sleep-baseline monitor-analysis-card" id="dashSleepBaseline" data-pages="monitor" data-admin-panel aria-label="Baseline ของสถานะการนอนทั้ง 5 ระดับ">
       <div class="admin-sleep-baseline-head">
-        <div><span class="admin-sleep-baseline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 15.5A8 8 0 0 1 9 4.5 8.5 8.5 0 1 0 20 15.5Z"/><path d="M4 20h16M7 17v3m10-3v3"/></svg></span><div><b>Baseline สถานะการนอน</b><small>หลักฐาน 30 วินาที · ยืนยันเมื่อแนวโน้มต่อเนื่อง 60 วินาที</small></div></div>
+        <div><span class="admin-sleep-baseline-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 15.5A8 8 0 0 1 9 4.5 8.5 8.5 0 1 0 20 15.5Z"/><path d="M4 20h16M7 17v3m10-3v3"/></svg></span><div><b>Baseline สถานะการนอน</b><small>หลักฐาน 30 วินาที · ยืนยันแนวโน้ม 60–120 วินาที</small></div></div>
         <span id="dashSleepBaselineSource">Age + Gender Baseline</span>
       </div>
       <div class="admin-sleep-baseline-grid" id="dashSleepBaselineGrid"><div class="admin-sleep-baseline-empty">กำลังรอข้อมูล Baseline</div></div>
-      <div class="admin-sleep-baseline-foot"><span id="dashSleepBaselineProgress">Sensor 10 วิ · Evidence 30 วิ · Confirm 60 วิ</span><span id="dashSleepBaselinePolicy">หลักฐานและสถานะยืนยันแยกจากกัน · ไม่ใช่ผล PSG</span></div>
+      <div class="admin-sleep-baseline-foot"><span id="dashSleepBaselineProgress">Sensor 10 วิ · Evidence 30 วิ · Confirm 60–120 วิ</span><span id="dashSleepBaselinePolicy">หลักฐานและสถานะยืนยันแยกจากกัน · ไม่ใช่ผล PSG</span></div>
     </section>
     <section class="card admin-live-explanation monitor-analysis-card" id="adminLiveExplanation" data-pages="monitor" data-admin-panel aria-label="สรุปสิ่งที่ต้องติดตามสำหรับผู้ดูแลระบบ">
       <div class="admin-live-explanation-head">
         <div class="admin-live-explanation-identity">
           <span class="admin-live-explanation-icon" aria-hidden="true"><i></i><svg viewBox="0 0 24 24"><path d="M4 18V9m6 9V5m6 13v-7m4 7V3"/><path d="M3 21h18"/></svg></span>
-          <div><em>INSIGHTS &amp; ACTIONS</em><b>สรุปสิ่งที่ต้องติดตาม</b><small>แสดงความหมายและข้อสังเกตสำหรับ Admin</small></div>
+          <div><em>INSIGHTS &amp; ACTIONS</em><b>สรุปสิ่งที่ต้องติดตาม</b><small>ความหมายของข้อมูลและข้อสังเกตสำหรับผู้ดูแล</small></div>
         </div>
         <div class="admin-live-explanation-context" aria-label="ค่าจริง · เทียบ Baseline และเกณฑ์ของโหมด">
           <div class="admin-live-explanation-basis"><span><i></i>ค่าปัจจุบัน</span><span>Baseline</span><span>เกณฑ์โหมด</span></div>
@@ -413,7 +413,7 @@
       </div>
       <div class="admin-live-explanation-grid single">
         <article class="admin-live-explanation-group admin-live-explanation-bio" aria-labelledby="adminBioExplanationTitle">
-          <div class="admin-live-explanation-group-head"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h4l2-4 4 9 2-5h6"/><path d="M12 21C5 17 3 13 3 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 9 2.5c0 3.5-2 7.5-9 11.5Z"/></svg></span><div><h4 id="adminBioExplanationTitle">สัญญาณชีพและการนอน</h4><small>ความหมายของสถานะและค่าที่อยู่นอก Baseline</small></div><em>BIOMETRIC</em></div>
+          <div class="admin-live-explanation-group-head"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h4l2-4 4 9 2-5h6"/><path d="M12 21C5 17 3 13 3 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 9 2.5c0 3.5-2 7.5-9 11.5Z"/></svg></span><div><h4 id="adminBioExplanationTitle">สัญญาณชีพและการนอน</h4><small>สถานะการพักและค่าที่ต่างจากช่วงอ้างอิง</small></div><em>BIOMETRIC</em></div>
           <div class="admin-live-explanation-list" id="adminBioExplanation"><div class="admin-live-explanation-empty">กำลังรอข้อมูล BCG, HR และ RR</div></div>
         </article>
       </div>
@@ -446,8 +446,8 @@
 
     <section class="card control-debug-deck" id="controlDebugDeck" data-pages="control_debug" aria-label="Control Debug Command Console">
       <div class="debug-deck-head">
-        <div><span>ADMIN · HARDWARE TEST</span><h3>Control Debug</h3><p>ส่งคำสั่งทดสอบและตรวจ Request, Payload, ACK และ Response จริงจากอุปกรณ์</p></div>
-        <a href="/control" class="debug-back-link ui-label-button"><svg class="ui-icon ui-icon-back" aria-hidden="true"><use href="#ui-icon-sign-out"/></svg><span>กลับหน้า Control</span></a>
+        <div><span>ADMIN · HARDWARE TEST</span><h3>ทดสอบอุปกรณ์</h3><p>ส่งคำสั่งทดสอบและตรวจ Request, Payload, ACK และ Response จริงจากอุปกรณ์</p></div>
+        <a href="/control" class="debug-back-link ui-label-button"><svg class="ui-icon ui-icon-back" aria-hidden="true"><use href="#ui-icon-sign-out"/></svg><span>กลับหน้าควบคุม</span></a>
       </div>
       <div class="debug-safety-banner"><span aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-alert"/></svg></span><div><b>คำสั่งในหน้านี้ควบคุมอุปกรณ์จริง</b><small>ตรวจผู้ใช้งานและพื้นที่รอบ ZEEP ก่อนกดทุกครั้ง · ระบบ Safety ยังคงมีผล</small></div></div>
       <div class="debug-controller-strip" aria-label="สถานะ Controller">
@@ -589,39 +589,39 @@
         </div>
         <div class="admin-occupant-actions">
           <button class="btn admin-session-end-button ui-label-button" id="adminEndSessionBtn" onclick="adminOccupantAction('end',this)" disabled>
-            <svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-stop"/></svg><span><b>จบ Session</b><small>บันทึกผลและคืน ZEEP</small></span>
+            <svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-stop"/></svg><span><b>จบการพัก</b><small>บันทึกผลและคืน ZEEP</small></span>
           </button>
           <button class="btn danger admin-session-kick-button ui-label-button" id="adminKickOccupantBtn" onclick="adminOccupantAction('kick',this)" disabled>
-            <svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-sign-out"/></svg><span><b>จบและออกจากระบบ</b><small>บันทึก Session และยกเลิก Login</small></span>
+            <svg class="ui-icon" aria-hidden="true"><use href="#ui-icon-sign-out"/></svg><span><b>จบและออกจากระบบ</b><small>บันทึกผลและออกจากระบบผู้ใช้</small></span>
           </button>
         </div>
       </section>
       <details class="safety-case-guide">
-        <summary><span><b>ระบบมี 5 กรณีหลัก</b><small>พร้อม · Auto เปิด · เฝ้าระวัง · ยังไม่พร้อม · ฉุกเฉิน</small></span><em>ดูคำอธิบาย</em></summary>
+        <summary><span><b>ระบบมี 5 กรณีหลัก</b><small>พร้อม · ป้องกันอัตโนมัติ · เฝ้าระวัง · ยังไม่พร้อม · ฉุกเฉิน</small></span><em>ดูคำอธิบาย</em></summary>
         <div class="safety-case-grid">
-          <article data-level="ready"><b>พร้อม</b><span>อุปกรณ์หลักและข้อมูลที่จำเป็นพร้อม แต่ Auto Response ยังปิดอยู่</span></article>
-          <article data-level="armed"><b>Auto เปิด</b><span>ระบบพร้อมและจะเข้าโหมดปลอดภัยอัตโนมัติเมื่อพบเหตุ Critical</span></article>
-          <article data-level="degraded"><b>เฝ้าระวัง</b><span>มีคำเตือน เช่น Network หลุด, BCG ขาดช่วง หรือ CO₂ เริ่มสูง แต่ Pi ยังควบคุม Local ต่อ</span></article>
-          <article data-level="not_ready"><b>ยังไม่พร้อม</b><span>ข้อมูลหรืออุปกรณ์สำคัญไม่พร้อม จึงยังเปิด Auto Response ไม่ได้</span></article>
-          <article data-level="emergency"><b>ฉุกเฉิน</b><span>เกิด Critical ขณะ Auto เปิด หรือ Admin สั่งเอง ระบบจะหยุดสิ่งเสริม หยุดเตียง และเปิดไฟใน ZEEP</span></article>
+          <article data-level="ready"><b>พร้อม</b><span>อุปกรณ์หลักและข้อมูลพร้อม แต่การตอบสนองอัตโนมัติยังปิดอยู่</span></article>
+          <article data-level="armed"><b>ป้องกันอัตโนมัติ</b><span>ระบบพร้อมและจะเข้าโหมดปลอดภัยอัตโนมัติเมื่อพบเหตุฉุกเฉิน</span></article>
+          <article data-level="degraded"><b>เฝ้าระวัง</b><span>มีคำเตือน เช่น เครือข่ายขาดการเชื่อมต่อ BCG ขาดช่วง หรือ CO₂ เริ่มสูง แต่ Pi ยังคงควบคุมภายในเครื่อง</span></article>
+          <article data-level="not_ready"><b>ยังไม่พร้อม</b><span>ข้อมูลหรืออุปกรณ์สำคัญไม่พร้อม จึงยังเปิดการตอบสนองอัตโนมัติไม่ได้</span></article>
+          <article data-level="emergency"><b>ฉุกเฉิน</b><span>พบเหตุฉุกเฉินขณะเปิดการตอบสนองอัตโนมัติ หรือผู้ดูแลสั่ง ระบบจะหยุดอุปกรณ์เสริม หยุดเตียง และเปิดไฟใน ZEEP</span></article>
         </div>
         <p class="safety-case-note"><b>Critical:</b> GPIO ใช้ไม่ได้, ESP32 ขาดข้อมูลขณะมีผู้ใช้งาน, CO₂ ≥1,300 ppm หรืออุณหภูมินอก 13–32°C · <b>Blocking:</b> Basis ยังไม่อนุมัติ, CO₂ ไม่มีข้อมูลสด หรือ ESP32 ไม่พร้อมก่อนใช้งาน · ระบบไม่เปิดประตูและไม่สั่งแอร์อัตโนมัติ</p>
       </details>
     </div>
     <section class="card adaptive-monitor" id="adaptiveMonitorCard" data-pages="monitor" data-admin-panel aria-labelledby="adaptiveMonitorTitle">
       <div class="adaptive-monitor-head">
-        <div><div class="section-title" id="adaptiveMonitorTitle">ข้อมูลอ้างอิงส่วนบุคคล · สด</div><p>เทียบ Session นี้กับรูปแบบการพักเดิมของผู้ใช้ พร้อมแสดงที่มาของแต่ละคำแนะนำ</p></div>
+        <div><div class="section-title" id="adaptiveMonitorTitle">ข้อมูลอ้างอิงส่วนบุคคล · สด</div><p>เทียบการพักครั้งนี้กับประวัติของผู้ใช้ พร้อมแสดงที่มาของคำแนะนำ</p></div>
         <div class="adaptive-shadow-badge">คำแนะนำเท่านั้น · ไม่สั่งอัตโนมัติ · ยังไม่เปลี่ยน State โดยตรง</div>
       </div>
       <div class="adaptive-status-grid" aria-live="polite">
-        <article><span>SESSION</span><b id="adaptiveSessionState">ยังไม่มี Session</b><small id="adaptiveSessionMeta">รอผู้ใช้งาน</small></article>
+        <article><span>SESSION</span><b id="adaptiveSessionState">ยังไม่มีการพัก</b><small id="adaptiveSessionMeta">รอผู้ใช้งาน</small></article>
         <article><span>SENSOR FRAME</span><b id="adaptiveFrameState">กำลังรอข้อมูล</b><small id="adaptiveFrameMeta">10 วินาทีต่อ Frame</small></article>
         <article><span>BASELINE</span><b id="adaptiveBaselineState">ยังไม่มีข้อมูล</b><small id="adaptiveBaselineMeta">Prior · Same mode</small></article>
         <article><span>DATA QUALITY</span><b id="adaptiveQualityState">กำลังตรวจ</b><small id="adaptiveQualityMeta">Sensor + HR/RR</small></article>
       </div>
       <div class="adaptive-monitor-layout">
         <section class="adaptive-panel adaptive-feature-panel">
-          <div class="adaptive-panel-head"><div><b>Live เทียบ Reference ของ Session นี้</b><span id="adaptiveReferenceOwner">รอผู้ใช้งานและรูปแบบการพัก</span></div><em id="adaptiveWindowMeta">Rolling window · 5 นาที</em></div>
+          <div class="adaptive-panel-head"><div><b>ข้อมูลปัจจุบันเทียบรูปแบบประจำของผู้ใช้</b><span id="adaptiveReferenceOwner">รอผู้ใช้งานและรูปแบบการพัก</span></div><em id="adaptiveWindowMeta">Rolling window · 5 นาที</em></div>
           <div class="adaptive-feature-table" id="adaptiveFeatureRows"><div class="adaptive-empty">กำลังรอ Adaptive dataset</div></div>
         </section>
         <section class="adaptive-panel adaptive-decision-panel">
@@ -716,7 +716,7 @@
     </section>
     <section class="card environment-card" id="environmentCard" data-pages="dashboard">
       <div class="environment-head">
-        <div><div class="section-title">สภาพแวดล้อมภายใน ZEEP · Live sensors</div><div class="mini">แสดงเฉพาะค่าจริงจาก Sensor พร้อมตรวจ freshness, สถานะอุปกรณ์ และช่วงค่าที่เป็นไปได้</div></div>
+        <div><div class="section-title">สภาพแวดล้อมภายใน ZEEP · Live sensors</div><div class="mini">ค่าจากเซนเซอร์ พร้อมอายุข้อมูล สถานะอุปกรณ์ และช่วงค่าที่รองรับ</div></div>
         <div class="environment-head-meta"><span class="environment-freshness" id="environmentFreshness">รอ packet ล่าสุด</span><div class="status-chip" id="environmentStatus">กำลังรอข้อมูล</div></div>
       </div>
       <div class="sensor-groups">
@@ -740,8 +740,8 @@
     </section>
 
     <section class="card sensor-integrity" id="sensorIntegrityCard" data-pages="monitor">
-      <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>Sensor integrity · ตรวจข้อมูลรายอุปกรณ์</div>
-      <div class="integrity-summary"><div><strong id="integrityHeadline">กำลังรอข้อมูล Sensor</strong><span id="integrityDetail">ตรวจ source, freshness, sensor status และ valid range</span></div><div class="status-chip" id="integrityChip">INITIALIZING</div></div>
+      <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>ตรวจคุณภาพข้อมูลรายอุปกรณ์ · Sensor integrity</div>
+      <div class="integrity-summary"><div><strong id="integrityHeadline">กำลังรอข้อมูลเซนเซอร์</strong><span id="integrityDetail">ตรวจแหล่งที่มา อายุข้อมูล สถานะเซนเซอร์ และช่วงค่าที่รองรับ</span></div><div class="status-chip" id="integrityChip">INITIALIZING</div></div>
       <div class="integrity-grid" id="sensorIntegrityRows"></div>
     </section>
 
@@ -845,7 +845,7 @@
           <div><strong>Bed Status</strong>สถานะที่อุปกรณ์ส่งมา เช่น อยู่บนเตียง ลุกออก หรือกำลังขยับ ใช้ช่วยบอกว่าควรเชื่อค่าช่วงนั้นมากน้อยเพียงใด</div>
         </div>
       </details>
-      <div class="mini" data-pages="monitor">Sleep Wellness estimate จาก HR, RR, Bed Status และการเคลื่อนไหวแบบไม่สัมผัส · Sleep State ใช้ Age + Gender เป็นค่าเริ่มต้น ส่วน Personal Reference ใช้เพื่อเปรียบเทียบและให้คำแนะนำ โดยยังไม่ตัดสิน Stage โดยตรง</div>
+      <div class="mini" data-pages="monitor">Sleep Wellness estimate จาก HR, RR, Bed Status และการเคลื่อนไหวแบบไม่สัมผัส · สถานะการนอนใช้อายุและเพศเป็นค่าเริ่มต้น ส่วนข้อมูลอ้างอิงส่วนบุคคลใช้เปรียบเทียบและให้คำแนะนำ ยังไม่ใช้ตัดสินระยะการนอนโดยตรง</div>
     </div>
 
     <div class="card control-center" id="environmentControlCenter" data-pages="control">
@@ -1161,12 +1161,12 @@
           <div id="sessionList" class="hist-list"><div class="mini">กำลังโหลดประวัติการใช้งาน…</div></div>
         </section>
         <section class="history-section history-detail-section" aria-labelledby="historyDetailTitle">
-          <div class="history-section-head"><div><span class="history-section-kicker">ผลการพัก</span><h4 id="historyDetailTitle">สรุปการพักครั้งนี้</h4><small>อ่านภาพรวมก่อน แล้วเปิดรายละเอียดเมื่อจำเป็น</small></div></div>
+          <div class="history-section-head"><div><span class="history-section-kicker">ผลการพัก</span><h4 id="historyDetailTitle">สรุปการพักครั้งนี้</h4><small>คะแนน คำแนะนำ และรายละเอียดการพัก</small></div></div>
           <div id="sessionDetail" aria-busy="false" tabindex="-1"><div class="history-empty"><b>เลือกรายการการพัก</b><span>ผลสรุปจะแสดงในส่วนนี้</span></div></div>
         </section>
       </div>
       <details class="history-section history-journey-panel">
-        <summary><span><b>แนวโน้มการพักที่ผ่านมา</b><small>รวม Overnight Recovery และ Nap &amp; Refresh ของคนเดียวกัน</small></span></summary>
+        <summary><span><b>แนวโน้มการพักที่ผ่านมา</b><small>แสดงผลของแต่ละคน แยกการพักค้างคืนและพักระหว่างวัน</small></span></summary>
         <div id="historyUserJourney" class="history-user-journey" aria-live="polite"></div>
       </details>
     </div>

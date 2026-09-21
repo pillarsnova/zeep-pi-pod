@@ -100,9 +100,9 @@ function render(s, source='ws'){
     topUserAvatar.textContent='Z';
     topUserName.textContent=currentPrincipal?.role==='admin'?'ยังไม่มีผู้ใช้งาน':'พร้อมเริ่มการพัก';
     topUserMeta.textContent=currentPrincipal?.role==='admin'
-      ?'เริ่ม Session เพื่อดูข้อมูลการใช้งาน'
+      ?'เริ่มการพักเพื่อดูข้อมูลการใช้งาน'
       :'เข้าสู่ระบบเพื่อดูข้อมูลการพักของคุณ';
-    topUserState.textContent=currentPrincipal?.role==='admin'?'NO SESSION':'ยังไม่เริ่ม';
+    topUserState.textContent=currentPrincipal?.role==='admin'?'ยังไม่มีการพัก':'ยังไม่เริ่ม';
     logoutBtn.style.display = 'none';
   }
   const environmentLive=Number(environment.live_count)||0,environmentTotal=Number(environment.total_count)||6;
@@ -128,13 +128,13 @@ function render(s, source='ws'){
       true,
       'พบเหตุด้านความปลอดภัยที่ต้องดูแล',
       currentPrincipal?.role==='admin'
-        ?'กรุณาหยุด Session ช่วยผู้ใช้งานเปิดประตูออกจาก ZEEP และตรวจสอบระบบทันที'
+        ?'กรุณาหยุดการพัก ช่วยผู้ใช้งานเปิดประตูออกจาก ZEEP และตรวจสอบระบบทันที'
         :'กรุณาหยุดการพัก เปิดประตูออกจาก ZEEP และแจ้งทีมงานทันที',
       true,
     );
   }else if(!se.active&&userSafetyFaults.length){
     if(currentPrincipal?.role==='admin'){
-      setPageMessage('warning','ระบบยังไม่พร้อมเริ่ม Session',userSafetyFaults.map(f=>f.message||f.code).join(' · '));
+      setPageMessage('warning','ระบบยังไม่พร้อมเริ่มการพัก',userSafetyFaults.map(f=>f.message||f.code).join(' · '));
     }else{
       setPageMessage('warning','ระบบกำลังตรวจความพร้อม','กรุณารอทีมงานตรวจระบบให้เรียบร้อยก่อนเริ่มการพัก');
     }
@@ -424,7 +424,7 @@ function connectWS(){
       history.replaceState({},'',USER_LOGIN_PATH);
       const overlay=document.getElementById('login');
       overlay.classList.remove('hide');overlay.setAttribute('aria-hidden','false');
-      setLoginAudience('user');showLoginError('Admin จบ Session นี้แล้ว กรุณาเข้าสู่ระบบใหม่','warning');
+      setLoginAudience('user');showLoginError('ผู้ดูแลจบการพักครั้งนี้แล้ว กรุณาเข้าสู่ระบบอีกครั้ง','warning');
       loadPublicStatus();return;
     }
     setConnectionStatus('offline');startRestFallback();

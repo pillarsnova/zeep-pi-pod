@@ -40,9 +40,9 @@ function renderUnifiedAudioModeControls(){
     toggle.dataset.mode=unifiedAudioMode;
     toggle.setAttribute('aria-pressed',repeat?'true':'false');
     toggle.setAttribute('aria-label',repeat
-      ? 'Loop เปิดอยู่ กดเพื่อเปลี่ยนเป็นเล่นตามคิว'
-      : 'เล่นตามคิวอยู่ กดเพื่อเปิด Loop เล่นซ้ำ');
-    toggle.title=repeat?'Loop · เล่นซ้ำ':'Queue · เล่นตามคิว';
+      ? 'เล่นซ้ำอยู่ กดเพื่อเล่นตามคิว'
+      : 'เล่นตามคิวอยู่ กดเพื่อเล่นซ้ำ');
+    toggle.title=repeat?'เล่นซ้ำ':'เล่นตามคิว';
     toggle.classList.toggle('on',repeat);
     setUiIconReference(document.getElementById('unifiedAudioModeIcon'),repeat?'repeat-one':'queue');
     const label=document.getElementById('unifiedAudioModeLabel');
@@ -244,7 +244,7 @@ function updateUnifiedPodSceneLabel(){
   if(!map)return;
   const roomLight=map.dataset.roomLight==='on'?'เปิด':'ปิด';
   const starLight=map.dataset.starLight==='on'?'เปิด':'ปิด';
-  const aircon=map.dataset.aircon==='on'?'เปิด':map.dataset.aircon==='offline'?'Offline':'ปิด';
+  const aircon=map.dataset.aircon==='on'?'คำสั่งเปิด':map.dataset.aircon==='off'?'คำสั่งปิด':map.dataset.aircon==='offline'?'ยังไม่เชื่อมต่อ':'ยังไม่ทราบคำสั่งล่าสุด';
   const redZones=map.dataset.redZones||'';
   const redText=redZones||'ปิดทุกส่วน';
   if(caption)caption.textContent=`ไฟเพดาน ${roomLight} · ไฟดาว ${starLight} · แสงแดง ${redText}`;
@@ -273,8 +273,8 @@ function syncUnifiedStarLight(on,enabled){
   updateUnifiedPodSceneLabel();
 }
 // Translate controller data into a calm, glanceable air-flow scene.  The
-// animation starts only from confirmed ESP32 power state. The scene shows the
-// same physical setpoint selected by the user and sent over IR.
+// animation follows the controller's acknowledged power intent, not physical
+// feedback from the air conditioner. Unknown intent must stay unknown.
 function syncUnifiedAirconComfort(on,online,targetTemperature,measuredTemperature){
   const map=document.getElementById('airconComfortMap');
   const caption=document.getElementById('airconComfortCaption');
@@ -287,14 +287,15 @@ function syncUnifiedAirconComfort(on,online,targetTemperature,measuredTemperatur
   map.classList.toggle('on',!!on&&!!online);
   map.classList.toggle('offline',!online);
   map.dataset.cool=hasTarget&&target<=20?'deep':hasTarget&&target<=22?'cool':'gentle';
-  caption.textContent=!online?(adminView?'ระบบแอร์ Offline':'กำลังเชื่อมต่อแอร์'):on?(targetText?`${targetText} · กำลังทำความเย็น`:'กำลังทำความเย็น'):'แอร์ปิดอยู่';
-  const measuredText=Number.isFinite(measured)?` อุณหภูมิแอร์ ${measured.toFixed(1)}°C`:'';
-  map.setAttribute('aria-label',!online?(adminView?'เครื่องปรับอากาศ Offline':'กำลังเชื่อมต่อเครื่องปรับอากาศ'):on?`เครื่องปรับอากาศเปิดอยู่ ตั้งไว้ที่ ${targetText||'รอข้อมูล'}${adminView?measuredText:''}`:'เครื่องปรับอากาศปิดอยู่');
+  const powerKnown=typeof on==='boolean';
+  caption.textContent=!online?'กำลังเชื่อมต่อแอร์':!powerKnown?'ยังไม่ทราบคำสั่งล่าสุด':on?(targetText?`${targetText} · คำสั่งเปิดแอร์`:'คำสั่งล่าสุด · เปิดแอร์'):'คำสั่งล่าสุด · ปิดแอร์';
+  const measuredText=Number.isFinite(measured)?` อุณหภูมิภายในตู้ ${measured.toFixed(1)}°C`:'';
+  map.setAttribute('aria-label',`${caption.textContent}${adminView?measuredText:''} · สถานะตามคำสั่ง ไม่ใช่การยืนยันจากตัวแอร์`);
   const podScene=document.getElementById('podRoomLightMap');
   if(podScene){
     podScene.classList.toggle('aircon-on',!!on&&!!online);
     podScene.classList.toggle('aircon-offline',!online);
-    podScene.dataset.aircon=!online?'offline':on?'on':'off';
+    podScene.dataset.aircon=!online?'offline':!powerKnown?'unknown':on?'on':'off';
     updateUnifiedPodSceneLabel();
   }
 }
@@ -345,7 +346,7 @@ const unifiedComfortProfiles=Object.freeze({
   // cartridge label is checked separately in Admin because the four GPIO
   // slots are reusable and the UI must never silently redefine their loadout.
   aroma1:{name:'ลาเวนเดอร์',purpose:'ก่อนนอน · ผ่อนคลาย',aliases:['ลาเวนเดอร์','lavender']},
-  aroma2:{name:'ยูคาลิปตัส',purpose:'เย็นสดชื่น · รู้สึกหายใจโล่ง',aliases:['ยูคาลิปตัส','eucalyptus']},
+  aroma2:{name:'ยูคาลิปตัส',purpose:'กลิ่นเย็นสดชื่น',aliases:['ยูคาลิปตัส','eucalyptus']},
   aroma3:{name:'ส้ม',purpose:'ผ่อนคลาย · สดชื่น',aliases:['ส้ม','orange','sweet orange']},
   aroma4:{name:'อากาศสดชื่น',purpose:'กลิ่นสะอาด · ไม่ใช่ O₂',aliases:['อากาศสดชื่น','fresh air','oxygen']},
   steam:{name:'ไอน้ำ',purpose:'เพิ่มความชื้น'},
@@ -488,7 +489,7 @@ function renderUnifiedAirQuality(environment={},devices={}){
   detail.textContent=adminView?`Air Sensor ${metrics.length}/3`:`ข้อมูลอากาศ ${metrics.length}/3`;
   card.title=metrics.length
     ? metrics.map(metric=>`${metric.name} ${metric.value} ${metric.unit}`).join(' · ')
-    : adminView?'MH-Z19C, PMS7003 และ SGP40 ยังไม่มีข้อมูล Live':'กำลังรวบรวมข้อมูลอากาศ';
+    : adminView?'MH-Z19C, PMS7003 และ SGP40 ยังไม่มีข้อมูลล่าสุด':'กำลังรวบรวมข้อมูลอากาศ';
 }
 
 // Humidity uses the exact same five assessment bands as the Dashboard.
@@ -575,7 +576,7 @@ function renderUnifiedControl(state={},environment={},aircon={},bed={},music={})
   document.getElementById('unifiedAirconStatus').textContent=airconOnline
     ? aircon.power==null
       ? adminView?'คำสั่งล่าสุด · ยังไม่ทราบ':'กำลังตรวจสถานะแอร์'
-      : airconOn?'แอร์เปิดอยู่':'แอร์ปิดอยู่'
+      : airconOn?'คำสั่งล่าสุด · เปิด':'คำสั่งล่าสุด · ปิด'
     : adminView?'Offline':'กำลังเชื่อมต่อแอร์';
   // One touch target controls both states. The visual state and next command
   // always derive from the latest ESP32 ACK, never from a click alone.
@@ -664,7 +665,7 @@ function renderUnifiedControl(state={},environment={},aircon={},bed={},music={})
   }
   tempSelect.disabled=!airconOnline||!!safety.latched||airconRequestBusy||!!aircon.command_pending;
   syncUnifiedAirconComfort(
-    airconOn,
+    aircon.power,
     airconOnline,
     Number.isInteger(unifiedAirconDraftTemp)?unifiedAirconDraftTemp:desiredTemp,
     environment.temperature_c

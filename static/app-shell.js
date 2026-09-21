@@ -18,28 +18,28 @@
   ]);
   const PAGE_DEFINITIONS = Object.freeze({
     dashboard: {
-      title: 'ภาพรวมขณะพัก',
+      title: 'ภาพรวมการพัก',
       subtitle: 'ดูสัญญาณระหว่างพักและสภาพแวดล้อมภายใน ZEEP',
       document: 'Dashboard',
     },
     control: {
-      title: 'ศูนย์ควบคุม ZEEP',
-      subtitle: 'เลือกและควบคุมอุปกรณ์ภายในตู้จากจุดเดียว',
+      title: 'ควบคุมอุปกรณ์',
+      subtitle: 'ปรับแสง เสียง อุณหภูมิ และท่าพักให้สบาย',
       document: 'Environment Control',
     },
     control_debug: {
-      title: 'Control Debug',
+      title: 'ทดสอบอุปกรณ์',
       subtitle: 'ทดสอบคำสั่งอุปกรณ์และตรวจ Request, ACK และ Response',
       document: 'Control Debug',
     },
     monitor: {
-      title: 'มอนิเตอร์ระบบและการพัก',
-      subtitle: 'ดูความพร้อม ข้อมูลสด เกณฑ์อ้างอิง และคำแนะนำจากจุดเดียว',
+      title: 'ติดตามระบบและการพัก',
+      subtitle: 'ตรวจความพร้อมของระบบ ข้อมูลล่าสุด และคำแนะนำสำหรับผู้ดูแล',
       document: 'System Monitor',
     },
     sessions: {
       title: 'ประวัติการใช้งาน',
-      subtitle: 'ดูภาพรวมก่อน แล้วเปิดผลการพักแต่ละครั้งเมื่อจำเป็น',
+      subtitle: 'ดูผลการพักแต่ละครั้งและเปรียบเทียบกับครั้งก่อน',
       document: 'Usage History & Reports',
     },
   });
@@ -65,7 +65,7 @@
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', active ? 'true' : 'false');
     button.setAttribute('aria-label', active ? 'ออกจากแอปแบบเต็มจอ' : 'เปิดแอปแบบเต็มจอ');
-    button.title = active ? 'แสดง Header และออกจากเต็มจอ' : 'เปิดทุกหน้าแบบเต็มจอ';
+    button.title = active ? 'แสดงส่วนหัวและออกจากเต็มจอ' : 'เปิดทุกหน้าแบบเต็มจอ';
   }
 
   async function toggleFullscreen() {
@@ -76,7 +76,7 @@
       const request = document.documentElement.requestFullscreen
         || document.documentElement.webkitRequestFullscreen;
       if (!request) {
-        notify('ซ่อน Header แล้ว', 'ok', 1600);
+        notify('ซ่อนส่วนหัวแล้ว', 'ok', 1600);
         return;
       }
       try {
@@ -87,7 +87,7 @@
         // Focus Mode is still useful when an embedded browser rejects the
         // native fullscreen request.
         fullscreenManaged = false;
-        notify('ซ่อน Header แล้ว · เบราว์เซอร์ไม่อนุญาตเต็มจอ', 'warning', 2400);
+        notify('ซ่อนส่วนหัวแล้ว · เบราว์เซอร์ไม่อนุญาตเต็มจอ', 'warning', 2400);
       }
       return;
     }

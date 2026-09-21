@@ -55,8 +55,8 @@ function assessDashboardAtmosphere(environment={},devices={}){
   const unavailable=evaluations.filter(metric=>metric.status!=='live');
   const blockingUnavailable=unavailable.filter(metric=>metric.required_for_overall!==false);
   const advisoryUnavailable=unavailable.filter(metric=>metric.required_for_overall===false);
-  const blockingMissingActions=blockingUnavailable.map(metric=>({type:'sensor',priority:'required',name:metric.name,current:'ไม่มีข้อมูล Live',target:metric.target,control:metric.source,action:`ตรวจการเชื่อมต่อ ${metric.source} และ freshness ก่อนประเมิน`,blocks_overall:true}));
-  const advisoryActions=advisoryUnavailable.map(metric=>({type:'sensor',priority:'advisory',name:metric.name,current:'ไม่มีข้อมูล Live',target:metric.target,control:metric.source,action:`ตรวจการเชื่อมต่อ ${metric.source} · ภาพรวมยังประเมินจาก Sensor หลักที่พร้อม`,blocks_overall:false}));
+  const blockingMissingActions=blockingUnavailable.map(metric=>({type:'sensor',priority:'required',name:metric.name,current:'ยังไม่มีข้อมูลล่าสุด',target:metric.target,control:metric.source,action:`ตรวจการเชื่อมต่อ ${metric.source} และอายุข้อมูลก่อนประเมิน`,blocks_overall:true}));
+  const advisoryActions=advisoryUnavailable.map(metric=>({type:'sensor',priority:'advisory',name:metric.name,current:'ยังไม่มีข้อมูลล่าสุด',target:metric.target,control:metric.source,action:`ตรวจการเชื่อมต่อ ${metric.source} · ภาพรวมยังประเมินจากเซนเซอร์หลักที่พร้อม`,blocks_overall:false}));
   if(!metrics.length){
     return {key:'unknown',label:'รอข้อมูล',english:'Waiting',symbol:'?',description:'Sensor ยังไม่พร้อมสำหรับประเมินภาพรวม',reason:'รอข้อมูล Sensor 7 เกณฑ์',metrics,evaluations,actions:[...blockingMissingActions,...advisoryActions],required_actions:blockingMissingActions,advisory_actions:advisoryActions,assessment_quality:'insufficient'};
   }
@@ -100,14 +100,14 @@ function renderAdminAtmosphere(result){
   const levels=Array.isArray(result.levels)&&result.levels.length?result.levels:dashboardAtmosphereLevels;
   guide.innerHTML=[...levels].reverse().map(level=>`<article class="atmosphere-guide-${level.key}${level.key===result.key?' active':''}"><span>${level.symbol}</span><div><b>${level.label} · ${level.english}</b><small>${level.description||level.principle||''}</small></div></article>`).join('');
   criteria.innerHTML=[...required,...advisoryUnavailable].map(metric=>{
-    if(metric.status!=='live')return `<article class="admin-criterion unavailable"><div><b>${metric.name}</b><span>${metric.source} · ${metric.deviceStatus||'ไม่พร้อม'}</span></div><strong>${metric.display||'--'}</strong><small>เป้าหมาย ${metric.target}<br>${metric.principle}<br><em>${metric.bands}</em><br>${metric.required_for_overall===false?'Sensor เสริม · ไม่บล็อกภาพรวม':metric.deviceStatus==='stale'?'ค่าล่าสุดก่อน Restart · รอข้อมูลสด':'ตรวจ Sensor และ freshness'}</small></article>`;
+    if(metric.status!=='live')return `<article class="admin-criterion unavailable"><div><b>${metric.name}</b><span>${metric.source} · ${metric.deviceStatus||'ไม่พร้อม'}</span></div><strong>${metric.display||'--'}</strong><small>เป้าหมาย ${metric.target}<br>${metric.principle}<br><em>${metric.bands}</em><br>${metric.required_for_overall===false?'เซนเซอร์เสริม · ยังประเมินภาพรวมได้':metric.deviceStatus==='stale'?'ค่าล่าสุดที่ได้รับ · รอข้อมูลใหม่':'ตรวจการเชื่อมต่อและอายุข้อมูล'}</small></article>`;
     return `<article class="admin-criterion criterion-${metric.level.key}"><div><b>${metric.name}</b><span>${metric.source} · ${metric.level.label}</span></div><strong>${metric.display}</strong><small>ผ่านขั้นต่ำ ${metric.expected_floor||metric.target} · เป้าหมายสูงสุด ${metric.target}<br>${metric.recommendation||metric.principle}${metric.control?` · ตรวจที่ ${metric.control}`:''}</small></article>`;
   }).join('')||'<div class="admin-atmosphere-success"><span>✓</span><div><b>ผ่านขั้นต่ำพอใช้ขึ้นไปครบทุกเกณฑ์</b><small>ค่าที่พร้อมอยู่ในเกณฑ์ · ระดับพอใช้ยังแสดงเป็นข้อเสนอให้ปรับเพิ่มด้านล่าง</small></div></div>';
   const policyCriteria=Array.isArray(result.criteria)&&result.criteria.length?result.criteria:evaluations;
   thresholds.innerHTML=policyCriteria.map(metric=>`<article><b>${metric.label||metric.name}</b><span>${metric.bands_text||metric.bands}</span><small>${metric.source}${metric.mode?` · ${metric.mode}`:''}<br>${ADMIN_EXPLANATION_CONTEXT[metric.id||metric.key]||metric.principle||''}</small></article>`).join('');
   const basis=document.getElementById('adminAtmosphereBasis'),basisInfo=current.safety?.threshold_basis||{};
   if(basis)basis.textContent=`Environment ${result.version||'ยังไม่กำหนด'} · Mode ${result.mode||'sleep'} · Safety Basis ${basisInfo.version||'ยังไม่กำหนด'} ${basisInfo.approved?'APPROVED':'NOT APPROVED'} · เกณฑ์นี้เป็น ZEEP Wellness Context ไม่ใช่การวินิจฉัย และไม่เปลี่ยน Safety Alarm`;
-  const requiredActions=Array.isArray(result.required_actions)?result.required_actions:required.map(metric=>({name:metric.name,current:metric.display||'ไม่มีข้อมูล Live',target:metric.expected_floor||metric.target,control:metric.control||metric.source,action:metric.recommendation||`ตรวจ ${metric.source}`}));
+  const requiredActions=Array.isArray(result.required_actions)?result.required_actions:required.map(metric=>({name:metric.name,current:metric.display||'ยังไม่มีข้อมูลล่าสุด',target:metric.expected_floor||metric.target,control:metric.control||metric.source,action:metric.recommendation||`ตรวจ ${metric.source}`}));
   const optimisationActions=Array.isArray(result.optimisation_actions)?result.optimisation_actions:optimise.map(metric=>({name:metric.name,current:metric.display,target:metric.target,control:metric.control,action:metric.recommendation}));
   // Required items already contain their corrective action in the cards on
   // the left. Keep this column for optional optimisation so the same warning
@@ -116,7 +116,7 @@ function renderAdminAtmosphere(result){
   if(!actionRows.length){
     actions.innerHTML=requiredActions.length
       ?'<div class="admin-atmosphere-empty">แก้รายการที่ระบุด้านซ้ายก่อน แล้วระบบจะประเมินใหม่จาก packet ถัดไป</div>'
-      :'<div class="admin-atmosphere-success"><span>★</span><div><b>อยู่ระดับดีหรือยอดเยี่ยม</b><small>รักษาค่าปัจจุบันและติดตาม freshness ต่อเนื่อง</small></div></div>';
+      :'<div class="admin-atmosphere-success"><span>★</span><div><b>อยู่ระดับดีหรือยอดเยี่ยม</b><small>รักษาค่าปัจจุบันและติดตามการอัปเดตข้อมูล</small></div></div>';
   }else{
     actions.innerHTML=actionRows.map((action,index)=>`<article class="admin-atmosphere-action ${action.kind}"><span>${index+1}</span><div><b>${action.group} · ${action.name} ${action.current} → ${action.target}</b><small>${action.action} · ตรวจที่ ${action.control}</small></div></article>`).join('');
   }
@@ -199,7 +199,7 @@ function monitorRestModeLabel(mode){
     cycle_nap:'Nap & Refresh',relax_meditation:'Nap & Refresh',
     recovery_readiness:'Nap & Refresh',performance_prep:'Nap & Refresh',
     physical_comfort:'Nap & Refresh',
-  })[mode]||mode||'รอ Mode';
+  })[mode]||mode||'รอรูปแบบการพัก';
 }
 function monitorMaskedAccount(session={}){
   const display=String(session.display_name||session.username||'ผู้ใช้งาน').trim();
@@ -231,12 +231,12 @@ function renderMonitorLiveSummary({bcg={},sleep={},session={},analysisEligible=f
   const source=sleep.classification_source==='personal'?'ข้อมูลส่วนบุคคล':'อายุและเพศ';
   const bedLabel=BCG_STATUS_TH[bcg.status_code]||bcg.status_text||'รอสัญญาณ';
   const age=Number(bcg.analysis_data_age_s??bcg.data_age_s);
-  const freshness=Number.isFinite(age)?`ข้อมูล ${age.toFixed(1)} วินาทีก่อน`:'ยังไม่มีเวลา Packet';
+  const freshness=Number.isFinite(age)?`ข้อมูล ${age.toFixed(1)} วินาทีก่อน`:'ยังไม่มีเวลารับข้อมูล';
   const coverage=Number(bcg.paired_vital_coverage);
   const personal=sleep.personal_baseline||{};
   const nights=Math.max(0,Number(personal.nights_used)||0);
   const personalReady=personal.status==='active'||personal.status==='early'||personal.status==='mature';
-  document.getElementById('monitorLiveIdentity').textContent=active?monitorMaskedAccount(session):'ยังไม่มีผู้ใช้งานใน Session';
+  document.getElementById('monitorLiveIdentity').textContent=active?monitorMaskedAccount(session):'ขณะนี้ไม่มีผู้ใช้งาน';
   document.getElementById('monitorLiveMode').textContent=monitorRestModeLabel(session.rest_mode);
   document.getElementById('monitorLiveReference').textContent=`เกณฑ์สถานะ · ${source}`;
   setMonitorLiveMetric('monitorLiveHrCard','monitorLiveHr','monitorLiveHrNote',{
@@ -399,38 +399,38 @@ function renderPersonalRestBaseline(sleep={},session={}){
     time.textContent='กำลังเรียนรู้';
     duration.textContent='บันทึกเฉพาะรูปแบบการพักครั้งนี้';
     score.textContent='พักอย่างเป็นธรรมชาติได้เลย';
-    advice.textContent='ผล Session นี้จะเป็นข้อมูลตั้งต้นสำหรับการกลับมาใช้ครั้งที่ 2';
+    advice.textContent='ZEEP จะใช้ข้อมูลครั้งนี้เปรียบเทียบเมื่อคุณกลับมาพักอีกครั้ง';
     return;
   }
   const observedOnce=count===1||baseline.status==='observed_once';
   const outcomeSupported=baseline.outcome_supported===true;
   const statusLabels={
     observed_once:'ข้อมูลตั้งต้น',learning:'กำลังเรียนรู้',early:'เริ่มเห็นรูปแบบ',
-    active:'Baseline พร้อมใช้',stable:'Baseline คงที่',
+    active:'พร้อมเปรียบเทียบ',stable:'รูปแบบชัดเจน',
   };
   title.textContent=!outcomeSupported
     ?'ช่วงเวลาจากครั้งก่อน'
     :observedOnce?'ช่วงเวลาจากครั้งก่อน':'ช่วงที่ได้คะแนนสูงสุดจากข้อมูลก่อนหน้า';
   evidence.textContent=!outcomeSupported
-    ?'ข้อมูลเวลาพร้อมแล้ว · หลักฐานผลลัพธ์ยังจำกัด'
+    ?'มีข้อมูลช่วงเวลาพักแล้ว แต่ผลการพักยังไม่ครบ'
     :observedOnce
-      ?'ข้อมูลตั้งต้นจาก 1 Session ก่อนหน้า'
-      :`เปรียบเทียบจาก ${count.toLocaleString('th-TH-u-nu-latn')} Sessions ก่อนหน้า`;
+      ?'อ้างอิงการพักครั้งก่อน'
+      :`เปรียบเทียบจากการพัก ${count.toLocaleString('th-TH-u-nu-latn')} ครั้งก่อนหน้า`;
   status.textContent=statusLabels[baseline.status]||'ข้อมูลส่วนบุคคล';
   time.textContent=`${start} – ${end}`;
   duration.textContent=personalRestDuration(baseline.duration_minutes);
   const scoreNumber=Number(baseline.score_value);
   const scoreTitle=baseline.score_title||(baseline.score_type==='sleep_score'?'Sleep Score':'Recovery Score');
   score.textContent=!outcomeSupported
-    ?'หลักฐานผลลัพธ์ยังไม่พอสำหรับแนะนำ'
+    ?'ข้อมูลยังไม่พอแนะนำช่วงเวลาพัก'
     :Number.isFinite(scoreNumber)
     ?`${scoreTitle} ${scoreNumber.toLocaleString('th-TH-u-nu-latn',{maximumFractionDigits:1})}`
     :'ผลการพักที่ใช้สร้างข้อมูลตั้งต้น';
   const tolerance=Math.max(0,Math.round(Number(baseline.start_tolerance_minutes)||0));
   advice.textContent=!outcomeSupported
-    ?'ใช้เป็นข้อมูลเวลาเบื้องต้น และรอผลครั้งถัดไปก่อนแนะนำการปรับ'
+    ?'ดูช่วงเวลาที่เคยพักได้ โดยยังไม่แนะนำให้เปลี่ยนเวลาพัก'
     :tolerance
-      ?`หากสะดวก ลองเริ่มพักใกล้เวลานี้ ±${tolerance} นาที และบอกความรู้สึกหลังพัก`
+      ?`หากสะดวก ลองเริ่มพักก่อนหรือหลังเวลานี้ไม่เกิน ${tolerance} นาที`
       :'หากสะดวก ลองเริ่มพักใกล้ช่วงเวลานี้';
 }
 function renderSimpleDashboard(state={},environment={},bcg={},session={}){

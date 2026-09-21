@@ -24,7 +24,7 @@ function setSensorDeviceState(key,device={}){
   card.classList.remove('live','fallback','warming','error','offline');
   const state=device.status||'offline';
   card.classList.add(state==='live'?'live':['stale','held'].includes(state)?'fallback':state==='warming'?'warming':['fault','invalid'].includes(state)?'error':'offline');
-  const age=Number(device.data_age_s);status.textContent=sensorStatusTh[state]||state;status.title=Number.isFinite(age)?`ข้อมูลล่าสุด ${age.toFixed(1)} วินาที`:'ยังไม่มีเวลา packet';
+  const age=Number(device.data_age_s);status.textContent=sensorStatusTh[state]||state;status.title=Number.isFinite(age)?`ข้อมูลล่าสุด ${age.toFixed(1)} วินาที`:'ยังยังไม่มีเวลารับข้อมูล';
 }
 function renderAssessment(id,meterId,result){
   const root=document.getElementById(id),meter=document.getElementById(meterId);if(!root||!meter)return;
@@ -32,10 +32,10 @@ function renderAssessment(id,meterId,result){
 }
 function renderSensorAssessments(e){
   const t=e.temperature_c,h=e.humidity_rh,l=e.lux,s=e.sound_dba_est,c=e.co2_ppm,p=e.pm2_5_ug_m3,v=e.voc_index;
-  renderAssessment('shtAssessment','shtMeter',t==null||h==null?{label:'รอข้อมูล',detail:'18–27°C · 40–60%RH',pct:0}:{label:t>29||h>65?'นอก Comfort band':t<18||h<40||t>27||h>60?'ควรติดตาม':'ยอดเยี่ยม',detail:`${fmt(t,1)}°C · ${fmt(h,1)}%RH`,level:t>29||h>65?'bad':t<18||h<40||t>27||h>60?'warn':'good',pct:(t-10)/30*100});
+  renderAssessment('shtAssessment','shtMeter',t==null||h==null?{label:'รอข้อมูล',detail:'18–27°C · 40–60%RH',pct:0}:{label:t>29||h>65?'นอกช่วงสบายที่กำหนด':t<18||h<40||t>27||h>60?'ควรติดตาม':'ยอดเยี่ยม',detail:`${fmt(t,1)}°C · ${fmt(h,1)}%RH`,level:t>29||h>65?'bad':t<18||h<40||t>27||h>60?'warn':'good',pct:(t-10)/30*100});
   renderAssessment('optAssessment','optMeter',l==null?{label:'รอข้อมูล',detail:'โหมดนอน ≤5 lux',pct:0}:{label:l<=5?'มืดเหมาะกับโหมดนอน':l<=20?'แสงสลัว':'สว่าง',detail:`${fmt(l,1)} lux`,level:l<=5?'good':l<=20?'warn':'bad',pct:l/50*100});
   renderAssessment('sphAssessment','sphMeter',s==null?{label:'รอข้อมูล',detail:'รอ sound_dba จาก ESP32 · เป้าหมาย ≤35 dBA',pct:0}:{label:s<=35?'อยู่ในเป้าหมาย':s<=45?'สูงกว่าเป้าหมาย':'เสียงสูง',detail:`${fmt(s,1)} dBA`,level:s<=35?'good':s<=45?'warn':'bad',pct:s/80*100});
-  renderAssessment('co2Assessment','co2Meter',c==null?{label:'รอข้อมูล',detail:'เตือน 1,000 ppm',pct:0}:{label:c<800?'การระบายอากาศดี':c<1000?'ควรติดตาม':c<1300?'ควร Boost ลม':'ถึง Critical band',detail:`${fmt(c,0)} ppm`,level:c<800?'good':c<1000?'warn':'bad',pct:(c-400)/900*100});
+  renderAssessment('co2Assessment','co2Meter',c==null?{label:'รอข้อมูล',detail:'เตือน 1,000 ppm',pct:0}:{label:c<800?'การระบายอากาศดี':c<1000?'ควรติดตาม':c<1300?'ควรเพิ่มการระบายอากาศ':'ถึงเกณฑ์ฉุกเฉิน',detail:`${fmt(c,0)} ppm`,level:c<800?'good':c<1000?'warn':'bad',pct:(c-400)/900*100});
   renderAssessment('pmsAssessment','pmsMeter',p==null?{label:'รอข้อมูล',detail:'อ้างอิง PM2.5',pct:0}:{label:p<=15?'ฝุ่นต่ำ':p<=35?'ควรติดตาม':'ฝุ่นสูง',detail:`PM2.5 ${fmt(p,0)} µg/m³`,level:p<=15?'good':p<=35?'warn':'bad',pct:p/75*100});
   renderAssessment('sgpAssessment','sgpMeter',v==null?{label:'รอข้อมูล',detail:'เทียบ Adaptive baseline',pct:0}:{label:v<80?'ต่ำกว่า Baseline':v<=150?'ใกล้ Baseline':'VOC เพิ่มขึ้น',detail:`VOC Index ${fmt(v,0)}`,level:v<=150?'good':'warn',pct:v/300*100});
 }
@@ -48,15 +48,15 @@ function bcgIntegrityDevice(b={}){
   return {model:'LSM-800-T · BCG',status:!connected?'offline':stale?'stale':b.error?'fault':'live',source_label:'Pi5 · BCG Serial',data_age_s:Number.isFinite(age)?age:null};
 }
 function bcgIntegrityValue(b={}){
-  const bed=BCG_STATUS_CONTROL_TH[Number(b.status_code)]||b.status_text||'รอ Bed Status';
-  return `${bed} · HR ${fmt(b.heart_rate_bpm,0)} BPM · RR ${fmt(b.respiration_rate,1)} ครั้ง/นาที · ${b.analysis_valid?'ผ่าน analysis':'รอ physiology'}`;
+  const bed=BCG_STATUS_CONTROL_TH[Number(b.status_code)]||b.status_text||'รอสถานะเตียง';
+  return `${bed} · HR ${fmt(b.heart_rate_bpm,0)} BPM · RR ${fmt(b.respiration_rate,1)} ครั้ง/นาที · ${b.analysis_valid?'พร้อมวิเคราะห์':'รอสัญญาณชีพครบ'}`;
 }
 function renderSensorIntegrity(e,b={}){
   const devices=e.devices||{},root=document.getElementById('sensorIntegrityRows');if(!root)return;root.innerHTML='';
   const rows=Object.entries(sensorUi).map(([key,ui])=>({key,ui,device:devices[key]||{model:key,status:'offline'},value:ui.value(e)}));
   rows.push({key:'bcg',ui:{icon:'BCG'},device:bcgIntegrityDevice(b),value:bcgIntegrityValue(b)});
-  rows.forEach(({key,ui,device:d,value})=>{const row=document.createElement('div');row.className=`integrity-row ${d.status||'offline'}`;row.dataset.sensor=key;row.innerHTML=`<div class="integrity-icon">${ui.icon}</div><div class="integrity-main"><b>${d.model||key}</b><span>${controllerSourceName(d.source_label||'ไม่ทราบ Source')} · ${value}</span></div><div class="integrity-state"><b>${sensorStatusTh[d.status]||d.status}</b><span>${d.data_age_s==null?'ไม่มีเวลา packet':`${Number(d.data_age_s).toFixed(1)}s ago`}</span></div>`;root.appendChild(row);});
-  const total=rows.length,live=rows.filter(row=>row.device.status==='live').length,chip=document.getElementById('integrityChip');document.getElementById('integrityHeadline').textContent=`Sensor พร้อม ${live}/${total} ตัว`;document.getElementById('integrityDetail').textContent=live===total?'ทุก Sensor ส่งข้อมูลสด · ค่าหลักครบทุกอุปกรณ์':'ตรวจแถวที่ไม่เป็น Live และเวลา packet ก่อนใช้งาน';chip.className=`status-chip ${live===total?'success':live?'warning':'danger'}`;chip.textContent=live===total?'ALL LIVE':live?'DEGRADED':'OFFLINE';
+  rows.forEach(({key,ui,device:d,value})=>{const row=document.createElement('div');row.className=`integrity-row ${d.status||'offline'}`;row.dataset.sensor=key;row.innerHTML=`<div class="integrity-icon">${ui.icon}</div><div class="integrity-main"><b>${d.model||key}</b><span>${controllerSourceName(d.source_label||'ไม่ทราบแหล่งข้อมูล')} · ${value}</span></div><div class="integrity-state"><b>${sensorStatusTh[d.status]||d.status}</b><span>${d.data_age_s==null?'ยังไม่มีเวลารับข้อมูล':`${Number(d.data_age_s).toFixed(1)} วินาทีก่อน`}</span></div>`;root.appendChild(row);});
+  const total=rows.length,live=rows.filter(row=>row.device.status==='live').length,chip=document.getElementById('integrityChip');document.getElementById('integrityHeadline').textContent=`เซนเซอร์พร้อม ${live}/${total} ตัว`;document.getElementById('integrityDetail').textContent=live===total?'เซนเซอร์ทุกตัวส่งข้อมูลล่าสุดครบ':'ตรวจอุปกรณ์ที่ข้อมูลไม่อัปเดตและเวลารับข้อมูลก่อนใช้งาน';chip.className=`status-chip ${live===total?'success':live?'warning':'danger'}`;chip.textContent=live===total?'พร้อมทั้งหมด':live?'พร้อมบางส่วน':'ขาดการเชื่อมต่อ';
 }
 function renderEnvironmentSensors(raw,e={},h2={},b={}){
   const env=raw?.devices?raw:legacyEnvironment(e,h2);
@@ -289,7 +289,7 @@ function renderAdaptiveFeatures(data={}){
     const mean=window.mean==null?'--':`${adaptiveValue(window.mean,metric.key==='co2'?0:1)} ${escapeMarkup(metric.unit||'')}`;
     const coverage=window.coverage_pct==null?'':` · ${adaptiveValue(window.coverage_pct,0)}%`;
     const scope=adaptiveReferenceScope(metric.reference_scope);
-    return `<article class="adaptive-feature-row ${comparison.tone}"><div><b>${escapeMarkup(metric.label)}</b><small>${escapeMarkup(metric.live_source||'ไม่ทราบ Source')}</small><i class="adaptive-reference-scope">${escapeMarkup(scope)}</i></div><span><em>ค่าปัจจุบัน</em><strong>${current}</strong></span><span><em>Reference</em><strong>${reference}</strong></span><span><em>เฉลี่ย 5 นาที</em><strong>${mean}${coverage}</strong></span><mark>${escapeMarkup(comparison.label)}</mark></article>`;
+    return `<article class="adaptive-feature-row ${comparison.tone}"><div><b>${escapeMarkup(metric.label)}</b><small>${escapeMarkup(metric.live_source||'ไม่ทราบแหล่งข้อมูล')}</small><i class="adaptive-reference-scope">${escapeMarkup(scope)}</i></div><span><em>ค่าปัจจุบัน</em><strong>${current}</strong></span><span><em>Reference</em><strong>${reference}</strong></span><span><em>เฉลี่ย 5 นาที</em><strong>${mean}${coverage}</strong></span><mark>${escapeMarkup(comparison.label)}</mark></article>`;
   }).join('');
 }
 
@@ -328,7 +328,7 @@ function renderAdaptiveLearning(data={}){
   const session=data.session||{},quality=data.data_quality||{},baseline=data.baseline||{},versions=data.versions||{};
   const valid=data.schema_version&&data.mode==='shadow'&&data.control_policy?.automatic_actuation===false;
   root.classList.toggle('contract-error',!valid);
-  document.getElementById('adaptiveSessionState').textContent=session.recording?'กำลังบันทึก':session.active?'รอเริ่มบันทึก':'ยังไม่มี Session';
+  document.getElementById('adaptiveSessionState').textContent=session.recording?'กำลังบันทึก':session.active?'รอเริ่มบันทึก':'ยังไม่มีการพัก';
   document.getElementById('adaptiveSessionMeta').textContent=`${adaptiveModeLabel(session.rest_mode)}${session.session_id?` · ${String(session.session_id).slice(0,8)}`:''}`;
   document.getElementById('adaptiveFrameState').textContent=quality.sensor_frame_stale?'STALE':versions.sensor_frame_sequence==null?'รอ Frame':`SEQ ${versions.sensor_frame_sequence}`;
   document.getElementById('adaptiveFrameMeta').textContent=`อายุ ${quality.sensor_frame_age_s==null?'--':adaptiveValue(quality.sensor_frame_age_s,1)}s · ทุก ${data.cadence?.sensor_frame_s||10}s`;
@@ -662,7 +662,7 @@ function renderCalibrationInspector(data,{force=false}={}){
   if(!grouped.size){root.innerHTML='<div class="mini">ยังไม่มีข้อมูล Sensor สำหรับ Calibration</div>';return;}
   root.innerHTML=[...grouped.entries()].map(([device,channels])=>{
     const primary=channels[0]||{},state=primary.status||'offline';
-    const age=primary.data_age_s==null?NaN:Number(primary.data_age_s),source=primary.source||'ไม่ทราบ Source';
+    const age=primary.data_age_s==null?NaN:Number(primary.data_age_s),source=primary.source||'ไม่ทราบแหล่งข้อมูล';
     const channelHtml=channels.map(channel=>{
       const metric=channel.metric,step=Number(channel.step)||0.1;
       const raw=calibrationNumber(channel.raw,step),bias=calibrationNumber(channel.bias,step),output=calibrationNumber(channel.calibrated,step);

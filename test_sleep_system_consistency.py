@@ -417,7 +417,7 @@ class SleepSystemPolicyConsistencyTests(unittest.TestCase):
         self.assertIn("u.available_sessions??u.sessions??0", ui)
         self.assertIn("u.current_sessions_without_data??0", ui)
         self.assertIn("u.available_usage_sessions??", ui)
-        self.assertIn("ยังไม่มี Session ที่จบในช่วง Pilot", ui)
+        self.assertIn("ยังไม่มีการพักที่จบแล้วในช่วงทดสอบ", ui)
 
     def test_session_history_has_daily_time_and_admin_name_filters(self):
         ui = (PI5_ROOT / "static" / "index.html").read_text(encoding="utf-8")

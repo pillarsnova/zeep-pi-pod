@@ -100,7 +100,7 @@ async function runSessionEndShare(payload){
     if(r.ok)result=await r.json();
   }catch{result=null;}
   if(!result?.ok||!result.qr_data_url){
-    setSessionEndQr('failed',`ยังเตรียม QR ไม่ได้ · กรุณาดูผลในแอป ZEEP<br>${fallback}`);
+    setSessionEndQr('failed',`ยังสร้าง QR ไม่สำเร็จ<br>${fallback}`);
     return;
   }
   const minutes=Number(result.expires_in_minutes)||SESSION_END_QR_FALLBACK_MINUTES;
@@ -379,7 +379,7 @@ async function loadPublicStatus(){
     if(d.occupied&&loginAudience==='user'){
       showLoginError('ZEEP กำลังมีผู้ใช้งาน กรุณารอให้การพักครั้งนี้จบก่อน','warning');
     }
-  }catch{showLoginError('ติดต่อระบบของตู้ไม่ได้');}
+  }catch{showLoginError('ยังเชื่อมต่อ ZEEP ไม่ได้ กรุณาแจ้งทีมงาน');}
 }
 
 function startAuthenticatedApp(){

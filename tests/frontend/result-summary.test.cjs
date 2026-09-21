@@ -140,7 +140,7 @@ test('unmeasured feedback cannot display stale or sensor-inferred improvement', 
     status: 'not_measured', freshness_delta: 2, activity_readiness: 8,
   };
   const html = render(context, payload);
-  assert.doesNotMatch(html, /restore-subjective-outcome|สดชื่นขึ้น 2|ความพร้อมทำกิจกรรม 8/);
+  assert.doesNotMatch(html, /restore-subjective-outcome|สดชื่นขึ้น 2|ความพร้อมทำกิจกรรมต่อ 8/);
 });
 
 test('measured zero feedback is retained and explicitly identified as self-report', () => {

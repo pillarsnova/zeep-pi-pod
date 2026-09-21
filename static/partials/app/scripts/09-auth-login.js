@@ -89,14 +89,14 @@ async function loadUsers(){
       const o = document.createElement('option');
       o.value = u.account_key||u.email||u.username;
       const sensorNote=sessionsWithoutSensor
-        ?` · ไม่มี Sensor ${sessionsWithoutSensor}`:'';
+        ?` · ไม่มีข้อมูลเซนเซอร์ ${sessionsWithoutSensor} ครั้ง`:'';
       o.textContent = `${identityLabel(u)} (${usageSessions} ครั้ง${sensorNote})`;
       sel.appendChild(o);
     });
     if (!orderedUsers.length) chips.innerHTML = '<div class="mini" style="margin-top:2px">ยังไม่มีผู้ใช้ — พิมพ์ชื่อด้านล่างเพื่อสร้างใหม่</div>';
     if (sel.options.length===1){
       const empty=document.createElement('option');
-      empty.value='';empty.textContent='ยังไม่มี Session ที่จบในช่วง Pilot';empty.disabled=true;
+      empty.value='';empty.textContent='ยังไม่มีการพักที่จบแล้วในช่วงทดสอบ';empty.disabled=true;
       sel.innerHTML='';empty.selected=true;sel.appendChild(empty);
     }
     // Sessions may receive its first WebSocket frame before the admin user
@@ -132,12 +132,12 @@ function setLoginAudience(audience){
   const admin=loginAudience==='admin',overlay=document.getElementById('login');
   overlay.dataset.audience=loginAudience;
   document.getElementById('loginTitle').textContent=admin
-    ? 'เข้าสู่ระบบผู้ดูแลระบบ · ZEEP'
+    ? 'เข้าสู่ระบบผู้ดูแล · ZEEP'
     : 'เข้าสู่ระบบผู้ใช้งาน · ZEEP';
   document.getElementById('loginRouteLabel').textContent=admin?'ผู้ดูแลระบบ':'ผู้ใช้งาน ZEEP';
   document.getElementById('loginRouteCaption').textContent=admin
     ? 'ตรวจสอบระบบ ควบคุม และดูข้อมูลเชิงเทคนิค'
-    : 'เริ่ม Session การพักผ่อนในตู้นี้';
+    : 'เริ่มการพักใน ZEEP เครื่องนี้';
   document.getElementById('loginAudienceHelp').textContent=loginAudience==='admin'
     ? 'ใช้บัญชีผู้ดูแลระบบที่ได้รับอนุญาตเท่านั้น'
     : 'เข้าสู่ระบบด้วยบัญชี ZEEP';
@@ -162,7 +162,7 @@ function applyRoleUI(principal){
   // Avoid repeating USER in the header. Admin remains explicit because that
   // role exposes Monitor and Control Debug capabilities.
   if(roleBadge){
-    roleBadge.textContent='ADMIN';
+    roleBadge.textContent='ผู้ดูแล';
     roleBadge.style.display=principal.role==='admin'?'':'none';
   }
   document.getElementById('accountLogoutBtn').style.display='';
@@ -481,13 +481,13 @@ function showProfileError(message, tone = 'danger'){
 }
 
 async function submitProfileForm(btn){
-  if (!profileGate.ticket){ showProfileError('แบบฟอร์มหมดอายุแล้ว — เข้าสู่ระบบอีกครั้ง'); return; }
+  if (!profileGate.ticket){ showProfileError('แบบฟอร์มหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง'); return; }
   const dob = profileDobValue();
   const height = Number(document.getElementById('profileHeight').value);
   const weight = Number(document.getElementById('profileWeight').value);
-  if (!profileGate.gender){ showProfileError('เลือกเพศก่อน'); return; }
-  if (!dob){ showProfileError('เลือกวันเกิดให้ครบ'); return; }
-  if (!(height > 0) || !(weight > 0)){ showProfileError('กรอกส่วนสูงและน้ำหนักให้ครบ'); return; }
+  if (!profileGate.gender){ showProfileError('กรุณาเลือกเพศ หรือเลือกไม่ระบุ'); return; }
+  if (!dob){ showProfileError('กรุณาเลือกวัน เดือน และปีเกิดให้ครบ'); return; }
+  if (!(height > 0) || !(weight > 0)){ showProfileError('กรุณากรอกส่วนสูงและน้ำหนักให้ครบ'); return; }
   const body = {
     profile_ticket:profileGate.ticket, gender:profileGate.gender, date_of_birth:dob,
     height_cm:height, weight_kg:weight, blood_group:profileGate.blood || null,
@@ -581,8 +581,8 @@ function userLoginFailure(code,status){
   };
   if(messages[code])return messages[code];
   if(status===401)return 'อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาลองอีกครั้ง';
-  if(status>=500)return 'ระบบกำลังกลับมาทำงาน กรุณาลองอีกครั้ง';
-  return 'เข้าสู่ระบบไม่สำเร็จ กรุณาตรวจข้อมูลแล้วลองอีกครั้ง';
+  if(status>=500)return 'ระบบยังไม่พร้อมให้บริการ กรุณาลองอีกครั้ง';
+  return 'เข้าสู่ระบบไม่สำเร็จ กรุณาตรวจสอบข้อมูลแล้วลองอีกครั้ง';
 }
 
 async function doZeepLogin(btn){

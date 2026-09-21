@@ -32,7 +32,7 @@
       "recommendation": {"primary": "เข้านอนและตื่นใกล้เวลาเดิมในแต่ละวัน", "title": "รักษาเวลาเข้านอนให้สม่ำเสมอ", "when_label": "ก่อนนอนครั้งถัดไป", "reason": "คำแนะนำทั่วไปสำหรับการนอน ควรดูผลหลายคืนประกอบกัน"},
       "personal_baseline": {"maturity": {"key": "active", "sessions_used": 5}},
       "confidence": {"level": "high"},
-      "subjective_outcome": {"status": "measured", "freshness_delta": 2, "activity_readiness": 8}
+      "subjective_outcome": {"status": "measured", "freshness_delta": 2, "activity_readiness": 8, "source": "pre_post_questionnaire", "sensor_inferred": false}
     }
   }
 }

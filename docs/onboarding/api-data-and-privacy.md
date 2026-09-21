@@ -64,6 +64,27 @@ Base path คือ `/api/v1/usage-sessions` และอ่านเฉพา�
 browser history และ access log Legacy routes ต้องคงไว้จน Tablet migrate และผ่าน
 parity check แล้วเท่านั้น
 
+### Adaptive Journey — Timeline, feedback และคำแนะนำ
+
+เพิ่มใน `eaccf32` บน Git; ตรวจ SHA/OpenAPI ของ Pod ก่อนใช้จริง เพราะรอบนี้ยังไม่ Deploy
+
+| Endpoint | หน้าที่ |
+| --- | --- |
+| `GET /api/v1/adaptive/sessions/{session_id}` | Timeline, ก่อน–หลัง, ความสบายอ้างอิง และคำแนะนำ |
+| `POST /api/v1/adaptive/sessions/{session_id}/comfort` | ความเห็นที่เลือกตอบ พร้อมยินยอมให้ใช้ปรับคำแนะนำ |
+| `POST /api/v1/adaptive/sessions/{session_id}/decisions` | บันทึกรับ/ปฏิเสธ/เลื่อนคำแนะนำ ไม่ส่งคำสั่งอุปกรณ์ |
+
+ใช้ Browser Auth/CSRF เดิม User เฉพาะของตน Admin ตามบทบาท ไม่รับ broad API token
+account key ว่างไม่ใช่หลักฐานยืนยันเจ้าของ และไม่ใช้รวมความชอบข้ามบุคคล
+ผลเป็น `private, no-store`; mutation มี UUID สำหรับ retry
+Smart Ear labels/features ยังคง Admin-only ส่วนค่าที่เปิดเผยต้องผ่านการตรวจสิทธิ์
+
+ใช้ `events` เดิมเก็บ `adaptive_comfort`/`adaptive_decision` แยกจาก Raw และคะแนน
+ไม่มี external AI egress, schema migration หรือ Auto Control
+รายละเอียด request/response และลำดับใช้งานดู
+[สรุป Adaptive Journey](adaptive-journey-and-sensor-expansion.md)
+และ [contract หลัก](../zeep-adaptive-journey-v1.md)
+
 ### Control และ raw/research boundary
 
 - Control mutation (`/api/aircon/*`, `/api/bed/*`, `/api/door/*`, output/audio)
@@ -167,7 +188,7 @@ validation/installation gate; user-facing summary ยังเป็น `ROADMAP
 | ZEEP account login/profile | ตั้ง `ZEEP_API_BASE_URL` และผู้ใช้ Login | identity/profile response และ short-lived auth material ตาม account flow | token เก็บ server-side/in-memory ตาม contract; ห้าม log/ส่งเข้า browser โดยไม่จำเป็น |
 | Finished-session ingest | ตั้งทั้ง `ZEEP_INGEST_API_KEY` และ `ZEEP_DEVICE_ID` | `userPublicId`, device/session/time, mode-specific result และ compact stage/environment result; ไม่มี raw BCG | allowlisted payload, durable/idempotent outbox, retry แยกจาก local finalization |
 | Report share | `SESSION_REPORT_SHARE_ENABLED=1` | PNG ที่ browser render จากชื่อและผล Session ไป account backend | single-use ticket; user tokenอยู่ใน process; signed read URL 60 นาที |
-| Workstation snapshot | approved encrypted team workstation | Session/BCG/Profile/Baseline/Derived report ที่กำหนด | **Internal Pilot only**, allowlist/checksum/SQLite check/atomic install; ห้ามใช้เป็น runtime DB |
+| Workstation snapshot | เครื่องทีมที่อนุมัติและเข้ารหัส หรือ Mac เครื่องพัฒนาที่มีข้อยกเว้นเฉพาะเครื่องตาม Runbook | Session/BCG/Profile/Baseline/Derived report ที่กำหนด | **Internal Pilot only**, allowlist/checksum/SQLite check/atomic install; ห้ามใช้เป็น runtime DB หรือขยายข้อยกเว้นไปเครื่องอื่น |
 | Remote access tunnel | Tailscale/Cloudflare configuration | application traffic และ provider access metadata | HTTPS/Access policy; review access log, DPA/PDPA, retention และ administrator scope |
 | Advisory AI | contract มี endpoint ภายใน | direct identifiers ถูกตัด แต่ข้อมูลยัง linkable กับเจ้าของบัญชี | **ห้าม external egress ใน v1** จนมี purpose-specific consent และ processor/retention approval |
 

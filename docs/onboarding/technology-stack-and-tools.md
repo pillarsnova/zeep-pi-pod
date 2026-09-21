@@ -4,7 +4,7 @@
 
 ขอบเขต: Pi 5 runtime, Web UI, local data, device integration, QA และ Operations
 
-ปรับปรุงล่าสุด: 17 กันยายน 2026
+ปรับปรุงล่าสุด: 22 กันยายน 2026
 
 เอกสารนี้ตอบคำถามว่า “ระบบปัจจุบันสร้างด้วยอะไร ข้อมูลอยู่ที่ไหน และควรใช้
 เครื่องมือใดตรวจแต่ละชั้น” โดยสรุปจาก source ที่ทำงานจริง ไม่รวมเทคโนโลยีของ
@@ -185,6 +185,21 @@ Sensor Hub ส่งผลจาก Firmware candidate ที่ผ่าน phy
 คำสั่งล่าสุดและเงื่อนไข Full gate ให้ยึด [TESTING.md](../../TESTING.md) ส่วน Pull,
 backup, deploy, restart และ recovery ให้ยึด
 [Pi 5 Operations Runbook](../pi5-operations-runbook.md)
+
+## Adaptive Journey — โมดูลที่เพิ่มบน stack เดิม
+
+`eaccf32` เพิ่ม `adaptive/journey.py`, `outcomes.py`, `comfort.py`, `coach.py`
+และ repository/service แยกกัน HTTP อยู่ `api/adaptive_journey.py`
+หน้า Monitor/Sessions ใช้ partial HTML/JS/CSS ที่ประกอบผ่าน `ui_composer.py`
+ส่วน audit กิจกรรม Session แยกจาก `app.py` ไป `sessions/activity.py`
+
+อ่าน SQLite `timeline`/`events` เดิมและเพิ่ม feedback/decision เป็น event
+ไม่เพิ่มฐานข้อมูล schema migration, LLM, vector database หรือ runtime ใหม่
+ไม่มีการเปลี่ยนสูตรคะแนนหรือเปิด Auto Control
+โค้ดขึ้น Git และ CI ผ่านแล้ว; ยังไม่ใช่หลักฐานว่า Deploy บน Pod
+
+ดู [แผนที่ไฟล์และหลักฐานทดสอบ](adaptive-journey-and-sensor-expansion.md)
+สำหรับเริ่ม Debug และแบ่งงาน Backend/App/Data/Hardware
 
 ## สิ่งที่ **ยังไม่มี** ใน Current stack
 

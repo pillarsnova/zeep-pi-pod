@@ -46,6 +46,18 @@ Mode และ target ถูกตรึงก่อน Recording เวลา�
 [Two-Mode Test Protocol](../zeep-pilot-two-mode-protocol.md) ส่วนสูตรและข้อยกเว้น
 อยู่ที่ [Sleep System Current](../zeep-sleep-system-current.md)
 
+## งานต่อยอด: Adaptive Journey
+
+โค้ด `eaccf32` เพิ่มชั้นเรียนรู้จากการพัก ไม่เปลี่ยนวงจร Session หรือสูตรคะแนนเดิม:
+รวมเหตุการณ์ → เปรียบเทียบก่อน–หลังคำสั่ง → ช่วงความสบายที่ผู้ใช้รายงาน → ข้อเสนอหนึ่งข้อ
+ผู้ใช้/Admin ต้องเลือกปรับใน Control เดิม ไม่มีการสั่งอุปกรณ์จาก Sleep State
+
+ความเห็นเป็นทางเลือก ไม่ตอบไม่ได้แปลว่าสบาย; ความเห็น Admin ไม่แทนผู้พัก
+ข้อมูลอ้างอิงแยก Overnight/Nap และเวลาเป้าหมาย ไม่เอาคะแนนสูงมาอนุมานความชอบ
+งานนี้ขึ้น Git และ CI ผ่านแล้ว แต่ยังไม่มี Deploy/Restart ในรอบนี้
+รายละเอียดและงานถัดไปอยู่ใน
+[สรุป Adaptive Journey สำหรับทีม](adaptive-journey-and-sensor-expansion.md)
+
 ## Lifecycle ตั้งแต่ Login ถึงผลลัพธ์
 
 ```mermaid

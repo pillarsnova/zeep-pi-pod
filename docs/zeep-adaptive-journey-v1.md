@@ -4,6 +4,11 @@
 
 22 กันยายน 2026 · ฐานโค้ด `78e90fc` · ทั้ง Overnight และ Nap & Refresh
 
+Implementation commit: [`eaccf32`](https://github.com/pillarsnova/zeep-pi-pod/commit/eaccf32dde878561a1c6debe7e790155e2ec3bb0)
+อยู่บน `origin/develop` และ CI ผ่านแล้ว; ยังไม่มี Deploy ในรอบนี้
+เริ่มอ่านภาพรวมและงานส่งต่อได้ที่
+[Onboarding — Adaptive Journey และแผนขยายเซนเซอร์](onboarding/adaptive-journey-and-sensor-expansion.md)
+
 ## สรุป
 
 เพิ่ม Timeline รวม → เปรียบเทียบก่อน–หลัง → ข้อมูลอ้างอิงความสบาย → คำแนะนำหนึ่งข้อ

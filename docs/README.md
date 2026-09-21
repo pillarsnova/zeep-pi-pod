@@ -1,8 +1,10 @@
 # ZEEP Pi 5 Documentation Index
 
-งานต่อยอด: [Adaptive Journey 4 ขั้น](zeep-adaptive-journey-v1.md) ·
+สรุปงานล่าสุดสำหรับทีม:
+[Adaptive Journey และแผนขยายเซนเซอร์](onboarding/adaptive-journey-and-sensor-expansion.md)
+(22 กันยายน 2026 · `eaccf32` ขึ้น Git และ CI ผ่านแล้ว; ยังไม่มี Deploy ในรอบนี้)
+รายละเอียดหลัก: [Adaptive Journey 4 ขั้น](zeep-adaptive-journey-v1.md) ·
 [Sensor Expansion BOM](zeep-sensor-expansion-bom-v1.md)
-(22 กันยายน 2026 · implementation/engineering candidate ยังไม่ Deploy)
 
 สถานะ: **Current document map**
 

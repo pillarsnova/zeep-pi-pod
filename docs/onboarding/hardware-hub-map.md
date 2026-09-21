@@ -57,6 +57,20 @@ Control Hub 1 ยืนยันเพียงว่า ESP32 เรียก�
 | Audio | เพลง local และ Brainwave preview ออกลำโพงของ Pi | MPV IPC ผ่าน Unix socket; `afplay`/`ffplay` เป็น development fallback | `state["music"]`, `state["system"]["player"]` | `hardware/audio.py`, `audio_api.py`, `brainwave_audio.py` |
 | GPIO | ประตู 2 ทิศ, ไฟเพดาน/ดาว, Aroma 4, Steam, Red light 3 zone | Pi BCM GPIO ผ่าน `gpiozero` + `lgpio` chip 0 | `state["gpio"]` เป็น commanded state | `hardware/gpio.py`; lock/cooldown อยู่ `hardware/pulse_control.py`; HTTP อยู่ `api/legacy_control_routes.py` |
 
+## แผนขยายเซนเซอร์ — ยังไม่ติดตั้งจากงานรอบนี้
+
+มี [BOM ต้นแบบ](../zeep-sensor-expansion-bom-v1.md) สำหรับตรวจประตูเปิดสุด/ปิดสุด
+2 จุด วัดลมเข้า–ออก 2 ชุด และอุณหภูมิพื้นผิว 2 จุด พร้อม Hub วงจรป้องกัน ชุดสาย
+และอุปกรณ์สอบเทียบ เป็น Engineering candidate/RFQ draft ไม่ใช่ Production BOM
+
+เป้าหมายคือแยก “ส่งคำสั่งแล้ว” ออกจาก “อุปกรณ์เกิดผลจริง” ต้องยืนยัน geometry
+ประตู ขนาดท่อ/อัตราลม จุดติดตั้งและระบบไฟก่อนล็อกรุ่น/ราคา
+ค่าความดันต่างไม่ใช่อัตราลมจนสอบเทียบครบ sensor สำรองต้องมี ID/ตำแหน่งและ
+ขอบเขตความเสียหายร่วมชัดเจน ไม่เลือกว่าตัวใดเสียเพียงเพราะค่าไม่ตรงกัน
+
+อ่าน [สรุปงานและหน้าที่ทีม](adaptive-journey-and-sensor-expansion.md)
+ก่อนต่อยอด Hardware/Firmware ไม่มีการ Flash เดินสาย หรือสั่งซื้อในรอบนี้
+
 ## 1. Sensor Hub 1 — USB Serial JSONL
 
 ### Physical/data contract ที่ runtime รู้จริง

@@ -13,9 +13,13 @@
 
 ## เริ่มอ่านจากตรงไหน
 
-งานต่อยอด 22 กันยายน: [Adaptive Journey 4 ขั้น](../zeep-adaptive-journey-v1.md)
-และ [Sensor Expansion BOM](../zeep-sensor-expansion-bom-v1.md) เป็น candidate
-ให้ตรวจผลทดสอบ/สถานะ Deploy ตามเอกสาร ไม่เปลี่ยนสูตรคะแนนหรือเปิด Auto Control
+**สรุปงานล่าสุด 22 กันยายน:**
+[Adaptive Journey และแผนขยายเซนเซอร์](adaptive-journey-and-sensor-expansion.md)
+รวมภาพรวม 4 ขั้น หน้าจอ API โครงสร้างโค้ด BOM ผลทดสอบ และงานถัดไปตามบทบาท
+
+โค้ด `eaccf32` อยู่บน `origin/develop` และ GitHub CI ผ่านทั้ง Python/Frontend
+แต่ยังไม่ได้ Deploy/Restart ในรอบนี้ ไม่เปลี่ยน Raw สูตรคะแนน หรือเปิด Auto Control
+ให้แยกสถานะใน Git ออกจากสถานะบนเครื่องจริงเสมอ
 
 อ่านเอกสารหลักตามลำดับนี้ในวันแรก:
 
@@ -29,6 +33,8 @@
    ข้อมูลใดอยู่บน Pod/ออกจาก Pod และขอบเขตการลบข้อมูล
 5. [Operations และ First-week checklist](operations-and-first-week.md) —
    เตรียมเครื่อง, เลือก test, deploy อย่างปลอดภัย และเป้าหมายสัปดาห์แรก
+6. [Adaptive Journey และแผนขยายเซนเซอร์](adaptive-journey-and-sensor-expansion.md) —
+   งานล่าสุดที่ทีมจะต่อยอด พร้อมหลักฐาน Commit/CI และรายการที่ยังต้องทดสอบจริง
 
 สำหรับทีม Sensor, Firmware, Data/ML, Monitor หรือ Product ที่จะพัฒนาเสียง ให้อ่าน
 [หูอัจฉริยะ · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md) เพิ่ม เอกสารนี้
@@ -102,6 +108,7 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 | Pull, Sync, Deploy, Backup | [Pi 5 Operations Runbook](../pi5-operations-runbook.md) |
 | คำที่แสดงต่อผู้ใช้ | [Product Language Guideline](../zeep-product-language-guideline-v1.md) |
 | การพัฒนา Interface | [UI Development Roadmap](../zeep-interface-development-roadmap.md) และ [UI partials](../../static/partials/app/README.md); แยกสิ่งที่ทำแล้วจากแผนถัดไป |
+| งาน Adaptive ล่าสุดและ BOM | [สรุปสำหรับทีม](adaptive-journey-and-sensor-expansion.md); contract หลักอยู่ที่ [Adaptive Journey](../zeep-adaptive-journey-v1.md) และ [Sensor BOM](../zeep-sensor-expansion-bom-v1.md) |
 
 ถ้าเอกสาร, runtime model, OpenAPI หรือ approved replay evidence ขัดกัน
 ให้ **หยุดการเผยแพร่ผล** บันทึก version/SHA ที่พบ และส่งให้ owner แก้ความขัดแย้ง
@@ -125,8 +132,9 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 - ห้ามแก้ Raw BCG, Raw Sensor หรือ Timeline เพื่อทำให้ Derived result ดูดีขึ้น
 - ห้ามเปิด port `8000` ตรงสู่ Public Internet หรือใส่ credential ใน URL,
   source, log, client bundle หรือไฟล์ที่ส่งให้ลูกค้า
-- ห้ามใช้ Pod snapshot เป็น `DATA_DIR`, ส่งต่อ snapshot หรือเก็บบนเครื่องส่วนตัว/
-  เครื่องที่ไม่ได้เข้ารหัสดิสก์
+- ห้ามใช้ Pod snapshot เป็น `DATA_DIR` หรือส่งต่อ/เก็บบนเครื่องที่ไม่ได้รับอนุมัติ
+  เครื่องทีมทั่วไปต้องเข้ารหัสดิสก์; ข้อยกเว้นเฉพาะ Mac เครื่องพัฒนาที่เจ้าของอนุมัติ
+  ให้ยึดทะเบียนและ [Runbook](../pi5-operations-runbook.md) ไม่ขยายไปยังเครื่องอื่น
 - การ Flash Sensor Hub ต้องทำตอน Pod ว่าง พร้อม Full-Flash backup, board identity,
   verify และ rollback; ผลทดลองไม่เท่ากับการรับรองใช้งานถาวร
 - ห้ามให้ Sleep State หรือ Shadow recommendation สั่งอุปกรณ์อัตโนมัติ;
@@ -152,8 +160,8 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 
 ## พร้อมรับงานชิ้นแรกเมื่อ
 
-- [ ] อ่านเอกสารหลัก 5 หน้าและ canonical docs ของ domain ที่จะรับผิดชอบ
-- [ ] ใช้ workstation ที่ทีมอนุมัติและเปิด FileVault หรือ LUKS/dm-crypt
+- [ ] อ่านเอกสารหลักและสรุปงานล่าสุด รวม canonical docs ของ domain ที่จะรับผิดชอบ
+- [ ] ใช้ workstation ที่ทีมอนุมัติและเปิด FileVault/LUKS หรือมีข้อยกเว้นเฉพาะเครื่องตาม Runbook
 - [ ] เข้าใจว่า Local/Mock pass ไม่ใช่ Hardware/Production smoke pass
 - [ ] แยกความสามารถ `LIVE` ออกจาก `SHADOW/ROADMAP` ได้ โดยเฉพาะ Adaptive และ Acoustic Intelligence
 - [ ] รัน focused suite ของ domain ได้โดยไม่อ่าน/เขียน Production data

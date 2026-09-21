@@ -25,6 +25,8 @@ Release gate หลัก: [TESTING.md](../../TESTING.md)
 
 - ใช้ repository access และสิทธิ์ Pod/data ตามบทบาทและหลัก least privilege
 - ใช้เครื่องทีมที่อนุมัติและเปิด FileVault หรือ LUKS/dm-crypt ก่อน Sync snapshot
+  ข้อยกเว้นเฉพาะ Mac เครื่องพัฒนาที่เจ้าของอนุมัติให้ยึดทะเบียนใน Runbook
+  ไม่ขยายไปยังเครื่องพนักงานอื่น และไม่เท่ากับผ่านการตรวจ encryption
 - เตรียม environment ตาม repository และระบุ owner ของ Product, Safety, Hardware,
   Data/Privacy และ Operations
 - งานที่กระทบ Pod ต้องมี maintenance window และยืนยันว่าไม่มีผู้ใช้/Recording
@@ -79,6 +81,25 @@ environment, passed/failed/error/skipped และ hardware ที่ได้�
 งาน refactor ใช้ characterization test ก่อนย้าย, รักษา compatibility facade จน
 caller ย้ายครบ และไม่เปลี่ยน threshold/score/device behavior แฝงไปพร้อมกัน
 โครงสร้างเป้าหมายอยู่ที่ [Pi 5 Software Architecture](../pi5-software-architecture.md)
+
+## ส่งต่องานล่าสุด — Adaptive Journey และ BOM
+
+อ่าน [สรุปงานล่าสุด](adaptive-journey-and-sensor-expansion.md) ก่อนเริ่มงาน:
+implementation `eaccf32` อยู่บน `origin/develop`; CI Python/Frontend ผ่านแล้ว
+รอบนี้ไม่ได้ Deploy/Restart/Flash และไม่มีการแก้ข้อมูลย้อนหลัง
+
+ก่อนเปิดใช้บน Pi ให้ตรวจอย่างน้อย:
+
+- [ ] มี maintenance window และไม่มีผู้ใช้หรือ Recording
+- [ ] ตรวจ SHA, สถานะ service และข้อมูลที่ต้องรักษาตาม Runbook
+- [ ] Timeline ของ Session ที่เลือกตรงกับข้อมูลจริง สิทธิ์ User/Admin ไม่ปะปน
+- [ ] คำแนะนำไม่มีผลสั่งอุปกรณ์เอง การรับคำแนะนำเปิด Control เดิมเท่านั้น
+- [ ] POST ที่ไม่มี CSRF และการขอ Session ข้ามบัญชีถูกปฏิเสธ
+- [ ] ข้อมูลขาด/คำสั่งซ้อนแสดงตามจริง ไม่มีค่าศูนย์หรือผลดีที่แต่งขึ้น
+- [ ] บันทึกผล smoke และ SHA ที่ Deploy; ย้อนกลับตาม approved ref ถ้าตรวจไม่ผ่าน
+
+ข้อจำกัดที่ต้องติดตามคือการบันทึกบางปุ่มเสียงยังไม่ครบ และยังต้องเทียบเวลาตอบสนอง
+กับอุปกรณ์จริง BOM เป็นแผนต้นแบบ ไม่ใช่คำอนุมัติจัดซื้อ/ติดตั้ง
 
 ## Deploy ไป Pod 1
 

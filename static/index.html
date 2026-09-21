@@ -867,6 +867,7 @@
   -->
   <link rel="stylesheet" href="/static/theme-modern.css?v=20260916-155" />
   <link rel="stylesheet" href="/static/styles/monitor.css?v=20260917-2" />
+  <link rel="stylesheet" href="/static/styles/adaptive-journey.css?v=20260922-1" />
   <link rel="stylesheet" href="/static/styles/interface-consistency.css?v=20260916-2" />
   <link rel="stylesheet" href="/static/styles/sessions.css?v=20260917-2" />
   <link rel="stylesheet" href="/static/styles/connection-state.css?v=20260919-1" />
@@ -2289,6 +2290,16 @@
       <div class="raw-table" id="rawPackets"><div class="mini">กำลังรอ packet…</div></div>
     </div>
 
+    <section class="card journey-card" id="journeyCard" data-pages="monitor sessions" aria-labelledby="journeyTitle">
+  <header class="journey-head"><div><h3 id="journeyTitle">เรียนรู้จากการพักครั้งนี้</h3><p id="journeyStatus">เลือกรายการการพักเพื่อดูข้อมูล</p></div><button class="btn" type="button" onclick="refreshJourney()">อัปเดต</button></header>
+  <div class="journey-grid">
+    <article><h4>ช่วงที่คุณเคยพักสบาย</h4><div id="journeyComfort">ยังไม่มีข้อมูลอ้างอิง</div></article>
+    <article><h4>ข้อเสนอสำหรับครั้งนี้</h4><div id="journeyCoach">ยังไม่มีข้อเสนอให้ปรับอุปกรณ์</div><div class="journey-actions" id="journeyDecisions"></div><small>ระบบไม่ปรับอุปกรณ์อัตโนมัติ</small></article>
+    <article><h4>ช่วง 5 นาทีท้ายที่บันทึก รู้สึกสบายเพียงใด?</h4><p>ตอบหรือข้ามได้ บันทึกเพื่อใช้แนะนำการพักครั้งถัดไป</p><label for="journeyFeedback">ความรู้สึกระหว่างพัก</label><select id="journeyFeedback"><option value="">เลือกคำตอบ</option><option value="comfortable">สบายพอดี</option><option value="too_cold">เย็นเกินไป</option><option value="too_warm">อุ่นเกินไป</option><option value="not_comfortable">ยังไม่สบาย</option></select><button class="btn" type="button" onclick="saveJourneyComfort(this)">บันทึกความเห็น</button><small>คำตอบของผู้ดูแลจะเก็บเป็นข้อสังเกต ไม่แทนความเห็นของผู้พัก</small></article>
+  </div>
+  <details><summary>เหตุการณ์เซนเซอร์และคำสั่งอุปกรณ์</summary><p>เรียงตามเวลาที่บันทึก เหตุการณ์ใกล้กันยังไม่ยืนยันสาเหตุ</p><div class="journey-channels" id="journeyChannels"></div><ol class="journey-events" id="journeyEvents"></ol></details>
+  <details><summary>ค่าก่อน–หลังปรับอุปกรณ์</summary><p>ก่อน 5 นาที · เว้นช่วงตอบสนอง 1 นาที · หลัง 5 นาที เป็นการเปรียบเทียบเบื้องต้น ไม่ใช่ผลรับรองประสิทธิภาพอุปกรณ์</p><div id="journeyOutcomes"></div></details>
+</section>
     <div class="card history" id="historyCard" data-pages="sessions">
       <div class="history-self-context" id="historySelfContext" aria-live="polite">
         <span class="history-self-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-icon-history"/></svg></span>
@@ -6292,6 +6303,152 @@ setInterval(()=>{
     fetchRawPackets();
   }
 },10000);
+/* Adaptive journey: observation first, never sends an equipment command. */
+let journeySelectedSession = '';
+let journeyData = null;
+let journeyRequest = 0;
+let journeyIdentity = '';
+let journeyLoading = false;
+
+function resetJourneyContext() {
+  journeySelectedSession = ''; journeyData = null; journeyRequest += 1;
+  if (document.getElementById('journeyCard')) renderJourney(null);
+}
+
+function selectJourneySession(sessionId) {
+  journeyRequest += 1;
+  journeySelectedSession = sessionId || '';
+  journeyData = null;
+  renderJourney(null);
+  refreshJourney();
+}
+
+function journeySessionId() {
+  return document.body.dataset.view === 'sessions'
+    ? journeySelectedSession : current?.session?.session_id || '';
+}
+
+async function refreshJourney() {
+  const root = document.getElementById('journeyCard');
+  if (!root) return;
+  const identity = `${currentPrincipal?.subject || ''}:${currentPrincipal?.account_key || ''}`;
+  if (journeyIdentity && identity !== journeyIdentity) {
+    journeySelectedSession = ''; journeyData = null; journeyRequest += 1;
+  }
+  journeyIdentity = identity;
+  const sid = journeySessionId();
+  if (!sid || !currentPrincipal) { renderJourney(null); return; }
+  if (journeyLoading) return;
+  const request = ++journeyRequest;
+  journeyLoading = true;
+  try {
+    const response = await fetch(`/api/v1/adaptive/sessions/${encodeURIComponent(sid)}`, {
+      cache: 'no-store', headers: authenticatedHeaders(),
+    });
+    if (!response.ok) throw new Error('load_failed');
+    const payload = await response.json();
+    if (request !== journeyRequest || sid !== journeySessionId()) return;
+    journeyData = payload.data;
+    renderJourney(journeyData);
+  } catch {
+    if (request === journeyRequest) {
+      journeyData = null; renderJourney(null);
+      document.getElementById('journeyStatus').textContent = 'ยังโหลดข้อมูลไม่ได้ กรุณาลองอีกครั้ง';
+    }
+  } finally {
+    journeyLoading = false;
+    if (request !== journeyRequest && currentPrincipal && journeySessionId()) refreshJourney();
+  }
+}
+
+function renderJourney(data) {
+  const put = (id, text) => { document.getElementById(id).textContent = text; };
+  for (const id of ['journeyDecisions', 'journeyEvents', 'journeyOutcomes', 'journeyChannels']) {
+    document.getElementById(id).replaceChildren();
+  }
+  put('journeyStatus', data ? `ข้อมูลเซนเซอร์ ${data.journey.samples_used} จุด · แสดงเหตุการณ์ล่าสุดไม่เกิน 100 รายการ${data.data_truncated ? ' · ข้อมูลถูกจำกัดตามขนาด' : ''} · ไม่เปลี่ยนคะแนน` : 'เลือกรายการการพักเพื่อดูข้อมูล');
+  put('journeyComfort', data?.comfort_reference?.message || 'ยังไม่มีข้อมูลอ้างอิง');
+  put('journeyCoach', data?.recommendation?.message || 'ยังไม่มีข้อเสนอให้ปรับอุปกรณ์');
+  if (!data) return;
+  const labels = Object.fromEntries(data.journey.channels.map(item => [item.key, item]));
+  for (const [key, range] of Object.entries(data.comfort_reference.ranges)) {
+    const line = document.createElement('small');
+    line.textContent = `${labels[key]?.label || key}: ${range.low}–${range.high} ${labels[key]?.unit || ''} · ${range.sessions} ครั้ง`;
+    document.getElementById('journeyComfort').append(line);
+  }
+  const item = data.recommendation.item;
+  if (item) {
+    put('journeyCoach', `${item.title} — ${item.reason}`);
+    for (const [value, label] of [['accept', item.confirmation_label], ['snooze', 'ไว้ภายหลัง'], ['reject', 'คงเดิม']]) {
+      const button = document.createElement('button'); button.className = 'btn'; button.type = 'button'; button.textContent = label;
+      button.onclick = () => decideJourney(value, button);
+      document.getElementById('journeyDecisions').append(button);
+    }
+  }
+  for (const channel of data.journey.channels) {
+    const chip = document.createElement('span');
+    chip.textContent = `${channel.label} · ${channel.available ? 'มีข้อมูล' : 'ไม่มีข้อมูล'}`;
+    document.getElementById('journeyChannels').append(chip);
+  }
+  for (const event of data.journey.events.slice(-100)) {
+    const row = document.createElement('li'), time = document.createElement('time'), body = document.createElement('div');
+    time.textContent = new Date(event.t * 1000).toLocaleTimeString('th-TH', { hour12: false });
+    body.textContent = event.label;
+    const detail = document.createElement('small');
+    detail.textContent = event.kind === 'sensor_change' ? `${event.before} → ${event.after} ${event.unit}`
+      : event.kind === 'command' ? 'บันทึกคำสั่งแล้ว · ยังไม่ทราบผลจากอุปกรณ์จริง'
+      : event.kind === 'acoustic' ? 'จำแนกเบื้องต้นจากลักษณะเสียง' : '';
+    body.append(detail); row.append(time, body); document.getElementById('journeyEvents').append(row);
+  }
+  if (!data.journey.events.length) put('journeyEvents', 'ยังไม่พบเหตุการณ์ที่เด่นชัด');
+  for (const outcome of data.outcomes.slice(-10)) {
+    const article = document.createElement('article'); article.className = 'journey-outcome';
+    const title = document.createElement('b'); title.textContent = `${outcome.label} · ${new Date(outcome.t * 1000).toLocaleTimeString('th-TH')}`;
+    const note = document.createElement('p'); note.textContent = outcome.message;
+    const list = document.createElement('ul');
+    for (const metric of outcome.metrics) {
+      const row = document.createElement('li');
+      const direction = {toward_reference: ' · ใกล้ช่วงที่เคยสบายขึ้น', away_from_reference: ' · ห่างจากช่วงที่เคยสบาย', within_reference: ' · อยู่ในช่วงที่เคยสบาย'}[metric.comfort_direction] || '';
+      row.textContent = metric.delta == null ? `${metric.label}: ข้อมูลยังไม่พอเปรียบเทียบ`
+        : `${metric.label}: ${metric.before.value} → ${metric.after.value} ${metric.unit}${direction}`;
+      list.append(row);
+    }
+    article.append(title, note, list); document.getElementById('journeyOutcomes').append(article);
+  }
+  if (!data.outcomes.length) put('journeyOutcomes', 'ยังไม่มีคำสั่งอุปกรณ์ในช่วงที่บันทึก');
+}
+
+async function saveJourneyComfort(button) {
+  const response = document.getElementById('journeyFeedback').value;
+  const sid = journeySessionId();
+  if (!response || !sid || !journeyData) { toast('กรุณาเลือกการพักและคำตอบก่อน'); return; }
+  button.disabled = true;
+  try {
+    const result = await post(`/api/v1/adaptive/sessions/${encodeURIComponent(sid)}/comfort`, {
+      response, use_for_personalization: true, request_id: crypto.randomUUID(),
+    });
+    if (result) toast('บันทึกความเห็นแล้ว ขอบคุณครับ');
+  } finally { button.disabled = false; }
+}
+
+async function decideJourney(decision, button) {
+  const item = journeyData?.recommendation?.item, sid = journeySessionId();
+  if (!item || !sid) return;
+  button.disabled = true;
+  try {
+    const result = await post(`/api/v1/adaptive/sessions/${encodeURIComponent(sid)}/decisions`, {
+      recommendation_id: item.id, decision, request_id: crypto.randomUUID(),
+    });
+    if (!result) return;
+    toast(decision === 'accept' ? 'รับคำแนะนำแล้ว กรุณาเลือกปรับอุปกรณ์ในหน้าควบคุม' : 'บันทึกแล้ว ระบบจะพักคำแนะนำไว้ก่อน');
+    if (decision === 'accept') window.location.assign('/control');
+    else refreshJourney();
+  } finally { button.disabled = false; }
+}
+
+setInterval(() => {
+  if (document.body.dataset.view === 'monitor') refreshJourney();
+}, 15000);
 
 /* ---------- per-person session: login / logout / history ---------- */
 function historyUserKey(user){
@@ -6443,6 +6600,7 @@ function setLoginAudience(audience){
 }
 
 function applyRoleUI(principal){
+  if(currentPrincipal?.subject!==principal?.subject&&typeof resetJourneyContext==='function')resetJourneyContext();
   currentPrincipal=principal||null;
   const roleBadge=document.getElementById('roleBadge');
   if(!principal){
@@ -8077,6 +8235,7 @@ function renderSessionList(d){
 }
 
 async function loadDetail(user, sid, row){
+  if(typeof selectJourneySession==='function')selectJourneySession(sid);
   const requestSeq=++historyDetailRequestSeq;
   document.querySelectorAll('.hist-row').forEach(x=>{
     x.classList.remove('sel');x.setAttribute('aria-pressed','false');

@@ -109,6 +109,7 @@ PROFILE_TESTS: dict[str, tuple[str, ...]] = {
     ),
     "adaptive": (
         "test_adaptive_learning.py",
+        "test_adaptive_journey.py",
         "test_sensor_services.py",
     ),
     "learning": (

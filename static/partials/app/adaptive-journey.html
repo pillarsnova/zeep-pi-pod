@@ -1,0 +1,10 @@
+<section class="card journey-card" id="journeyCard" data-pages="monitor sessions" aria-labelledby="journeyTitle">
+  <header class="journey-head"><div><h3 id="journeyTitle">เรียนรู้จากการพักครั้งนี้</h3><p id="journeyStatus">เลือกรายการการพักเพื่อดูข้อมูล</p></div><button class="btn" type="button" onclick="refreshJourney()">อัปเดต</button></header>
+  <div class="journey-grid">
+    <article><h4>ช่วงที่คุณเคยพักสบาย</h4><div id="journeyComfort">ยังไม่มีข้อมูลอ้างอิง</div></article>
+    <article><h4>ข้อเสนอสำหรับครั้งนี้</h4><div id="journeyCoach">ยังไม่มีข้อเสนอให้ปรับอุปกรณ์</div><div class="journey-actions" id="journeyDecisions"></div><small>ระบบไม่ปรับอุปกรณ์อัตโนมัติ</small></article>
+    <article><h4>ช่วง 5 นาทีท้ายที่บันทึก รู้สึกสบายเพียงใด?</h4><p>ตอบหรือข้ามได้ บันทึกเพื่อใช้แนะนำการพักครั้งถัดไป</p><label for="journeyFeedback">ความรู้สึกระหว่างพัก</label><select id="journeyFeedback"><option value="">เลือกคำตอบ</option><option value="comfortable">สบายพอดี</option><option value="too_cold">เย็นเกินไป</option><option value="too_warm">อุ่นเกินไป</option><option value="not_comfortable">ยังไม่สบาย</option></select><button class="btn" type="button" onclick="saveJourneyComfort(this)">บันทึกความเห็น</button><small>คำตอบของผู้ดูแลจะเก็บเป็นข้อสังเกต ไม่แทนความเห็นของผู้พัก</small></article>
+  </div>
+  <details><summary>เหตุการณ์เซนเซอร์และคำสั่งอุปกรณ์</summary><p>เรียงตามเวลาที่บันทึก เหตุการณ์ใกล้กันยังไม่ยืนยันสาเหตุ</p><div class="journey-channels" id="journeyChannels"></div><ol class="journey-events" id="journeyEvents"></ol></details>
+  <details><summary>ค่าก่อน–หลังปรับอุปกรณ์</summary><p>ก่อน 5 นาที · เว้นช่วงตอบสนอง 1 นาที · หลัง 5 นาที เป็นการเปรียบเทียบเบื้องต้น ไม่ใช่ผลรับรองประสิทธิภาพอุปกรณ์</p><div id="journeyOutcomes"></div></details>
+</section>

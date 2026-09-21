@@ -1,0 +1,24 @@
+.journey-card { grid-column: 1 / -1; min-width: 0; }
+.journey-head { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
+.journey-card h3 { font-size: 20px; margin: 0 0 6px; }
+.journey-card h4 { font-size: 16px; margin: 0 0 12px; color: #d6f4f6; }
+.journey-card :is(p, small) { color: #9bb6c0; line-height: 1.65; }
+.journey-card p { font-size: 14px; margin: 4px 0 12px; }
+.journey-card small { display: block; font-size: 13px; margin-top: 10px; }
+.journey-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.journey-grid article { min-width: 0; border: 1px solid #24424f; background: #0a1d29; border-radius: 14px; padding: 18px; font-size: 15px; line-height: 1.65; overflow-wrap: anywhere; }
+.journey-card label { display: block; font-size: 13px; color: #9bb6c0; }
+.journey-card select { width: 100%; min-height: 42px; background: #081823; color: #e1f4f6; border: 1px solid #335562; border-radius: 8px; margin: 8px 0 12px; padding: 8px; font: inherit; }
+.journey-card details { border-top: 1px solid #24424f; margin-top: 18px; padding-top: 16px; }
+.journey-card summary { cursor: pointer; font-size: 16px; color: #bde7eb; }
+.journey-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.journey-actions .btn { white-space: normal; }
+.journey-channels { display: flex; flex-wrap: wrap; gap: 8px; }
+.journey-channels span { border: 1px solid #24424f; border-radius: 12px; padding: 4px 10px; font-size: 13px; }
+.journey-events { list-style: none; padding: 0; max-height: 400px; overflow: auto; }
+.journey-events li { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 12px; border-left: 2px solid #35cbd4; padding: 12px 16px; border-bottom: 1px solid #1e3542; font-size: 14px; }
+.journey-events time { color: #6cd9e0; }
+.journey-events small { margin: 2px 0 0; }
+.journey-outcome { padding: 14px 0; border-bottom: 1px solid #24424f; }
+.journey-outcome ul { padding-left: 20px; line-height: 1.8; font-size: 14px; }
+@media (max-width: 1000px) { .journey-grid { grid-template-columns: 1fr; } }

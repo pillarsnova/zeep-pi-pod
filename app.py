@@ -120,6 +120,7 @@ from hardware.sensorhub1 import (
     SensorHub1Reader,
     SensorHub1StateStore,
 )
+from sessions.activity import record_session_activity
 from sessions.cadence import (
     cadence_interval_at as _cadence_interval_at,
     normalise_cadence_segments as _normalise_cadence_segments,
@@ -2360,24 +2361,10 @@ def _sleep_auxiliary_evidence(
 
 def note_session_activity(kind: str, value: Any = None):
     """Count an action for the report and persist its timestamped event to DB."""
-    session_id = None
-    with session_lock:
-        if _active_session is not None:
-            counters = _active_session["counters"]
-            counters[kind] = counters.get(kind, 0) + 1
-            if _active_session.get("phase") == "recording":
-                session_id = _active_session["record"]["session_id"]
-    if session_id:
-        database.enqueue(
-            "sessions",
-            "event",
-            {
-                "session_id": session_id,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "type": kind,
-                "value": value,
-            },
-        )
+    record_session_activity(
+        kind, value, lock=session_lock,
+        active_session=lambda: _active_session, database=database,
+    )
 
 
 class ZeepApiOffline(Exception):
@@ -4021,6 +4008,7 @@ app.include_router(
         sleep_policy_snapshot=sleep_policy_snapshot,
         maintenance_contract_snapshot=maintenance_contract_snapshot,
         acoustic_timeline_snapshot=acoustic_timeline_snapshot,
+        adaptive_database=database, require_user=require_user,
     )
 )
 app.include_router(

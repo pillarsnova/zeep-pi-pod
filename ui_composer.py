@@ -29,7 +29,7 @@ PARTIALS = {
     "aroma-zone": "aroma.html",
 }
 MARKER = "<!-- ZEEP_PARTIAL:control/{name} -->"
-HTML_PARTIALS = ("app/shell.html",)
+HTML_PARTIALS = ("app/shell.html", "app/adaptive-journey.html")
 HTML_MARKER = "<!-- ZEEP_PARTIAL:{name} -->"
 INLINE_MARKER = "/* ZEEP_PARTIAL:{name} */"
 STYLE_PARTIAL = "app/styles.css"
@@ -46,6 +46,7 @@ SCRIPT_PARTIALS = (
     ("app/scripts/06-client-api.js", "/* Optional auth:"),
     ("app/scripts/07-debug-brainwave.js", "let brainwaveCatalog=null;"),
     ("app/scripts/08-sensors-monitor.js", "function fmt(v,d=1)"),
+    ("app/scripts/08-adaptive-journey.js", "/* Adaptive journey:"),
     (
         "app/scripts/09-auth-login.js",
         "/* ---------- per-person session:",

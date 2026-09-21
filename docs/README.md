@@ -1,10 +1,14 @@
 # ZEEP Pi 5 Documentation Index
 
+งานต่อยอด: [Adaptive Journey 4 ขั้น](zeep-adaptive-journey-v1.md) ·
+[Sensor Expansion BOM](zeep-sensor-expansion-bom-v1.md)
+(22 กันยายน 2026 · implementation/engineering candidate ยังไม่ Deploy)
+
 สถานะ: **Current document map**
 
 เจ้าของ: Pi 5 application team
 
-อัปเดตล่าสุด: 19 กันยายน 2026
+อัปเดตล่าสุด: 22 กันยายน 2026
 
 เริ่มจาก [ZEEP v1 Team Onboarding](onboarding/README.md) ซึ่งเป็นหน้าหลักสำหรับ
 สมาชิกทีมทุกบทบาท เอกสารนี้เป็นทะเบียนเอกสารที่ยังใช้งาน ไม่ใช่การประกาศว่า

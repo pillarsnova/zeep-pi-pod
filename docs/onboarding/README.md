@@ -4,7 +4,7 @@
 
 ขอบเขต: Pi 5 runtime, Web UI, Sensor/Control Hubs, Session results และงานปฏิบัติการ
 
-ปรับปรุงล่าสุด: 17 กันยายน 2026
+ปรับปรุงล่าสุด: 22 กันยายน 2026
 
 > ชุด Onboarding นี้เป็น **ประตูหลักสำหรับค้นหาเอกสาร v1** แล้วจึงตามลิงก์ไปยัง
 > contract/runtime source ที่มีอำนาจของแต่ละ domain; ไม่ได้แทนหลักฐานอนุมัติ release
@@ -12,6 +12,10 @@
 > ลงนามใน closure record ก่อนประกาศ Final Code Freeze
 
 ## เริ่มอ่านจากตรงไหน
+
+งานต่อยอด 22 กันยายน: [Adaptive Journey 4 ขั้น](../zeep-adaptive-journey-v1.md)
+และ [Sensor Expansion BOM](../zeep-sensor-expansion-bom-v1.md) เป็น candidate
+ให้ตรวจผลทดสอบ/สถานะ Deploy ตามเอกสาร ไม่เปลี่ยนสูตรคะแนนหรือเปิด Auto Control
 
 อ่านเอกสารหลักตามลำดับนี้ในวันแรก:
 

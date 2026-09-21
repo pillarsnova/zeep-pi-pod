@@ -148,6 +148,7 @@ function setLoginAudience(audience){
 }
 
 function applyRoleUI(principal){
+  if(currentPrincipal?.subject!==principal?.subject&&typeof resetJourneyContext==='function')resetJourneyContext();
   currentPrincipal=principal||null;
   const roleBadge=document.getElementById('roleBadge');
   if(!principal){

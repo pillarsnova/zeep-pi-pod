@@ -904,7 +904,7 @@ class SleepSessionReportTests(unittest.TestCase):
         )
         self.assertEqual(
             report["restore_summary"]["recommendation"]["primary"],
-            "ลองเช็กว่าตอนนี้สดชื่นหรือยังง่วง แล้วเลือกจังหวะเริ่มกิจกรรมที่สบายกับคุณ",
+            "หากยังรู้สึกง่วง ให้พักต่อก่อนเริ่มกิจกรรมที่ต้องใช้สมาธิ",
         )
 
     def test_continuity_attribution_does_not_inflate_evidence_coverage(self):

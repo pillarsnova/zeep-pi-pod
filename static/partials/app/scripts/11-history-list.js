@@ -494,6 +494,7 @@ function renderSessionList(d){
 }
 
 async function loadDetail(user, sid, row){
+  if(typeof selectJourneySession==='function')selectJourneySession(sid);
   const requestSeq=++historyDetailRequestSeq;
   document.querySelectorAll('.hist-row').forEach(x=>{
     x.classList.remove('sel');x.setAttribute('aria-pressed','false');

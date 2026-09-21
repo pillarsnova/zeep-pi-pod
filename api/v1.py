@@ -13,6 +13,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Response
 
 from acoustics import acoustic_contract_snapshot
+from api.adaptive_journey import create_adaptive_journey_router
 from api.responses import response_envelope
 
 # Internal compatibility for the first v1 routes and their existing tests.
@@ -30,6 +31,7 @@ def _api_index_data() -> dict[str, Any]:
             "sleep_policy": "/api/v1/admin/contracts/sleep",
             "maintenance": "/api/v1/admin/maintenance",
             "adaptive_learning_live": "/api/v1/admin/adaptive/live",
+            "adaptive_journey": "/api/v1/adaptive/sessions/{session_id}",
             "fleet_health": "/api/v1/admin/fleet/health",
             "acoustic_contract": "/api/v1/admin/contracts/acoustics",
             "acoustic_live": "/api/v1/admin/acoustics/live",
@@ -57,10 +59,20 @@ def create_api_v1_router(
     sleep_policy_snapshot: Callable[[], dict[str, Any]],
     maintenance_contract_snapshot: Callable[[], dict[str, Any]],
     acoustic_timeline_snapshot: Callable[[], dict[str, Any]],
+    adaptive_database: Any = None,
+    require_user: Callable[..., Any] | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1", tags=["ZEEP API v1"])
     pod_operator = Depends(require_pod_operator)
     admin = Depends(require_admin)
+    if adaptive_database is not None and require_user is not None:
+        router.include_router(
+            create_adaptive_journey_router(
+                database=adaptive_database,
+                require_user=require_user,
+                snapshot_for=snapshot_for,
+            )
+        )
 
     @router.get("")
     def index():

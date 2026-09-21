@@ -1,5 +1,10 @@
 # ZEEP Adaptive Coach v1.0 — Recommendation-first Plan
 
+**อัปเดต 22 กันยายน 2026:** [Adaptive Journey candidate](zeep-adaptive-journey-v1.md)
+เริ่ม Timeline, outcome comparison, optional comfort feedback และ one-advisory
+พร้อมบันทึก decision แล้ว รุ่นนี้ accept เปิด Control ให้กดเอง ไม่ใช่ Gateway/Auto
+API และน้ำหนัก/เกณฑ์ในเอกสารแผนด้านล่างที่ไม่ได้ระบุใน implementation ยังเป็นเป้าหมาย
+
 สถานะ: **แผนเสนออนุมัติ · ยังไม่เปิดการสั่งอุปกรณ์อัตโนมัติ**  
 วันที่ทบทวน: 16 กันยายน 2026
 ขอบเขต: Pi5, Admin Monitor, User Control และ API สำหรับ ZEEP App

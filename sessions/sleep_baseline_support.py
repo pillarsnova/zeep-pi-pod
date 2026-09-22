@@ -10,7 +10,7 @@ import math
 from collections.abc import Mapping
 from typing import Any
 
-from sleep_system_policy import SLEEP_N3_MIN_AXIS_BASELINE_FIT
+from sessions.sleep_n3_policy import SLEEP_N3_MIN_AXIS_BASELINE_FIT
 
 
 def n3_baseline_support(

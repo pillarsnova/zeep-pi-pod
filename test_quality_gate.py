@@ -45,6 +45,14 @@ class QualityGateSelectionTests(unittest.TestCase):
         plan = self.plan_for("sessions/personal_behaviour.py")
         self.assertIn("test_personal_behaviour.py", plan)
 
+    def test_python_domains_keep_architecture_checks_in_focused_gate(self):
+        for path in (
+            "sleep_stage_scoring.py", "sleep_system_policy.py",
+            "sessions/live_sleep_estimator.py", "identity/baseline_context.py",
+        ):
+            with self.subTest(path=path):
+                self.assertIn("test_modular_architecture.py", self.plan_for(path))
+
     def test_changed_files_includes_deleted_paths_in_both_git_diffs(self):
         def git_results(*args):
             if args[0] == "diff" and "--diff-filter=ACDMR" in args:

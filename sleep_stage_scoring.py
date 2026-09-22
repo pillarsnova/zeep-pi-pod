@@ -10,7 +10,8 @@ from __future__ import annotations
 import math
 from typing import Any, Mapping
 
-from sessions.sleep_baseline_support import n3_baseline_support
+from common.numbers import coerce_finite_number as _finite
+from sessions.sleep_n3_evidence import evaluate_n3_evidence
 from sleep_signal_features import sleep_movement_evidence
 
 
@@ -101,15 +102,6 @@ def interpret_baseline_fit(
 
 def _clamp(value: float, lower: float = 0.0, upper: float = 1.0) -> float:
     return max(lower, min(upper, float(value)))
-
-
-def _finite(value: Any, default: float = 0.0) -> float:
-    """Convert untrusted telemetry to one finite number for score arithmetic."""
-    try:
-        number = float(value)
-    except (TypeError, ValueError, OverflowError):
-        return default
-    return number if math.isfinite(number) else default
 
 
 def _optional_finite(value: Any) -> float | None:
@@ -783,29 +775,22 @@ def score_sleep_evidence(
         and max(relative_sleep_support, hr_drop) >= 0.18
     )
 
-    # N3 is deliberately gated: low HR/RR proximity alone cannot create it.
-    # The label needs quiet BCG, low summary variability and regular breathing.
-    n3_hr_conflict = max(0.0, _finite(hr_fits.get("n2"), 0.0)
-                         - _finite(hr_fits.get("n3"), 0.0))
-    n3_rr_conflict = max(0.0, _finite(rr_fits.get("n2"), 0.0)
-                         - _finite(rr_fits.get("n3"), 0.0))
-    deep_cv_limit = max(0.010, _finite(deep_cv_threshold, 0.025))
-    deep_rr_cv_limit = max(0.025, min(0.050, deep_cv_limit * 1.6))
-    n3_reference = n3_baseline_support(
-        hr_fits, rr_fits, mean_hr=mean_hr, mean_rr=mean_rr
-    )
-    n3_gate = bool(
-        waveform_available
-        and not drift_flag
-        and n3_reference["passed"]
-        and current_stage in {"n2", "n3"}
-        and movement < move_deep_ratio
-        and hr_cv <= deep_cv_limit
-        and rr_cv <= deep_rr_cv_limit
-        and regularity is not None
-        and regularity >= 0.58
-        and n3_hr_conflict < 0.08
-        and max(relative_sleep_support, hr_drop) >= 0.40
+    n3 = evaluate_n3_evidence(
+        hr_fits,
+        rr_fits,
+        mean_hr=mean_hr,
+        mean_rr=mean_rr,
+        deep_cv_threshold=deep_cv_threshold,
+        waveform_available=waveform_available,
+        drift_flag=drift_flag,
+        current_stage=current_stage,
+        movement=movement,
+        move_deep_ratio=move_deep_ratio,
+        hr_cv=hr_cv,
+        rr_cv=rr_cv,
+        regularity=regularity,
+        relative_sleep_support=relative_sleep_support,
+        hr_drop=hr_drop,
     )
 
     # REM receives no standalone time boost.  Time acts only after the current
@@ -901,15 +886,15 @@ def score_sleep_evidence(
         + 0.10 * amplitude_stability
         + 0.10 * relative_sleep_support
         + 0.15  # reward only after every independent N3 gate has passed
-    ) if n3_gate else 0.0
-    if n3_gate:
+    ) if n3.gate else 0.0
+    if n3.gate:
         n3_score -= min(
             0.20,
-            n3_rr_conflict * n3_rr_conflict_penalty * 0.15
-            + n3_hr_conflict * 0.15,
+            n3.rr_conflict * n3_rr_conflict_penalty * 0.15
+            + n3.hr_conflict * 0.15,
         )
     n2_score += (
-        min(0.05, n3_rr_conflict * n2_rr_conflict_support * 0.10)
+        min(0.05, n3.rr_conflict * n2_rr_conflict_support * 0.10)
         if n2_gate else 0.0
     )
     rem_score = (
@@ -962,12 +947,12 @@ def score_sleep_evidence(
         ),
         "relative_wake_support": round(relative_wake_support, 4),
         "environment_direct_stage_influence": False,
-        "n3_gate": n3_gate,
-        "n3_baseline_support": n3_reference,
-        "n3_hr_cv_limit": round(deep_cv_limit, 4),
-        "n3_rr_cv_limit": round(deep_rr_cv_limit, 4),
-        "n3_hr_conflict": round(n3_hr_conflict, 4),
-        "n3_rr_conflict": round(n3_rr_conflict, 4),
+        "n3_gate": n3.gate,
+        "n3_baseline_support": n3.baseline_support,
+        "n3_hr_cv_limit": round(n3.hr_cv_limit, 4),
+        "n3_rr_cv_limit": round(n3.rr_cv_limit, 4),
+        "n3_hr_conflict": round(n3.hr_conflict, 4),
+        "n3_rr_conflict": round(n3.rr_conflict, 4),
         "rem_gate": rem_gate,
         "rem_hr_cv_reference": round(rem_cv_limit, 4),
         "rem_rr_irregularity": round(rr_irregularity, 4),

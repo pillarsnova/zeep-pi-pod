@@ -231,6 +231,7 @@ def classify(path: str) -> set[str]:
             profiles.add(f"test:{candidate.name}")
         elif not profiles:
             profiles.add("core")
+        profiles.add("test:test_modular_architecture.py")
     return profiles
 
 

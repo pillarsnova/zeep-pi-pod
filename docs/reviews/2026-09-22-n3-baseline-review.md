@@ -2,7 +2,7 @@
 
 วันที่: 22 กันยายน 2026 · ขอบเขต: Sleep Wellness
 
-สถานะ: **Source candidate สำหรับ Commit/Push — ยังไม่ Deploy/Restart หรือเขียนผลย้อนหลัง**
+สถานะ: **Source candidate — ยังไม่ Deploy/Restart หรือเขียนผลย้อนหลัง**
 
 ## TL;DR
 
@@ -93,6 +93,11 @@ Session ที่กำลังใช้งานไม่รวมในตา
   รวม invalid/missing/non-finite และ reason codes
 - `sleep_stage_scoring.py`: live และ historical scorer ใช้ helper เดียวกัน
   ก่อน N3 gate เดิม เพิ่ม `sleep_evidence.n3_baseline_support` สำหรับ audit
+- `sessions/sleep_n3_evidence.py` / `sessions/sleep_n3_policy.py`: แยก N3
+  physiology และ policy ออกจากไฟล์เดิม โดยคงผลคำนวณและ policy API
+- `presentation/sleep_candidate.py`: รวมข้อความอธิบาย candidate ทั้งห้า State
+- `common/numbers.py`: numeric coercion สำหรับ legacy scoring แบบ opt-in;
+  ไม่เปลี่ยน strict JSON-number helpers ที่ผู้เรียกอื่นใช้อยู่
 - `sleep_system_policy.py`: floor 0.25 และ policy snapshot; estimator v1.30,
   evidence v3.8, baseline v1.9, replay v29, pipeline v1.13
 - `sessions/live_sleep_estimator.py`: แก้คำอธิบายที่เหมารวมว่า RR ต่ำ
@@ -114,15 +119,18 @@ Session ที่กำลังใช้งานไม่รวมในตา
 
 - ทดสอบ helper, synthetic HR/RR-conflict case, constant-RR control, ทุกกลุ่มอายุ,
   invalid values และ waveform/movement gates ร่วมกับ regression เดิม
-- ผ่าน **292 tests**: baseline support, signal features, baseline policy,
-  system consistency, restart context, historical runtime/storage/reclassification,
-  session reports, Recovery guardrails, evidence registry และ documentation
-- Ruff check/format ผ่านสำหรับ helper และ live estimator; registry check ผ่าน
-  33 sources พร้อม Markdown↔JSON lock และ protocol register; `git diff --check` ผ่าน
-- `quality_gate.py changed` ผ่านเพิ่มเติม: 260 tests รวม Session lifecycle,
-  start/finalization/cadence/occupancy และ compilation (มีรายการซ้ำกับชุด 292;
-  ไม่ให้นำสองจำนวนมาบวกเป็นจำนวน test ที่ไม่ซ้ำ)
-- ไม่ได้รัน full application suite หรือ full sequential Raw replay ในรอบนี้
+- Commit แรก `27aaf35` ผ่าน Focused 408 tests แต่ CI Full suite พบ 3
+  architectural failures จากขนาดไฟล์/ฟังก์ชันเกินเพดาน จึงแยกโมดูลเพิ่มเติม
+  โดยไม่เพิ่มเพดานหรือลบข้อกำหนดการตรวจ
+- หลังแก้ `quality_gate.py full` ผ่าน **1,364 tests** ไม่มี failure/error/skip
+  พร้อม UI composer, Ruff check/format, compilation และ `git diff --check`
+- ตรวจ exact score/evidence parity เทียบ `27aaf35` ด้วยข้อมูลจำลอง 2,000 ชุด
+  ตรงกัน 2,000/2,000 รวมตัวอย่าง N3 gate ผ่าน 82 ชุด; policy snapshot ตรงกัน
+  การตรวจนี้ยืนยันเฉพาะ Refactor ไม่ใช่ความแม่นยำ Sleep Stage กับมนุษย์
+- Focused gate เพิ่ม architectural checks เมื่อแก้ Python source เพื่อพบปัญหา
+  ก่อน Push โดยไม่บังคับ Full suite ทุกครั้ง
+- Registry check ผ่าน 35 sources พร้อม Markdown↔JSON lock และ protocol register
+- ไม่ได้รัน full sequential Raw replay หรือ browser viewport QA ในรอบนี้
 - ไม่ Restart, ไม่เปลี่ยน Raw, ไม่เขียนฐานข้อมูลหรือผลคะแนนบน Pod
 
 ## หลักฐานอ้างอิง
@@ -131,13 +139,8 @@ Session ที่กำลังใช้งานไม่รวมในตา
 `health_reference.baseline_context` และแสดงใน Admin จาก snapshot ของ Session
 ดูรายละเอียดและตารางแยกชาย/หญิงที่ [Baseline](../zeep-sleep-state-baseline-v1.8.md)
 ไม่เปลี่ยน HR/RR ranges เดิมจาก BMI; ยังไม่ Deploy และไม่ Rerun ผลจริง
-ทะเบียนหลังเพิ่ม HLT-005/006 มี 35 รายการ ส่วนผลตรวจ 33 รายการข้างต้นเป็น
-หลักฐานรอบก่อนเพิ่ม demographic context ไม่ใช่จำนวนปัจจุบัน
-หลังเพิ่มส่วนนี้ `quality_gate.py changed` ผ่าน **408 tests** พร้อม lint/format,
-UI composer, registry และ compilation; frontend suite แยกผ่าน **68 tests**
-(มีการรันซ้ำผ่าน wrapper ใน focused gate ไม่ให้นับบวกรวมเป็นจำนวนที่ไม่ซ้ำ)
-การตรวจนี้เป็น synthetic/code verification ไม่ใช่ browser viewport QA หรือ
-การทดสอบความแม่นยำ N3 กับมนุษย์จริง
+ทะเบียนหลังเพิ่ม HLT-005/006 มี 35 รายการ ผลตรวจล่าสุดอยู่ใน Verification
+ข้างต้น ไม่บวกจำนวน Focused tests ซ้ำเข้ากับ Full suite
 
 ทะเบียนและข้อจำกัดรายแหล่ง: [Source Register](../../research/evidence-library/SOURCE_REGISTER.md)
 

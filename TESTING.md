@@ -32,6 +32,8 @@ Domain ที่รองรับ: `core`, `ui`, `sensor`, `control`, `sleep`, 
 
 Focused gate เลือกตาม domain และเพิ่ม test ที่ตรงชื่อ module เสมอ แม้มี domain
 อื่นครอบอยู่แล้ว เพื่อไม่ให้การย้ายไฟล์ไป `sessions/` กลบ Sleep/AI privacy tests
+การแก้ Python source เพิ่ม `test_modular_architecture.py` ใน Focused gate เสมอ
+เพื่อพบไฟล์หรือฟังก์ชันที่เกินขอบเขตก่อน Push ไม่ต้องรอ Full suite บน CI
 การตรวจ Git รวมไฟล์ที่ลบด้วย; เมื่อลบ test จะใช้ Full gate เพื่อตรวจส่วนที่เหลือ
 แทนการพยายาม import test ที่ไม่มีแล้ว และจะไม่ compile source ที่ลบไป
 

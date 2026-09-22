@@ -11,10 +11,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from sessions.sleep_n3_policy import SLEEP_N3_MIN_AXIS_BASELINE_FIT, n3_policy_snapshot
+
 # Every persisted decision/report carries these versions for provenance.
-SLEEP_PIPELINE_CONTRACT_VERSION = (
-    "zeep-sleep-health-pipeline-v1.13-paired-n3-baseline"
-)
+SLEEP_PIPELINE_CONTRACT_VERSION = "zeep-sleep-health-pipeline-v1.13-paired-n3-baseline"
 SLEEP_ESTIMATOR_VERSION = "bcg-audio-bed-5state-v1.30-paired-n3-baseline"
 SLEEP_EVIDENCE_VERSION = "zeep-sleep-state-evidence-v3.8-paired-n3-baseline"
 ZEEP_SLEEP_BASELINE_VERSION = "zeep-sleep-state-baseline-v1.9-paired-n3-fit"
@@ -26,9 +26,7 @@ PERSONAL_REST_WINDOW_BASELINE_VERSION = (
 )
 ZEEP_SLEEP_TRANSITION_POLICY_VERSION = "zeep-semimarkov-30s-v1.18-scoreable-continuity"
 SLEEP_G2_ONTOLOGY_VERSION = "g2-aasm-5class-v1.0"
-SLEEP_HISTORY_BACKFILL_VERSION = (
-    "zeep-sleep-history-reclass-v29-paired-n3-baseline"
-)
+SLEEP_HISTORY_BACKFILL_VERSION = "zeep-sleep-history-reclass-v29-paired-n3-baseline"
 SESSION_REPORT_VERSION = "zeep-session-report-v10.12-minimum-only-score-release"
 SLEEP_QUALITY_VERSION = "zeep-rest-quality-v8.10-minimum-only-score-release"
 PRE_MINIMUM_ONLY_SESSION_REPORT_VERSION = (
@@ -191,13 +189,6 @@ ZEEP_ON_BED_LABELS = frozenset(
     }
 )
 ZEEP_ON_BED_STATUS_CODES = frozenset({0, 2, 3, 5})
-
-# Absolute axis proximity floor for N3 evidence. This is a broad engineering
-# compatibility guard, not a physiological cutoff or a 25% N3 probability.
-# In-range values have fit >= 0.863 under baseline_interval_proximity; 0.25
-# deliberately tolerates some distance beyond each interval. A merely nearest
-# range cannot pass when HR or RR is far from every sleep-stage reference.
-SLEEP_N3_MIN_AXIS_BASELINE_FIT = 0.25
 
 # Broad, overlapping population priors used until sufficient personal history
 # exists. They are engineering references for a contactless Wellness estimate,
@@ -1493,9 +1484,7 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "evidence": SLEEP_EVIDENCE_VERSION,
             "baseline": ZEEP_SLEEP_BASELINE_VERSION,
             "personal_behaviour_baseline": PERSONAL_BEHAVIOUR_BASELINE_VERSION,
-            "personal_rest_window_baseline": (
-                PERSONAL_REST_WINDOW_BASELINE_VERSION
-            ),
+            "personal_rest_window_baseline": PERSONAL_REST_WINDOW_BASELINE_VERSION,
             "transition": ZEEP_SLEEP_TRANSITION_POLICY_VERSION,
             "g2_ontology": SLEEP_G2_ONTOLOGY_VERSION,
             "historical_replay": SLEEP_HISTORY_BACKFILL_VERSION,
@@ -1558,14 +1547,7 @@ def sleep_policy_snapshot() -> dict[str, Any]:
             "safety_supervisor_seconds": 1.0,
         },
         "minimum_dwell_seconds": dict(SLEEP_STAGE_MIN_DWELL_SECONDS),
-        "n3_baseline_support": {
-            "minimum_axis_fit": SLEEP_N3_MIN_AXIS_BASELINE_FIT,
-            "both_hr_and_rr_required": True,
-            "rr_rate_drop_required": False,
-            "nap_n3_prohibited": False,
-            "engineering_guard_not_clinical_normal_range": True,
-            "existing_continuity_policy_unchanged": True,
-        },
+        "n3_baseline_support": n3_policy_snapshot(),
         "sleep_onset_guard": {
             "minimum_observation_seconds": SLEEP_ONSET_MIN_OBSERVATION_SECONDS,
             "maximum_movement_ratio": SLEEP_ONSET_MAX_MOVEMENT_RATIO,

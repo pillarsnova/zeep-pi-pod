@@ -1,8 +1,7 @@
 """Canonical numeric coercion helpers.
 
-These helpers intentionally accept only already-decoded JSON numbers.  They do
-not parse numeric strings because transport validation belongs at each API or
-device boundary.
+Strict helpers accept only already-decoded JSON numbers. Legacy scoring can
+explicitly opt into finite numeric coercion without changing strict callers.
 """
 
 from __future__ import annotations
@@ -22,6 +21,15 @@ def as_finite_number(value: Any) -> float | None:
     """Return a finite JSON number while rejecting booleans and NaN/Inf."""
     number = as_number(value)
     return number if number is not None and math.isfinite(number) else None
+
+
+def coerce_finite_number(value: Any, default: float = 0.0) -> float:
+    """Preserve legacy scoring coercion, including numeric strings and booleans."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return number if math.isfinite(number) else default
 
 
 def number_in_range(

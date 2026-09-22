@@ -10,6 +10,7 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
+from presentation.sleep_candidate import sleep_candidate_reason
 from sessions.live_sleep_runtime import LiveSleepRuntime
 
 
@@ -959,18 +960,8 @@ def estimate_sleep_state(runtime: LiveSleepRuntime) -> dict[str, Any]:
         reason_bits.append("Bed Status พบ weak-breathing context")
     if auxiliary_evidence["bed_status"]["snoring_frames"]:
         reason_bits.append("Bed Status พบ snoring context")
-    if decision_candidate == "wake":
-        reason_bits.append("หลักฐานใกล้ Awake baseline เด่นที่สุด")
-    elif decision_candidate == "n1":
-        reason_bits.append("หลักฐานกำลังลดจาก Awake baseline และอยู่ในช่วงเปลี่ยนผ่าน")
-    elif decision_candidate == "n2":
-        reason_bits.append("หลักฐาน HR/RR และ BCG คงที่ต่อเนื่อง")
-    elif decision_candidate == "n3":
-        reason_bits.append(
-            "ชีพจรและการหายใจสอดคล้องกับช่วงอ้างอิง N3 พร้อมหลักฐานความนิ่งและการหายใจสม่ำเสมอ"
-        )
-    elif decision_candidate == "rem":
-        reason_bits.append("RR แปรปรวนบนเตียงที่นิ่งและ REM gate ผ่าน")
+    if candidate_reason := sleep_candidate_reason(decision_candidate):
+        reason_bits.append(candidate_reason)
     if environment["lux"] is not None:
         reason_bits.append(f"แสงเฉลี่ย {environment['lux']:.0f} lux")
     if environment["sound_dba"] is not None:

@@ -20,6 +20,7 @@
 | Source | หน้าที่หลัก |
 | --- | --- |
 | `shell.html` | Header, identity, navigation, fullscreen, page heading และสถานะข้อมูลร่วม |
+| `smart-senses.html` | ขอบเขต Smart Senses แบบพับเก็บใน Monitor; ไม่ใช่สถานะออนไลน์หรือค่าจำลอง ใช้ `static/styles/smart-senses.css` |
 | `styles.css` | Base layout และ component styles ก่อน theme overrides |
 | `scripts/00-product-copy-alerts.js` | Product copy, icon helpers และ alert presentation |
 | `scripts/01-runtime-safety.js` | Runtime state, safety, profile และ sleep presentation |

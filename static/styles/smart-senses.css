@@ -1,0 +1,79 @@
+/* Product scope only. Live quality remains in the existing sensor panels. */
+#smartSensesOverview {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding: 0;
+  color: var(--text);
+  border-color: var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-soft);
+  font-size: 14px;
+  line-height: 1.6;
+}
+body[data-view="monitor"] #smartSensesOverview { order: 6; }
+body[data-view="monitor"] #journeyCard { order: 8; }
+#smartSensesOverview > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 22px;
+  cursor: pointer;
+  list-style: none;
+}
+#smartSensesOverview > summary::-webkit-details-marker { display: none; }
+#smartSensesOverview > summary::after {
+  content: '+';
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 22px;
+}
+#smartSensesOverview[open] > summary::after { content: '−'; }
+#smartSensesOverview strong { font-size: 18px; font-weight: 650; }
+#smartSensesOverview .senses-subtitle { display: block; font-size: 13px; color: var(--muted); }
+#smartSensesOverview .ui-icon { width: 20px; height: 20px; color: var(--cyan); flex: none; }
+#smartSensesOverview .senses-summary-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+#smartSensesOverview .senses-body { padding: 0 22px 22px; }
+#smartSensesOverview p { margin: 0; color: var(--muted); }
+#smartSensesOverview .senses-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+#smartSensesOverview article {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel2);
+  overflow-wrap: anywhere;
+}
+#smartSensesOverview h4 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+#smartSensesOverview h4 small { font-size: 11px; font-weight: 400; color: var(--muted); }
+#smartSensesOverview .senses-tag { display: block; margin-top: 12px; font-size: 12px; color: var(--muted); }
+#smartSensesOverview .senses-context { color: var(--text); }
+#smartSensesOverview .senses-note { display: block; margin-top: 8px; font-size: 12px; color: var(--muted); }
+#smartSensesOverview summary:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+#journeyCard .journey-kicker { display: block; color: var(--cyan); font-size: 11px; letter-spacing: .08em; }
+@media (max-width: 480px) {
+  #smartSensesOverview > summary { padding: 16px; }
+  #smartSensesOverview .senses-body { padding: 0 16px 16px; }
+  #smartSensesOverview .senses-summary-icon { display: none; }
+}

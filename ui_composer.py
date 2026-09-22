@@ -29,7 +29,11 @@ PARTIALS = {
     "aroma-zone": "aroma.html",
 }
 MARKER = "<!-- ZEEP_PARTIAL:control/{name} -->"
-HTML_PARTIALS = ("app/shell.html", "app/adaptive-journey.html")
+HTML_PARTIALS = (
+    "app/shell.html",
+    "app/smart-senses.html",
+    "app/adaptive-journey.html",
+)
 HTML_MARKER = "<!-- ZEEP_PARTIAL:{name} -->"
 INLINE_MARKER = "/* ZEEP_PARTIAL:{name} */"
 STYLE_PARTIAL = "app/styles.css"

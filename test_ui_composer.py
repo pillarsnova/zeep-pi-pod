@@ -8,6 +8,26 @@ import ui_composer
 
 
 class UiComposerTests(unittest.TestCase):
+    def test_smart_senses_scope_preserves_the_audio_module_and_live_views(self):
+        runtime = ui_composer.render()
+        overview = (
+            ui_composer.STATIC / "partials/app/smart-senses.html"
+        ).read_text(encoding="utf-8")
+        self.assertEqual(runtime.count('id="smartSensesOverview"'), 1)
+        self.assertIn('data-pages="monitor" data-admin-panel', overview)
+        self.assertNotIn('<details open', overview)
+        for domain in ("ear", "eyes", "nose", "skin", "voice"):
+            self.assertIn(f'data-sense="{domain}"', overview)
+        self.assertIn("ยังไม่เปิดใช้งาน", overview)
+        self.assertIn("ไม่ใช่สถานะออนไลน์", overview)
+        self.assertNotIn("fetch(", overview)
+        self.assertNotIn("onclick=", overview)
+        self.assertIn("SMART SENSES · SMART EAR", runtime)
+        self.assertIn('id="acousticIntelligenceCard"', runtime)
+        self.assertIn('id="sensorIntegrityCard"', runtime)
+        self.assertIn('/api/v1/admin/acoustics/timeline', runtime)
+        self.assertIn('/static/styles/smart-senses.css?', runtime)
+
     def test_local_preview_reuses_theme_and_cannot_serve_private_files(self):
         path = ui_composer.STATIC.parent / "tests/frontend/preview_theme.py"
         spec = importlib.util.spec_from_file_location("preview_theme_test", path)
@@ -18,6 +38,11 @@ class UiComposerTests(unittest.TestCase):
         self.assertIn("/static/styles/adaptive-journey.css?", html)
         self.assertIn('class="ui-icon-sprite"', html)
         self.assertIn("ข้อมูลจำลอง", html)
+        self.assertIn('data-role="user"', html)
+        self.assertIn(
+            'data-role="admin"',
+            preview.preview_page("<p>fixture</p>", "", view="monitor"),
+        )
         self.assertNotIn("connectWS();", html)
         self.assertIsNone(preview.static_asset("/static/../app.py"))
         self.assertIsNone(preview.static_asset("/static/index.html"))

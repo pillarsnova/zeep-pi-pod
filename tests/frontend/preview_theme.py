@@ -19,13 +19,14 @@ def preview_page(content: str, scripts: str, *, view: str = "monitor") -> str:
         r'<svg class="ui-icon-sprite".*?</svg>', template, re.DOTALL
     ).group(0)
     heading = "ประวัติการใช้งาน" if view == "sessions" else "ติดตามระบบและการพัก"
+    role = "user" if view == "sessions" else "admin"
     return f"""<!doctype html><html lang="th"><head>{head}
     <style>
     .preview-nav{{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}}
     .preview-nav a{{text-decoration:none}}
     .preview-note{{color:var(--muted);font-size:13px;margin:12px 0 20px}}
     .preview-content{{display:grid;gap:20px;min-width:0}}
-    </style></head><body data-view="{view}">{sprite}<main class="wrap">
+    </style></head><body data-view="{view}" data-role="{role}">{sprite}<main class="wrap">
     <header class="page-heading"><div><div class="page-kicker">ZEEP</div>
     <h2>{heading}</h2><p>ตัวอย่างหน้าจอสำหรับตรวจรูปแบบและการใช้งาน</p></div>
     <span class="pill warn">ข้อมูลจำลอง</span></header>

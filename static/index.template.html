@@ -23,6 +23,7 @@
   <link rel="stylesheet" href="/static/styles/connection-state.css?v=20260919-1" />
   <link rel="stylesheet" href="/static/styles/result-summary.css?v=20260919-2" />
   <link rel="stylesheet" href="/static/styles/adaptive-journey.css?v=20260922-2" />
+  <link rel="stylesheet" href="/static/styles/smart-senses.css?v=20260922-1" />
 </head>
 <body>
 <!-- Shared line-icon library: every interactive view reuses the same 24 px
@@ -297,8 +298,9 @@
       <span>02</span><div><h3>ผู้ใช้งานและข้อมูลสด</h3><p>สัญญาณชีพ สถานะการพัก และข้อมูลอ้างอิงที่กำลังใช้</p></div>
     </header>
     <header class="monitor-section-heading monitor-section-environment" id="monitorEnvironmentHeading" data-pages="monitor">
-      <span>03</span><div><h3>สภาพแวดล้อมและคำแนะนำ</h3><p>สิ่งที่ควรปรับตามรูปแบบการพักและข้อมูลอ้างอิงของผู้ใช้</p></div>
+      <span>03</span><div><h3>Smart Senses · สภาพแวดล้อมและคำแนะนำ</h3><p>เชื่อมข้อมูลหลายเซนเซอร์กับรูปแบบการพักของผู้ใช้</p></div>
     </header>
+    <!-- ZEEP_PARTIAL:app/smart-senses.html -->
     <header class="monitor-section-heading monitor-section-advanced" id="monitorAdvancedHeading" data-pages="monitor">
       <span>04</span><div><h3>ข้อมูลเชิงเทคนิค</h3><p>รุ่นโมเดล สัญญาณ BCG การปรับเทียบ และข้อมูลอุปกรณ์</p></div>
     </header>
@@ -668,7 +670,7 @@
     </section>
     <section class="card acoustic-shadow-card" id="acousticIntelligenceCard" data-pages="monitor" data-admin-panel aria-labelledby="acousticIntelligenceTitle">
       <div class="acoustic-card-head">
-        <div class="acoustic-card-title"><span class="acoustic-orb" aria-hidden="true">⌁</span><div><em>SMART EAR</em><h3 id="acousticIntelligenceTitle">เหตุการณ์เสียงภายใน ZEEP</h3><p>ดูระดับเสียงและลักษณะเสียงที่ตรวจพบ พร้อมเวลาที่เกิด</p></div></div>
+        <div class="acoustic-card-title"><span class="acoustic-orb" aria-hidden="true">⌁</span><div><em>SMART SENSES · SMART EAR</em><h3 id="acousticIntelligenceTitle">เหตุการณ์เสียงภายใน ZEEP</h3><p>ดูระดับเสียงและลักษณะเสียงที่ตรวจพบ พร้อมเวลาที่เกิด</p></div></div>
         <span class="acoustic-status-badge" id="acousticStatusBadge">รอข้อมูลเสียง</span>
       </div>
       <div class="acoustic-summary-grid" aria-live="polite">
@@ -709,7 +711,7 @@
           <div><span>Level detector</span><b id="acousticDetectorVersion">rule --</b></div>
           <div><span>SPH0645 window</span><b id="acousticWindowFeatures">รอค่า RMS / Peak</b></div>
           <div><span>DSP classifier</span><b id="acousticDspStatus">รอข้อมูลจำแนกเสียง</b></div>
-          <div><span>ผลต่อคะแนน/Control</span><b>ไม่มี</b></div>
+          <div><span>ผลของป้ายจำแนกเสียง</span><b>ไม่เปลี่ยนคะแนนหรือสั่งอุปกรณ์</b></div>
         </div>
         <p class="acoustic-metrology-note">ค่าเฉลี่ยคำนวณจากพลังงานของค่าที่ Sensor ส่งในแต่ละรอบ ไม่ใช่ค่า LAeq(A) จากเครื่องวัดที่ผ่านการรับรอง</p>
       </details>

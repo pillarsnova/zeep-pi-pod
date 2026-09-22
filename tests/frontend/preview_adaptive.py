@@ -11,12 +11,18 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from preview_theme import preview_page, static_asset
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from adaptive.journey import build_journey, command_events, normalize_samples
-from adaptive.outcomes import compare_commands
-from preview_theme import preview_page, static_asset
+# Direct script execution needs the project root for the production builders.
+from adaptive.journey import (  # noqa: E402
+    build_journey,
+    command_events,
+    normalize_samples,
+)
+from adaptive.outcomes import compare_commands  # noqa: E402
 
 now = time.time()
 samples = [
@@ -71,6 +77,9 @@ data = {
 
 def page(view: str = "monitor", mode: str = "nap") -> str:
     panel = (ROOT / "static/partials/app/adaptive-journey.html").read_text()
+    if view == "monitor":
+        overview = (ROOT / "static/partials/app/smart-senses.html").read_text()
+        panel = overview + panel
     scripts = ROOT / "static/partials/app/scripts"
     result = ""
     script = (

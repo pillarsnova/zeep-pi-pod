@@ -5,6 +5,10 @@
 ต้องตรวจจาก health/version response และ closure record ของ release นั้น
 ขอบเขต: Pi 5 runtime, Sensor Hub 1/2, BCG, Control Hub 1/2, Audio และ GPIO
 
+ภาพรวมผลิตภัณฑ์ใช้ชื่อ [Smart Senses](smart-senses.md): Smart Ear เป็นส่วนเสียง
+ส่วนแสง อากาศ และความสบายใช้ sensor เดิมตามผังนี้ การเปลี่ยนชื่อไม่เพิ่ม
+thermal camera, radar, e-nose หรือการรับคำสั่งเสียงเข้า hardware ที่ติดตั้งอยู่
+
 แผนรุ่นถัดไปแยกไว้ที่
 [เซนเซอร์สำรองและการขยายระบบอุปกรณ์](../zeep-redundant-sensors-and-device-expansion-v1.md)
 ครอบคลุม Hub/Power/Air/Film, Ion/Ozone, Foot Warmer และระบบน้ำ โดยมีสถานะ

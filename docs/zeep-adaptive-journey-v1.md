@@ -1,5 +1,8 @@
 # ZEEP Adaptive Journey v1
 
+เป็นส่วนเชื่อมข้อมูลภายใต้ [Smart Senses](onboarding/smart-senses.md)
+ใช้หลายเซนเซอร์ คำสั่งอุปกรณ์ และความเห็นผู้พักร่วมกัน โดยคง API และข้อกำหนดเดิม
+
 สถานะ: **Implementation candidate · ยังไม่ Deploy**
 
 22 กันยายน 2026 · ฐานโค้ด `78e90fc` · ทั้ง Overnight และ Nap & Refresh

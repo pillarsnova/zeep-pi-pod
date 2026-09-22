@@ -64,13 +64,15 @@
 | Product language | [Product Language Guideline v1.2](zeep-product-language-guideline-v1.md) | คำสั้น กระชับ เป็นมิตร และไม่วินิจฉัย; [ผลตรวจเนื้อหา 19 ก.ย.](reviews/2026-09-19-interface-content-review.md) |
 | Interface map และ UI | [Interface Map & UI Standard v1](zeep-interface-map-and-ui-standard-v1.md) | หน้าที่ทุกหน้า ลำดับข้อมูล Touch/Type/Icon และ viewport QA |
 | Interface development | [UI Development Roadmap](zeep-interface-development-roadmap.md) | แผนร่วมเทคนิค/UX/ข้อมูล/ศิลปะ, สถานะจริง, คำไทย และงาน P0–P2 พร้อมเกณฑ์รับงาน |
-| Acoustic Intelligence | [หูอัจฉริยะ · DSP Plan](onboarding/smart-ear-dsp-plan.md) | Level timeline และ Firmware DSP markers เป็น **ADMIN SHADOW**; การรับรองราย class และผลผู้ใช้ยังเป็น ROADMAP |
+| Smart Senses | [ภาพรวมหลายเซนเซอร์](onboarding/smart-senses.md) | ขอบเขตปัจจุบัน ห้าด้าน แผน R&D และข้อแตกต่างจากพิมพ์เขียวภายนอก |
+| Smart Ear / Acoustic Intelligence | [โมดูลเสียง · DSP Plan](onboarding/smart-ear-dsp-plan.md) | ส่วนหนึ่งของ Smart Senses; Level timeline และ Firmware DSP markers เป็น **ADMIN SHADOW** |
 | Firmware | [Firmware Index](../firmware/README.md) | Sensor Hub 1 source, DSP, calibration และขั้นตอน Flash/rollback |
 | Pilot สองโหมด | [Pilot Two-Mode Protocol](zeep-pilot-two-mode-protocol.md) | Overnight Recovery และ Nap & Refresh |
 | Evidence library | [Research Evidence Library](../research/evidence-library/README.md) | แหล่งอ้างอิง, checksum และ verification |
 
 ## หลักฐาน Regression ที่ยังใช้งาน
 
+- [Smart Senses Integration · 22 September 2026](reviews/2026-09-22-smart-senses-integration.md)
 - [Interface Roadmap Review · 19 September 2026](reviews/2026-09-19-interface-roadmap-review.md)
 - [Runtime Multi-agent Audit · 19 September 2026](reviews/2026-09-19-runtime-audit.md)
 - [ผล Rerun และ Sync · 19 September 2026](reviews/2026-09-19-after-rest-rerun.md)

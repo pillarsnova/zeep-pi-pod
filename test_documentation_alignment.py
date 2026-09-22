@@ -43,6 +43,21 @@ def current_markdown_files() -> list[Path]:
 
 
 class DocumentationAlignmentTests(unittest.TestCase):
+    def test_smart_senses_is_the_umbrella_not_a_firmware_or_api_rename(self):
+        guide = (ROOT / "docs/onboarding/smart-senses.md").read_text(
+            encoding="utf-8"
+        )
+        for reference in (
+            "Smart Ear เป็นโมดูลเสียง",
+            "/api/v1/adaptive/sessions/{session_id}",
+            "/api/v1/admin/acoustics/timeline",
+            "zeep-pod-acoustic-design.html",
+            "ไม่ได้แก้หน้าเว็บไซต์ต้นทาง",
+        ):
+            self.assertIn(reference, guide)
+        for name in ("README.md", "docs/README.md", "docs/onboarding/README.md"):
+            self.assertIn("smart-senses.md", (ROOT / name).read_text())
+
     def test_onboarding_is_the_primary_human_entry_point(self) -> None:
         root_readme = (ROOT / "README.md").read_text(encoding="utf-8")
         docs_index = (ROOT / "docs" / "README.md").read_text(encoding="utf-8")

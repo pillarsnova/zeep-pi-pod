@@ -17,6 +17,12 @@
 ## เริ่มอ่านจากตรงไหน
 
 **สรุปงานล่าสุด 22 กันยายน:**
+[Smart Senses — การรับรู้หลายเซนเซอร์](smart-senses.md) เป็นภาพรวมผลิตภัณฑ์
+โดยมี Smart Ear เป็นโมดูลเสียง ขยายข้อมูลและหน้าจอให้ตรงกับระบบที่มีจริง
+แยกแผนเซนเซอร์ใหม่/Voice ออกจากความสามารถปัจจุบัน ไม่เปลี่ยนคะแนนหรือ API
+หน้าจอชุดนี้อยู่ใน `1bc988e` ดู [ผลตรวจรอบ Smart Senses](../reviews/2026-09-22-smart-senses-integration.md)
+ยังไม่ได้ Deploy/Restart หรือ Flash ในรอบนี้
+
 [Adaptive Journey และแผนขยายเซนเซอร์](adaptive-journey-and-sensor-expansion.md)
 รวมภาพรวม 4 ขั้น หน้าจอ API โครงสร้างโค้ด BOM ผลทดสอบ และงานถัดไปตามบทบาท
 
@@ -43,8 +49,9 @@
 6. [Adaptive Journey และแผนขยายเซนเซอร์](adaptive-journey-and-sensor-expansion.md) —
    งานล่าสุดที่ทีมจะต่อยอด พร้อมหลักฐาน Commit/CI และรายการที่ยังต้องทดสอบจริง
 
-สำหรับทีม Sensor, Firmware, Data/ML, Monitor หรือ Product ที่จะพัฒนาเสียง ให้อ่าน
-[หูอัจฉริยะ · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md) เพิ่ม เอกสารนี้
+สำหรับทีม Sensor, Firmware, Data/ML, Monitor หรือ Product ให้อ่าน
+[Smart Senses](smart-senses.md) ก่อน แล้วเลือก domain ที่รับผิดชอบ
+ส่วนเสียงอ่าน [Smart Ear · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md) เพิ่ม เอกสารนี้
 มี **P1 ADMIN SHADOW** สำหรับ level timeline และ Firmware DSP marker;
 มีหลักฐานติดตั้ง Firmware และรับ features บน Pod 1 แล้ว แต่ป้ายแหล่งเสียงยังเป็น
 ผลชั่วคราว ไม่ใช่ classifier ที่ยืนยันความแม่นยำหรือผลสุขภาพสำหรับผู้ใช้
@@ -111,7 +118,7 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 | API สำหรับ App | [ZEEP API v1](../zeep-api-v1.md), [Schema Reference](../zeep-api-schema-reference-v1.md), Pydantic models และ `/openapi.json` ของ release ที่ deploy |
 | Sensor field/range/provenance | [Sensor Interface Contract](../zeep-sensor-interface-contract-v1.2.md) และ [`sensors/contracts.py`](../../sensors/contracts.py) |
 | Tech stack, database และเครื่องมือ | [Technology Stack, Data และเครื่องมือ](technology-stack-and-tools.md) เป็น orientation; runtime ยึด requirements/config/service จริง |
-| แผนจำแนกเสียง/DSP | [หูอัจฉริยะ · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md) และ [Validation Protocol](../../research/evidence-library/ACOUSTIC_INTELLIGENCE_VALIDATION.md); P1-shadow รองรับ marker ฝั่ง Pi และ Firmware ใช้ Production Flash เพื่อเก็บหลักฐานจริงได้ตาม workflow ที่มี backup/rollback |
+| Smart Senses / โมดูลเสียง | [ภาพรวมหลายเซนเซอร์](smart-senses.md), [Smart Ear · DSP Plan](smart-ear-dsp-plan.md) และ [Validation Protocol](../../research/evidence-library/ACOUSTIC_INTELLIGENCE_VALIDATION.md); ยังแยก R&D จาก ADMIN SHADOW และข้อมูลจริง |
 | Test/release gate | [TESTING.md](../../TESTING.md) |
 | Pull, Sync, Deploy, Backup | [Pi 5 Operations Runbook](../pi5-operations-runbook.md) |
 | คำที่แสดงต่อผู้ใช้ | [Product Language Guideline](../zeep-product-language-guideline-v1.md) |
@@ -166,7 +173,8 @@ Onboarding สรุปเส้นทาง ไม่ทำสำเนาร�
 | Restore Summary | คำอธิบายคะแนนหลัก ไม่ใช่คะแนนที่สาม |
 | OFF BED | Occupancy exception แยกจาก Wake และไม่เข้า Sleep Stage ratio |
 | Shadow | คำแนะนำ/การประเมินที่ไม่มีสิทธิ์สั่ง Hardware |
-| Acoustic Intelligence | P1-shadow แสดงระดับเสียงและ optional Firmware DSP marker ให้ Admin; ไม่ส่ง Raw audio ไม่ฟัง/ถอดเนื้อหาคำพูด และไม่กระทบ State/Score/Control |
+| Smart Senses | ภาพรวมเสียง แสง อากาศ ความสบาย และบริบทการพักร่วมกัน; ไม่ใช่การรับรองว่าติดตั้ง hardware ในแผนแล้ว |
+| Smart Ear / Acoustic Intelligence | โมดูลเสียงของ Smart Senses; P1-shadow แสดง DSP marker ให้ Admin ไม่ถอดคำพูด ป้ายไม่เปลี่ยน State/Score/Control โดยตรง; เกณฑ์ระดับเสียงเดิมยังทำงาน |
 | Email-first identity | ใช้ email ที่ยืนยันได้ก่อน; ข้อมูลเก่าอาจยังใช้ normalized legacy account key โดยมี alias ที่ตรวจสอบแล้ว |
 
 ## พร้อมรับงานชิ้นแรกเมื่อ

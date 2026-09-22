@@ -1,4 +1,9 @@
-# ZEEP หูอัจฉริยะ — Acoustic Intelligence DSP Plan
+# ZEEP Smart Senses · Smart Ear — Acoustic Intelligence DSP Plan
+
+Smart Ear เป็นโมดูลเสียงภายใน [Smart Senses](smart-senses.md) ไม่ใช่ขอบเขตทั้งหมด
+ของระบบ อ่านภาพรวมเพื่อเชื่อมเสียงกับแสง อากาศ ความสบาย และบริบท HR/RR
+ชื่อไฟล์ URL, API, field และ firmware เดิมคงไว้เพื่อความเข้ากันได้
+ทบทวนชื่อและขอบเขต 22 กันยายน 2026; หลักฐานอุปกรณ์ด้านล่างคงวันที่ตรวจเดิม
 
 สถานะ: **P1 ADMIN SHADOW · DSP telemetry พบแล้วบน Pod 1 · ยังไม่รับรอง class accuracy**
 
@@ -39,7 +44,7 @@ confidence, provenance และทางเลือก `unknown`
 
 แยกการแสดงผลเป็นสองระดับ:
 
-1. **Monitor · SMART EAR** — แสดงกราฟระดับเสียงตลอด Session, ค่าเฉลี่ย/สูงสุด,
+1. **Monitor · SMART SENSES / SMART EAR** — แสดงกราฟระดับเสียงตลอด Session, ค่าเฉลี่ย/สูงสุด,
    Coverage และช่วงที่ตรวจสอบย้อนกลับได้ เช่น ค่าระดับเปลี่ยนระหว่างจุดวัด
    ค่าสูงหลายจุดติดกัน
    หรือข้อมูลขาดช่วง

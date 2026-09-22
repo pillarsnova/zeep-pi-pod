@@ -1,5 +1,9 @@
 # ZEEP v1 — Technology Stack, Data และเครื่องมือ
 
+ชื่อภาพรวมการรับรู้หลายเซนเซอร์คือ [Smart Senses](smart-senses.md)
+Smart Ear เป็นโมดูลเสียง ใช้ stack เดิม ไม่มีการเพิ่ม ASR/TTS, ML runtime
+หรือ dependency ใหม่จากการปรับชื่อและเอกสารรอบ 22 กันยายน 2026
+
 สถานะ: **Current implementation · Internal Pilot / freeze candidate**
 
 ขอบเขต: Pi 5 runtime, Web UI, local data, device integration, QA และ Operations

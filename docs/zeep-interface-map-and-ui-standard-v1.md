@@ -72,14 +72,18 @@ User และ Admin ใช้ Control deck เดียวกัน Admin เ�
 2. Safety และ Sensor integrity
 3. Live physiology และคำอธิบายเฉพาะข้อสังเกต
 4. Personal Reference/Adaptive recommendation
-5. สภาพแวดล้อม
-6. Smart Ear · Level Timeline และ DSP markers แบบชั่วคราวสำหรับผู้ดูแล
+5. Smart Senses · สภาพแวดล้อม ขอบเขตระบบแบบพับเก็บ และคำแนะนำ
+6. Smart Ear · โมดูลเสียง พร้อม Level Timeline และ DSP markers แบบชั่วคราวสำหรับผู้ดูแล
 7. ข้อมูลเชิงเทคนิค (Advanced Diagnostics) เมื่อผู้ดูแลเปิดดู
 
 Live strip เป็นแหล่งค่าปัจจุบันหลัก ส่วนคำอธิบายและ Reference ต้องไม่ทวนค่าชุดเดิม
 โดยไม่มีบริบทเพิ่ม
 
-“หูอัจฉริยะ” ตาม [Acoustic Intelligence DSP Plan](onboarding/smart-ear-dsp-plan.md)
+ชื่อภาพรวมใช้ [Smart Senses](onboarding/smart-senses.md) และคง Smart Ear
+เป็นชื่อโมดูลเสียง ไม่ใส่ค่าจำลองหรือสถานะออนไลน์ในสรุปขอบเขตระบบ
+รายละเอียด hardware ในแผนแยกชัดเจนจากค่าที่อ่านได้จริง
+
+Smart Ear ตาม [Acoustic Intelligence DSP Plan](onboarding/smart-ear-dsp-plan.md)
 มี Level Timeline และ optional DSP marker แบบ **P1 ADMIN SHADOW** แล้ว
 นอก Session แสดงสดแต่ไม่บันทึก เมื่อไม่มี features กลับเป็น level-only;
 ป้ายเสียงยังไม่ใช่ผลจำแนกที่รับรองความแม่นยำหรือผลสุขภาพในหน้า User

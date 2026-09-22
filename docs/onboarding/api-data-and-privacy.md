@@ -158,7 +158,14 @@ canonical identifier เมื่อมีข้อมูล แต่ยัง�
 - Public/App projection ใช้ positive allowlist: field ใหม่ไม่ออกเองจนผ่าน review
 - `clinical_validated=false` ต้องถูกบังคับใน public v1 แม้ข้อมูลเก่าระบุอย่างอื่น
 
-### Acoustic Intelligence / เสียง
+### Smart Senses และขอบเขตข้อมูล
+
+[Smart Senses](smart-senses.md) เป็นชื่อรวมการรับรู้หลายเซนเซอร์ ไม่ใช่ API
+หรือสิทธิ์ใหม่ ใช้ Adaptive Journey และ Acoustic API เดิมตามตารางข้างต้น
+การแสดงชื่อรวมไม่เปิดเผย labels เสียงให้ User และไม่เพิ่มการเก็บภาพ/เสียงดิบ
+Voice และ thermal ยังเป็นแผน ต้องออกแบบ consent/retention ของตนเองเมื่อพัฒนา
+
+### Smart Ear / Acoustic Intelligence — โมดูลเสียง
 
 Current runtime ไม่มี Raw audio/PCM store; รองรับเฉพาะ provisional DSP label
 จาก ESP32 โดยไม่ถอดเนื้อหาคำพูดหรือระบุตัวบุคคล ระบบเก็บระดับ `sound_dba`

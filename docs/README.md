@@ -1,6 +1,11 @@
 # ZEEP Pi 5 Documentation Index
 
 สรุปงานล่าสุดสำหรับทีม:
+[Smart Senses — โมดูลและจุด Debug](onboarding/smart-senses.md) ·
+[ผลตรวจ Refactor](reviews/2026-09-22-smart-senses-refactor.md)
+(22 กันยายน 2026 · คง API/ผลคำนวณเดิม; ไม่ Deploy ในรอบนี้)
+
+งานก่อนหน้า:
 [Adaptive Journey และแผนขยายเซนเซอร์](onboarding/adaptive-journey-and-sensor-expansion.md)
 (22 กันยายน 2026 · `eaccf32` ขึ้น Git และ CI ผ่านแล้ว; ยังไม่มี Deploy ในรอบนี้)
 รายละเอียดหลัก: [Adaptive Journey 4 ขั้น](zeep-adaptive-journey-v1.md) ·
@@ -72,6 +77,7 @@
 
 ## หลักฐาน Regression ที่ยังใช้งาน
 
+- [Smart Senses Refactor · 22 September 2026](reviews/2026-09-22-smart-senses-refactor.md)
 - [N3 Baseline Review · 22 September 2026](reviews/2026-09-22-n3-baseline-review.md) · source candidate, read-only cohort audit, ยังไม่ Deploy
 - [Smart Senses Integration · 22 September 2026](reviews/2026-09-22-smart-senses-integration.md)
 - [Interface Roadmap Review · 19 September 2026](reviews/2026-09-19-interface-roadmap-review.md)

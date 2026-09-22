@@ -33,6 +33,7 @@ Session นั้น ไม่ใช่คะแนนที่สามหร�
 | Sleep estimator — Pod audit 22 ก.ย. | `bcg-audio-bed-5state-v1.29-complete-occupied-epochs` บน `78e90fc` | core scorer ตรงกับ source ก่อนแก้; มีผู้พักอยู่ ณ เวลาตรวจ |
 | Baseline demographic context — source candidate | `zeep-baseline-demographics-v1.0` | เพศ × อายุ × BMI จาก health snapshot; BMI ใช้จัดกลุ่ม ไม่ปรับ Stage/Score ยังไม่ Deploy |
 | Smart Senses | [ภาพรวมขอบเขต 22 ก.ย.](onboarding/smart-senses.md) | รวมข้อมูลหลายเซนเซอร์และ Adaptive Journey; Voice/thermal/radar/e-nose ยังเป็นแผน ไม่ได้ติดตั้งจากการปรับชื่อ |
+| Smart Senses — Refactor source | [โครงสร้างและผลตรวจ](reviews/2026-09-22-smart-senses-refactor.md) · ฐาน `7a85711` | แยก Timeline, คุณภาพข้อมูล, context และคำแนะนำ; คง API/schema/ผลคำนวณเดิม ไม่ Deploy/Restart ในรอบนี้ |
 | Smart Ear · โมดูลเสียง | Admin DSP shadow; มี telemetry features บน Pod 1 ใน audit `f570a68` | เป็น provisional label ไม่ใช่ผลจำแนกที่รับรองความแม่นยำ |
 
 เวอร์ชันที่เปลี่ยนตาม release ยึด [`sleep_system_policy.py`](../sleep_system_policy.py),

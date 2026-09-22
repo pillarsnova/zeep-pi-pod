@@ -100,6 +100,11 @@ API นี้เพิ่มจาก Usage Session API ไม่แทน endpo
 
 ## แผนที่โค้ดสำหรับพัฒนาและ Debug
 
+ส่วน Monitor ข้อมูลสดแยกจาก Journey ราย Session: `adaptive/learning.py`
+ประกอบผลจาก `features.py`, `learning_quality.py`, `learning_context.py` และ
+`learning_recommendations.py` ดู [Smart Senses module map](smart-senses.md)
+ไม่เพิ่ม endpoint หรือส่งคำสั่งอัตโนมัติจากการย้ายไฟล์
+
 | กลุ่ม | จุดเริ่ม | หน้าที่ |
 | --- | --- | --- |
 | รวมเหตุการณ์ | [`adaptive/journey.py`](../../adaptive/journey.py) | ตรวจค่า เรียงเวลา รวมเหตุการณ์ และจำกัดขนาดผล |

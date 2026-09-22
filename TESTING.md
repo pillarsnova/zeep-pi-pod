@@ -27,7 +27,7 @@ python quality_gate.py full
 ```
 
 Domain ที่รองรับ: `core`, `ui`, `sensor`, `control`, `sleep`, `score`, `session`,
-`auth`, `history`, `data`, `sync`, `evidence`, `adaptive` และ `learning`
+`auth`, `history`, `data`, `sync`, `evidence`, `adaptive`, `acoustics` และ `learning`
 การแก้ไฟล์ Test/Infrastructure จะยกระดับตามความเสี่ยงโดยอัตโนมัติ
 
 Focused gate เลือกตาม domain และเพิ่ม test ที่ตรงชื่อ module เสมอ แม้มี domain
@@ -42,6 +42,9 @@ Focused, Full และ CI ใช้ขอบเขต Ruff เดียวก�
 ภายใน packages เหล่านั้น ส่วน Python ที่เปลี่ยนทุกไฟล์ รวม `app.py`, root facade
 และ tests ยังต้องผ่าน compilation และ regression ที่เกี่ยวข้อง ไม่ขยายการแก้
 legacy style ทั้งไฟล์เป็นส่วนหนึ่งของการ Refactor ย่อย
+
+Smart Senses ใช้ `python quality_gate.py acoustics adaptive` เพื่อตรวจ Timeline,
+คุณภาพข้อมูล คำแนะนำแบบรอยืนยัน และขอบเขตโมดูล; ไม่สั่งอุปกรณ์จริง
 
 ## Focused suites
 

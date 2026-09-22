@@ -32,6 +32,16 @@ class QualityGateSelectionTests(unittest.TestCase):
         plan = self.plan_for("adaptive/features.py")
         self.assertIn("test_adaptive_learning.py", plan)
 
+    def test_smart_senses_modules_keep_their_domain_regressions(self):
+        for path, expected in (
+            ("acoustics/timeline_series.py", "test_acoustic_intelligence.py"),
+            ("adaptive/learning_context.py", "test_adaptive_learning.py"),
+        ):
+            with self.subTest(path=path):
+                plan = self.plan_for(path)
+                self.assertIn(expected, plan)
+                self.assertIn("test_smart_senses_modules.py", plan)
+
     def test_bed_motion_runs_physical_control_failsafe_tests(self):
         plan = self.plan_for("hardware/bed_motion.py")
         self.assertIn("test_control_failsafe.py", plan)

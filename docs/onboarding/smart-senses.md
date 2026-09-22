@@ -10,8 +10,9 @@
 **Smart Ear เป็นโมดูลเสียงภายใน Smart Senses** ชื่อ API, field และ firmware
 เดิมยังใช้ได้ ไม่ต้องย้ายข้อมูลหรือเปลี่ยน client
 
-รอบนี้ปรับข้อมูลและการนำเสนอ ไม่เพิ่มเซนเซอร์ ไม่ Flash ไม่เปลี่ยน Sleep State
-หรือสูตรคะแนน และไม่เปิดการควบคุมอัตโนมัติ ความสามารถใน source ไม่ได้ยืนยัน
+รอบล่าสุดแยกโมดูลการวิเคราะห์และการนำเสนอ โดยคง API และผลลัพธ์เดิม
+ไม่เพิ่มเซนเซอร์ ไม่ Flash ไม่เปลี่ยน Sleep State หรือสูตรคะแนน
+และไม่เปิดการควบคุมอัตโนมัติ ความสามารถใน source ไม่ได้ยืนยัน
 ว่าอุปกรณ์ทุกตัวออนไลน์ ให้ดู Sensor integrity และ provenance ของ Pod จริง
 
 ## 1. ขอบเขตห้าด้าน
@@ -86,6 +87,40 @@ Payload และสิทธิ์ใช้ [API/Data/Privacy](api-data-and-pri
 แต่ module ยังแบ่งตามหน้าที่ ใช้ contract/device identity เดิม และเพิ่ม field
 แบบ backward-compatible เมื่อมีอุปกรณ์จริง
 
+### 4.1 แผนที่โมดูลและจุด Debug
+
+```text
+acoustics/
+  live_timeline.py          อ่านข้อมูล Session ภายใต้ lock เดิม
+  timeline_projection.py   ประกอบผล Timeline; จุดเรียกเดิมยังใช้ได้
+  timeline_series.py       สถิติระดับเสียง ย่อกราฟ และรักษาช่วงข้อมูลขาด
+  timeline_view.py         จัดเหตุการณ์ ข้อความสถานะ และ metadata
+  level_events.py          ตรวจรูปแบบระดับเสียง
+  label_events.py          รวมป้าย DSP จาก Firmware
+
+adaptive/
+  learning.py              ประกอบผลข้อมูลสดสำหรับ Admin
+  features.py              เตรียมค่าจากเซนเซอร์และเทียบข้อมูลอ้างอิง
+  learning_quality.py      คุณภาพข้อมูล ความพร้อม Baseline และข้อจำกัด
+  learning_recommendations.py  รวมและเรียงคำแนะนำ; ไม่มีสิทธิ์ส่งคำสั่ง
+  learning_context.py      ข้อมูล Session สถานะคำสั่ง และที่มาของข้อมูล
+  control_policy.py        ยืนยันว่าคำแนะนำต้องรอผู้ใช้/Admin
+```
+
+- กราฟขาดช่วงหรือสถิติไม่ตรง: เริ่มที่ `timeline_series.py` แล้วตรวจข้อมูลเข้า
+  จาก `live_timeline.py`; ไม่เติมศูนย์เพื่อให้กราฟต่อกัน
+- ป้ายเหตุการณ์หรือจำนวนการ์ด: เริ่มที่ `timeline_view.py`; การตรวจพบจริงยังอยู่
+  ที่ `level_events.py` / `label_events.py` ไม่เปลี่ยนเกณฑ์ในตัวแสดงผล
+- ข้อมูลสด/Baseline ไม่พร้อม: ตรวจ `features.py` และ `learning_quality.py`
+- ลำดับคำแนะนำไม่ตรง: ตรวจ `learning_recommendations.py`; สถานะและข้อมูล
+  คำสั่งอุปกรณ์ใน `learning_context.py` ไม่ใช่หลักฐานว่าอุปกรณ์ทำงานสำเร็จ
+
+จุดเข้าเดิม `build_acoustic_timeline_snapshot()` และ
+`build_adaptive_learning_snapshot()` คงชื่อ signature และ schema เดิม
+โมดูลย่อยไม่อ่านฐานข้อมูล ไม่เรียกเครือข่าย และไม่ควบคุมฮาร์ดแวร์
+ไม่มี migration หรือ Rerun ผลย้อนหลังสำหรับ Refactor นี้
+รายละเอียดผลตรวจ: [Smart Senses Refactor](../reviews/2026-09-22-smart-senses-refactor.md)
+
 ## 5. เทียบเอกสารต้นทางกับโค้ดล่าสุด
 
 แหล่งแนวคิด: [ZEEP Smart Senses — พิมพ์เขียวระบบประสาทสัมผัส](https://monitor.pillarsnova.com/zeep-project/zeep-pod-acoustic-design.html)
@@ -126,4 +161,5 @@ Payload และสิทธิ์ใช้ [API/Data/Privacy](api-data-and-pri
 - Git/CI เป็นหลักฐาน source เท่านั้น สถานะ deployment ยึด
   [Current Status](../current-status.md); ไม่แก้ผล audit เก่าให้เป็นผลใหม่
 
-ผลตรวจรอบนี้: [Smart Senses integration review](../reviews/2026-09-22-smart-senses-integration.md)
+ผลตรวจหน้าเว็บรอบก่อน: [Smart Senses integration review](../reviews/2026-09-22-smart-senses-integration.md)
+ผลตรวจโครงสร้างโค้ดล่าสุด: [Smart Senses Refactor](../reviews/2026-09-22-smart-senses-refactor.md)

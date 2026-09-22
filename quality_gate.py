@@ -110,7 +110,13 @@ PROFILE_TESTS: dict[str, tuple[str, ...]] = {
     "adaptive": (
         "test_adaptive_learning.py",
         "test_adaptive_journey.py",
+        "test_smart_senses_modules.py",
         "test_sensor_services.py",
+    ),
+    "acoustics": (
+        "test_acoustic_intelligence.py",
+        "test_smart_senses_modules.py",
+        "test_api_state_projection.py",
     ),
     "learning": (
         "test_user_ai_context.py",
@@ -165,6 +171,7 @@ PROFILE_PATTERNS: dict[str, tuple[str, ...]] = {
     "data": ("database", "backup", "maintenance", "cleanup", "trim_session"),
     "sync": ("pod_data_sync", "snapshot_export"),
     "adaptive": ("adaptive/", "smart_response"),
+    "acoustics": ("acoustics/",),
     "learning": (
         "user_ai",
         "user_learning",

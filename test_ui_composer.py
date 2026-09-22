@@ -1,5 +1,6 @@
 """Keep the deployed single-file UI synchronized with Control partials."""
 
+import importlib.util
 import re
 import unittest
 
@@ -7,6 +8,35 @@ import ui_composer
 
 
 class UiComposerTests(unittest.TestCase):
+    def test_local_preview_reuses_theme_and_cannot_serve_private_files(self):
+        path = ui_composer.STATIC.parent / "tests/frontend/preview_theme.py"
+        spec = importlib.util.spec_from_file_location("preview_theme_test", path)
+        preview = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(preview)
+        html = preview.preview_page("<p>fixture</p>", "", view="sessions")
+        self.assertIn("/static/theme-modern.css?", html)
+        self.assertIn("/static/styles/adaptive-journey.css?", html)
+        self.assertIn('class="ui-icon-sprite"', html)
+        self.assertIn("ข้อมูลจำลอง", html)
+        self.assertNotIn("connectWS();", html)
+        self.assertIsNone(preview.static_asset("/static/../app.py"))
+        self.assertIsNone(preview.static_asset("/static/index.html"))
+        self.assertIsNotNone(preview.static_asset("/static/theme-modern.css"))
+
+    def test_adaptive_journey_is_shared_by_monitor_and_sessions(self):
+        runtime = ui_composer.render()
+        self.assertEqual(runtime.count('id="journeyCard"'), 1)
+        self.assertIn('data-pages="monitor sessions"', runtime)
+        self.assertIn("สภาพแวดล้อมระหว่างพัก", runtime)
+        self.assertNotIn("เรียนรู้จากการพักครั้งนี้", runtime)
+        self.assertIn('id="journeyRanges"', runtime)
+        self.assertIn('id="journeyStaffNote" hidden', runtime)
+        self.assertIn("if (feedback) feedback.value = '';", runtime)
+        self.assertGreater(
+            runtime.index("/static/styles/adaptive-journey.css?"),
+            runtime.index("/static/styles/interface-consistency.css?"),
+        )
+
     def test_shared_shell_is_one_build_time_partial(self):
         template = ui_composer.TEMPLATE.read_text(encoding="utf-8")
         runtime = ui_composer.render()

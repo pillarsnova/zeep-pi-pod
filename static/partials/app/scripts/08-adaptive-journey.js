@@ -7,6 +7,8 @@ let journeyLoading = false;
 
 function resetJourneyContext() {
   journeySelectedSession = ''; journeyData = null; journeyRequest += 1;
+  const feedback = document.getElementById('journeyFeedback');
+  if (feedback) feedback.value = '';
   if (document.getElementById('journeyCard')) renderJourney(null);
 }
 
@@ -14,6 +16,8 @@ function selectJourneySession(sessionId) {
   journeyRequest += 1;
   journeySelectedSession = sessionId || '';
   journeyData = null;
+  const feedback = document.getElementById('journeyFeedback');
+  if (feedback) feedback.value = '';
   renderJourney(null);
   refreshJourney();
 }
@@ -58,24 +62,42 @@ async function refreshJourney() {
 
 function renderJourney(data) {
   const put = (id, text) => { document.getElementById(id).textContent = text; };
-  for (const id of ['journeyDecisions', 'journeyEvents', 'journeyOutcomes', 'journeyChannels']) {
+  for (const id of ['journeyDecisions', 'journeyEvents', 'journeyOutcomes', 'journeyChannels', 'journeyRanges']) {
     document.getElementById(id).replaceChildren();
   }
-  put('journeyStatus', data ? `ข้อมูลเซนเซอร์ ${data.journey.samples_used} จุด · แสดงเหตุการณ์ล่าสุดไม่เกิน 100 รายการ${data.data_truncated ? ' · ข้อมูลถูกจำกัดตามขนาด' : ''} · ไม่เปลี่ยนคะแนน` : 'เลือกรายการการพักเพื่อดูข้อมูล');
-  put('journeyComfort', data?.comfort_reference?.message || 'ยังไม่มีข้อมูลอ้างอิง');
-  put('journeyCoach', data?.recommendation?.message || 'ยังไม่มีข้อเสนอให้ปรับอุปกรณ์');
+  const admin = currentPrincipal?.role === 'admin';
+  put('journeyStatus', data
+    ? `${admin ? `ข้อมูลเซนเซอร์ ${data.journey.samples_used} จุด` : 'สรุปจากข้อมูลการพักครั้งนี้'}${data.data_truncated ? ' · แสดงข้อมูลบางส่วน' : ''}`
+    : 'เลือกการพักเพื่อดูข้อมูล');
+  put('journeyComfort', data?.comfort_reference?.message || 'ยังไม่มีข้อมูลความสบายจากครั้งก่อน');
+  put('journeyCoach', data?.recommendation?.message || 'ยังไม่มีคำแนะนำเพิ่มเติม');
+  document.getElementById('journeyAdvicePanel').hidden =
+    document.body.dataset.view === 'sessions' && !data?.recommendation?.item;
+  put('journeyFeedbackHelp', document.body.dataset.view === 'sessions'
+    ? 'ช่วง 5 นาทีท้ายของการพัก รู้สึกสบายเพียงใด?'
+    : 'ช่วง 5 นาทีที่ผ่านมา รู้สึกสบายเพียงใด?');
+  document.getElementById('journeyStaffNote').hidden = !admin;
+  document.getElementById('journeyFeedback').disabled = !data;
+  document.getElementById('journeySave').disabled = !data;
   if (!data) return;
   const labels = Object.fromEntries(data.journey.channels.map(item => [item.key, item]));
   for (const [key, range] of Object.entries(data.comfort_reference.ranges)) {
-    const line = document.createElement('small');
-    line.textContent = `${labels[key]?.label || key}: ${range.low}–${range.high} ${labels[key]?.unit || ''} · ${range.sessions} ครั้ง`;
-    document.getElementById('journeyComfort').append(line);
+    const line = document.createElement('div'); line.className = 'journey-range';
+    const label = document.createElement('span'), value = document.createElement('b'), note = document.createElement('small');
+    label.textContent = labels[key]?.label || key;
+    value.textContent = `${range.low}–${range.high} ${labels[key]?.unit || ''}`;
+    note.textContent = `จาก ${range.sessions} ครั้ง`;
+    line.append(label, value, note);
+    document.getElementById('journeyRanges').append(line);
   }
   const item = data.recommendation.item;
   if (item) {
-    put('journeyCoach', `${item.title} — ${item.reason}`);
-    for (const [value, label] of [['accept', item.confirmation_label], ['snooze', 'ไว้ภายหลัง'], ['reject', 'คงเดิม']]) {
-      const button = document.createElement('button'); button.className = 'btn'; button.type = 'button'; button.textContent = label;
+    const title = document.createElement('strong'), reason = document.createElement('p');
+    title.className = 'journey-advice-title'; title.textContent = item.title;
+    reason.textContent = item.reason;
+    document.getElementById('journeyCoach').replaceChildren(title, reason);
+    for (const [value, label] of [['accept', item.confirmation_label], ['snooze', 'ภายหลัง'], ['reject', 'คงเดิม']]) {
+      const button = document.createElement('button'); button.className = value === 'accept' ? 'btn primary' : 'btn'; button.type = 'button'; button.textContent = label;
       button.onclick = () => decideJourney(value, button);
       document.getElementById('journeyDecisions').append(button);
     }
@@ -95,7 +117,7 @@ function renderJourney(data) {
       : event.kind === 'acoustic' ? 'จำแนกเบื้องต้นจากลักษณะเสียง' : '';
     body.append(detail); row.append(time, body); document.getElementById('journeyEvents').append(row);
   }
-  if (!data.journey.events.length) put('journeyEvents', 'ยังไม่พบเหตุการณ์ที่เด่นชัด');
+  if (!data.journey.events.length) put('journeyEvents', 'ยังไม่มีเหตุการณ์ที่บันทึก');
   for (const outcome of data.outcomes.slice(-10)) {
     const article = document.createElement('article'); article.className = 'journey-outcome';
     const title = document.createElement('b'); title.textContent = `${outcome.label} · ${new Date(outcome.t * 1000).toLocaleTimeString('th-TH')}`;
@@ -103,7 +125,7 @@ function renderJourney(data) {
     const list = document.createElement('ul');
     for (const metric of outcome.metrics) {
       const row = document.createElement('li');
-      const direction = {toward_reference: ' · ใกล้ช่วงที่เคยสบายขึ้น', away_from_reference: ' · ห่างจากช่วงที่เคยสบาย', within_reference: ' · อยู่ในช่วงที่เคยสบาย'}[metric.comfort_direction] || '';
+      const direction = {toward_reference: ' · ใกล้ช่วงอ้างอิงมากขึ้น', away_from_reference: ' · ห่างจากช่วงอ้างอิง', within_reference: ' · อยู่ในช่วงอ้างอิง'}[metric.comfort_direction] || '';
       row.textContent = metric.delta == null ? `${metric.label}: ข้อมูลยังไม่พอเปรียบเทียบ`
         : `${metric.label}: ${metric.before.value} → ${metric.after.value} ${metric.unit}${direction}`;
       list.append(row);
@@ -122,7 +144,7 @@ async function saveJourneyComfort(button) {
     const result = await post(`/api/v1/adaptive/sessions/${encodeURIComponent(sid)}/comfort`, {
       response, use_for_personalization: true, request_id: crypto.randomUUID(),
     });
-    if (result) toast('บันทึกความเห็นแล้ว ขอบคุณครับ');
+    if (result) toast('บันทึกความเห็นแล้ว');
   } finally { button.disabled = false; }
 }
 

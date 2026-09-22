@@ -30,13 +30,14 @@ def one_recommendation(
         "item": None,
         "automatic_actuation": False,
         "score_modified": False,
-        "message": "ยังไม่มีข้อเสนอให้ปรับอุปกรณ์",
+        "message": "ยังไม่มีคำแนะนำเพิ่มเติม",
     }
     age = as_finite_number(frame.get("data_age_s"))
+    if not session.get("recording") or session.get("session_id") != session_id:
+        response["message"] = "คำแนะนำปรับอุปกรณ์แสดงขณะใช้งานตู้เท่านั้น"
+        return response
     if (
-        not session.get("recording")
-        or session.get("session_id") != session_id
-        or frame.get("stale")
+        frame.get("stale")
         or age is None
         or age > 30
         or not safety.get("ready")
@@ -67,7 +68,7 @@ def one_recommendation(
         direction = "ลด" if delta > 0 else "เพิ่ม"
         reason = (
             f"{label}ช่วง 5 นาทีล่าสุด {observed['value']:g} {unit} "
-            f"ต่างจากช่วงที่คุณเคยบอกว่าสบาย ({target['typical']:g} {unit})"
+            f"เทียบกับค่าอ้างอิงจากช่วงที่พักสบาย {target['typical']:g} {unit}"
         )
         basis = {
             "session": session_id,
@@ -83,13 +84,13 @@ def one_recommendation(
             "id": identifier,
             "device": control,
             "metric": key,
-            "title": f"ลอง{direction}{label}",
+            "title": f"แนะนำให้{direction}{label}",
             "reason": reason,
             "reference_status": reference["status"],
             "requires_confirmation": True,
             "execution": "manual_control_only",
             "expires_at": (int(now // 120) + 1) * 120,
-            "confirmation_label": "รับคำแนะนำและไปหน้าควบคุม",
+            "confirmation_label": "ไปหน้าควบคุม",
         }
         break
     return response

@@ -108,9 +108,9 @@ def build_comfort_reference(
         "ranges": ranges,
         "minimum_for_reference": 3,
         "message": (
-            "ยังไม่มีความเห็นจากการพักก่อนหน้า"
+            "ยังไม่มีข้อมูลความสบายจากครั้งก่อน"
             if not count
-            else f"อ้างอิงช่วงที่คุณบอกว่าสบายจาก {count} ครั้งก่อน"
+            else f"จากการพักที่คุณระบุว่าสบาย {count} ครั้ง"
         ),
         "score_used_as_preference": False,
         "current_session_used": False,

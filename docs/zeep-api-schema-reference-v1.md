@@ -272,6 +272,39 @@ timestamp โดยส่งเพียงนาทีของวันท้�
 purpose-specific inference consent จึงห้ามใช้กับ AI inference, การควบคุมอัตโนมัติ,
 คะแนน หรือ Sleep State
 
+### 4.2 Baseline demographic context ใน Live Session
+
+Source candidate 22 ก.ย.: live Session ที่มีสิทธิ์เข้าถึงมี additive field
+`session.health_reference.baseline_context` จาก `identity/baseline_context.py`
+เป็น snapshot ของผู้พัก ไม่ใช่ normative result ของกลุ่มที่ฝึกสำเร็จแล้ว
+Public Usage report/share ยังคงตัด `health_reference` ออกทั้งก้อนตาม privacy policy
+ไม่เพิ่ม BMI เข้า `restore_summary` หรือสูตรคะแนน
+
+| Field | Type / ค่าที่เป็นไปได้ |
+|---|---|
+| `version` | string: `zeep-baseline-demographics-v1.0` |
+| `gender` | string: `male`, `female`, `other`, `unspecified` ตาม Profile ไม่อนุมานชีววิทยา |
+| `gender_source` | string: `profile_gender_not_inferred_biological_sex` |
+| `age_years` | integer หรือ null เมื่อทราบเพียงช่วงอายุ |
+| `age_group` | string: `18-29`, `30-44`, `45-59`, `60+`, `unspecified` |
+| `adult_reference_applicable` | boolean |
+| `bmi.value` | number หรือ null; กก. ÷ ม.² แสดงสองตำแหน่งทศนิยม |
+| `bmi.unit` | string: `kg/m2` |
+| `bmi.band` | string หรือ null: `below_18_5`, `18_5_to_25`, `25_to_30`, `30_and_above` |
+| `bmi.band_label` | string หรือ null: ข้อความช่วงตัวเลข ไม่ใช่คำวินิจฉัย |
+| `bmi.reference` | string: `who-adult-international-v1` |
+| `bmi.status` | string: `available`, `missing_measurements`, `adult_reference_not_applicable` |
+| `cohort_key` | string เช่น `female\|30-44\|18_5_to_25` หรือ null เมื่อข้อมูลแบ่งกลุ่มไม่ครบ |
+| `missing_fields` | string[]: `gender`, `adult_age_group`, `height_cm`, `weight_kg` |
+| `role` | string: `stratification_context_only` |
+| `matched_cohort_reference_available` | boolean: false ในรุ่นนี้ |
+| `bmi_direct_stage_influence` / `bmi_score_adjustment` | boolean: false ในรุ่นนี้ |
+
+จัดกลุ่มจาก BMI ก่อนปัดเศษ และใช้ช่วง BMI ผู้ใหญ่เฉพาะเมื่อทราบอายุ ≥18 ปี
+หรือช่วงอายุผู้ใหญ่ที่ระบุไว้จริง ไม่มีน้ำหนัก/ส่วนสูงไม่เติมค่าประมาณ
+Live projection คำนวณจาก health snapshot เดิมได้โดยไม่แก้ record
+ไม่ใช้ Profile ที่แก้ภายหลังเปลี่ยนค่าที่เคยบันทึก ไม่ต้อง Rerun State/Score เพื่อเพิ่มข้อมูลนี้
+
 ## 5. List data schema (`usage_session_list`)
 
 ```json

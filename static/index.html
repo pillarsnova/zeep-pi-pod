@@ -2853,6 +2853,12 @@ function healthReferenceValue(value,unit=''){
   if(value===null||value===undefined||value===''||!Number.isFinite(Number(value)))return '—';
   return `${Number(value).toLocaleString('th-TH-u-nu-latn',{maximumFractionDigits:1})}${unit}`;
 }
+function baselineBmiLabel(session={}){
+  const bmi=session.health_reference?.baseline_context?.bmi;
+  if(bmi?.status!=='available'||typeof bmi.value!=='number'||!Number.isFinite(bmi.value)||bmi.value<=0)return 'BMI ยังไม่มีข้อมูลอ้างอิง';
+  const value=bmi.value.toLocaleString('th-TH-u-nu-latn',{maximumFractionDigits:2});
+  return `BMI ${value} · ใช้แบ่งกลุ่มเปรียบเทียบ ยังไม่ปรับสถานะการนอน`;
+}
 function setHealthReferenceFact(id,value){
   const card=document.getElementById(id);if(!card)return;
   card.querySelector('strong').textContent=value||'—';card.classList.toggle('missing',!value||value==='—');
@@ -2984,7 +2990,7 @@ function renderSleepState(sl={},session={},bcg={}){
   const base=sl.baseline||{}, names={wake:'W · ตื่น',n1:'N1',n2:'N2',n3:'N3',rem:'REM'};
   const baselineRows=order.filter(k=>base[k]).map(k=>`<tr class="${classificationActive&&sl.state===k?'current':''}"><td>${names[k]}</td><td>${base[k].hr[0]}–${base[k].hr[1]} BPM</td><td>${base[k].rr[0]}–${base[k].rr[1]} ครั้ง/นาที</td></tr>`).join('');
   const genderAdj=sl.gender_adjustment||{};
-  const baselineTable=baselineRows?`<div class="baseline-block"><div class="baseline-title"><strong>Wellness Baseline · ${ageGroupDisplay(sl.age_group)} · ${genderTh(sl.gender)}</strong><span>Reference ที่ใช้ตัดสิน State · ${source}</span></div><table class="baseline-table"><thead><tr><th>Sleep State</th><th>HR · Heart Rate</th><th>RR · Respiratory Rate</th></tr></thead><tbody>${baselineRows}</tbody></table></div>`:'';
+  const baselineTable=baselineRows?`<div class="baseline-block"><div class="baseline-title"><strong>ช่วงอ้างอิง · ${ageGroupDisplay(sl.age_group)} · ${genderTh(sl.gender)}</strong><span>${baselineBmiLabel(session)}</span></div><table class="baseline-table"><thead><tr><th>Sleep State</th><th>HR · Heart Rate</th><th>RR · Respiratory Rate</th></tr></thead><tbody>${baselineRows}</tbody></table></div>`:'';
   const env=sl.environment||{}, q=sl.signal_quality||{};
   const envParts=[
     env.temperature_c!=null?`🌡 ${env.temperature_c}°C`:null,
@@ -3853,7 +3859,8 @@ function renderAdminSleepBaseline(sleep={},session={}){
   const personal=sleep.personal_baseline||{};
   sourceEl.textContent=sleep.classification_source==='personal'
     ? `Personal Baseline · ${personal.nights_used||0} คืน`
-    : `Age + Gender · ${ageGroupDisplay(sleep.age_group||session.age_group)} · ${genderTh(sleep.gender||session.gender)}`;
+    : `ช่วงอ้างอิงตามอายุและเพศ · ${ageGroupDisplay(sleep.age_group||session.age_group)} · ${genderTh(sleep.gender||session.gender)}`;
+  sourceEl.textContent+=` · ${baselineBmiLabel(session)}`;
   const frame=current.sensor_frame||current.analysis_frame||{};
   const frameTime=frame.timestamp?new Date(frame.timestamp).toLocaleTimeString('th-TH',{hour12:false}):'--:--:--';
   const clock=sleep.sensor_frame_clock||{},confirmation=sleep.confirmation||{};

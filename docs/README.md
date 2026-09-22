@@ -72,6 +72,7 @@
 
 ## หลักฐาน Regression ที่ยังใช้งาน
 
+- [N3 Baseline Review · 22 September 2026](reviews/2026-09-22-n3-baseline-review.md) · source candidate, read-only cohort audit, ยังไม่ Deploy
 - [Smart Senses Integration · 22 September 2026](reviews/2026-09-22-smart-senses-integration.md)
 - [Interface Roadmap Review · 19 September 2026](reviews/2026-09-19-interface-roadmap-review.md)
 - [Runtime Multi-agent Audit · 19 September 2026](reviews/2026-09-19-runtime-audit.md)

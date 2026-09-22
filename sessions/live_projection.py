@@ -12,6 +12,8 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, NotRequired, TypedDict, cast
 
+from identity.baseline_context import project_health_reference
+
 __all__ = (
     "LiveSessionProjection",
     "SessionPublicIdentity",
@@ -152,7 +154,7 @@ def active_session_projection(
         "gender": identity.gender,
         "age": identity.age,
         "age_group": identity.age_group,
-        "health_reference": _copy_optional_mapping(identity.health_reference),
+        "health_reference": project_health_reference(identity.health_reference),
         "wellness_context_available": wellness_context_available,
         "rest_mode": rest_mode,
         "target_duration_s": target_duration_s,

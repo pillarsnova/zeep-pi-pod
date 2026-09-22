@@ -9,6 +9,8 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from identity.baseline_context import build_baseline_context
+
 SUPPORTED_GENDERS = ("male", "female", "other", "unspecified")
 
 
@@ -133,7 +135,7 @@ def health_reference_from_profile(
     dob = normalise_date_of_birth(profile.get("date_of_birth"))
     exact_age_known = bool(dob) or profile.get("age_is_estimated") is False
     valid_age = isinstance(age, int) and 0 < age <= 120 and exact_age_known
-    return {
+    reference = {
         "schema_version": 1,
         "gender": profile.get("gender") or "unspecified",
         "date_of_birth": dob,
@@ -159,6 +161,8 @@ def health_reference_from_profile(
         "updated_at_utc": profile.get("health_reference_updated_at_utc"),
         "intended_use": "health_reference_only",
     }
+    reference["baseline_context"] = build_baseline_context(reference)
+    return reference
 
 
 def zeep_health_reference(me: dict[str, Any]) -> dict[str, Any]:

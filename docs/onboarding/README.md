@@ -49,6 +49,9 @@
 6. [Adaptive Journey และแผนขยายเซนเซอร์](adaptive-journey-and-sensor-expansion.md) —
    งานล่าสุดที่ทีมจะต่อยอด พร้อมหลักฐาน Commit/CI และรายการที่ยังต้องทดสอบจริง
 
+งาน Baseline ล่าสุดใน source: [เพศ ช่วงอายุ และ BMI](../zeep-sleep-state-baseline-v1.8.md)
+แยกการจัดกลุ่ม Profile ออกจากสูตรทำนาย State; BMI ยังไม่ปรับ Stage/Score และยังไม่ Deploy
+
 สำหรับทีม Sensor, Firmware, Data/ML, Monitor หรือ Product ให้อ่าน
 [Smart Senses](smart-senses.md) ก่อน แล้วเลือก domain ที่รับผิดชอบ
 ส่วนเสียงอ่าน [Smart Ear · Acoustic Intelligence DSP Plan](smart-ear-dsp-plan.md) เพิ่ม เอกสารนี้

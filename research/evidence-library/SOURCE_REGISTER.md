@@ -1,12 +1,13 @@
 # Source Register — ฉบับย่อสำหรับทีม ZEEP
 
-วันที่ตรวจสอบลิงก์และฉบับ: **5 กันยายน 2026**
+อัปเดตทะเบียน: **22 กันยายน 2026** · วันที่ตรวจแต่ละรายการอยู่ใน `provenance`
+รอบนี้เพิ่ม SLP-012, SLP-013 และ HLT-004–006; ไม่ได้ตรวจซ้ำทุกแหล่งเดิม
 
 [`source-register.json`](source-register.json) เป็นทะเบียน **authoritative** สำหรับ ID,
 ชื่อเรื่อง, URL, access tier, provenance และ checksum ส่วนเอกสารนี้เป็น human-readable
 view สำหรับทีม หากข้อมูลต่างกันให้ยึด JSON และแก้ Markdown ให้ตรงใน pull request เดียวกัน
 
-Canonical JSON SHA-256: `003f3a18088bfc3174b2ea070fe72e99863a18728d7c4a02c8e7d746b4c56816`
+Canonical JSON SHA-256: `e9116cda2997bdb109c21afa7b3d0041ed0c808ab56bf5ff3f4629e91594877f`
 
 ## 1. Sleep และการประเมินสถานะการนอน
 
@@ -23,6 +24,8 @@ Canonical JSON SHA-256: `003f3a18088bfc3174b2ea070fe72e99863a18728d7c4a02c8e7d74
 | SLP-009 | [Wakeful Rest Meta-analysis](https://pmc.ncbi.nlm.nih.gov/articles/PMC12808189/) | รองรับการศึกษาการพักแบบตื่นสงบเมื่อผู้ใช้ Nap & Refresh ไม่หลับ | ผลด้าน memory มี heterogeneity และเล็กกว่าในวัยหนุ่มสาวสุขภาพดี; ไม่พิสูจน์ whole-body recovery |
 | SLP-010 | [Brooks & Lack: Which Nap Duration is Most Recuperative?](https://pubmed.ncbi.nlm.nih.gov/16796222/) | เปรียบเทียบ nap 5/10/20/30 นาทีและผลทันที/ล่าช้าหลังตื่น | ผู้ใหญ่สุขภาพดี 24 คนหลังจำกัดการนอน; ไม่ใช่ duration สากลหรือสูตรคะแนน ZEEP |
 | SLP-011 | [Review of Short Naps and Sleep Inertia](https://pubmed.ncbi.nlm.nih.gov/28366332/) | รองรับคำเตือนว่า duration อย่างเดียวไม่รับประกันการหลีกเลี่ยง SWS/sleep inertia | เป็น review ของ protocol ที่หลากหลาย; ไม่ใช้ตั้งกฎตายตัว 30 นาที |
+| SLP-012 | [Heart rate variability during daytime naps in healthy adults](https://pmc.ncbi.nlm.nih.gov/articles/PMC4801685/) | พบ N3 ในการงีบ และแยกการเปลี่ยนแปลงหัวใจจากอัตราหายใจ; งานนี้ไม่พบความต่างของ respiratory frequency ระหว่าง stage อย่างมีนัยสำคัญ | 66 คนวัยหนุ่มสาว งีบ 80–120 นาที; ไม่ใช่เกณฑ์ HR/RR สากล ไม่รับรอง ZEEP หรือ Fit 0.25; อ่าน full text ออนไลน์ ยังไม่มี cache |
+| SLP-013 | [NHLBI: Sleep Phases and Stages of Sleep](https://www.nhlbi.nih.gov/health/sleep/stages-of-sleep) | อธิบายระยะการนอนจากกิจกรรมสมองและการเปลี่ยนแปลงตามวัย | ไม่ใช่ตาราง HR/RR สำหรับตัดสิน N3 |
 
 ## 2. Health & Wellness Guardrails
 
@@ -31,6 +34,9 @@ Canonical JSON SHA-256: `003f3a18088bfc3174b2ea070fe72e99863a18728d7c4a02c8e7d74
 | HLT-001 | [AASM Clinical Practice Guideline for Diagnostic Testing for Adult OSA](https://doi.org/10.5664/jcsm.6506) | แยก wellness estimation ออกจากการวินิจฉัย OSA; PSG/HSAT ที่เหมาะสมเป็นเส้นทางตรวจโรค | เป็นแนวทางสำหรับแพทย์ ไม่ใช่สูตร scoring ของ ZEEP |
 | HLT-002 | [WHO Global Health Observatory](https://www.who.int/data/gho) | ตรวจชุดข้อมูลสุขภาพประชากรและ metadata ที่อัปเดต | ฐานข้อมูลเปลี่ยนได้; ต้องระบุวันที่ดึง ชุดข้อมูล และประเทศทุกครั้ง |
 | HLT-003 | [WHO Data](https://data.who.int/) | จุดตรวจข้อมูลสุขภาพ WHO ปัจจุบัน | `link-only`; ห้ามนำค่ามาใช้กับบุคคลโดยไม่ตรวจนิยามและประชากรอ้างอิง |
+| HLT-004 | [MedlinePlus: Vital signs](https://medlineplus.gov/ency/article/002341.htm) | กรอบผู้ใหญ่ขณะพักทั่วไป: ชีพจร 60–100 และหายใจ 12–18 ครั้ง/นาที | ไม่ใช่เกณฑ์ขณะหลับหรือ N3; ไม่ใช้แทน Baseline ของบุคคลหรือวินิจฉัยจากค่าตัวเดียว |
+| HLT-005 | [WHO NLIS: BMI และกลุ่มอ้างอิงผู้ใหญ่](https://www.who.int/data/nutrition/nlis/info/malnutrition-in-women) | สูตร BMI และจุดแบ่งสากล 18.5 / 25 / 30 สำหรับจัดกลุ่มข้อมูล | ไม่ใช่เกณฑ์ Sleep State หรือองค์ประกอบร่างกาย; ไม่เดาเชื้อชาติและไม่หักคะแนนจาก BMI |
+| HLT-006 | [Real-world heart rate norms in the Health eHeart study](https://www.nature.com/articles/s41746-019-0134-9) | รองรับการพิจารณาอายุ เพศที่ระบุ และ BMI เป็นตัวแปรแยกในการอ่านค่า HR | เป็น smartphone PPG/on-demand HR ไม่ใช่ N3; ไม่รับรอง female +2 bpm หรือ BMI offset ของ ZEEP |
 
 ## 3. WHO — สุขภาพ ที่อยู่อาศัย อากาศ และยาสูบ
 

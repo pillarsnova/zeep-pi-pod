@@ -1,9 +1,9 @@
-# ZEEP — Sleep-State Baseline v1.8
+# ZEEP — Sleep-State Baseline · v1.9 amendment
 
 > **Purpose:** นิยาม input, baseline, transition policy, data quality และแผน PSG validation ของตัวประมาณสถานะการนอนใน Pod  
 > **Positioning:** Sleep Wellness · EEG-free exploratory telemetry · ไม่ใช่ผล PSG/การวินิจฉัย/ตัวสั่งอุปกรณ์  
 > **Status:** Baseline/evidence reference · complete occupied-epoch continuity amendment active · paired-PSG G2 validation open
-> **Version:** `zeep-sleep-state-baseline-v1.8-sep1-cutover` · **Estimator:** `bcg-audio-bed-5state-v1.29-complete-occupied-epochs` · **Transition:** `zeep-semimarkov-30s-v1.18-scoreable-continuity` · **Updated:** 2026-09-16
+> **Version:** `zeep-sleep-state-baseline-v1.9-paired-n3-fit` · **Estimator:** `bcg-audio-bed-5state-v1.30-paired-n3-baseline` · **Transition:** `zeep-semimarkov-30s-v1.18-scoreable-continuity` · **Updated:** 2026-09-22 · source candidate, not deployed
 > **Related:** [Current Sleep System](zeep-sleep-system-current.md) · [Historical Promotion Policy](sleep-history-promotion-policy-v2.md) · [Evidence Library](../research/evidence-library/README.md)
 
 > **Normative precedence:** เอกสารนี้อธิบาย Baseline และหลักฐานทางสรีรวิทยา
@@ -14,6 +14,12 @@
 > Stage ratio แต่ยังใช้ประกอบ continuity/presence ของคะแนน
 
 ## TL;DR
+
+- Amendment 22 ก.ย.: N3 ต้องมี HR fit และ RR fit อย่างละ ≥0.25 เพื่อไม่ให้
+  “ใกล้ที่สุดแต่ยังห่างมาก” ผ่านเกณฑ์ใหม่ ตัวเลขนี้เป็น engineering floor
+  ไม่ใช่ clinical normal range หรือ probability; ช่วงประชากรเดิมไม่เปลี่ยน
+  และยังไม่ใช้ Stage ที่โมเดลทำนายเองฝึกเป็น N3 ground truth
+  ดู [Baseline สามระดับและผลตรวจย้อนหลัง](reviews/2026-09-22-n3-baseline-review.md)
 
 - ทุก session/cycle เริ่ม `Wake → N1`; เส้นทางปกติไป N2 ก่อน N3/REM แต่เปิด
   `N1 → REM` แบบ rare/guarded เมื่อ REM physiology gate ผ่านและหลักฐานชนะ
@@ -29,7 +35,7 @@
   มันใช้อธิบาย disturbance/confidence และเป็นองค์ประกอบสนับสนุนแบบจำกัด
   10 คะแนนในทั้ง Sleep Score และ Recovery Score ที่ชั้น Report
 - Sensor frame ทุก 10 วินาที, Evidence epoch ทุก 30 วินาทีจาก rolling 60 วินาที และยืนยัน State 60/120 วินาทีตาม target; แนวโน้ม onset ใช้ context ได้ถึง 270 วินาที
-- 5 นาทีแรกสร้าง Session-relative Awake reference; N1 เริ่มได้เมื่อเตียงนิ่ง ไม่มี vital rise และ HR/RR แสดงการลดลงหรือคงอยู่ที่ plateau ที่ต่ำกว่าช่วงตั้งต้นอย่างสอดคล้องกัน เวลาเพียงอย่างเดียวสร้าง N1 ไม่ได้
+- 5 นาทีแรกสร้าง Session-relative Awake reference; N1 เริ่มได้เมื่อเตียงนิ่ง ไม่มี vital rise และ HR ลดลงหรือคงอยู่ต่ำกว่าช่วงตั้งต้น ร่วมกับรูปแบบการหายใจที่สม่ำเสมอ ไม่บังคับให้ RR ลดลงทุกคน เวลาเพียงอย่างเดียวสร้าง N1 ไม่ได้
 - พฤติกรรมย้อนหลังใช้เฉพาะ Session ก่อนหน้า ตั้งแต่ 1 ก.ย. 2569 แยกตามบัญชีและโหมด อย่างน้อย 3 Session และเป็น context/คำแนะนำเท่านั้น (`direct_stage_influence=false`); ห้ามข้อมูล Session ปัจจุบันหรืออนาคตย้อนมากำหนด State
 - หากหลักฐานสอง State ใกล้กัน ระบบไม่ให้ State ผู้ท้าชิง แต่คง State เดิม (หรือ W สำหรับ occupied epoch แรก) อย่างต่อเนื่องและเข้าคะแนน โดยเก็บความไม่แน่ใจเป็น Evidence/QA metadata แยก
 - `HR-CV` ในระบบเป็นความแปรปรวนของค่าเฉลี่ยต่อ analysis bucket 10 วินาที ไม่ใช่ RMSSD/SDNN; amplitude shift ของ BCG ไม่ใช่ EEG K-complex/spindle
@@ -138,6 +144,49 @@ ZEEP จึงไม่ใช้ hard timer ทางการแพทย์ �
 
 หน่วยในแต่ละช่องคือ `HR BPM / RR ครั้งต่อนาที` เพศเป็นเพียง prior แบบโปร่งใส
 ในเวอร์ชันปัจจุบันและต้องรายงานแยก subgroup; ห้ามตีความเป็นช่วงปกติทางการแพทย์
+
+### 3.1.1 แยกเพศ ช่วงอายุ และ BMI
+
+รอบ 22 ก.ย. เพิ่ม `zeep-baseline-demographics-v1.0` ใน source candidate
+โดยสร้าง `health_reference.baseline_context` จากข้อมูลของ Session นั้น
+ไม่ใช้ Profile ปัจจุบันเขียนทับข้อเท็จจริงใน Session เก่า
+
+| แกน | กลุ่มที่ใช้ | ผลต่อระบบปัจจุบัน |
+|---|---|---|
+| เพศจาก Profile | ชาย / หญิง / อื่น ๆ / ไม่ระบุ | ใช้ age/gender prior เดิม; ไม่อนุมานเพศทางชีววิทยา ฮอร์โมน หรือการตั้งครรภ์ |
+| อายุ | 18–29 / 30–44 / 45–59 / 60+ | อายุจริงมีลำดับก่อนช่วงอายุ; หากมีเพียงช่วงอายุจะไม่สร้างอายุจริงขึ้นเอง |
+| BMI | <18.5 / 18.5–<25 / 25–<30 / ≥30 | แบ่งกลุ่มเปรียบเทียบเท่านั้น ไม่เลื่อน HR/RR ไม่ทำให้เกิด N3 และไม่ปรับคะแนน |
+
+BMI = น้ำหนักกิโลกรัม ÷ (ส่วนสูงเมตร)² ใช้กลุ่มสากลผู้ใหญ่ของ WHO
+จุดแบ่ง BMI ไม่ต่างกันระหว่างชาย/หญิง แต่แยก cell ร่วมกับเพศและอายุ
+เช่น `female|30-44|18_5_to_25` ไม่มี height/weight ให้แสดงว่าไม่มีข้อมูล
+ไม่แทนด้วยค่าเฉลี่ย หากยังไม่ทราบว่าเป็นผู้ใหญ่จะไม่จัดเข้ากลุ่ม BMI ผู้ใหญ่
+สำหรับเกณฑ์ไทย/เอเชียต้องประกาศ reference แยก ไม่อนุมานเชื้อชาติจากภาษา
+
+ตัวอย่างช่วง N3 ตาม **heuristic เดิมของโมเดล** ไม่ใช่ค่าปกติที่รับรองแล้ว:
+
+| อายุ | HR ชาย | HR หญิง | RR ทั้งสองกลุ่ม |
+|---|---:|---:|---:|
+| 18–29 | 50–67 | 52–69 | 10–16 |
+| 30–44 | 51–68 | 53–70 | 10–16 |
+| 45–59 | 52–70 | 54–72 | 10–17 |
+| 60+ | 53–72 | 55–74 | 10–17 |
+
+การบวก HR +2 ในกลุ่มหญิงเป็นค่าเดิมทางวิศวกรรม ไม่ใช่ข้อสรุปว่าสตรีทุกคน
+ต้องมีชีพจรสูงกว่าชาย 2 ครั้ง/นาที งาน [HLT-006](../research/evidence-library/SOURCE_REGISTER.md)
+รองรับการศึกษาตัวแปรเหล่านี้ แต่ไม่ได้รองรับเลข adjustment ดังกล่าวหรือ N3 cutoffs
+
+การมี `cohort_key` ไม่ได้แปลว่ามี Baseline ที่เรียนรู้ของ cell นั้นแล้ว
+`matched_cohort_reference_available=false` จนมีการพัฒนา/ตรวจสอบ cohort model
+แยกต่างหาก ไม่คัดค่าจาก label N3 เดิมมาประกาศเป็น “มนุษย์ปกติ” และไม่ตัดคะแนน
+เมื่อข้อมูล Profile ไม่ครบ ส่วนหน้า Admin แสดง BMI พร้อมระบุบทบาทว่าใช้แบ่งกลุ่ม
+`cohort_key` นี้ระบุเฉพาะประชากร การวิเคราะห์ข้าม Session ยังต้องแยก Rest Mode
+และเป้าหมาย Nap ตามเดิม ไม่ใช้ key นี้รวม Nap กับ Overnight เข้า Baseline เดียวกัน
+
+ไฟล์หลัก: `identity/baseline_context.py` และ `identity/profile_fields.py`
+Live projection คำนวณข้อมูลกลุ่มจาก snapshot เดิมได้โดยไม่แก้ record บนดิสก์
+เมื่อจบ Session ใหม่ snapshot นี้เดินตาม lifecycle เดิมไปยัง final summary
+Public report/share ยังคงตัด `health_reference` ทั้งชุดออก
 
 ### 3.2 Personal adaptive baseline
 

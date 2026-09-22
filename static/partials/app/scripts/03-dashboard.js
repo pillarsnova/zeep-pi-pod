@@ -564,7 +564,8 @@ function renderAdminSleepBaseline(sleep={},session={}){
   const personal=sleep.personal_baseline||{};
   sourceEl.textContent=sleep.classification_source==='personal'
     ? `Personal Baseline · ${personal.nights_used||0} คืน`
-    : `Age + Gender · ${ageGroupDisplay(sleep.age_group||session.age_group)} · ${genderTh(sleep.gender||session.gender)}`;
+    : `ช่วงอ้างอิงตามอายุและเพศ · ${ageGroupDisplay(sleep.age_group||session.age_group)} · ${genderTh(sleep.gender||session.gender)}`;
+  sourceEl.textContent+=` · ${baselineBmiLabel(session)}`;
   const frame=current.sensor_frame||current.analysis_frame||{};
   const frameTime=frame.timestamp?new Date(frame.timestamp).toLocaleTimeString('th-TH',{hour12:false}):'--:--:--';
   const clock=sleep.sensor_frame_clock||{},confirmation=sleep.confirmation||{};

@@ -6,6 +6,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 import tempfile
 import unittest
+from datetime import date
 from unittest import mock
 
 
@@ -44,7 +45,10 @@ class ResearchEvidenceLibraryTests(unittest.TestCase):
                 self.assertTrue(source["source_url"].startswith("https://"))
                 self.assertTrue(source["use_in_zeep"].strip())
                 self.assertTrue(source["limitations"].strip())
-                self.assertEqual(source["provenance"]["checked_on"], "2026-09-05")
+                checked = date.fromisoformat(source["provenance"]["checked_on"])
+                self.assertLessEqual(
+                    checked, date.fromisoformat(self.register["checked_on"])
+                )
                 self.assertTrue(source["provenance"]["checked_by_role"].strip())
                 self.assertTrue(source["provenance"]["method"].strip())
                 local_file = source.get("local_file")

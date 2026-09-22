@@ -10,7 +10,8 @@
 Session นั้น ไม่ใช่คะแนนที่สามหรือการประเมินความพร้อมทั้งวัน
 
 หน้านี้แยกสถานะ source ใน Git ออกจากหลักฐานการตรวจ Pod ที่บันทึกไว้
-ไม่ได้ตรวจสถานะ Pod สดในรอบ 22 ก.ย. และไม่ได้ Restart, Deploy หรือ Flash
+รอบ N3 วันที่ 22 ก.ย. ตรวจ Pod แบบอ่านอย่างเดียวที่ 16:20 +07 พบ `78e90fc`
+และมีผู้พักอยู่; ไม่ได้ Restart, Deploy หรือ Flash
 หน้านี้ไม่ใช่ telemetry สดหรือการอนุมัติ Final Code Freeze
 ก่อน deploy ให้ตรวจ Git SHA, สถานะตู้ และ [Runbook](pi5-operations-runbook.md) อีกครั้ง
 
@@ -28,7 +29,9 @@ Session นั้น ไม่ใช่คะแนนที่สามหร�
 | Recovery Score | `zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10` | เวลา 25, HR/RR 35, ความนิ่ง/ต่อเนื่อง 30, สิ่งแวดล้อม 10 |
 | คำแนะนำหลังพัก | `zeep-restore-recommendation-v1.2-after-rest` | API และ Pi result presenter ใช้นโยบายเดียวกัน |
 | Product language ใน source | `zeep-product-language-v1.2` ใน `69bd298` และ `89d404f` | ปรับข้อความและแยกคำสั่งแอร์จากสถานะจริง; ขึ้น Git แล้ว ไม่ถือว่าติดตั้งบน Pod แล้ว |
-| Sleep estimator | `bcg-audio-bed-5state-v1.29-complete-occupied-epochs` | รอบ Rerun ล่าสุดไม่เปลี่ยน Sleep State |
+| Sleep estimator — source candidate | `bcg-audio-bed-5state-v1.30-paired-n3-baseline` | เพิ่ม N3 paired-fit guard; ยังไม่ Deploy หรือเขียน State ย้อนหลัง |
+| Sleep estimator — Pod audit 22 ก.ย. | `bcg-audio-bed-5state-v1.29-complete-occupied-epochs` บน `78e90fc` | core scorer ตรงกับ source ก่อนแก้; มีผู้พักอยู่ ณ เวลาตรวจ |
+| Baseline demographic context — source candidate | `zeep-baseline-demographics-v1.0` | เพศ × อายุ × BMI จาก health snapshot; BMI ใช้จัดกลุ่ม ไม่ปรับ Stage/Score ยังไม่ Deploy |
 | Smart Senses | [ภาพรวมขอบเขต 22 ก.ย.](onboarding/smart-senses.md) | รวมข้อมูลหลายเซนเซอร์และ Adaptive Journey; Voice/thermal/radar/e-nose ยังเป็นแผน ไม่ได้ติดตั้งจากการปรับชื่อ |
 | Smart Ear · โมดูลเสียง | Admin DSP shadow; มี telemetry features บน Pod 1 ใน audit `f570a68` | เป็น provisional label ไม่ใช่ผลจำแนกที่รับรองความแม่นยำ |
 

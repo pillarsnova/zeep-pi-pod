@@ -966,7 +966,9 @@ def estimate_sleep_state(runtime: LiveSleepRuntime) -> dict[str, Any]:
     elif decision_candidate == "n2":
         reason_bits.append("หลักฐาน HR/RR และ BCG คงที่ต่อเนื่อง")
     elif decision_candidate == "n3":
-        reason_bits.append("หลักฐาน HR/RR ต่ำ การหายใจสม่ำเสมอ และ N3 gate ผ่าน")
+        reason_bits.append(
+            "ชีพจรและการหายใจสอดคล้องกับช่วงอ้างอิง N3 พร้อมหลักฐานความนิ่งและการหายใจสม่ำเสมอ"
+        )
     elif decision_candidate == "rem":
         reason_bits.append("RR แปรปรวนบนเตียงที่นิ่งและ REM gate ผ่าน")
     if environment["lux"] is not None:

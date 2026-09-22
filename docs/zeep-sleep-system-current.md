@@ -3,7 +3,7 @@
 > **Purpose:** เอกสารหลักฉบับเดียวของ Sleep State, Historical Replay, Sleep Score และ Session Report ที่ใช้งานจริงใน ZEEP Pod  
 > **Positioning:** Sleep Wellness · EEG-free exploratory telemetry · ไม่ใช่ PSG/การวินิจฉัย/คำสั่งรักษา  
 > **Status:** Wellness release candidate · guarded derived-result replay/promotion · G2 paired-PSG validation open
-> **Updated:** 2026-09-19 · การทบทวนนี้ไม่เปลี่ยนสูตรหรือ State
+> **Updated:** 2026-09-22 · เพิ่ม N3 paired-fit guard ใน source; ยังไม่ Deploy หรือแก้ State ย้อนหลัง
 > **Code manifest:** [`sleep_system_policy.py`](../sleep_system_policy.py)
 > **Related:** [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.8.md) · [ZEEP Restore Summary v1](zeep-restore-summary-v1.md) · [Resting Heart & Breathing Wellness v1.2](zeep-respiratory-wellness-v1.md) · [Historical Promotion Policy v2](sleep-history-promotion-policy-v2.md)
 
@@ -13,8 +13,13 @@
 คำนวณคะแนนและคำแนะนำใหม่ 43 Session ตั้งแต่ 1 ก.ย. ไม่ Reclassify State
 คำแนะนำหลังพัก v1.2 ใช้ [นโยบายกลาง](zeep-post-rest-advice.md) ไม่ใช่ score formula ใหม่
 
+รอบ 22 ก.ย. เพิ่มการตรวจ Fit ของ HR และ RR แยกแกนก่อนเสนอ N3
+รายละเอียดและข้อจำกัดอยู่ใน [ผลตรวจ N3](reviews/2026-09-22-n3-baseline-review.md)
+เป็น source candidate; ไม่เปลี่ยนสูตรคะแนนหรือ continuity และยังไม่ได้ Restart ตู้
+
 - ระบบเก็บ Sensor ทุก 10 วินาที สรุป `sleep_stage_evidence` ทุก 30 วินาที และเปลี่ยน State เมื่อผู้ท้าชิงผ่าน Gate พร้อมยืนยัน 2 epoch/60 วินาที (N2 ใช้ 4 epoch/120 วินาที) เมื่อเริ่ม Recording ระบบยึด `W` เป็น State แรกทันที; ทุกช่วงที่ยังไม่ยืนยัน `OFF BED` ต้องมี W/N1/N2/N3/REM โดยผู้ท้าชิงที่ยังไม่ชัดจะคง State ก่อนหน้าและนับคะแนนให้ State เดิมจนกว่าจะยืนยัน State ใหม่สำเร็จ
-- Sleep-onset Guard คง W อย่างน้อย 5 นาทีแรก; หลังจากนั้น N1 ต้องมีเตียงนิ่ง ไม่มี vital rise และ HR/RR แสดงการลดลงหรือ plateau ที่ต่ำกว่าช่วงตั้งต้นอย่างสอดคล้องกัน เวลาเพียงอย่างเดียวสร้าง N1 ไม่ได้
+- Sleep-onset Guard คง W อย่างน้อย 5 นาทีแรก; หลังจากนั้น N1 ต้องมีเตียงนิ่ง ไม่มี vital rise และ HR ลดลงหรือคงอยู่ต่ำกว่าช่วงตั้งต้น ร่วมกับรูปแบบการหายใจที่สม่ำเสมอ ไม่บังคับให้ RR ลดลงทุกคน เวลาเพียงอย่างเดียวสร้าง N1 ไม่ได้
+- N3 ต้องมี Fit ของ HR และ RR อย่างละ ≥0.25 ก่อนผ่านเกณฑ์ waveform/movement/CV/regularity เดิม เป็นเกณฑ์ความสอดคล้องทางวิศวกรรม ไม่ใช่โอกาสหลับลึก 25% หรือค่าปกติของมนุษย์; ไม่ให้ HR สูงชดเชย RR ที่ Fit ต่ำมาก และไม่ห้าม N3 ใน Nap
 - หลักฐานทั้ง 5 State ถูกปรับให้อยู่บนงบ 0..1 เท่ากัน; หากผู้ชนะ <45% หรือห่างอันดับสอง <8% ระบบจะไม่เปิด State ใหม่ แต่คง State ที่ยืนยันก่อนหน้าอย่างต่อเนื่องจนกว่าผู้ท้าชิงจะผ่าน Gate; N3 ใช้เกณฑ์เดียวกันหลังผ่าน waveform/movement/CV/regularity/relative-drop gate
 - พฤติกรรมย้อนหลังเรียนรู้แยกตามบัญชีและ Rest Mode: `best_rest_window` เริ่มแสดงใน visit 2 จาก completed Session ก่อนหน้า 1 ครั้งที่ Mode/target เดียวกัน ส่วน aggregate baseline เช่น latency, ระยะเวลา และสิ่งแวดล้อมที่มักพบเริ่มเป็น provisional/internal เมื่อมี 3 Session; หน้าผู้ใช้เริ่มเปรียบเทียบ Personal Baseline เมื่อมีอย่างน้อย 7 Session; ทั้งสองเป็น observation/context ไม่ใช่ preference หรือเหตุและผล ไม่มีผลต่อ Score/Sleep State/automatic control และใช้ข้อมูลอดีตแบบ forward-only ตั้งแต่ 1 ก.ย. 2569
 - ข้อยกเว้นเฉพาะการ์ดชีพจรและการหายใจขณะพัก: เริ่มสร้างข้อมูลอ้างอิงส่วนบุคคลเมื่อมี prior Session โหมดเดียวกันที่ HR/RR ผ่านพร้อมกัน 3 ครั้ง; ไม่ลดเกณฑ์ Personal Score comparison 7 ครั้งของส่วนอื่น
@@ -38,13 +43,13 @@
 
 | ชั้นระบบ | Version |
 |---|---|
-| Health pipeline contract | `zeep-sleep-health-pipeline-v1.12-complete-occupied-epochs` |
-| Live estimator candidate | `bcg-audio-bed-5state-v1.29-complete-occupied-epochs` |
-| Evidence definition | `zeep-sleep-state-evidence-v3.7-complete-occupied-epochs` |
-| Baseline | `zeep-sleep-state-baseline-v1.8-sep1-cutover` |
+| Health pipeline contract | `zeep-sleep-health-pipeline-v1.13-paired-n3-baseline` |
+| Live estimator candidate | `bcg-audio-bed-5state-v1.30-paired-n3-baseline` |
+| Evidence definition | `zeep-sleep-state-evidence-v3.8-paired-n3-baseline` |
+| Baseline | `zeep-sleep-state-baseline-v1.9-paired-n3-fit` |
 | Semi-Markov transition | `zeep-semimarkov-30s-v1.18-scoreable-continuity` |
 | G2 ontology | `g2-aasm-5class-v1.0` |
-| Historical replay | `zeep-sleep-history-reclass-v28-complete-occupied-epochs` |
+| Historical replay | `zeep-sleep-history-reclass-v29-paired-n3-baseline` |
 | Sleep / Recovery quality | `zeep-rest-quality-v8.10-minimum-only-score-release` |
 | Sleep Score formula | `zeep-sleep-score-v2.1-minimum-only-neutral-25-35-20-10-10` |
 | Recovery Score formula | `zeep-recovery-score-v3.1-minimum-only-neutral-25-35-30-10` |
@@ -277,6 +282,11 @@ probability ปลอมให้ State เดิม
     carry ไม่ใช่ช่องว่าง State; `WAIT · กำลังยืนยันสถานะ` ใช้ได้เฉพาะก่อน Recording
 
 ### 2.5 Baseline สามชั้นที่ต้องไม่ปนกัน
+
+Source candidate 22 ก.ย. เพิ่มกลุ่ม **เพศ × ช่วงอายุ × BMI** ใน health snapshot
+ตาม [Baseline demographic context](zeep-sleep-state-baseline-v1.8.md)
+อายุ/เพศยังใช้ prior เดิม ส่วน BMI เป็นข้อมูลแบ่งกลุ่ม ไม่ใช่ stage/score adjustment
+และยังไม่อ้างว่ามี cohort-specific normative HR/RR เรียนรู้ครบแล้ว
 
 | ชั้น Baseline | ใช้อะไร | ใช้ทำอะไร | ห้ามใช้ทำอะไร |
 |---|---|---|---|

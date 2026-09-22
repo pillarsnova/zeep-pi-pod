@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 from typing import Any, Mapping
 
+from sessions.sleep_baseline_support import n3_baseline_support
 from sleep_signal_features import sleep_movement_evidence
 
 
@@ -790,9 +791,13 @@ def score_sleep_evidence(
                          - _finite(rr_fits.get("n3"), 0.0))
     deep_cv_limit = max(0.010, _finite(deep_cv_threshold, 0.025))
     deep_rr_cv_limit = max(0.025, min(0.050, deep_cv_limit * 1.6))
+    n3_reference = n3_baseline_support(
+        hr_fits, rr_fits, mean_hr=mean_hr, mean_rr=mean_rr
+    )
     n3_gate = bool(
         waveform_available
         and not drift_flag
+        and n3_reference["passed"]
         and current_stage in {"n2", "n3"}
         and movement < move_deep_ratio
         and hr_cv <= deep_cv_limit
@@ -958,6 +963,7 @@ def score_sleep_evidence(
         "relative_wake_support": round(relative_wake_support, 4),
         "environment_direct_stage_influence": False,
         "n3_gate": n3_gate,
+        "n3_baseline_support": n3_reference,
         "n3_hr_cv_limit": round(deep_cv_limit, 4),
         "n3_rr_cv_limit": round(deep_rr_cv_limit, 4),
         "n3_hr_conflict": round(n3_hr_conflict, 4),

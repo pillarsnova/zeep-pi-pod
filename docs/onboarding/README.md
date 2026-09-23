@@ -1,7 +1,7 @@
 # ZEEP v1 — Team Onboarding
 
 **เปิดอ่านแบบเว็บไซต์:** [ZEEP POD Knowledge Hub](../portal/index.html)
-รวมคู่มือทั้งหมดเป็นหมวด มีการค้นหาและสารบัญย่อย งานนี้ยังอยู่บน Mac
+รวมคู่มือทั้งหมดเป็นหมวด มีการค้นหาและสารบัญย่อย เอกสารอยู่ใน Git แล้ว
 หลัง Deploy จึงเข้า `/handbook` ด้วยบัญชี Admin ได้; ระหว่างนี้ใช้ HTML ออฟไลน์
 หรือ Local preview หน้าอ่านนี้ไม่เปลี่ยนลำดับอำนาจของเอกสารด้านล่าง
 
@@ -22,33 +22,17 @@
 ## เริ่มอ่านจากตรงไหน
 
 **สรุปงานล่าสุด 23 กันยายน:**
-Knowledge Hub และเอกสารอยู่ใน commit `7cdb173` แล้ว รอบนี้ลบตัวช่วยที่ไม่มี
-ผู้เรียกและเครื่องมือปรับเสียงย้อนหลังที่เลิกใช้ โดยคงสูตรคะแนน/API และ Raw เดิม
+Knowledge Hub อยู่ใน `7cdb173`; รอบแรกล้างโค้ดที่เลิกใช้ใน `00047ad`
+รอบต่อเนื่องลบ CSS ของหน้าจอรุ่นเก่าและ wrapper Admin ที่ไม่มีผู้เรียก
+โดยคงหน้าตาปัจจุบัน สูตรคะแนน/API และ Raw เดิม
 ดู [ผลตรวจและรายการที่ลบ](../reviews/2026-09-23-unused-code-cleanup.md)
 กับ [สถานะรุ่น](../current-status.md) งานนี้ยังไม่ Deploy/Restart;
 หลักฐาน Pod ล่าสุดเป็นรอบ 22 ก.ย. 20:57 +07 (`78e90fc`)
 
-รอบ Refactor แยก Smart Ear Timeline และ Adaptive Learning เป็นโมดูลย่อย
-ตามหน้าที่ อ่าน [แผนที่โมดูลและจุด Debug](smart-senses.md#41-แผนที่โมดูลและจุด-debug)
-และ [ผลตรวจ Refactor](../reviews/2026-09-22-smart-senses-refactor.md)
-API และผลลัพธ์เดิมไม่เปลี่ยน; รอบนี้ไม่ Deploy/Restart หรือแก้ Session
-
-[Smart Senses — การรับรู้หลายเซนเซอร์](smart-senses.md) เป็นภาพรวมผลิตภัณฑ์
-โดยมี Smart Ear เป็นโมดูลเสียง ขยายข้อมูลและหน้าจอให้ตรงกับระบบที่มีจริง
-แยกแผนเซนเซอร์ใหม่/Voice ออกจากความสามารถปัจจุบัน ไม่เปลี่ยนคะแนนหรือ API
-หน้าจอชุดนี้อยู่ใน `1bc988e` ดู [ผลตรวจรอบ Smart Senses](../reviews/2026-09-22-smart-senses-integration.md)
-ยังไม่ได้ Deploy/Restart หรือ Flash ในรอบนี้
-
-[Adaptive Journey และแผนขยายเซนเซอร์](adaptive-journey-and-sensor-expansion.md)
-รวมภาพรวม 4 ขั้น หน้าจอ API โครงสร้างโค้ด BOM ผลทดสอบ และงานถัดไปตามบทบาท
-
-โค้ด `eaccf32` อยู่บน `origin/develop` และ GitHub CI ผ่านทั้ง Python/Frontend
-แต่ยังไม่ได้ Deploy/Restart ในรอบนี้ ไม่เปลี่ยน Raw สูตรคะแนน หรือเปิด Auto Control
-ให้แยกสถานะใน Git ออกจากสถานะบนเครื่องจริงเสมอ
-
-รอบรวมงานที่ค้าง: [บันทึก 22 กันยายน](../reviews/2026-09-22-pending-work-integration.md)
-รวมข้อความ Backend/หน้าจอและเอกสารให้ตรงกับรุ่นล่าสุด ไม่เปลี่ยนสูตรคะแนน
-ไม่รวมข้อมูลผู้ทดสอบขึ้น Git และไม่ได้ Restart ในรอบนี้
+งานพัฒนาหลักอ่านที่ [Smart Senses และจุด Debug](smart-senses.md)
+กับ [Adaptive Journey และแผนขยายเซนเซอร์](adaptive-journey-and-sensor-expansion.md)
+ประวัติ Commit, ผลตรวจ และสถานะ Deploy รวมไว้ที่ [Current Status](../current-status.md)
+ไม่ใช้ Onboarding เป็นสำเนาของบันทึก release ทุกครั้ง
 
 อ่านเอกสารหลักตามลำดับนี้ในวันแรก:
 

@@ -506,25 +506,6 @@ body[data-role="admin"] .main-nav {
   font-size: 10px;
 }
 
-.controller-details {
-  margin-top: 18px;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: #0a1620;
-  box-shadow: inset 0 0 0 1px var(--border);
-}
-
-.controller-details > summary {
-  padding: 14px 16px;
-  color: #91aab5;
-}
-
-.controller-node {
-  border: 0;
-  border-radius: 12px;
-  background: #10202d;
-  box-shadow: inset 0 0 0 1px rgba(137, 183, 201, .1);
-}
 
 .device-zone-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -565,24 +546,8 @@ body[data-role="admin"] .main-nav {
   font-size: 10px;
 }
 
-.device-row {
-  min-height: 64px;
-  padding: 11px 0;
-  border-color: rgba(137, 183, 201, .12);
-}
 
-.device-copy b {
-  color: #e5eef1;
-  font-size: 13px;
-}
-
-.device-copy span {
-  color: #78909c;
-  font-size: 10px;
-}
-
-.smart-switch,
-.device-mini-btn {
+.smart-switch {
   min-height: 44px;
   border-color: rgba(137, 183, 201, .22);
   border-radius: 12px;
@@ -606,24 +571,6 @@ body[data-role="admin"] .main-nav {
   background: #572733;
 }
 
-.device-details {
-  border-color: rgba(137, 183, 201, .12);
-}
-
-.device-details summary {
-  min-height: 44px;
-  padding: 12px 0;
-  color: #87a0ab;
-  font-size: 11px;
-}
-
-.unified-note {
-  margin-top: 14px;
-  padding: 11px 13px;
-  border-color: rgba(245, 185, 91, .24);
-  border-radius: 12px;
-  background: rgba(59, 43, 19, .42);
-}
 
 /* Monitor: safety first, then sensor integrity, then logs ---------------- */
 .monitor-alert-bar {
@@ -866,10 +813,8 @@ input {
   background: #4b2530;
   color: #ffdce1;
 }
-
 .btn:focus-visible,
 .smart-switch:focus-visible,
-.device-mini-btn:focus-visible,
 .main-nav a:focus-visible,
 select:focus-visible,
 input:focus-visible {
@@ -1191,25 +1136,11 @@ select,
     padding: 15px;
   }
 
-  .device-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
 
-  .device-row > .device-inline {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+.device-inline select {
     width: 100%;
   }
 
-  .device-inline select,
-  .device-inline .device-mini-btn {
-    width: 100%;
-  }
-
-  .controller-map {
-    grid-template-columns: 1fr;
-  }
 
   .monitor-alert-bar .btn {
     flex: 1 1 calc(50% - 6px);
@@ -1652,13 +1583,6 @@ body[data-view="control"] .pod-environment-map > span small {
   max-width: 62%;
 }
 
-body[data-view="control"] .door-rear-marker,
-body[data-view="control"] .door-front-marker {
-  fill: none;
-  stroke: rgba(144, 168, 174, .38);
-  stroke-width: 1;
-  stroke-linecap: round;
-}
 
 @media (max-width: 620px) {
   body[data-view="control"] .pod-environment-control-panel {
@@ -2244,13 +2168,6 @@ body[data-view="control"] .priority-safety .device-zone-icon {
   background: rgba(102, 73, 26, .52);
 }
 
-body[data-view="control"] .priority-safety .device-mini-btn {
-  min-width: 44px;
-  border-color: rgba(245, 185, 91, .42);
-  color: #ffe0a3;
-  background: rgba(71, 52, 24, .48);
-  font-size: 17px;
-}
 
 body[data-view="control"] .priority-health {
   border-color: rgba(110, 223, 242, .32);
@@ -2321,20 +2238,6 @@ body[data-view="control"] .zone-sensor > small {
   font-size: 7px;
 }
 
-body[data-view="control"] .device-row {
-  min-height: 44px;
-  gap: 7px;
-  padding: 3px 0;
-}
-
-body[data-view="control"] .device-copy b {
-  font-size: 11px;
-}
-
-body[data-view="control"] .device-copy span {
-  margin-top: 1px;
-  font-size: 8.5px;
-}
 
 body[data-view="control"] .smart-switch {
   min-width: 66px;
@@ -2358,64 +2261,9 @@ body[data-view="control"] .action-toggle {
   font-size: 11px;
 }
 
-body[data-view="control"] .compact-control-group .icon-switch {
-  font-size: 12px;
-  font-weight: 850;
-}
 
 /* Red-light anatomy map: each highlighted body section mirrors a real Pi GPIO. */
-body[data-view="control"] .red-light-panel {
-  display: grid;
-  grid-template-columns: 92px minmax(0, 1fr);
-  align-items: stretch;
-  gap: 8px;
-  margin-top: 4px;
-}
 
-body[data-view="control"] .red-body-map {
-  display: grid;
-  place-items: center;
-  min-height: 142px;
-  padding: 6px 5px 5px;
-  overflow: hidden;
-  color: var(--muted);
-  background:
-    radial-gradient(circle at 50% 42%, rgba(255, 89, 108, .09), transparent 46%),
-    rgba(3, 12, 26, .56);
-  border: 1px solid rgba(128, 153, 196, .2);
-  border-radius: 14px;
-}
-
-body[data-view="control"] .red-body-map svg {
-  width: 65px;
-  height: 112px;
-  overflow: visible;
-}
-
-body[data-view="control"] .red-body-map > span {
-  margin-top: -4px;
-  font-size: 7.5px;
-  letter-spacing: .03em;
-}
-
-body[data-view="control"] .red-body-region {
-  fill: rgba(118, 137, 174, .23);
-  stroke: rgba(158, 179, 219, .5);
-  stroke-width: 1.4;
-  transition: fill .18s ease, stroke .18s ease, filter .18s ease;
-}
-
-body[data-view="control"] .red-body-region .red-body-limb {
-  fill: none;
-  stroke-width: 8;
-  stroke-linecap: round;
-}
-
-body[data-view="control"] .red-body-region.on {
-  fill: #ff4e63;
-  stroke: #ffc0c7;
-  filter: drop-shadow(0 0 7px rgba(255, 57, 82, .9));
-}
 
 body[data-view="control"] .red-zone-grid {
   display: grid;
@@ -2493,124 +2341,17 @@ body[data-view="control"] .red-zone-icon i::after {
   background: currentColor;
 }
 
-body[data-view="control"] .red-face-icon::before {
-  top: 2px;
-  left: 7px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-}
-
-body[data-view="control"] .red-face-icon::after {
-  bottom: 2px;
-  left: 3px;
-  width: 20px;
-  height: 11px;
-  border-radius: 10px 10px 4px 4px;
-}
-
-body[data-view="control"] .red-torso-icon::before {
-  top: 3px;
-  left: 5px;
-  width: 16px;
-  height: 25px;
-  border-radius: 7px 7px 4px 4px;
-  clip-path: polygon(12% 0, 88% 0, 100% 100%, 0 100%);
-}
-
-body[data-view="control"] .red-torso-icon::after {
-  top: 6px;
-  left: 1px;
-  width: 24px;
-  height: 5px;
-  border-radius: 5px;
-}
-
-body[data-view="control"] .red-leg-icon::before,
-body[data-view="control"] .red-leg-icon::after {
-  top: 2px;
-  width: 8px;
-  height: 27px;
-  border-radius: 5px;
-}
-
-body[data-view="control"] .red-leg-icon::before { left: 4px; }
-body[data-view="control"] .red-leg-icon::after { right: 4px; }
 
 body[data-view="control"] .red-zone-button.on .red-zone-icon {
   color: #ff6275;
   filter: drop-shadow(0 0 5px rgba(255, 61, 84, .75));
 }
 
-body[data-view="control"] .device-mini-btn {
-  min-width: 44px;
-  min-height: 44px;
-  padding: 4px 7px;
-  font-size: 14px;
-}
-
-body[data-view="control"] .device-row select {
-  min-height: 44px;
-  padding-top: 5px;
-  padding-bottom: 5px;
-  font-size: 11px;
-}
 
 body[data-view="control"] .device-inline {
   gap: 5px;
 }
 
-body[data-view="control"] .control-choice-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(58px, 1fr));
-  gap: 5px;
-  min-width: 140px;
-}
-
-body[data-view="control"] .control-choice-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 44px;
-  font-size: 15px;
-}
-
-body[data-view="control"] .control-choice-btn b {
-  font-size: 10px;
-}
-
-body[data-view="control"] .icon-action-row {
-  flex-wrap: nowrap;
-}
-
-body[data-view="control"] .device-details {
-  margin-top: 3px;
-}
-
-body[data-view="control"] .device-details > summary {
-  display: grid;
-  place-items: center;
-  min-height: 28px;
-  padding: 2px 0;
-  font-size: 0;
-}
-
-body[data-view="control"] .device-details > summary::before {
-  content: "⋯";
-  color: var(--muted);
-  font-size: 17px;
-  line-height: 1;
-}
-
-body[data-view="control"] .bed-mini-grid {
-  gap: 5px;
-  margin-top: 5px;
-}
-
-body[data-view="control"] .bed-mini-grid .device-mini-btn {
-  min-height: 44px;
-}
 
 body[data-view="control"] input[type="range"] {
   min-height: 36px;
@@ -2769,7 +2510,6 @@ body[data-view="control"] .stream-play.on {
   background: linear-gradient(135deg, #286d7e, #1d4f62);
 }
 
-body[data-view="control"] .stream-stop { color: #f19ba5; }
 
 body[data-view="control"] .stream-volume-icon {
   color: var(--muted);
@@ -2877,44 +2617,6 @@ body[data-view="control"] .bed-zone .zone-sensor > b {
   white-space: normal;
 }
 
-body[data-view="control"] .door-zone .device-row {
-  grid-template-columns: 1fr;
-  align-content: start;
-}
-
-body[data-view="control"] .door-zone .icon-action-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  width: 100%;
-}
-
-body[data-view="control"] .door-zone .device-mini-btn {
-  width: 100%;
-  min-height: 58px;
-  font-size: 18px;
-}
-
-body[data-view="control"] .door-safety-note {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 32px;
-  margin: 5px 0 7px;
-  color: #d8bd83;
-  font-size: 8.5px;
-}
-
-body[data-view="control"] .door-safety-note > span {
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  flex: none;
-  color: #201608;
-  font-weight: 900;
-  background: var(--amber);
-  border-radius: 50%;
-}
 
 body[data-view="control"] .door-action-grid {
   display: grid;
@@ -2977,16 +2679,6 @@ body[data-view="control"] .door-action-button small { margin-top: 4px; color: va
 body[data-view="control"] .door-close-action { border-color: rgba(242, 122, 135, .38); }
 body[data-view="control"] .door-close-action .door-action-icon { color: #ff9ca7; background: rgba(112, 34, 48, .22); }
 
-body[data-view="control"] .bed-current-state {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 28px;
-  margin-bottom: 5px;
-  color: var(--faint);
-  font-size: 8px;
-}
 
 body[data-view="control"] .bed-motion-panel {
   display: block;
@@ -3014,13 +2706,6 @@ body[data-view="control"] .bed-motion-map.moving #bedMotionArrow { color: #07161
 body[data-view="control"] .bed-motion-map > b { position: absolute; right: 4px; bottom: 5px; left: 4px; overflow: hidden; color: var(--muted); font-size: 7px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
 body[data-view="control"] .bed-motion-map.moving > b { color: #b9f7ff; }
 
-body[data-view="control"] .bed-current-state b {
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 9px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 body[data-view="control"] .bed-control-grid {
   display: grid;
@@ -3161,15 +2846,6 @@ button.command-failed {
   animation: command-error-shake .36s ease-in-out 2 !important;
 }
 
-body[data-view="control"] .bed-stop-btn {
-  border-color: rgba(242, 122, 135, .68);
-  color: #ffd8dd;
-  background: rgba(91, 31, 42, .78);
-}
-
-body[data-view="control"] .bed-stop-btn > span {
-  color: #ff9ca7;
-}
 
 body[data-view="control"] .comfort-profile-grid {
   display: grid;
@@ -3680,9 +3356,6 @@ body[data-view="sessions"] #historyCard {
   border-radius: 18px;
 }
 
-.history-deck-head {
-  margin-bottom: 7px;
-}
 
 #historyToolbar {
   gap: 7px;
@@ -4728,110 +4401,6 @@ body[data-view="sessions"] .hist-row > .hist-quality {
   line-height: 1.45;
 }
 
-.sound-engineering {
-  margin-top: 8px;
-  padding: 8px;
-  border: 1px solid rgba(56, 202, 230, .2);
-  border-radius: 9px;
-  background:
-    linear-gradient(145deg, rgba(8, 41, 56, .7), rgba(5, 21, 32, .86));
-}
-
-.sound-engineering-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.sound-engineering-head b,
-.sound-engineering-head small { display: block; }
-.sound-engineering-head b { color: #80e9f6; font-size: 10px; letter-spacing: .05em; }
-.sound-engineering-head small { margin-top: 3px; color: #6f929f; font: 600 9px "SF Mono", ui-monospace, monospace; }
-
-.sound-review-stack {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 5px;
-}
-
-.sound-review,
-.sound-calibration-state {
-  flex: 0 0 auto;
-  padding: 4px 7px;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  font: 850 8px "SF Mono", ui-monospace, monospace;
-  letter-spacing: .06em;
-}
-
-.sound-review.valid { color: #69e5b7; background: rgba(33, 173, 124, .1); }
-.sound-review.blocked,
-.sound-review.stale { color: #f0b75e; background: rgba(196, 125, 23, .1); }
-.sound-review.invalid { color: #ff8492; background: rgba(202, 53, 72, .1); }
-.sound-calibration-state.verified { color: #69e5b7; background: rgba(33, 173, 124, .1); }
-.sound-calibration-state.pending { color: #f0b75e; background: rgba(196, 125, 23, .1); }
-.sound-calibration-state.unknown { color: #8da8b3; background: rgba(69, 102, 114, .12); }
-
-.sound-raw-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  margin-top: 9px;
-}
-
-.sound-raw-value {
-  min-width: 0;
-  padding: 8px 9px;
-  border-radius: 8px;
-  background: rgba(17, 55, 70, .45);
-}
-
-.sound-raw-value span,
-.sound-raw-value b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sound-raw-value span { color: #7598a5; font-size: 9px; }
-.sound-raw-value b { margin-top: 3px; color: #d9f5f8; font: 750 13px "SF Mono", ui-monospace, monospace; }
-.sound-raw-value.calibration b { color: #e8b8ff; }
-
-.sound-integrity-flags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 8px;
-}
-
-.sound-integrity-flag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 7px;
-  border-radius: 999px;
-  color: #6d8792;
-  background: rgba(39, 65, 76, .28);
-  font-size: 9px;
-  font-weight: 800;
-}
-
-.sound-integrity-flag i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-.sound-integrity-flag.pass { color: #67dfb2; }
-.sound-integrity-flag.fail { color: #ff8290; }
-.sound-integrity-flag.unknown { color: #d6a95f; }
-
-.sound-engineering-details { margin-top: 8px; color: #74939f; font-size: 9px; }
-.sound-engineering-details summary { cursor: pointer; color: #82a6b3; font-weight: 800; }
-.sound-engineering-details > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin-top: 6px; }
-.sound-engineering-details span { display: flex; justify-content: space-between; gap: 4px; padding: 4px 5px; border-radius: 5px; background: rgba(19, 46, 58, .3); }
-.sound-engineering-details b { color: #7695a1; font-weight: 700; }
-.sound-engineering > p { margin: 8px 0 0; color: #78949f; font-size: 9px; line-height: 1.45; }
-
-@media (max-width: 700px) {
-  .sound-engineering-head { display: block; }
-  .sound-review-stack { justify-content: flex-start; margin-top: 7px; }
-  .sound-raw-grid { grid-template-columns: 1fr; }
-  .sound-engineering-details > div { grid-template-columns: 1fr; }
-}
-
 .calibration-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 8px; color: #617b86; font-size: 7px; }
 .calibration-legend span { display: inline-flex; align-items: center; gap: 4px; font-weight: 800; }
 .calibration-legend i { width: 6px; height: 6px; border-radius: 50%; background: #57717c; }
@@ -5640,8 +5209,7 @@ body[data-view="control"] .temperature-auto-control select.busy {
 }
 
 @media (max-width: 620px) {
-  body[data-view="control"] .device-row > .visual-power-toggle,
-  body[data-view="control"] .temperature-auto-control {
+body[data-view="control"] .temperature-auto-control {
     width: 100%;
   }
 
@@ -5902,13 +5470,6 @@ body[data-view="control"] .pod-light-zone-icon svg {
   stroke-linejoin: round;
 }
 
-body[data-view="control"] .pod-room-light-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 142px;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-}
 
 body[data-view="control"] .pod-room-light-map {
   position: relative;
@@ -5967,12 +5528,6 @@ body[data-view="control"] .pod-room-fixture {
   transition: fill .22s ease, stroke .22s ease, filter .22s ease;
 }
 
-body[data-view="control"] .pod-room-bed path {
-  fill: rgba(50, 78, 100, .58);
-  stroke: rgba(130, 163, 181, .42);
-  stroke-width: 1.2;
-  stroke-linecap: round;
-}
 
 body[data-view="control"] .pod-room-light-map > span {
   position: absolute;
@@ -6039,17 +5594,6 @@ body[data-view="control"] .pod-room-light-toggle .toggle-status-icon svg {
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-
-@media (max-width: 620px) {
-  body[data-view="control"] .pod-room-light-panel {
-    grid-template-columns: minmax(0, 1fr) 132px;
-  }
-
-  body[data-view="control"] .pod-room-light-panel > .visual-power-toggle {
-    width: 132px;
-    min-width: 132px;
-  }
 }
 
 body[data-view="control"] .temperature-auto-control select {
@@ -6261,16 +5805,8 @@ body[data-view="control"] .pod-door-map > svg {
   height: calc(100% - 20px);
 }
 
-body[data-view="control"] .door-pod-shell {
-  fill: rgba(23, 46, 58, .86);
-  stroke: rgba(223, 184, 110, .5);
-  stroke-width: 1.5;
-}
 
-body[data-view="control"] .door-pod-floor,
-body[data-view="control"] .door-frame-ring,
-body[data-view="control"] .door-direction,
-body[data-view="control"] .door-slide-track {
+body[data-view="control"] .door-direction {
   fill: none;
   stroke: rgba(241, 202, 125, .68);
   stroke-width: 1.6;
@@ -6278,9 +5814,6 @@ body[data-view="control"] .door-slide-track {
   stroke-linejoin: round;
 }
 
-body[data-view="control"] .door-opening {
-  fill: rgba(3, 12, 21, .92);
-}
 
 body[data-view="control"] .door-slide-panel {
   transform-origin: center;
@@ -6411,17 +5944,6 @@ body[data-view="control"] .aircon-comfort-map > svg {
   overflow: visible;
 }
 
-body[data-view="control"] .air-pod-shell {
-  fill: rgba(18, 48, 66, .9);
-  stroke: rgba(105, 191, 214, .52);
-  stroke-width: 1.6;
-}
-
-body[data-view="control"] .air-pod-inner {
-  fill: rgba(3, 17, 31, .9);
-  stroke: rgba(105, 164, 187, .27);
-  stroke-width: 1;
-}
 
 body[data-view="control"] .aircon-unit rect {
   fill: rgba(66, 111, 131, .52);
@@ -6800,27 +6322,7 @@ body[data-view="control"] .comfort-steam { border-color: rgba(110, 223, 242, .42
     height: calc(100% - 26px);
   }
 
-  body[data-view="control"] .bed-scene-pod {
-    fill: rgba(16, 46, 63, .8);
-    stroke: rgba(105, 191, 214, .42);
-    stroke-width: 1.5;
-  }
 
-  body[data-view="control"] :is(.bed-scene-frame, .bed-scene-mattress, .bed-scene-pillow, .bed-scene-divider, .bed-scene-guide) {
-    fill: none;
-    stroke: rgba(139, 209, 224, .62);
-    stroke-width: 1.6;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
-  body[data-view="control"] .bed-scene-mattress {
-    fill: rgba(69, 122, 143, .24);
-  }
-
-  body[data-view="control"] .bed-scene-guide {
-    stroke: rgba(102, 219, 238, .72);
-  }
 
   body[data-view="control"] .bed-pod-scene > span {
     position: absolute;
@@ -6871,41 +6373,8 @@ body[data-view="control"] .audio-zone { order: 4; }
 body[data-view="control"] .bed-zone { order: 5; }
 body[data-view="control"] .aroma-zone { order: 6; }
 
-body[data-view="control"] .red-light-panel {
-  grid-template-columns: minmax(145px, .95fr) minmax(0, 1.35fr);
-}
 
-body[data-view="control"] .red-bed-zone-map {
-  position: relative;
-  display: grid;
-  min-width: 0;
-  min-height: 166px;
-  place-items: center;
-  padding: 5px 6px 23px;
-  overflow: hidden;
-  color: var(--muted);
-  border: 1px solid rgba(128, 153, 196, .2);
-  border-radius: 14px;
-  background:
-    radial-gradient(ellipse at 50% 44%, rgba(255, 79, 99, .1), transparent 58%),
-    rgba(3, 12, 26, .62);
-}
-
-body[data-view="control"] .red-bed-zone-map > svg {
-  width: 100%;
-  height: 122px;
-  overflow: visible;
-}
-
-body[data-view="control"] .red-bed-shell {
-  fill: rgba(27, 41, 65, .82);
-  stroke: rgba(146, 163, 197, .48);
-  stroke-width: 1.5;
-}
-
-body[data-view="control"] .red-bed-frame,
-body[data-view="control"] .red-bed-pillow,
-body[data-view="control"] .red-bed-zone-divider {
+body[data-view="control"] .red-bed-pillow {
   fill: none;
   stroke: rgba(154, 170, 202, .54);
   stroke-width: 1.35;
@@ -6926,31 +6395,6 @@ body[data-view="control"] .red-bed-region.on {
   filter: drop-shadow(0 0 8px rgba(255, 52, 80, .92));
 }
 
-body[data-view="control"] .red-bed-zone-map > span {
-  position: absolute;
-  right: 7px;
-  bottom: 7px;
-  left: 7px;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 5px;
-  line-height: 1;
-}
-
-body[data-view="control"] .red-bed-zone-map > span b {
-  color: #d6ddea;
-  font-size: var(--ui-label);
-  font-weight: 800;
-}
-
-body[data-view="control"] .red-bed-zone-map > span small {
-  overflow: hidden;
-  color: #7f8eaa;
-  font-size: 7px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 body[data-view="control"] .red-bed-zone-icon {
   display: grid;
@@ -7127,9 +6571,7 @@ body[data-view="control"] .aroma-zone .comfort-profile-grid {
 }
 
 @media (max-width: 620px) {
-  body[data-view="control"] .red-light-panel {
-    grid-template-columns: minmax(132px, .9fr) minmax(0, 1.3fr);
-  }
+
 
   body[data-view="control"] .comfort-control-panel {
     grid-template-columns: minmax(100px, .75fr) minmax(0, 1.65fr);
@@ -7568,7 +7010,7 @@ body[data-view="control"] .pod-door-map .door-panel-window {
   stroke-width: 1.15;
 }
 
-body[data-view="control"] .pod-door-map :is(.door-slide-track, .door-direction) {
+body[data-view="control"] .pod-door-map .door-direction {
   fill: none;
   stroke: rgba(241, 202, 125, .72);
   stroke-width: 1.5;
@@ -8223,109 +7665,6 @@ body:not([data-role="user"]) [data-user-panel] {
   display: none !important;
 }
 
-/* Progressive user profile ---------------------------------------------
- * One optional question at a time. The compact details card avoids pushing
- * health telemetry below the fold on the 8.5-inch tablet. */
-.progressive-profile-card {
-  margin: 10px 22px 4px;
-  border: 1px solid rgba(77, 174, 195, .28);
-  border-radius: 14px;
-  background: linear-gradient(135deg, rgba(9, 31, 43, .96), rgba(11, 25, 38, .96));
-  overflow: hidden;
-}
-
-.progressive-profile-card > summary {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  min-height: 48px;
-  padding: 7px 11px;
-  cursor: pointer;
-  list-style: none;
-}
-
-.progressive-profile-card > summary::-webkit-details-marker { display: none; }
-.progressive-profile-card > summary span b,
-.progressive-profile-card > summary span small { display: block; }
-.progressive-profile-card > summary span b { color: #e9fbff; font-size: 12px; }
-.progressive-profile-card > summary span small { margin-top: 2px; color: #7995a2; font-size: 9px; }
-.progressive-profile-card > summary em {
-  padding: 4px 7px;
-  border: 1px solid rgba(83, 210, 226, .25);
-  border-radius: 999px;
-  color: #74dbe8;
-  background: rgba(20, 89, 105, .18);
-  font: 800 10px "SF Mono", ui-monospace, monospace;
-  font-style: normal;
-}
-
-.progressive-profile-icon {
-  display: grid !important;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border: 1px solid rgba(83, 210, 226, .25);
-  border-radius: 10px;
-  color: #6ee7f2 !important;
-  background: rgba(19, 103, 121, .22);
-  font-size: 19px !important;
-}
-
-.progressive-profile-body {
-  display: grid;
-  gap: 9px;
-  padding: 0 12px 12px;
-  border-top: 1px solid rgba(79, 139, 156, .15);
-}
-
-.progressive-profile-copy { padding-top: 10px; }
-.progressive-profile-copy b,
-.progressive-profile-copy span { display: block; }
-.progressive-profile-copy b { color: #edfaff; font-size: 13px; }
-.progressive-profile-copy span { margin-top: 4px; color: #8ba3ad; font-size: 10px; line-height: 1.5; }
-.progressive-profile-field {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: stretch;
-}
-.progressive-profile-field select,
-.progressive-profile-field input {
-  min-width: 0;
-  min-height: 42px;
-  margin: 0;
-  border-color: #315365;
-  border-radius: 10px;
-  background: #081722;
-}
-.progressive-profile-actions { display: flex; flex-wrap: wrap; gap: 7px; }
-.progressive-profile-actions .btn { min-height: 38px; padding: 8px 13px; }
-.progressive-profile-privacy {
-  color: #66828f;
-  font-size: 8.5px;
-  line-height: 1.5;
-}
-.progressive-profile-sensitive {
-  display: inline-flex;
-  margin-top: 5px;
-  padding: 3px 6px;
-  border-radius: 6px;
-  color: #f4c77d;
-  background: rgba(137, 88, 22, .18);
-  font-size: 8px;
-  font-weight: 800;
-}
-
-@media (max-width: 760px) {
-  .progressive-profile-card { margin-right: 14px; margin-left: 14px; }
-}
-
-@media (max-width: 460px) {
-  .progressive-profile-field { grid-template-columns: 1fr; }
-  .progressive-profile-actions .btn { flex: 1; }
-}
-
 body[data-view="monitor"] .admin-atmosphere-card {
   grid-column: 1 / -1;
   order: 4;
@@ -8753,7 +8092,8 @@ body[data-view="monitor"] .raw-monitor { order: 7; }
   body[data-view="control"] .stream-track-copy small { font-size: 10px; }
   body[data-view="control"] .temperature-quick-copy small { font-size: 9px; }
   body[data-view="control"] .aircon-control-stack .temperature-auto-state { font-size: 9px; }
-  body[data-view="control"] .door-safety-note { min-height: 36px; font-size: 10px; }
+
+
   body[data-view="control"] .door-action-button small { font-size: 10px; }
   body[data-view="control"] .bed-position-grid { grid-template-rows: repeat(2, var(--ui-action-h)); height: 116px; }
   body[data-view="control"] .bed-normal-button { min-height: var(--ui-action-h); height: var(--ui-action-h); }
@@ -8820,7 +8160,7 @@ body[data-view="monitor"] .raw-monitor { order: 7; }
   body[data-view="control"] .audio-control-panel { grid-template-columns: 118px minmax(0, 1fr); }
   body[data-view="control"] .audio-pod-map { width: 118px; }
   body[data-view="control"] .comfort-control-panel { grid-template-columns: 102px minmax(0, 1fr); }
-  body[data-view="control"] .red-light-panel { grid-template-columns: 134px minmax(0, 1fr); }
+
 
   body[data-view="sessions"] .hist-row {
     grid-template-columns: minmax(170px, 1.15fr) repeat(2, minmax(120px, 1fr));
@@ -12299,10 +11639,6 @@ body[data-view="control"] .audio-zone .stream-play {
   border-color: rgba(89, 210, 230, .5);
 }
 
-body[data-view="control"] .audio-zone .stream-stop {
-  color: #ff91a0;
-  border-color: rgba(239, 87, 107, .46);
-}
 
 /* Input-device profiles · 2026-08-27 -------------------------------------
  * Daily ZEEP operation is touch-first, while Monitor is a desktop workspace.
@@ -13210,83 +12546,6 @@ body[data-view="control"] .audio-zone .stream-track-copy b {
   font-size: 9px;
 }
 
-body[data-view="control"] .stream-mode-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  min-height: 0;
-}
-
-body[data-view="control"] .stream-mode-toggle {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr);
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  height: 26px;
-  min-height: 26px;
-  max-height: 26px;
-  padding: 2px 7px;
-  color: #9db7c4;
-  background: rgba(8, 25, 39, .92);
-  border: 1px solid rgba(91, 137, 158, .34);
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-body[data-view="control"] .stream-mode-option {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  min-width: 0;
-  opacity: .55;
-  transition: color .2s ease, opacity .2s ease;
-}
-
-body[data-view="control"] .stream-mode-option.active {
-  color: #dffff4;
-  opacity: 1;
-}
-
-body[data-view="control"] .stream-mode-option .ui-icon {
-  width: 14px;
-  height: 14px;
-}
-
-body[data-view="control"] .stream-mode-option small {
-  overflow: hidden;
-  font-size: 7px;
-  font-weight: 800;
-  line-height: 1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-body[data-view="control"] .stream-mode-switch {
-  position: relative;
-  display: block;
-  width: 28px;
-  height: 14px;
-  border: 1px solid rgba(83, 215, 197, .54);
-  border-radius: 999px;
-  background: rgba(18, 66, 72, .86);
-}
-
-body[data-view="control"] .stream-mode-switch > i {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #7ff0cd;
-  box-shadow: 0 0 7px rgba(72, 224, 166, .7);
-  transition: transform .2s ease;
-}
-
-body[data-view="control"] .stream-mode-toggle[data-mode="queue"] .stream-mode-switch > i {
-  transform: translateX(14px);
-}
 
 body[data-view="control"] .audio-zone .stream-queue-row select,
 body[data-view="control"] .audio-zone .stream-queue-row input[type="range"] {
@@ -13412,39 +12671,11 @@ body[data-view="control"] .audio-zone.audio-loading .stream-play {
   border-color: #b9f7ff;
   box-shadow: 0 0 0 3px rgba(80, 218, 238, .14), 0 0 14px rgba(80, 218, 238, .34);
 }
-
 /* Focus / fullscreen control · 2026-08-27 -------------------------------
  * Native fullscreen must start from a user gesture. The same button also
  * activates an in-page focus mode, so hiding the identity header still works
  * when an embedded browser declines the fullscreen request. */
-body[data-view="control"] .control-fullscreen-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  box-sizing: border-box;
-  min-width: 66px;
-  height: 30px;
-  min-height: 30px;
-  padding: 4px 8px;
-  color: #bceef5;
-  border: 1px solid rgba(104, 215, 232, .38);
-  border-radius: 9px;
-  background: rgba(20, 62, 78, .72);
-  font: 800 9px/1 inherit;
-  cursor: pointer;
-}
 
-body[data-view="control"] .control-fullscreen-button .ui-icon {
-  width: 15px;
-  height: 15px;
-}
-
-body[data-view="control"] .control-fullscreen-button.active {
-  color: #dffff5;
-  border-color: rgba(95, 231, 190, .66);
-  background: rgba(24, 89, 74, .78);
-}
 
 body[data-view="control"].control-focus-mode {
   padding-top: 4px;
@@ -13463,10 +12694,7 @@ body[data-view="control"].control-focus-mode .unified-control {
     --control-deck-row: clamp(236px, calc((100dvh - 96px) / 2), 298px);
   }
 
-  body[data-view="control"].control-focus-mode .control-fullscreen-button {
-    height: 26px;
-    min-height: 26px;
-  }
+
 }
 
 /* Simplified Pi-local Safety Supervisor · 2026-08-27 --------------------
@@ -14092,7 +13320,6 @@ body[data-view="control"] :is(
   .unified-room-state,
   .control-button-caption,
   .stream-control small,
-  .stream-mode-option small,
   .temperature-quick-copy b,
   .temperature-quick-copy small
 ) {
@@ -14108,9 +13335,6 @@ body[data-view="control"] .stream-control small {
   line-height: 11px;
 }
 
-body[data-view="control"] .stream-mode-option small {
-  font-size: 8px;
-}
 
 body[data-view="control"] .device-zone > .zone-sensor-grid > :is(.door-safety-sensor, .comfort-output-sensor) > b {
   display: block;
@@ -14195,13 +13419,6 @@ body[data-view="control"] .device-zone :is(
   white-space: nowrap !important;
 }
 
-body[data-view="control"] .control-fullscreen-button {
-  font-family: inherit;
-  font-size: 9px;
-  font-weight: 800;
-  line-height: 1;
-  white-space: nowrap;
-}
 
 @media (min-width: 901px) and (max-width: 1600px) and (max-height: 900px) and (orientation: landscape) {
   body[data-view="control"].control-focus-mode .device-zone :is(
@@ -14362,8 +13579,7 @@ body[data-view="control"] .audio-zone .stream-now-playing {
 
 body[data-view="control"] .audio-zone :is(
   .stream-queue-row,
-  .stream-controls,
-  .stream-mode-row
+  .stream-controls
 ) {
   min-width: 0;
   overflow: hidden;
@@ -14384,12 +13600,6 @@ body[data-view="control"] .audio-zone .stream-control {
   overflow: hidden;
 }
 
-body[data-view="control"] .audio-zone .stream-mode-row,
-body[data-view="control"] .audio-zone .stream-mode-toggle {
-  height: 28px;
-  min-height: 28px;
-  max-height: 28px;
-}
 
 /* User history ownership --------------------------------------------------
  * A user never chooses an account on the History screen: the authenticated

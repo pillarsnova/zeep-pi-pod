@@ -8,6 +8,16 @@ import ui_composer
 
 
 class UiComposerTests(unittest.TestCase):
+    def test_retired_widget_styles_are_not_shipped(self):
+        retired = (
+            r"\.(?:sound-engineering[\w-]*|progressive-profile-[\w-]+|"
+            r"stream-mode-[\w-]+|control-fullscreen-button)\b"
+        )
+        for relative in ("theme-modern.css", "partials/app/styles.css"):
+            with self.subTest(stylesheet=relative):
+                css = (ui_composer.STATIC / relative).read_text(encoding="utf-8")
+                self.assertNotRegex(css, retired)
+
     def test_smart_senses_scope_preserves_the_audio_module_and_live_views(self):
         runtime = ui_composer.render()
         overview = (

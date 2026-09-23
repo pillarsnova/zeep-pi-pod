@@ -11,7 +11,8 @@ Session นั้น ไม่ใช่คะแนนที่สามหร�
 
 หน้านี้แยกสถานะ source ใน Git ออกจากหลักฐานการตรวจ Pod ที่บันทึกไว้
 ตรวจ Git หลัง Pull `origin/develop` วันที่ 23 ก.ย. ได้ `5de1b2e`
-จากนั้นบันทึกงาน Knowledge Hub/เอกสารเป็น `7cdb173` และจัดชุดล้างโค้ดที่เลิกใช้
+จากนั้นบันทึกงาน Knowledge Hub/เอกสารเป็น `7cdb173` และล้างโค้ดเป็น `00047ad`
+รอบต่อเนื่อง Pull แล้วไม่มีต้นทางใหม่ จึงล้าง CSS เก่าและ wrapper Admin เพิ่ม
 ตาม [รายงาน 23 ก.ย.](reviews/2026-09-23-unused-code-cleanup.md)
 ตรวจ Pod แบบอ่านอย่างเดียววันที่ 22 ก.ย. เวลา 20:57 +07 ยังพบ `78e90fc`
 และ `zeep-pod.service` active/running; รอบนี้ไม่ได้ตรวจสถานะผู้พักหรือสั่ง Restart,
@@ -23,7 +24,7 @@ Deploy หรือ Flash
 
 | เรื่อง | รุ่น/หลักฐานที่ตรวจแล้ว | ขอบเขต |
 |---|---|---|
-| Source รอบ 23 ก.ย. | ฐาน `5de1b2e` → Knowledge Hub `7cdb173` → ชุดล้างโค้ดใน revision นี้ | ตรวจรายการลบและผลทดสอบในรายงาน 23 ก.ย.; ไม่ใช่สถานะ Deploy |
+| Source รอบ 23 ก.ย. | ฐาน `5de1b2e` → Knowledge Hub `7cdb173` → ล้างโค้ด `00047ad` → ล้าง CSS ใน revision นี้ | ตรวจรายการลบและผลทดสอบแยกรอบในรายงาน 23 ก.ย.; ไม่ใช่สถานะ Deploy |
 | Pod 1 — ตรวจ 22 ก.ย. 20:57 +07 | `78e90fc` · branch `develop` · WorkingDirectory `/home/pod1/pi5` · Git working tree สะอาด | service active/running; process เริ่ม 21 ก.ย. 12:33:29 +07; อ่านจาก Git/systemd ไม่ใช่การทดสอบ Sensor หรือรับรองสถานะผู้พัก |
 | Pi application — หลักฐานการตรวจเดิม | `b2ce19b` บน Pod 1; Restart 19 ก.ย. 2026 06:41:14 +07 | บริการ active และ Safety ready ณ เวลาตรวจเดิม ไม่ใช้ยืนยัน SHA หรือสถานะ Pod ปัจจุบัน |
 | เอกสารผล Rerun | `c75edcd` | เป็น documentation commit ไม่ต้อง restart เพื่อใช้เอกสาร |

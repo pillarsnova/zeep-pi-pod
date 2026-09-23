@@ -462,9 +462,6 @@ class AuthSessionManager:
                 matched = configured_name
         return matched
 
-    def verify_local_admin(self, username: str, password: str) -> bool:
-        return self.authenticate_local_admin(username, password) is not None
-
     def health(self) -> dict[str, Any]:
         now = time.time()
         with closing(self._connect()) as connection:

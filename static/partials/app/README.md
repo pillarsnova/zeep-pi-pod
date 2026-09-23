@@ -13,6 +13,9 @@
 - ลำดับใน `ui_composer.SCRIPT_PARTIALS` เป็น contract เพราะโค้ดเดิมใช้ global
   functions, shared state และ inline event handlers ร่วมกัน
 - `styles.css` ต้องถูกประกอบก่อน `theme-modern.css` เพื่อรักษาลำดับ CSS cascade
+- ลบ CSS เมื่อยืนยันว่าไม่มี DOM/renderer ใช้แล้วเท่านั้น คลาส `mode-*`,
+  `tone-*`, `quality-*`, `atmosphere-*` และ `humidity-*` บางส่วนสร้างแบบไดนามิก
+  ห้ามลบเพียงเพราะค้นชื่อเต็มไม่พบ; การล้าง selector ต้องเทียบภาพ/layout ก่อน–หลัง
 - ทุก partial ต้องลงท้ายด้วย newline และทุก marker ต้องมีเพียงหนึ่งตำแหน่ง
 
 ## แผนผังไฟล์

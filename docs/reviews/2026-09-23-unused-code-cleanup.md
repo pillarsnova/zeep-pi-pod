@@ -84,3 +84,52 @@ git diff --check
 `app.py` และ live estimator ยังเป็นส่วนขนาดใหญ่ ต้องแยกความรับผิดชอบพร้อม
 characterization tests ต่อ ไม่ควรลบเพียงเพราะไฟล์ยาวหรือชื่อเป็น legacy
 การตัด API/facade ที่ยังใช้ต้องมี client migration แยกจากงานนี้
+
+## รอบต่อเนื่อง — CSS และ Admin wrapper
+
+ฐาน: `00047ad` · ตรวจหลัง Pull `origin/develop` อีกครั้งโดยไม่มีโค้ดใหม่จากต้นทาง
+ผล Full regression ด้านบนเป็นของรอบแรก ไม่ใช่จำนวน test ของรอบนี้
+
+### สิ่งที่นำออก
+
+- CSS ของแผง sound engineering เก่า, progressive-profile card เดิม,
+  controller/device rows รุ่นเก่า และภาพ SVG ของอุปกรณ์ที่ไม่มีใน DOM แล้ว
+- CSS ของ stream mode row และปุ่ม fullscreen เฉพาะ Control รุ่นเก่า;
+  คงปุ่มเล่นซ้ำและปุ่มเต็มจอส่วนกลางที่ใช้จริง ไม่ลบฟังก์ชันเหล่านี้
+- `AuthSessionManager.verify_local_admin`: wrapper Boolean ที่ไม่มี caller;
+  Login ยังคงใช้ `authenticate_local_admin` และตรวจรหัสผ่านแบบเดิม
+- ข้อความบันทึก release ซ้ำในหน้าแรก Onboarding ย้ายการอ้างอิงไป Current Status
+  โดยไม่ได้ลบหลักฐานตามวันที่
+
+### ขนาดที่ลดลง
+
+| Source | ก่อน | หลัง |
+|---|---:|---:|
+| `static/theme-modern.css` | 15,773 บรรทัด | 14,983 บรรทัด |
+| `static/partials/app/styles.css` | 850 บรรทัด | 846 บรรทัด |
+| `access_control.py` | 508 บรรทัด | 505 บรรทัด |
+
+CSS ต้นทางลดรวม **23,578 bytes**; ไม่รวมการนับซ้ำจาก generated `static/index.html`
+เพิ่ม cache version ของ stylesheet เป็น `20260923-1` และประกอบ HTML ใหม่
+ไม่เปลี่ยน API, สูตร, Session, hardware หรือข้อมูลผู้พัก
+
+### หลักฐานการตรวจรอบต่อเนื่อง
+
+- ตรวจการอ้างถึง selector จาก HTML, JavaScript, partials และ renderer ก่อนลบ
+  คงคลาสที่สร้างแบบไดนามิก เช่น `mode-*`, `tone-*`, `quality-*` และระดับสิ่งแวดล้อม
+- Browser computed-style parity **92 กรณีผ่าน**: shell 5 หน้า × 2 บทบาท ×
+  Focus mode เปิด/ปิด × 4 ขนาดจอ รวม 80 กรณี และ dynamic Nap/Overnight/Monitor
+  อีก 12 กรณี ขนาดจอ 390, 768, 1280 และ 1920 px
+- Shell เทียบ layout/typography/colors และ pseudo-elements; dynamic results
+  รวม computed properties มาตรฐานทั้งหมด ไม่พบ script error หรือ external request
+- ใช้ข้อมูลจำลองทั้งหมด ไม่เชื่อม Pod; การตรวจ CSS ของ Monitor ในบทบาท User
+  เป็นการตรวจ presentation เท่านั้น ไม่ได้เปิดสิทธิ์เข้าหน้านั้น
+- แยกการจับภาพออกจากการวัด layout หลังพบว่าจับภาพเพียงฝั่งเดียวทำให้
+  text layout ต่างระดับเศษพิกเซล ตรวจ A/A control แล้วเทียบใหม่ผ่าน
+- เพิ่ม regression กันการส่ง stylesheet ของ widget ที่เลิกใช้กลับมาอีก
+- Focused gate `ui auth core control` ผ่าน **269 tests**; เอกสาร/Knowledge Hub
+  ผ่าน **24 tests**; ไม่มี failure หรือ skip ทั้งสองชุด
+- UI composer, handbook source alignment และ `git diff --check` ผ่าน
+  CI ของรอบต่อเนื่องให้ตรวจจาก Git SHA ของ commit นี้ ไม่ใช้ผลรอบแรกแทน
+
+รอบนี้ไม่ Restart/Deploy และไม่ใช้ผล browser จำลองรับรองการสั่งอุปกรณ์จริง

@@ -73,7 +73,7 @@ LEGACY_PACKAGE_FACADES = {
     "api_state_projection",
 }
 LEGACY_FILE_LINE_CAPS = {
-    "access_control.py": 508,
+    "access_control.py": 505,
     "pod_occupancy.py": 387,
     "reclassify_sleep_history.py": 1_109,
     "sleep_session_report.py": 3_584,

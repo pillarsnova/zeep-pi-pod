@@ -1,7 +1,7 @@
 # ZEEP — สถานะระบบและรุ่นที่ตรวจล่าสุด
 
 สถานะ: **Source release register · Internal Pilot**
-ทบทวน: 22 กันยายน 2026 · ผู้รับผิดชอบ: Pi Backend / Product / Operations
+ทบทวน: 23 กันยายน 2026 · ผู้รับผิดชอบ: Pi Backend / Product / Operations
 
 ## TL;DR
 
@@ -10,8 +10,9 @@
 Session นั้น ไม่ใช่คะแนนที่สามหรือการประเมินความพร้อมทั้งวัน
 
 หน้านี้แยกสถานะ source ใน Git ออกจากหลักฐานการตรวจ Pod ที่บันทึกไว้
-ตรวจ Git หลัง Pull `origin/develop` วันที่ 22 ก.ย. ได้ `5de1b2e`
-ส่วนงาน Knowledge Hub และการทบทวนเอกสารยังเป็น Working tree บน Mac
+ตรวจ Git หลัง Pull `origin/develop` วันที่ 23 ก.ย. ได้ `5de1b2e`
+จากนั้นบันทึกงาน Knowledge Hub/เอกสารเป็น `7cdb173` และจัดชุดล้างโค้ดที่เลิกใช้
+ตาม [รายงาน 23 ก.ย.](reviews/2026-09-23-unused-code-cleanup.md)
 ตรวจ Pod แบบอ่านอย่างเดียววันที่ 22 ก.ย. เวลา 20:57 +07 ยังพบ `78e90fc`
 และ `zeep-pod.service` active/running; รอบนี้ไม่ได้ตรวจสถานะผู้พักหรือสั่ง Restart,
 Deploy หรือ Flash
@@ -22,7 +23,7 @@ Deploy หรือ Flash
 
 | เรื่อง | รุ่น/หลักฐานที่ตรวจแล้ว | ขอบเขต |
 |---|---|---|
-| Source ล่าสุดใน Git | `5de1b2e` บน `origin/develop` | Pull แบบ fast-forward แล้ว ไม่มี Commit ใหม่จากต้นทาง ณ รอบตรวจ 22 ก.ย.; ไม่รวมงาน Knowledge Hub ที่ยังไม่ Commit |
+| Source รอบ 23 ก.ย. | ฐาน `5de1b2e` → Knowledge Hub `7cdb173` → ชุดล้างโค้ดใน revision นี้ | ตรวจรายการลบและผลทดสอบในรายงาน 23 ก.ย.; ไม่ใช่สถานะ Deploy |
 | Pod 1 — ตรวจ 22 ก.ย. 20:57 +07 | `78e90fc` · branch `develop` · WorkingDirectory `/home/pod1/pi5` · Git working tree สะอาด | service active/running; process เริ่ม 21 ก.ย. 12:33:29 +07; อ่านจาก Git/systemd ไม่ใช่การทดสอบ Sensor หรือรับรองสถานะผู้พัก |
 | Pi application — หลักฐานการตรวจเดิม | `b2ce19b` บน Pod 1; Restart 19 ก.ย. 2026 06:41:14 +07 | บริการ active และ Safety ready ณ เวลาตรวจเดิม ไม่ใช้ยืนยัน SHA หรือสถานะ Pod ปัจจุบัน |
 | เอกสารผล Rerun | `c75edcd` | เป็น documentation commit ไม่ต้อง restart เพื่อใช้เอกสาร |
@@ -41,7 +42,7 @@ Deploy หรือ Flash
 | Smart Senses | [ภาพรวมขอบเขต 22 ก.ย.](onboarding/smart-senses.md) | รวมข้อมูลหลายเซนเซอร์และ Adaptive Journey; Voice/thermal/radar/e-nose ยังเป็นแผน ไม่ได้ติดตั้งจากการปรับชื่อ |
 | Smart Senses — Refactor ใน Git | `5de1b2e` · [โครงสร้างและผลตรวจ](reviews/2026-09-22-smart-senses-refactor.md) | แยก Timeline, คุณภาพข้อมูล, context และคำแนะนำ; คง API/schema/ผลคำนวณเดิม ยังไม่ติดตั้งบน Pod ที่ตรวจ |
 | Smart Ear · โมดูลเสียง | Admin DSP shadow; มี telemetry features บน Pod 1 ใน audit `f570a68` | เป็น provisional label ไม่ใช่ผลจำแนกที่รับรองความแม่นยำ |
-| Knowledge Hub — Working tree บน Mac | [หน้าอ่านคู่มือ](portal/index.html) · เตรียม Route `/handbook` สำหรับ Admin | สารบัญ ค้นหาฉบับเต็ม และพิมพ์รายบท; ยังไม่ Commit/Push/Deploy บน Pod ที่ตรวจ ใช้ HTML ออฟไลน์หรือ Local preview ก่อน |
+| Knowledge Hub — Source commit `7cdb173` | [หน้าอ่านคู่มือ](portal/index.html) · Route `/handbook` สำหรับ Admin | สารบัญ ค้นหาฉบับเต็ม และพิมพ์รายบท; ยังไม่ Deploy บน Pod ที่ตรวจ ใช้ HTML ออฟไลน์หรือ Local preview ก่อน |
 
 เวอร์ชันที่เปลี่ยนตาม release ยึด [`sleep_system_policy.py`](../sleep_system_policy.py),
 Pydantic/OpenAPI และ effective configuration; ตารางนี้ต้องแก้เมื่อมี deployment ใหม่
@@ -101,11 +102,11 @@ Sleep Score 15/15, Recovery Score 24/28; อีก 4 Session ต่ำกว่�
 
 ## Verification
 
-เอกสารรอบนี้เทียบกับ source บน `develop` ที่ `5de1b2e` และงาน Knowledge Hub
-ใน Working tree โดยตรวจ policy version, models, routes, แผนผังโมดูลและเอกสารต้นทาง
-รวมทั้ง Git/systemd ของ Pod แบบอ่านอย่างเดียวตามเวลาข้างต้น ไม่สั่งอุปกรณ์
-ไม่ Restart และไม่ Rerun เพิ่ม ผล Browser QA ของ Knowledge Hub ไม่ใช้รับรอง
-Dashboard, Control, Monitor หรือ Sessions ของรุ่นอื่น
-รายละเอียดอยู่ใน [รายงานทบทวนเอกสาร 22 ก.ย.](reviews/2026-09-22-documentation-refresh.md)
+รอบ 23 ก.ย. ตรวจจากฐาน `5de1b2e`, Knowledge Hub `7cdb173` และชุดล้างโค้ดนี้
+หลักฐาน policy/models/routes/เอกสารและ Git/systemd ของ Pod มาจาก
+[รายงานทบทวนเอกสาร 22 ก.ย.](reviews/2026-09-22-documentation-refresh.md)
+ส่วนรายการลบและผลทดสอบใหม่อยู่ใน
+[รายงาน 23 ก.ย.](reviews/2026-09-23-unused-code-cleanup.md)
+ไม่สั่งอุปกรณ์ ไม่ Restart ไม่ Rerun และไม่ใช้ผล Browser QA รุ่นเก่ารับรองรุ่นใหม่
 ใช้ `python -m unittest -q test_documentation_alignment.py` ตรวจลิงก์และ contract
 เอกสาร; ผลนี้ไม่แทน hardware หรือ visual acceptance

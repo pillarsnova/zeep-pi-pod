@@ -151,8 +151,9 @@ canonical identifier เมื่อมีข้อมูล แต่ยัง�
 ### Raw กับ Derived
 
 - Raw Sensor/BCG และ original Timeline ห้ามถูกแก้เพื่อทำให้ผลดีขึ้น
-- Reclassify/rescore/recalibrate เขียน Derived result ใหม่พร้อม policy/formula version,
-  provenance, immutable-Raw guard และ audit
+- Raw replay/promotion และ rescore เขียน Derived result ใหม่พร้อม
+  policy/formula version, provenance, immutable-Raw guard และ audit
+- เสียงใช้ `sound_dba` จาก ESP32 โดยตรง ไม่มีเครื่องมือบวก/ลบ Bias ย้อนหลังบน Pi
 - “Raw immutable” เป็นกฎความถูกต้องเชิงวิเคราะห์ ไม่ได้ห้ามการลบอย่างมีอำนาจตาม
   privacy/retention process
 - Public/App projection ใช้ positive allowlist: field ใหม่ไม่ออกเองจนผ่าน review

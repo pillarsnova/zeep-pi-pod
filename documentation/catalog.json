@@ -1,6 +1,6 @@
 {
   "edition": "V1 · INTERNAL PILOT",
-  "reviewed_on": "2026-09-22",
+  "reviewed_on": "2026-09-23",
   "groups": [
     {
       "id": "start",
@@ -412,6 +412,13 @@
       "icon": "check",
       "description": "หลักฐานตามวันที่และรุ่น ไม่ใช้รับรองรุ่นใหม่โดยอัตโนมัติ",
       "documents": [
+        [
+          "unused-code-cleanup",
+          "docs/reviews/2026-09-23-unused-code-cleanup.md",
+          "23 ก.ย. · ล้างโค้ดที่เลิกใช้งาน",
+          "รายการลบ เหตุผล ส่วนที่คงไว้ และผลทดสอบโดยไม่เปลี่ยนสูตรคะแนน",
+          "audit"
+        ],
         [
           "documentation-review",
           "docs/reviews/2026-09-22-documentation-refresh.md",

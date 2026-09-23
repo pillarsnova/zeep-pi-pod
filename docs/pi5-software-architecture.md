@@ -2,8 +2,8 @@
 
 สถานะ: **Current implementation**
 
-ทบทวนเอกสาร: 22 กันยายน 2026 · Source `5de1b2e` และงาน Knowledge Hub บน Mac
-[Current Status](current-status.md) แยกรุ่นใน Git, Working tree และ Pod ที่ยังเป็น `78e90fc`
+ทบทวนเอกสาร: 23 กันยายน 2026 · Knowledge Hub `7cdb173` และชุดล้างโค้ดที่เลิกใช้
+[Current Status](current-status.md) แยกรุ่นใน Git ออกจาก Pod ที่ตรวจล่าสุดเป็น `78e90fc`
 ขอบเขต: `/home/pod1/pi5` · branch `origin/develop`
 
 เอกสารนี้เป็นแผนที่กลางสำหรับพัฒนาและตรวจสอบ Pi5 runtime ของ ZEEP ทุกตู้
@@ -85,7 +85,7 @@ app, ต่อ lifecycle, ประกอบ dependency และเรียก
 | Storage | `database.py`, `bcg_storage.py`, `backup.py` | SQLite writer, raw BCG และ Daily backup |
 | UI source | `static/index.template.html`, `static/partials/control/*`, `static/partials/app/*` | App shell, Control cards, Base CSS และ ordered JavaScript fragments |
 | UI bundle | `ui_composer.py`, `static/index.html` | ประกอบและตรวจ runtime HTML โดยไม่ fetch partial ตอนใช้งาน |
-| Knowledge Hub — Working tree | `documentation/`, `api/handbook_routes.py`, `docs/portal/index.html` | Build คู่มือจาก Markdown แบบ allowlist; Route Admin ส่งไฟล์ที่สร้างแล้ว ไม่มี Sensor polling หรือคำสั่งอุปกรณ์ ยังไม่ Deploy |
+| Knowledge Hub — Source `7cdb173` | `documentation/`, `api/handbook_routes.py`, `docs/portal/index.html` | Build คู่มือจาก Markdown แบบ allowlist; Route Admin ส่งไฟล์ที่สร้างแล้ว ไม่มี Sensor polling หรือคำสั่งอุปกรณ์ ยังไม่ Deploy |
 | User History availability | `sessions/history.py` | นับ Session จาก SQLite ที่จบแล้วและมี Timeline ให้ตรงกับรายการที่เปิดดูได้ |
 | Wake lock-in QA | `audit_wake_lock_in.py`, `sessions/wake_lock_audit.py` | Shadow audit แบบ read-only; ไม่แก้ State, Score หรือ Raw data |
 
@@ -230,10 +230,13 @@ Onboarding ใช้เอกสารนี้เป็น Roadmap ทางเ
 - `5de1b2e`: แยก Smart Ear Timeline และ Adaptive Learning ตามหน้าที่
   โดยคง public entry points, API/schema และผลคำนวณ อ่าน
   [แผนที่โมดูลและจุด Debug](onboarding/smart-senses.md#41-แผนที่โมดูลและจุด-debug)
-- Knowledge Hub อยู่ใน Working tree บน Mac ยังไม่อยู่ในรายการ Commit ข้างต้น
+- `7cdb173`: Knowledge Hub และเอกสารปัจจุบัน บันทึกเป็น source วันที่ 23 กันยายน
   อ่าน [คู่มือ Build](../documentation/README.md); ไม่ใช่ dependency ของ Sensor/Session
 
-`app.py` คงอยู่ที่ไม่เกิน 5,932 บรรทัด และเป็น composition root ต่อไป ส่วน API,
+รอบล้างโค้ด 23 กันยายนตัดตัวช่วย JSONL/Outbox ที่ไม่มี caller และ alias เก่า
+อ่าน [รายการลบและขอบเขต](reviews/2026-09-23-unused-code-cleanup.md)
+
+`app.py` ลดเหลือไม่เกิน 5,878 บรรทัด และเป็น composition root ต่อไป ส่วน API,
 Sensor contract/calibration/normalization/environment/sound และ value helpers อยู่ใน
 package ตามโดเมนแล้ว ไฟล์ชื่อเดิมที่ root เหลือเป็น facade บางเพื่อรักษา script/test
 เดิม การย้ายนี้ไม่เปลี่ยน Sleep/Score formula, Sensor cadence, ชื่อ public JSON key

@@ -19,7 +19,6 @@ from typing import Any
 
 from .pod_snapshot_errors import PodDataSyncError
 
-PRIVATE_FILE_MODE = 0o600
 PRIVATE_DIRECTORY_MODE = 0o700
 SENSITIVE_ARTIFACT_TTL = timedelta(hours=24)
 SENSITIVE_ARTIFACT_MAX_COUNT = 3
@@ -156,17 +155,6 @@ def read_private_json(
     finally:
         if descriptor >= 0:
             os.close(descriptor)
-
-
-def require_regular_file(path: Path, message: str) -> os.stat_result:
-    """Return ``lstat`` for a non-symlink regular file or fail closed."""
-    try:
-        result = path.lstat()
-    except OSError as exc:
-        raise PodDataSyncError(message) from exc
-    if stat.S_ISLNK(result.st_mode) or not stat.S_ISREG(result.st_mode):
-        raise PodDataSyncError(message)
-    return result
 
 
 def require_private_path(path: Path) -> None:

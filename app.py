@@ -98,7 +98,7 @@ from identity.profile_fields import (
     normalize_username as _normalize_username,
     zeep_health_reference as _zeep_health_reference,
 )
-from identity.zeep_account import authenticate_password, identity_from_auth_data
+from identity.zeep_account import authenticate_password
 from hardware.aircon_reference import AirconFanReferenceStore
 from hardware.audio import AudioPlayer, default_music_state
 from hardware.audio_api import AudioControlService, create_audio_router
@@ -139,7 +139,6 @@ from sessions.live_sleep_estimator import (
 )
 from sessions.live_sleep_runtime import LiveSleepRuntime
 from sessions.lifecycle import (
-    SESSION_CHECKPOINT_VERSION,
     SessionCheckpointStore,
     bed_is_occupied,
     evaluate_vital_start_gate,
@@ -227,7 +226,6 @@ from progressive_profile import (
 from pod_occupancy import (
     CoordinatorUnavailable,
     OccupancyConflict,
-    OccupancyLease,
     OccupancyStore,
     build_occupancy_client,
     create_occupancy_router,
@@ -1322,7 +1320,6 @@ def safety_supervisor():
 
 # ---------- profile & session store (on-device only) ----------
 profile_lock = threading.Lock()
-sessions_file_lock = threading.Lock()
 session_lock = threading.RLock()
 last_sensor_frame_lock = threading.Lock()
 ingest_outbox_lock = threading.RLock()
@@ -1367,8 +1364,6 @@ session_checkpoint_store = SessionCheckpointStore(
     bed_start_seconds=BED_START_SECONDS,
     on_invalid=_log_invalid_session_checkpoint,
 )
-active_session_checkpoint_lock = session_checkpoint_store.lock
-ACTIVE_SESSION_CHECKPOINT_VERSION = SESSION_CHECKPOINT_VERSION
 
 
 def _active_session_checkpoint_payload(active: Dict[str, Any]) -> Dict[str, Any]:
@@ -2515,42 +2510,6 @@ def _migrate_profiles_to_email_keys() -> Dict[str, str]:
         return verified_alias_mapping(migrated)
 
 
-def _read_sessions() -> list:
-    with sessions_file_lock:
-        try:
-            with SESSIONS_PATH.open("r", encoding="utf-8") as f:
-                lines = f.readlines()
-        except FileNotFoundError:
-            return []
-    records = []
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            records.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return records
-
-
-def _append_session_record(record: Dict[str, Any]):
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with sessions_file_lock:
-        with SESSIONS_PATH.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
-
-
-def _rewrite_sessions(records: list):
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with sessions_file_lock:
-        tmp = SESSIONS_PATH.with_suffix(".jsonl.tmp")
-        with tmp.open("w", encoding="utf-8") as f:
-            for record in records:
-                f.write(json.dumps(record, ensure_ascii=False) + "\n")
-        tmp.replace(SESSIONS_PATH)
-
-
 def _series_stats(values):
     vals = [v for v in values if isinstance(v, (int, float)) and not isinstance(v, bool)]
     if not vals:
@@ -3470,20 +3429,8 @@ _session_ingest_outbox = IngestOutbox(
 )
 
 
-def _ingest_outbox_path(session_id: str) -> Path:
-    return _session_ingest_outbox.path(session_id)
-
-
-def _write_ingest_outbox(entry: Dict[str, Any]) -> None:
-    _session_ingest_outbox.write(entry)
-
-
 def _clear_ingest_outbox(session_id: str) -> bool:
     return _session_ingest_outbox.clear(session_id)
-
-
-def _post_ingest_entry(entry: Dict[str, Any], *, timeout: Optional[float] = None) -> bool:
-    return _session_ingest_outbox.post(entry, timeout=timeout)
 
 
 def _enqueue_session_ingest(record: Dict[str, Any], report_samples: List[Dict[str, Any]]) -> None:
@@ -4770,7 +4717,6 @@ _zeep_binding = {
     "log_event": log_event,
     "offline_error": ZeepApiOffline,
 }
-_zeep_identity_from_auth_data = partial(identity_from_auth_data, **_zeep_binding)
 _authenticate_zeep_account = partial(authenticate_password, **_zeep_binding)
 
 

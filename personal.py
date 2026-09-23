@@ -63,8 +63,6 @@ from sessions.personal_behaviour import (
 from sessions.score_identity import assess_score_identity
 from sessions.target_provenance import assess_target_provenance
 
-# เกณฑ์กลาง (population default) — ใช้จนกว่าจะเรียนรู้ครบขั้นต่ำ
-DEFAULT_THRESHOLDS = {"cv_deep": 0.025, "cv_rem": 0.06}
 MIN_NIGHTS = PERSONAL_BASELINE_MIN_NIGHTS
 MAX_NIGHTS = PERSONAL_BASELINE_MAX_NIGHTS
 MIN_SESSION_SECONDS = PERSONAL_BASELINE_MIN_SESSION_SECONDS

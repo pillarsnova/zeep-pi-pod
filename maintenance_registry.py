@@ -17,7 +17,7 @@ from sleep_system_policy import (
 )
 
 
-MAINTENANCE_CONTRACT_VERSION = "zeep-maintenance-tools-v1.5"
+MAINTENANCE_CONTRACT_VERSION = "zeep-maintenance-tools-v1.6"
 
 MAINTENANCE_TOOLS: dict[str, dict[str, Any]] = {
     "reclassify_sleep_history.py": {
@@ -108,23 +108,6 @@ MAINTENANCE_TOOLS: dict[str, dict[str, Any]] = {
         "guard": "online SQLite backup before --apply",
         "policy_version": SLEEP_QUALITY_VERSION,
         "report_version": SESSION_REPORT_VERSION,
-    },
-    "recalibrate_sound_history.py": {
-        "group": "retired_legacy_audit",
-        "purpose": (
-            "Read-only preview of a correction proposed under the retired "
-            "Pi-side sound-calibration policy"
-        ),
-        "writes": [],
-        "preserves": [
-            "timeline", "events", "sleep_stage.state", "physiology", "raw_bcg",
-        ],
-        "default_mode": "audit_only",
-        "guard": (
-            "--apply always refuses; active esp32-direct-sound-dba contract "
-            "prohibits delta/bias writeback"
-        ),
-        "policy_version": "esp32-direct-sound-dba-v1.0",
     },
     "cleanup_short_sessions.py": {
         "group": "data_retention",

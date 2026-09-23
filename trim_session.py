@@ -14,7 +14,7 @@ import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 from zoneinfo import ZoneInfo
 
 from sleep_session_report import build_session_report, build_sleep_quality
@@ -43,19 +43,6 @@ def _cutoff_utc(value: str, timezone_name: str) -> datetime:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=ZoneInfo(timezone_name))
     return parsed.astimezone(timezone.utc)
-
-
-def _stats(values: list[Any]) -> Optional[Dict[str, Any]]:
-    numeric = [float(value) for value in values
-               if isinstance(value, (int, float)) and not isinstance(value, bool)]
-    if not numeric:
-        return None
-    return {
-        "avg": round(sum(numeric) / len(numeric), 2),
-        "min": round(min(numeric), 2),
-        "max": round(max(numeric), 2),
-        "n": len(numeric),
-    }
 
 
 def _load_json(value: Any) -> Dict[str, Any]:

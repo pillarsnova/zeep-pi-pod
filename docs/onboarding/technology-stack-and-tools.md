@@ -24,7 +24,7 @@ Account backend ซึ่งอยู่นอก repository นี้
 | Backend/API | FastAPI, Uvicorn, Pydantic บน typed domain APIs, HTTP/REST, WebSocket, `httpx` | Browser/API, validation, auth, live state และ ZEEP account integration |
 | Frontend | Vanilla HTML/CSS/JavaScript, inline SVG, Canvas | Dashboard, Control, Monitor และประวัติการใช้งาน |
 | UI build | `ui_composer.py` | รวม template/partials เป็น `static/index.html`; ไม่มี Node/npm bundler |
-| Knowledge Hub build — Working tree | Python `documentation/`, `markdown-it-py==4.0.0`, Vanilla HTML/CSS/JS | สร้าง `docs/portal/index.html` จากเอกสาร allowlist; อ่านออฟไลน์ได้ ยังไม่ Deploy |
+| Knowledge Hub build — Source | Python `documentation/`, `markdown-it-py==4.0.0`, Vanilla HTML/CSS/JS | สร้าง `docs/portal/index.html` จากเอกสาร allowlist; commit `7cdb173` อ่านออฟไลน์ได้ ยังไม่ Deploy |
 | Database | SQLite WAL; ไม่มี ORM | Session/Timeline/Event, Raw BCG, Auth และ Pod occupancy |
 | Sidecar storage | JSON/JSONL และ durable filesystem outbox | Profile, Baseline, checkpoint, device state, audit และ retry |
 | Hardware I/O | USB Serial JSONL/Binary, MQTT, BCM GPIO, MPV IPC | Sensor Hub, BCG, Control Hub, relay/driver และเสียงออกลำโพง |

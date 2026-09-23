@@ -16,16 +16,6 @@ from identity.account_aliases import account_boundary_keys
 SessionReader = Callable[[str, tuple[Any, ...]], list[dict[str, Any]]]
 ProgressSummary = Callable[[dict[str, Any]], dict[str, Any]]
 
-USER_HISTORY_FILTER = """
-    lower(trim(s.username_key))=?
-    AND s.start_time>=?
-    AND s.end_time IS NOT NULL
-    AND EXISTS (
-        SELECT 1 FROM timeline AS history_timeline
-        WHERE history_timeline.session_id=s.session_id
-    )
-"""
-
 SESSION_AVAILABILITY_SQL = """
     SELECT
         lower(trim(s.username_key)) AS username_key,

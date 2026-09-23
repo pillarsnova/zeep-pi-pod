@@ -583,7 +583,6 @@ def score_sleep_evidence(
     hr_cv = max(0.0, _finite(metrics.get("hr_cv"), 0.0))
     rr_cv = max(0.0, _finite(metrics.get("rr_cv"), 0.0))
     movement = _clamp(_finite(metrics.get("movement_ratio"), 0.0))
-    bed_status = str(metrics.get("bed_status") or "")
     hr_slope = _finite(metrics.get("hr_slope_bpm_per_min"), 0.0)
     rr_slope = _finite(metrics.get("rr_slope_per_min"), 0.0)
     regularity_raw = _optional_finite(metrics.get("resp_regularity"))

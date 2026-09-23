@@ -32,23 +32,6 @@ __all__ = (
 )
 
 
-def _first_finite_metric(
-    payload: Mapping[str, Any],
-    *keys: str,
-) -> float | None:
-    for key in keys:
-        value = payload.get(key)
-        if value is None or isinstance(value, bool):
-            continue
-        try:
-            number = float(value)
-        except (TypeError, ValueError, OverflowError):
-            continue
-        if math.isfinite(number):
-            return number
-    return None
-
-
 # Plain dictionaries are retained at this boundary because the Admin API and
 # existing tests expose these fields as JSON.  The source of truth now lives in
 # one module instead of being embedded in the server orchestrator.

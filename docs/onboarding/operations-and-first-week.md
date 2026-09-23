@@ -64,7 +64,7 @@ environment, passed/failed/error/skipped และ hardware ที่ได้�
 - งานย้อนหลังต้องผ่าน [`maintenance_registry.py`](../../maintenance_registry.py),
   เริ่ม dry-run และเก็บ immutable-Raw provenance กับ before/after audit
 - อ่าน [Sleep History Promotion Policy](../sleep-history-promotion-policy-v2.md)
-  ก่อน reclassify/rescore/recalibrate/cleanup/trim/reset/annotation
+  ก่อน replay/promotion/rescore/cleanup/trim/reset/annotation
 - Local/Mock pass ไม่แทนเครื่องจริง และ Hardware smoke ไม่แทน Full Product Gate
 
 ## Pull request / handoff ที่ review ได้

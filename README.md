@@ -10,7 +10,7 @@
 > จุดเริ่มต้นและคำสั่ง Bootstrap ไม่ใช่สำเนาของข้อกำหนดทุกระบบ
 
 หน้าอ่านสำหรับทีม: [ZEEP POD Knowledge Hub](docs/portal/index.html)
-เปิด HTML ออฟไลน์ได้; `/handbook` เป็น Route Admin ที่เตรียมไว้ใน Working tree
+เปิด HTML ออฟไลน์ได้; `/handbook` เป็น Route Admin ใน source commit `7cdb173`
 ยังไม่ติดตั้งบน Pod ที่ตรวจ 22 ก.ย. 2026 ดู [Current Status](docs/current-status.md)
 
 ## ขอบเขต v1

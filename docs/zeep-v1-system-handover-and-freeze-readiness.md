@@ -294,10 +294,12 @@ Hardware experiment แยก release record จาก v1 Pi Product Gate
    Error/Skipped ตามผลจริง ห้ามคัดลอกตัวเลขจากรอบก่อน
 
 สิ่งที่ลดได้หลัง Freeze โดยทำเป็น migration แยก คือ legacy Tablet history route
-หลัง App ใช้ Usage API ครบ, `recalibrate_sound_history.py` หลังยืนยันว่าไม่มีข้อมูล
-รุ่นเก่าที่ต้อง audit และ compatibility facade ที่ไม่มี caller แล้ว ส่วนไฟล์
-`docs/archive/sound-processing-history-2026-09-10.json` เป็น audit provenance ขนาดเล็ก
-ไม่ใช่ runtime จึงยังไม่ควรลบเพื่อประหยัดเวลาหรือพื้นที่
+หลัง App ใช้ Usage API ครบ และ compatibility facade ที่ไม่มี caller แล้ว
+รอบ 23 ก.ย. นำ `recalibrate_sound_history.py` ออกจากชุดเครื่องมือปัจจุบัน:
+เป็น preview ของนโยบาย Bias ที่เลิกใช้ ไม่มี runtime caller และห้าม apply อยู่แล้ว
+ประวัติโค้ดยังอยู่ใน Git; ข้อมูลเก่าและ
+`docs/archive/sound-processing-history-2026-09-10.json` ซึ่งเป็น audit provenance
+ยังเก็บไว้ อ่าน [รายการล้างโค้ด](reviews/2026-09-23-unused-code-cleanup.md)
 
 รายละเอียดคำสั่งและขอบเขตอยู่ใน [TESTING.md](../TESTING.md)
 

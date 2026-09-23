@@ -18,7 +18,6 @@ class MaintenanceRegistryTests(unittest.TestCase):
             "promote_sleep_history.py",
             "compare_sleep_history_replay.py",
             "rescore_session_reports.py",
-            "recalibrate_sound_history.py",
             "cleanup_short_sessions.py",
             "trim_session.py",
             "reset_sleep_dataset.py",
@@ -50,6 +49,11 @@ class MaintenanceRegistryTests(unittest.TestCase):
         snapshot = registry.maintenance_contract_snapshot()
         self.assertFalse(snapshot["browser_execution_enabled"])
         self.assertEqual(snapshot["tools"], registry.MAINTENANCE_TOOLS)
+
+    def test_retired_sound_delta_tool_is_not_distributed(self):
+        retired = "recalibrate_sound_history.py"
+        self.assertNotIn(retired, registry.MAINTENANCE_TOOLS)
+        self.assertFalse((ROOT / retired).exists())
 
 
 if __name__ == "__main__":

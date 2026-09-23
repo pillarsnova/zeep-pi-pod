@@ -7,8 +7,10 @@
 > **Product position:** ZEEP Wellness & Longevity · ผลเป็นการประเมิน
 > เชิงสุขภาพจาก Sensor ไม่ใช่การวินิจฉัยหรือผล AASM/PSG
 >
-> **Status:** Implemented presentation contract · ทบทวน 2026-09-19 หลัง `c75edcd`
+> **Status:** Implemented presentation contract · ทบทวน 2026-09-22 กับ Source `5de1b2e`
 > ไม่ใช่การรับรอง visual/keyboard QA ใหม่ทุกหน้า
+> สัญญาและสูตรคะแนนเดิมไม่เปลี่ยนจากงาน Refactor Smart Senses หรือ Knowledge Hub;
+> รุ่นบน Pod แยกใน [Current Status](current-status.md)
 >
 > **Related specification:**
 > [ZEEP Restore Summary v1](zeep-restore-summary-v1.md) ·

@@ -9,16 +9,25 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse, RedirectResponse
 
+from api.handbook_routes import create_handbook_router
+
 
 def create_shell_router(
     *,
     static_dir: Path,
+    require_admin: Callable[..., Any],
     require_pod_operator: Callable[..., Any],
     snapshot_for: Callable[[Any], dict[str, Any]],
     public_status: Callable[[], dict[str, Any]],
     smart_response: Callable[[], dict[str, Any]],
 ) -> APIRouter:
     router = APIRouter(tags=["Pod shell"])
+    router.include_router(
+        create_handbook_router(
+            bundle=static_dir.parent / "docs/portal/index.html",
+            require_admin=require_admin,
+        )
+    )
     operator_dependency = Depends(require_pod_operator)
 
     @router.get("/")

@@ -13,6 +13,7 @@ DOMAIN_PACKAGE_NAMES = (
     "adaptive",
     "api",
     "common",
+    "documentation",
     "hardware",
     "identity",
     "operations",

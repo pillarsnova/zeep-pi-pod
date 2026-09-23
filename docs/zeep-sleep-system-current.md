@@ -5,7 +5,7 @@
 > **Status:** Wellness release candidate · guarded derived-result replay/promotion · G2 paired-PSG validation open
 > **Updated:** 2026-09-22 · เพิ่ม N3 paired-fit guard ใน source; ยังไม่ Deploy หรือแก้ State ย้อนหลัง
 > **Code manifest:** [`sleep_system_policy.py`](../sleep_system_policy.py)
-> **Related:** [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.8.md) · [ZEEP Restore Summary v1](zeep-restore-summary-v1.md) · [Resting Heart & Breathing Wellness v1.2](zeep-respiratory-wellness-v1.md) · [Historical Promotion Policy v2](sleep-history-promotion-policy-v2.md)
+> **Related:** [Sleep-State Baseline v1.9](zeep-sleep-state-baseline-v1.8.md) · [ZEEP Restore Summary v1](zeep-restore-summary-v1.md) · [Resting Heart & Breathing Wellness v1.2](zeep-respiratory-wellness-v1.md) · [Historical Promotion Policy v2](sleep-history-promotion-policy-v2.md)
 
 ## TL;DR
 

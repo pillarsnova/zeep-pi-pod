@@ -9,6 +9,10 @@
 > [ZEEP v1 Team Onboarding](docs/onboarding/README.md) เสมอ เอกสารหน้านี้เป็นเพียง
 > จุดเริ่มต้นและคำสั่ง Bootstrap ไม่ใช่สำเนาของข้อกำหนดทุกระบบ
 
+หน้าอ่านสำหรับทีม: [ZEEP POD Knowledge Hub](docs/portal/index.html)
+เปิด HTML ออฟไลน์ได้; `/handbook` เป็น Route Admin ที่เตรียมไว้ใน Working tree
+ยังไม่ติดตั้งบน Pod ที่ตรวจ 22 ก.ย. 2026 ดู [Current Status](docs/current-status.md)
+
 ## ขอบเขต v1
 
 ZEEP v1 มีรูปแบบการพักที่ผู้ใช้เลือกสองแบบเท่านั้น:
@@ -92,6 +96,7 @@ sensors/                     Sensor contract, calibration และ normalizatio
 sessions/                    Session, report, history, baseline และ replay services
 identity/                    ZEEP account, profile, occupancy และ erasure
 operations/                  snapshot sync, export และ workstation approval
+documentation/               catalog, Markdown renderer และ offline handbook builder
 acoustics/                   Acoustic Intelligence contract และ Admin projection
 adaptive/                    Baseline features และ Shadow recommendation
 presentation/                ภาษาผลลัพธ์ Wellness ที่ใช้ร่วมกัน
@@ -103,6 +108,7 @@ sleep_session_report.py      mode-aware Sleep/Recovery result
 static/index.template.html   UI source
 static/partials/             UI sections
 static/index.html            generated runtime bundle
+docs/portal/index.html       generated handbook; ไม่ใช่ Public static asset
 ```
 
 Dashboard, Session, Safety และ Report ต้องอ่าน canonical Sensor values ชุดเดียวกัน
@@ -111,7 +117,7 @@ Dashboard, Session, Safety และ Report ต้องอ่าน canonical S
 ## Invariants ที่ห้ามทำลาย
 
 1. Raw Sensor/BCG/Timeline ไม่ถูกแก้เพื่อทำให้ Derived result ดูดีขึ้น
-2. ไม่มีผู้ใช้อยู่บนเตียงหรือไม่มี HR/RR ตาม gate ห้ามสร้าง N1/N2/N3/REM
+2. ห้ามอนุมาน N1/N2/N3/REM ใหม่จาก HR/RR ที่ใช้ไม่ได้หรือกรณียืนยันไม่มีคนบนเตียง; ช่วงยัง occupied ให้คง State ตาม continuity policy พร้อมที่มาของผล ไม่ถือเป็นหลักฐานใหม่
 3. ทุก occupied Recording interval ต้องเป็น W/N1/N2/N3/REM; OFF BED แยกออก
 4. Overnight มี Sleep Score และ Nap มี Recovery Score; เวลาที่ผ่านไปห้ามสลับ Mode
 5. Environment ไม่สร้าง Sleep State แต่เป็น bounded support 10 คะแนนในทั้งสองสูตร
@@ -134,3 +140,13 @@ python ui_composer.py check
 ```
 
 อย่าแก้ generated `static/index.html` เพียงไฟล์เดียว
+
+เมื่อแก้เอกสารใน Knowledge Hub ให้สร้างและตรวจฉบับอ่านใหม่:
+
+```bash
+python -m documentation build
+python -m documentation check
+```
+
+อ่าน [วิธีดูแลหน้าคู่มือ](documentation/README.md); `markdown-it-py` อยู่ใน
+Dev dependencies เท่านั้น Pi ให้บริการไฟล์ที่ Build แล้วโดยไม่แปลง Markdown ขณะใช้งาน

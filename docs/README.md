@@ -1,5 +1,14 @@
 # ZEEP Pi 5 Documentation Index
 
+**หน้าอ่านเอกสารสำหรับทีม:** [ZEEP POD Knowledge Hub](portal/index.html)
+หรือ `/handbook` หลังเข้าสู่ระบบ Admin เมื่อ Deploy งานนี้แล้ว — ค้นหา อ่านฉบับเต็ม และพิมพ์รายบทได้
+สร้างจากเอกสารต้นทางโดยตรง; [วิธีอัปเดตชุดเอกสาร](../documentation/README.md)
+
+**ทบทวนเนื้อหาล่าสุด 22 ก.ย. 2026:** เทียบ Git `5de1b2e` กับ Working tree
+และตรวจ Pod เวลา 20:57 +07 ซึ่งยังเป็น `78e90fc`;
+อ่าน [สิ่งที่แก้และขอบเขตผลตรวจ](reviews/2026-09-22-documentation-refresh.md)
+งาน Knowledge Hub ยังไม่ Commit/Push/Deploy ณ รอบตรวจนี้
+
 สรุปงานล่าสุดสำหรับทีม:
 [Smart Senses — โมดูลและจุด Debug](onboarding/smart-senses.md) ·
 [ผลตรวจ Refactor](reviews/2026-09-22-smart-senses-refactor.md)
@@ -52,7 +61,7 @@
 | ภาพรวมระบบ | [Pi 5 Software Architecture](pi5-software-architecture.md) | ขอบเขต module, dependency และลำดับ refactor |
 | ปฏิบัติการเครื่อง | [Pi 5 Operations Runbook](pi5-operations-runbook.md) | Pull, verified Pod sync, test, deploy, backup, restart และ recovery |
 | Sleep State และคะแนน | [Sleep System Current](zeep-sleep-system-current.md) | Runtime, replay, Sleep Score และ Recovery Score |
-| หลักฐาน Baseline | [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.8.md) | Feature, gate, transition และขอบเขตการกล่าวอ้าง |
+| หลักฐาน Baseline | [Sleep-State Baseline v1.9](zeep-sleep-state-baseline-v1.8.md) | Feature, gate, transition และขอบเขตการกล่าวอ้าง; คงชื่อไฟล์เดิมเพื่อรักษาลิงก์ |
 | Historical promotion | [Sleep History Promotion Policy v2](sleep-history-promotion-policy-v2.md) | Guard และ audit เมื่อเขียน derived result ย้อนหลัง |
 | ผลลัพธ์ผู้ใช้ | [Session Result Presentation v1](zeep-session-result-presentation-v1.md) | ภาษากับลำดับข้อมูลบนหน้าผลลัพธ์ |
 | Restore Summary | [Restore Summary v1](zeep-restore-summary-v1.md) | คำอธิบายคะแนนโดยไม่สร้างคะแนนที่สาม |
@@ -76,6 +85,8 @@
 | Evidence library | [Research Evidence Library](../research/evidence-library/README.md) | แหล่งอ้างอิง, checksum และ verification |
 
 ## หลักฐาน Regression ที่ยังใช้งาน
+
+- [Documentation Refresh · 22 September 2026](reviews/2026-09-22-documentation-refresh.md) — source/Pod status, module map และ Knowledge Hub
 
 - [Smart Senses Refactor · 22 September 2026](reviews/2026-09-22-smart-senses-refactor.md)
 - [N3 Baseline Review · 22 September 2026](reviews/2026-09-22-n3-baseline-review.md) · source candidate, read-only cohort audit, ยังไม่ Deploy

@@ -6,6 +6,7 @@ include = [
     "adaptive/**/*.py",
     "api/**/*.py",
     "common/**/*.py",
+    "documentation/**/*.py",
     "hardware/**/*.py",
     "identity/**/*.py",
     "operations/**/*.py",

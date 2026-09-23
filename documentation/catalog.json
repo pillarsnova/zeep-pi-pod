@@ -1,0 +1,509 @@
+{
+  "edition": "V1 · INTERNAL PILOT",
+  "reviewed_on": "2026-09-22",
+  "groups": [
+    {
+      "id": "start",
+      "number": "01",
+      "title": "เริ่มต้นกับ ZEEP",
+      "icon": "book",
+      "description": "เข้าใจผลิตภัณฑ์ บทบาทของทีม และสถานะของระบบ",
+      "documents": [
+        [
+          "onboarding",
+          "docs/onboarding/README.md",
+          "คู่มือเริ่มงาน",
+          "ลำดับการอ่านสำหรับสมาชิกใหม่และขอบเขตของ ZEEP v1",
+          "guide"
+        ],
+        [
+          "status",
+          "docs/current-status.md",
+          "สถานะระบบและรุ่นล่าสุด",
+          "แยกโค้ดใน Git รุ่นบน Pod และงานที่ยังอยู่ระหว่างพัฒนา",
+          "guide"
+        ],
+        [
+          "lifecycle",
+          "docs/onboarding/product-and-lifecycle.md",
+          "ผลิตภัณฑ์และขั้นตอนการพัก",
+          "ตั้งแต่เข้าสู่ระบบ เลือกโหมด จนได้รับผลและคำแนะนำ",
+          "guide"
+        ],
+        [
+          "pilot",
+          "docs/zeep-pilot-two-mode-protocol.md",
+          "การทดสอบสองรูปแบบ",
+          "Nap & Refresh และ Overnight Recovery",
+          "guide"
+        ],
+        [
+          "index",
+          "docs/README.md",
+          "ทะเบียนเอกสารและลำดับอ้างอิง",
+          "เอกสารใดใช้อธิบายเรื่องใด และตรวจอย่างไรเมื่อข้อมูลขัดกัน",
+          "guide"
+        ],
+        [
+          "handover",
+          "docs/zeep-v1-system-handover-and-freeze-readiness.md",
+          "การส่งมอบและความพร้อม v1",
+          "ขอบเขตงาน รายการตรวจ และเงื่อนไขก่อน Code Freeze",
+          "guide"
+        ]
+      ]
+    },
+    {
+      "id": "system",
+      "number": "02",
+      "title": "สถาปัตยกรรมระบบ",
+      "icon": "layers",
+      "description": "โครงสร้าง Pi 5 เทคโนโลยี ฐานข้อมูล และส่วนเชื่อมต่อ",
+      "documents": [
+        [
+          "stack",
+          "docs/onboarding/technology-stack-and-tools.md",
+          "เทคโนโลยีและเครื่องมือ",
+          "Python, FastAPI, Web UI, SQLite และเครื่องมือพัฒนา",
+          "guide"
+        ],
+        [
+          "architecture",
+          "docs/pi5-software-architecture.md",
+          "โครงสร้างซอฟต์แวร์ Pi 5",
+          "ขอบเขตโมดูล การเชื่อมต่อ และจุดเริ่มแก้ไขโค้ด",
+          "guide"
+        ],
+        [
+          "hardware",
+          "docs/onboarding/hardware-hub-map.md",
+          "แผนผังอุปกรณ์และ Hub",
+          "Sensor Hub, Control Hub, BCG และอุปกรณ์บน Pi",
+          "guide"
+        ],
+        [
+          "device-health",
+          "docs/device-contract-and-fleet-health-v1.md",
+          "Device Contract และ Fleet Health",
+          "ตัวตนอุปกรณ์ รุ่น Firmware คุณภาพและอายุข้อมูล",
+          "contract"
+        ]
+      ]
+    },
+    {
+      "id": "senses",
+      "number": "03",
+      "title": "Smart Senses และเซนเซอร์",
+      "icon": "wave",
+      "description": "การรับรู้เสียง แสง อากาศ ความสบาย และสัญญาณร่างกาย",
+      "documents": [
+        [
+          "smart-senses",
+          "docs/onboarding/smart-senses.md",
+          "Smart Senses",
+          "ภาพรวมหลายเซนเซอร์ โมดูลย่อย และแนวทางต่อยอด",
+          "guide"
+        ],
+        [
+          "sensor-contract",
+          "docs/zeep-sensor-interface-contract-v1.2.md",
+          "ข้อกำหนดข้อมูลเซนเซอร์",
+          "ฟิลด์ หน่วย คุณภาพข้อมูล และการรับค่าจาก ESP32/BCG",
+          "contract"
+        ],
+        [
+          "smart-ear",
+          "docs/onboarding/smart-ear-dsp-plan.md",
+          "Smart Ear และการวิเคราะห์เสียง",
+          "DSP และ Timeline เสียงสำหรับ Admin; ป้ายเสียงยังเป็นผลชั่วคราว",
+          "shadow"
+        ],
+        [
+          "firmware",
+          "firmware/README.md",
+          "คู่มือ Firmware",
+          "Source การปรับเทียบ และขั้นตอนอัปเดตบอร์ด",
+          "guide"
+        ],
+        [
+          "hub1",
+          "firmware/sensorhub1-esp32s3/README.md",
+          "Sensor Hub 1 · ESP32-S3",
+          "อุณหภูมิ ความชื้น แสง และเสียงบนบอร์ดเดียวกัน",
+          "guide"
+        ],
+        [
+          "firmware-compatibility",
+          "firmware/sensorhub1-esp32s3/ORIGINAL_FIRMWARE_COMPATIBILITY.md",
+          "ความเข้ากันได้กับ Firmware เดิม",
+          "หลักฐานการเทียบข้อมูลและพฤติกรรมก่อนเปลี่ยน Firmware",
+          "evidence"
+        ],
+        [
+          "sound-lab",
+          "docs/brainwave-sound-lab-v1.md",
+          "ระบบเสียงเพื่อการพัก",
+          "Sound Lab การเล่นผ่านลำโพง และขอบเขตการกล่าวอ้าง",
+          "guide"
+        ]
+      ]
+    },
+    {
+      "id": "rest",
+      "number": "04",
+      "title": "การพักและการประเมินผล",
+      "icon": "moon",
+      "description": "Sleep State, Baseline, Sleep Score และ Recovery Score",
+      "documents": [
+        [
+          "sleep-system",
+          "docs/zeep-sleep-system-current.md",
+          "ระบบประเมินการพักปัจจุบัน",
+          "การประมวลผล State และคะแนนของทั้งสองโหมด",
+          "guide"
+        ],
+        [
+          "baseline",
+          "docs/zeep-sleep-state-baseline-v1.8.md",
+          "Baseline และหลักฐาน Sleep State",
+          "HR/RR Fit, Gate, Transition และข้อจำกัดของการประมาณ",
+          "guide"
+        ],
+        [
+          "restore",
+          "docs/zeep-restore-summary-v1.md",
+          "สรุปผลการฟื้นตัว",
+          "อธิบายคะแนนและปัจจัยสำคัญ โดยไม่สร้างคะแนนที่สาม",
+          "contract"
+        ],
+        [
+          "advice",
+          "docs/zeep-post-rest-advice.md",
+          "คำแนะนำหลังพัก",
+          "แปลงข้อมูลเป็นคำแนะนำสั้น ๆ สำหรับกิจกรรมถัดไป",
+          "guide"
+        ],
+        [
+          "vitals",
+          "docs/zeep-respiratory-wellness-v1.md",
+          "ชีพจรและการหายใจระหว่างพัก",
+          "สรุป HR/RR เชิงสุขภาพ โดยไม่วินิจฉัยโรคหรือความฟิตของปอด",
+          "guide"
+        ],
+        [
+          "learning",
+          "docs/zeep-user-learning-profile-v1.md",
+          "การเรียนรู้ข้อมูลเฉพาะบุคคล",
+          "ประวัติการพัก ช่วงอ้างอิง และความสบายของแต่ละคน",
+          "guide"
+        ],
+        [
+          "replay",
+          "docs/sleep-history-promotion-policy-v2.md",
+          "การประมวลผลย้อนหลัง",
+          "ตรวจราย Epoch เก็บ Audit trail และไม่แก้ Raw file",
+          "contract"
+        ]
+      ]
+    },
+    {
+      "id": "adaptive",
+      "number": "05",
+      "title": "Adaptive และแผนพัฒนา",
+      "icon": "spark",
+      "description": "เริ่มจากคำแนะนำที่มีเหตุผล ก่อนพัฒนาสู่การปรับอุปกรณ์",
+      "documents": [
+        [
+          "adaptive-start",
+          "docs/onboarding/adaptive-journey-and-sensor-expansion.md",
+          "ภาพรวม Adaptive Journey",
+          "เส้นทางข้อมูล หน้าจอ และงานต่อยอดตามบทบาท",
+          "guide"
+        ],
+        [
+          "adaptive-journey",
+          "docs/zeep-adaptive-journey-v1.md",
+          "Adaptive Journey 4 ขั้น",
+          "Timeline ก่อน–หลัง ช่วงความสบาย และการยืนยันคำแนะนำ",
+          "guide"
+        ],
+        [
+          "adaptive-data",
+          "docs/adaptive-control-data-foundation-v1.md",
+          "ข้อมูลสำหรับ Adaptive",
+          "Live context และข้อมูลที่ใช้เปรียบเทียบใน Shadow mode",
+          "shadow"
+        ],
+        [
+          "adaptive-plan",
+          "docs/adaptive-control-recommendation-plan-v1.md",
+          "แผนคำแนะนำการปรับอุปกรณ์",
+          "ให้ผู้ใช้หรือ Admin ยืนยันก่อน ไม่สั่งงานจาก AI โดยตรง",
+          "plan"
+        ],
+        [
+          "expansion",
+          "docs/zeep-redundant-sensors-and-device-expansion-v1.md",
+          "เซนเซอร์สำรองและอุปกรณ์รุ่นถัดไป",
+          "ข้อเสนอการออกแบบ ไม่ใช่รายการที่ติดตั้งแล้ว",
+          "plan"
+        ],
+        [
+          "bom",
+          "docs/zeep-sensor-expansion-bom-v1.md",
+          "BOM สำหรับพัฒนาและผลิต",
+          "สถานะประตู การไหลอากาศ อุณหภูมิพื้นผิว และรายการที่ต้องพิสูจน์",
+          "plan"
+        ]
+      ]
+    },
+    {
+      "id": "api",
+      "number": "06",
+      "title": "API ข้อมูล และสิทธิ์",
+      "icon": "code",
+      "description": "จุดเชื่อมต่อสำหรับแอป ZEEP และขอบเขตการใช้ข้อมูล",
+      "documents": [
+        [
+          "api-intro",
+          "docs/onboarding/api-data-and-privacy.md",
+          "ภาพรวม API และความเป็นส่วนตัว",
+          "ใครอ่านอะไรได้ ข้อมูลอยู่ที่ไหน และการลบข้อมูล",
+          "guide"
+        ],
+        [
+          "api-guide",
+          "docs/zeep-api-v1.md",
+          "คู่มือ API สำหรับทีมแอป",
+          "Endpoint รูปแบบการเรียก และการรับผล Session",
+          "contract"
+        ],
+        [
+          "api-schema",
+          "docs/zeep-api-schema-reference-v1.md",
+          "API Schema Reference",
+          "Type, Field, Enum และตัวอย่างโครงสร้างข้อมูล",
+          "contract"
+        ]
+      ]
+    },
+    {
+      "id": "interface",
+      "number": "07",
+      "title": "หน้าจอและการสื่อสาร",
+      "icon": "window",
+      "description": "หน้าที่แต่ละหน้า การแสดงผล และภาษาที่ใช้กับผู้พัก",
+      "documents": [
+        [
+          "interface-map",
+          "docs/zeep-interface-map-and-ui-standard-v1.md",
+          "แผนผังหน้าจอและมาตรฐาน UI",
+          "Dashboard, Control, Monitor, Sessions และสิทธิ์เข้าถึง",
+          "guide"
+        ],
+        [
+          "presentation",
+          "docs/zeep-session-result-presentation-v1.md",
+          "การนำเสนอผล Session",
+          "สรุปเชิงสุขภาพก่อน เปิดรายละเอียดเมื่อต้องการ",
+          "guide"
+        ],
+        [
+          "language",
+          "docs/zeep-product-language-guideline-v1.md",
+          "แนวทางภาษาในผลิตภัณฑ์",
+          "ทางการ เป็นมิตร กระชับ และไม่อ้างเกินข้อมูล",
+          "guide"
+        ],
+        [
+          "ui-roadmap",
+          "docs/zeep-interface-development-roadmap.md",
+          "แผนพัฒนา Interface",
+          "ลำดับงานด้าน UX ข้อมูล และงานออกแบบ",
+          "plan"
+        ]
+      ]
+    },
+    {
+      "id": "operations",
+      "number": "08",
+      "title": "พัฒนาและดูแลระบบ",
+      "icon": "tool",
+      "description": "การเริ่มงาน ทดสอบ Deploy สำรอง และกู้คืนระบบ",
+      "documents": [
+        [
+          "first-week",
+          "docs/onboarding/operations-and-first-week.md",
+          "เริ่มงานในสัปดาห์แรก",
+          "เตรียมเครื่อง เลือก Test และ Checklist ตามบทบาท",
+          "guide"
+        ],
+        [
+          "runbook",
+          "docs/pi5-operations-runbook.md",
+          "คู่มือปฏิบัติการ Pi 5",
+          "Pull, Sync, Deploy, Restart และ Recovery",
+          "guide"
+        ],
+        [
+          "testing",
+          "TESTING.md",
+          "การเลือกและรันทดสอบ",
+          "ทดสอบตามผลกระทบ และใช้ชุดเต็มเมื่อจำเป็น",
+          "guide"
+        ]
+      ]
+    },
+    {
+      "id": "research",
+      "number": "09",
+      "title": "หลักฐานและงานวิจัย",
+      "icon": "research",
+      "description": "แหล่งอ้างอิงที่ตรวจสอบได้ และแผนพิสูจน์ความสามารถ",
+      "documents": [
+        [
+          "evidence",
+          "research/evidence-library/README.md",
+          "คู่มือคลังหลักฐาน",
+          "วิธีอ่าน ตรวจ และปรับปรุงแหล่งข้อมูล",
+          "evidence"
+        ],
+        [
+          "sources",
+          "research/evidence-library/SOURCE_REGISTER.md",
+          "ทะเบียนแหล่งอ้างอิง",
+          "ลิงก์ฉบับเต็ม ขอบเขตการใช้ และข้อมูลตรวจสอบ",
+          "evidence"
+        ],
+        [
+          "score-evidence",
+          "research/evidence-library/TWO_MODE_SCORE_EVIDENCE.md",
+          "หลักฐานของคะแนนสองโหมด",
+          "แยกเหตุผลของ Sleep Score และ Recovery Score",
+          "evidence"
+        ],
+        [
+          "voc-case",
+          "research/evidence-library/SMOKING_VOC_CASE.md",
+          "VOC และสารตกค้างจากผู้ใช้งาน",
+          "สิ่งที่หลักฐานรองรับ และสิ่งที่ VOC Index บอกไม่ได้",
+          "evidence"
+        ],
+        [
+          "voc-protocol",
+          "research/evidence-library/VOC_CONTROL_VALIDATION.md",
+          "แผนทดสอบการลด VOC",
+          "Protocol การควบคุมตัวแปรและการอนุมัติทดสอบ",
+          "plan"
+        ],
+        [
+          "acoustic-validation",
+          "research/evidence-library/ACOUSTIC_INTELLIGENCE_VALIDATION.md",
+          "แผนตรวจความแม่นยำเสียง",
+          "ขอบเขตการพิสูจน์ป้ายเสียงก่อนใช้สรุปผล",
+          "plan"
+        ]
+      ]
+    },
+    {
+      "id": "reviews",
+      "number": "10",
+      "title": "บันทึกตรวจสอบและกรณีศึกษา",
+      "icon": "check",
+      "description": "หลักฐานตามวันที่และรุ่น ไม่ใช้รับรองรุ่นใหม่โดยอัตโนมัติ",
+      "documents": [
+        [
+          "documentation-review",
+          "docs/reviews/2026-09-22-documentation-refresh.md",
+          "22 ก.ย. · ทบทวนเอกสารและสถานะระบบ",
+          "เทียบ Source, Working tree และ Pod พร้อมปรับคู่มือให้ตรงกับโค้ด",
+          "audit"
+        ],
+        [
+          "refactor-review",
+          "docs/reviews/2026-09-22-smart-senses-refactor.md",
+          "22 ก.ย. · Refactor Smart Senses",
+          "ผลตรวจการแยกโมดูลโดยคง API และผลคำนวณเดิม",
+          "audit"
+        ],
+        [
+          "n3-review",
+          "docs/reviews/2026-09-22-n3-baseline-review.md",
+          "22 ก.ย. · N3 และ Baseline",
+          "ผลตรวจ Source candidate และข้อมูลย้อนหลังแบบอ่านอย่างเดียว",
+          "audit"
+        ],
+        [
+          "senses-review",
+          "docs/reviews/2026-09-22-smart-senses-integration.md",
+          "22 ก.ย. · Smart Senses Integration",
+          "ขอบเขตหน้าจอและการเทียบเอกสารต้นทาง",
+          "audit"
+        ],
+        [
+          "integration-review",
+          "docs/reviews/2026-09-22-pending-work-integration.md",
+          "22 ก.ย. · รวมงานระบบและเอกสาร",
+          "หลักฐาน Backend, Interface และเนื้อหาที่อัปเดต",
+          "audit"
+        ],
+        [
+          "hardware-audit",
+          "docs/audits/pi5-esp-system-audit-2026-09-19.md",
+          "19 ก.ย. · Pi 5 และ ESP",
+          "การตรวจเครื่องจริงตามวันที่และรุ่นที่ระบุ",
+          "audit"
+        ],
+        [
+          "runtime-audit",
+          "docs/reviews/2026-09-19-runtime-audit.md",
+          "19 ก.ย. · Runtime Audit",
+          "ข้อค้นพบและผลตรวจระบบในรอบนั้น",
+          "audit"
+        ],
+        [
+          "content-review",
+          "docs/reviews/2026-09-19-interface-content-review.md",
+          "19 ก.ย. · เนื้อหาหน้าจอ",
+          "ผลตรวจความสอดคล้องของภาษาในระบบ",
+          "audit"
+        ],
+        [
+          "rerun-review",
+          "docs/reviews/2026-09-19-after-rest-rerun.md",
+          "19 ก.ย. · Rerun และ Sync",
+          "ขอบเขตข้อมูลและผลตรวจในรอบประมวลผล",
+          "audit"
+        ],
+        [
+          "copy-release",
+          "docs/reviews/2026-09-19-session-copy-release.md",
+          "19 ก.ย. · ข้อความผล Session",
+          "ขอบเขต Release เฉพาะข้อความ",
+          "audit"
+        ],
+        [
+          "roadmap-review",
+          "docs/reviews/2026-09-19-interface-roadmap-review.md",
+          "19 ก.ย. · ทบทวน Interface Roadmap",
+          "ข้อเสนอและหลักฐานก่อนพัฒนาหน้าจอ",
+          "audit"
+        ],
+        [
+          "wake-cases",
+          "docs/zeep-wake-lock-regression-register.md",
+          "ทะเบียนกรณี Wake Lock-in",
+          "กรณี Regression สำหรับตรวจโมเดลการพัก",
+          "evidence"
+        ],
+        [
+          "case-cs01",
+          "docs/zeep-case-study-cs-01-two-overnight-sessions.md",
+          "กรณีศึกษา CS-01",
+          "บทเรียนจากการพักสองคืนในรูปแบบ Coded case",
+          "evidence"
+        ]
+      ]
+    }
+  ]
+}

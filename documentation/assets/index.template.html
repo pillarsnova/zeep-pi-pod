@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="referrer" content="no-referrer" />
+    <title>คู่มือระบบ ZEEP POD · Knowledge Hub</title>
+    <style>
+      @@STYLE@@
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">ข้ามไปเนื้อหา</a>
+    <header class="topbar">
+      <a class="brand" href="#/" aria-label="ZEEP คู่มือระบบ หน้าแรก"
+        >ZEEP<span class="brand-divider"></span
+        ><span class="brand-context">POD KNOWLEDGE HUB</span></a
+      >
+      <div class="topbar-right">
+        <span class="internal-label">เอกสารสำหรับทีม</span
+        ><span class="edition">V1 / INTERNAL PILOT</span
+        ><button
+          class="menu-button icon-button"
+          id="menu-button"
+          aria-expanded="false"
+          aria-controls="sidebar"
+          aria-label="เปิดสารบัญ"
+        >
+          <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+        </button>
+      </div>
+    </header>
+    <button
+      class="sidebar-backdrop"
+      id="sidebar-backdrop"
+      aria-label="ปิดสารบัญ"
+      tabindex="-1"
+      hidden
+    ></button>
+    <aside class="sidebar" id="sidebar" aria-label="สารบัญคู่มือ">
+      <div class="sidebar-intro">
+        <span class="eyebrow">THE HANDBOOK</span>
+        <p>เข้าใจระบบ<br /><strong>ต่อยอดอย่างมีทิศทาง</strong></p>
+      </div>
+      <a class="home-link" href="#/"
+        ><svg viewBox="0 0 24 24">
+          <path d="m3 10 9-7 9 7M5 9v12h14V9M9 21v-8h6v8" /></svg
+        >ภาพรวมคู่มือ</a
+      >
+      <p class="nav-caption">เนื้อหาทั้งหมด</p>
+      <nav id="chapter-nav" aria-label="หมวดเอกสาร"></nav>
+      <div class="sidebar-note">
+        <span class="note-mark">i</span>
+        <p>
+          คู่มืออธิบายระบบ<br />สถานะเครื่องจริงตรวจจาก
+          <a href="#/read/status">Version &amp; Provenance</a>
+        </p>
+      </div>
+      <div class="sidebar-footer">
+        WELLNESS &amp; LONGEVITY<br /><span>ออกแบบเพื่อการพักที่ดีขึ้น</span>
+      </div>
+    </aside>
+    <div class="workspace">
+      <div class="utility-bar">
+        <div id="breadcrumb" class="breadcrumb">
+          คู่มือระบบ <span>/</span> ภาพรวม
+        </div>
+        <label class="search-box"
+          ><svg viewBox="0 0 24 24">
+            <circle cx="10.5" cy="10.5" r="6.5" />
+            <path d="m16 16 5 5" /></svg
+          ><input
+            id="search"
+            type="search"
+            placeholder="ค้นหาในคู่มือ…"
+            aria-label="ค้นหาชื่อและเนื้อหาเอกสาร"
+            autocomplete="off"
+          /><kbd>⌘ K</kbd></label
+        >
+      </div>
+      <main id="main" tabindex="-1"></main>
+      <footer class="page-footer">
+        <span>ZEEP POD · คู่มือระบบและการพัฒนา</span
+        ><span id="bundle-meta"></span>
+      </footer>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    <noscript
+      ><p class="noscript">
+        กรุณาเปิด JavaScript เพื่ออ่านชุดเอกสาร หรือเปิดเอกสารต้นฉบับจาก
+        docs/onboarding/README.md
+      </p></noscript
+    >
+    <template id="home-template">
+      <section class="hero">
+        <div class="hero-copy">
+          <div class="hero-kicker">
+            <span></span> ZEEP POD / SYSTEM HANDBOOK
+          </div>
+          <h1>ทุกส่วนของ ZEEP<br /><em>ในคู่มือเดียว</em></h1>
+          <p class="hero-description">
+            จากการรับรู้ของเซนเซอร์ สู่ความเข้าใจการพัก<br
+              class="desktop-break"
+            />
+            รวมโครงสร้าง วิธีทำงาน และแนวทางพัฒนาสำหรับทีม
+          </p>
+          <div class="hero-actions">
+            <a class="primary-button" href="#/read/onboarding"
+              >เริ่มอ่านคู่มือ <span aria-hidden="true">↗</span></a
+            ><a class="text-button" href="#/read/status"
+              >ดูสถานะระบบ <span aria-hidden="true">→</span></a
+            >
+          </div>
+          <div class="hero-footnote">
+            INTERNAL PILOT <span>·</span> WELLNESS, NOT DIAGNOSIS
+          </div>
+        </div>
+        <div class="pod-visual">
+          <svg
+            viewBox="0 0 460 346"
+            role="img"
+            aria-labelledby="pod-visual-title"
+          >
+            <title id="pod-visual-title">
+              ภาพแนวคิด ZEEP POD เชื่อมโยงผู้พัก เซนเซอร์ และระบบ Pi 5
+              ไม่ใช่แบบก่อสร้าง
+            </title>
+            <defs>
+              <linearGradient id="pod-shell" x1="0" y1="0" x2="1" y2="1">
+                <stop stop-color="#f7fbfa" />
+                <stop offset=".54" stop-color="#d3e5e0" />
+                <stop offset="1" stop-color="#a8c7c0" />
+              </linearGradient>
+              <linearGradient id="pod-room" x1="0" x2="1" y1="0" y2="1">
+                <stop stop-color="#193f3f" />
+                <stop offset="1" stop-color="#0b262c" />
+              </linearGradient>
+              <linearGradient id="bed" x1="0" x2="0" y1="0" y2="1">
+                <stop stop-color="#fcfff8" />
+                <stop offset="1" stop-color="#bbd1c6" />
+              </linearGradient>
+              <radialGradient id="pod-glow">
+                <stop stop-color="#d8eee6" />
+                <stop offset="1" stop-color="#eff5f0" stop-opacity="0" />
+              </radialGradient>
+            </defs>
+            <ellipse
+              cx="241"
+              cy="194"
+              rx="208"
+              ry="163"
+              fill="url(#pod-glow)"
+            />
+            <g fill="none" stroke="#bed5cd" stroke-width="1">
+              <ellipse cx="241" cy="243" rx="193" ry="75" />
+              <ellipse
+                cx="241"
+                cy="243"
+                rx="169"
+                ry="57"
+                stroke-dasharray="3 6"
+              />
+              <path d="M240 61v22M56 242H37M421 242h17" />
+            </g>
+            <ellipse
+              cx="246"
+              cy="263"
+              rx="132"
+              ry="26"
+              fill="#aac3ba"
+              opacity=".2"
+            />
+            <path
+              d="M126 241V137q0-40 43-50l135-26q38-6 46 34l23 139-95 56Z"
+              fill="url(#pod-shell)"
+              stroke="#9fbcb3"
+              stroke-width="1.4"
+            />
+            <path
+              d="m172 105 113-21q39-7 44 33l17 113-78 40-110-25V143q0-32 14-38Z"
+              fill="url(#pod-room)"
+            />
+            <path
+              d="m169 115 111-22q35-5 37 28"
+              fill="none"
+              stroke="#c3e9d9"
+              stroke-width="2.2"
+            />
+            <path d="m158 212 116-22 55 36-66 28-105-18Z" fill="url(#bed)" />
+            <path d="m158 236 105 22 66-28v-5l-65 23-106-18Z" fill="#8bac9c" />
+            <path d="m244 194 30-6 26 16-31 9Z" fill="#fbfaf1" />
+            <path d="M126 241v13l152 48 95-56v-12l-95 56Z" fill="#a5c1b7" />
+            <path
+              d="m126 237 152 48 89-51"
+              fill="none"
+              stroke="#e8f5ed"
+              stroke-width="2"
+            />
+            <rect
+              x="177"
+              y="149"
+              width="24"
+              height="29"
+              rx="3"
+              transform="rotate(-11 177 149)"
+              fill="#3c6460"
+              stroke="#5e8b7d"
+            />
+            <path
+              d="m183 160 4-1 2-4 3 8 3-5 3-1"
+              fill="none"
+              stroke="#a9e6c4"
+              stroke-width="1.5"
+            />
+            <g fill="#227d65" stroke="#f1f8f3" stroke-width="3">
+              <circle cx="162" cy="126" r="5" />
+              <circle cx="323" cy="192" r="5" />
+              <circle cx="206" cy="246" r="5" />
+            </g>
+            <g fill="none" stroke="#7eaaa0" stroke-width="1">
+              <path d="M162 126h-30L107 97H52" />
+              <path d="M323 192h33l24-26h44" />
+              <path d="M206 246v40l-32 26H79" />
+            </g>
+            <g
+              font-family="Arial,sans-serif"
+              font-size="10"
+              letter-spacing="1.5"
+              fill="#416961"
+            >
+              <text x="49" y="84">SMART SENSES</text>
+              <text x="342" y="153">PI 5 CORE</text>
+              <text x="78" y="329">PERSONAL REST</text>
+            </g></svg
+          ><span class="visual-caption">SYSTEM CONCEPT · NOT TO SCALE</span>
+        </div>
+      </section>
+      <section class="overview-strip" aria-label="ภาพรวมชุดเอกสาร">
+        <div>
+          <strong id="document-count">—</strong><span>เอกสารต้นทาง</span>
+        </div>
+        <div><strong>10</strong><span>หมวดการทำงาน</span></div>
+        <div><strong>2</strong><span>รูปแบบการพัก</span></div>
+        <p>
+          ชุดเอกสารแยกคู่มือ ข้อกำหนด แผนพัฒนา<br />และหลักฐานการตรวจสอบไว้อย่างชัดเจน
+        </p>
+      </section>
+      <section class="section-block">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">READ BY ROLE</span>
+            <h2>เริ่มจากสิ่งที่คุณดูแล</h2>
+          </div>
+          <span class="section-aside">เส้นทางอ่านสำหรับทีม</span>
+        </div>
+        <div class="role-grid">
+          <a href="#/read/lifecycle"
+            ><span class="role-number">01</span>
+            <div>
+              <strong>ผลิตภัณฑ์และผู้ดูแล</strong
+              ><small>การพัก · ผลลัพธ์ · การใช้งานจริง</small>
+            </div>
+            <span aria-hidden="true">↗</span></a
+          ><a href="#/read/architecture"
+            ><span class="role-number">02</span>
+            <div>
+              <strong>นักพัฒนาระบบ</strong
+              ><small>โครงสร้าง · API · ข้อมูล</small>
+            </div>
+            <span aria-hidden="true">↗</span></a
+          ><a href="#/read/hardware"
+            ><span class="role-number">03</span>
+            <div>
+              <strong>อุปกรณ์และข้อมูล</strong
+              ><small>Hub · Sensor · Smart Senses</small>
+            </div>
+            <span aria-hidden="true">↗</span></a
+          >
+        </div>
+      </section>
+      <section class="section-block">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">EXPLORE THE SYSTEM</span>
+            <h2>อ่านตามส่วนงาน</h2>
+          </div>
+          <a class="text-button" href="#/read/index"
+            >ทะเบียนเอกสาร <span aria-hidden="true">↗</span></a
+          >
+        </div>
+        <div class="category-grid" id="category-grid"></div>
+      </section>
+      <section class="principles">
+        <div>
+          <span class="eyebrow">ONE SYSTEM, CLEAR BOUNDARIES</span>
+          <h2>เข้าใจตรงกัน ก่อนพัฒนาต่อ</h2>
+        </div>
+        <div class="principle-list">
+          <p>
+            <b>01 / คะแนนให้ตรงกับการพัก</b
+            ><span
+              >Overnight ใช้ Sleep Score · Nap &amp; Refresh ใช้ Recovery
+              Score</span
+            >
+          </p>
+          <p>
+            <b>02 / คำแนะนำไม่ใช่คำสั่งอุปกรณ์</b
+            ><span
+              >Adaptive เริ่มจากเสนอเหตุผล ให้ผู้ใช้หรือ Admin ยืนยันก่อน</span
+            >
+          </p>
+          <p>
+            <b>03 / หลักฐานต้องตรวจย้อนกลับได้</b
+            ><span
+              >โค้ด เอกสาร และผลตรวจระบุขอบเขตแยกจากสถานะบนเครื่องจริง</span
+            >
+          </p>
+        </div>
+      </section>
+      <section class="reference-note">
+        <svg viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 11v6M12 7v1" />
+        </svg>
+        <div>
+          <strong>อ่านฉบับเต็มได้ในหน้านี้</strong>
+          <p>
+            ค้นหาได้ทั้งชื่อและเนื้อหา ทุกบทมีลิงก์ต้นฉบับและสารบัญย่อย
+            ข้อมูลเป็นการประเมินเชิงสุขภาพ ไม่ใช่การวินิจฉัยทางการแพทย์
+          </p>
+        </div>
+        <button class="quiet-button" data-action="print">พิมพ์หน้านี้</button>
+      </section>
+    </template>
+    <script id="handbook-data" type="application/json">
+      @@DATA@@
+    </script>
+    <script>
+      @@SCRIPT@@
+    </script>
+  </body>
+</html>

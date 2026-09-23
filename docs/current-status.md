@@ -10,8 +10,11 @@
 Session นั้น ไม่ใช่คะแนนที่สามหรือการประเมินความพร้อมทั้งวัน
 
 หน้านี้แยกสถานะ source ใน Git ออกจากหลักฐานการตรวจ Pod ที่บันทึกไว้
-รอบ N3 วันที่ 22 ก.ย. ตรวจ Pod แบบอ่านอย่างเดียวที่ 16:20 +07 พบ `78e90fc`
-และมีผู้พักอยู่; ไม่ได้ Restart, Deploy หรือ Flash
+ตรวจ Git หลัง Pull `origin/develop` วันที่ 22 ก.ย. ได้ `5de1b2e`
+ส่วนงาน Knowledge Hub และการทบทวนเอกสารยังเป็น Working tree บน Mac
+ตรวจ Pod แบบอ่านอย่างเดียววันที่ 22 ก.ย. เวลา 20:57 +07 ยังพบ `78e90fc`
+และ `zeep-pod.service` active/running; รอบนี้ไม่ได้ตรวจสถานะผู้พักหรือสั่ง Restart,
+Deploy หรือ Flash
 หน้านี้ไม่ใช่ telemetry สดหรือการอนุมัติ Final Code Freeze
 ก่อน deploy ให้ตรวจ Git SHA, สถานะตู้ และ [Runbook](pi5-operations-runbook.md) อีกครั้ง
 
@@ -19,6 +22,8 @@ Session นั้น ไม่ใช่คะแนนที่สามหร�
 
 | เรื่อง | รุ่น/หลักฐานที่ตรวจแล้ว | ขอบเขต |
 |---|---|---|
+| Source ล่าสุดใน Git | `5de1b2e` บน `origin/develop` | Pull แบบ fast-forward แล้ว ไม่มี Commit ใหม่จากต้นทาง ณ รอบตรวจ 22 ก.ย.; ไม่รวมงาน Knowledge Hub ที่ยังไม่ Commit |
+| Pod 1 — ตรวจ 22 ก.ย. 20:57 +07 | `78e90fc` · branch `develop` · WorkingDirectory `/home/pod1/pi5` · Git working tree สะอาด | service active/running; process เริ่ม 21 ก.ย. 12:33:29 +07; อ่านจาก Git/systemd ไม่ใช่การทดสอบ Sensor หรือรับรองสถานะผู้พัก |
 | Pi application — หลักฐานการตรวจเดิม | `b2ce19b` บน Pod 1; Restart 19 ก.ย. 2026 06:41:14 +07 | บริการ active และ Safety ready ณ เวลาตรวจเดิม ไม่ใช้ยืนยัน SHA หรือสถานะ Pod ปัจจุบัน |
 | เอกสารผล Rerun | `c75edcd` | เป็น documentation commit ไม่ต้อง restart เพื่อใช้เอกสาร |
 | Adaptive Journey ใน Git | `eaccf32` | Timeline, ก่อน–หลังคำสั่ง, Comfort Profile และคำแนะนำพร้อม API; CI ผ่านสำหรับ SHA นี้ ยังไม่ Deploy ในรอบนี้ |
@@ -30,11 +35,13 @@ Session นั้น ไม่ใช่คะแนนที่สามหร�
 | คำแนะนำหลังพัก | `zeep-restore-recommendation-v1.2-after-rest` | API และ Pi result presenter ใช้นโยบายเดียวกัน |
 | Product language ใน source | `zeep-product-language-v1.2` ใน `69bd298` และ `89d404f` | ปรับข้อความและแยกคำสั่งแอร์จากสถานะจริง; ขึ้น Git แล้ว ไม่ถือว่าติดตั้งบน Pod แล้ว |
 | Sleep estimator — source candidate | `bcg-audio-bed-5state-v1.30-paired-n3-baseline` | เพิ่ม N3 paired-fit guard; ยังไม่ Deploy หรือเขียน State ย้อนหลัง |
-| Sleep estimator — Pod audit 22 ก.ย. | `bcg-audio-bed-5state-v1.29-complete-occupied-epochs` บน `78e90fc` | core scorer ตรงกับ source ก่อนแก้; มีผู้พักอยู่ ณ เวลาตรวจ |
+| Sleep evidence / Baseline — source candidate | `zeep-sleep-state-evidence-v3.8-paired-n3-baseline` / `zeep-sleep-state-baseline-v1.9-paired-n3-fit` | HR Fit และ RR Fit ของ N3 ต้องผ่านแต่ละแกน ร่วมกับ gate เดิม; ไม่เปลี่ยน Sleep/Recovery Score formula |
+| Sleep estimator — ไฟล์บน Pod ที่ตรวจ 22 ก.ย. | `bcg-audio-bed-5state-v1.29-complete-occupied-epochs` บน `78e90fc` | อ่านค่าจาก `sleep_system_policy.py`; Baseline บน Pod ยังเป็น `zeep-sleep-state-baseline-v1.8-sep1-cutover` ไม่ใช่ source candidate v1.9 |
 | Baseline demographic context — source candidate | `zeep-baseline-demographics-v1.0` | เพศ × อายุ × BMI จาก health snapshot; BMI ใช้จัดกลุ่ม ไม่ปรับ Stage/Score ยังไม่ Deploy |
 | Smart Senses | [ภาพรวมขอบเขต 22 ก.ย.](onboarding/smart-senses.md) | รวมข้อมูลหลายเซนเซอร์และ Adaptive Journey; Voice/thermal/radar/e-nose ยังเป็นแผน ไม่ได้ติดตั้งจากการปรับชื่อ |
-| Smart Senses — Refactor source | [โครงสร้างและผลตรวจ](reviews/2026-09-22-smart-senses-refactor.md) · ฐาน `7a85711` | แยก Timeline, คุณภาพข้อมูล, context และคำแนะนำ; คง API/schema/ผลคำนวณเดิม ไม่ Deploy/Restart ในรอบนี้ |
+| Smart Senses — Refactor ใน Git | `5de1b2e` · [โครงสร้างและผลตรวจ](reviews/2026-09-22-smart-senses-refactor.md) | แยก Timeline, คุณภาพข้อมูล, context และคำแนะนำ; คง API/schema/ผลคำนวณเดิม ยังไม่ติดตั้งบน Pod ที่ตรวจ |
 | Smart Ear · โมดูลเสียง | Admin DSP shadow; มี telemetry features บน Pod 1 ใน audit `f570a68` | เป็น provisional label ไม่ใช่ผลจำแนกที่รับรองความแม่นยำ |
+| Knowledge Hub — Working tree บน Mac | [หน้าอ่านคู่มือ](portal/index.html) · เตรียม Route `/handbook` สำหรับ Admin | สารบัญ ค้นหาฉบับเต็ม และพิมพ์รายบท; ยังไม่ Commit/Push/Deploy บน Pod ที่ตรวจ ใช้ HTML ออฟไลน์หรือ Local preview ก่อน |
 
 เวอร์ชันที่เปลี่ยนตาม release ยึด [`sleep_system_policy.py`](../sleep_system_policy.py),
 Pydantic/OpenAPI และ effective configuration; ตารางนี้ต้องแก้เมื่อมี deployment ใหม่
@@ -94,9 +101,11 @@ Sleep Score 15/15, Recovery Score 24/28; อีก 4 Session ต่ำกว่�
 
 ## Verification
 
-เอกสารรอบนี้เทียบกับ source บน `develop` ที่ฐาน `fa7bd07` และงานรวมวันที่
-22 ก.ย., models, routes, นโยบายเวอร์ชัน และรายงานการตรวจที่ระบุ SHA
-ไม่สั่งอุปกรณ์ ไม่ restart และไม่
-Rerun เพิ่ม ผล browser/keyboard/viewport ใหม่ยังต้องตรวจใน UI release ถัดไป
+เอกสารรอบนี้เทียบกับ source บน `develop` ที่ `5de1b2e` และงาน Knowledge Hub
+ใน Working tree โดยตรวจ policy version, models, routes, แผนผังโมดูลและเอกสารต้นทาง
+รวมทั้ง Git/systemd ของ Pod แบบอ่านอย่างเดียวตามเวลาข้างต้น ไม่สั่งอุปกรณ์
+ไม่ Restart และไม่ Rerun เพิ่ม ผล Browser QA ของ Knowledge Hub ไม่ใช้รับรอง
+Dashboard, Control, Monitor หรือ Sessions ของรุ่นอื่น
+รายละเอียดอยู่ใน [รายงานทบทวนเอกสาร 22 ก.ย.](reviews/2026-09-22-documentation-refresh.md)
 ใช้ `python -m unittest -q test_documentation_alignment.py` ตรวจลิงก์และ contract
 เอกสาร; ผลนี้ไม่แทน hardware หรือ visual acceptance

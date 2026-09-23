@@ -14,6 +14,10 @@ import quality_gate
 
 
 class QualityGateSelectionTests(unittest.TestCase):
+    def test_handbook_assets_and_routes_keep_security_tests(self):
+        for path in ("documentation/assets/handbook.js", "api/handbook_routes.py"):
+            self.assertIn("test_handbook.py", self.plan_for(path))
+
     def plan_for(self, path: str) -> list[str]:
         return quality_gate.test_plan(quality_gate.classify(path))
 

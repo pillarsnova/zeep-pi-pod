@@ -1,5 +1,8 @@
 # ZEEP — Sleep-State Baseline · v1.9 amendment
 
+ชื่อไฟล์คง `v1.8` เพื่อรักษาลิงก์เดิม แต่เนื้อหา Source ปัจจุบันเป็น v1.9
+Pod ที่ตรวจ 22 ก.ย. 20:57 +07 ยังเป็น v1.8 ดู [Current Status](current-status.md)
+
 > **Purpose:** นิยาม input, baseline, transition policy, data quality และแผน PSG validation ของตัวประมาณสถานะการนอนใน Pod  
 > **Positioning:** Sleep Wellness · EEG-free exploratory telemetry · ไม่ใช่ผล PSG/การวินิจฉัย/ตัวสั่งอุปกรณ์  
 > **Status:** Baseline/evidence reference · complete occupied-epoch continuity amendment active · paired-PSG G2 validation open
@@ -236,7 +239,7 @@ physiology = 0.55×HR_proximity + 0.35×RR_proximity
 
 ### 4.1 Primary physiological evidence
 
-| กลุ่ม | ตัวแปร | บทบาทใน v1.8 |
+| กลุ่ม | ตัวแปร | บทบาทใน v1.9 |
 |---|---|---|
 | BCG/เตียง | อยู่บนเตียง, ลุกจากเตียง, movement ratio, burst count, longest run | Bed exit ใช้ยืนยัน OFF BED; movement บนเตียงใช้สนับสนุน Wake เมื่อมี physiology/BCG corroboration; brief movement เป็น sleep-compatible |
 | หัวใจ | mean HR, HR trend, HR-summary CV, personal HR baseline | เทียบช่วงและความนิ่ง; HR-summary CV ไม่ใช่ IBI-HRV และมีน้ำหนัก REM ต่ำ |

@@ -21,6 +21,7 @@ DOMAIN_PACKAGES = (
     "adaptive",
     "api",
     "common",
+    "documentation",
     "hardware",
     "identity",
     "operations",
@@ -213,6 +214,9 @@ def classify(path: str) -> set[str]:
     name = Path(path).name
     lowered = path.lower()
     profiles: set[str] = set()
+
+    if lowered.startswith("documentation/") or name == "handbook_routes.py":
+        return {"test:test_handbook.py", "test:test_modular_architecture.py"}
 
     if path in FULL_TRIGGER_FILES or path == "quality_gate.py":
         return {"full"}

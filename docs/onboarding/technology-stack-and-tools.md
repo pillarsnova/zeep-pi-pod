@@ -2,7 +2,8 @@
 
 ชื่อภาพรวมการรับรู้หลายเซนเซอร์คือ [Smart Senses](smart-senses.md)
 Smart Ear เป็นโมดูลเสียง ใช้ stack เดิม ไม่มีการเพิ่ม ASR/TTS, ML runtime
-หรือ dependency ใหม่จากการปรับชื่อและเอกสารรอบ 22 กันยายน 2026
+หรือ dependency ใหม่จากการปรับชื่อ Smart Senses ส่วน Knowledge Hub เพิ่ม
+`markdown-it-py` เฉพาะ Dev/Build ไม่เพิ่ม Markdown runtime บน Pi
 
 สถานะ: **Current implementation · Internal Pilot / freeze candidate**
 
@@ -23,11 +24,12 @@ Account backend ซึ่งอยู่นอก repository นี้
 | Backend/API | FastAPI, Uvicorn, Pydantic บน typed domain APIs, HTTP/REST, WebSocket, `httpx` | Browser/API, validation, auth, live state และ ZEEP account integration |
 | Frontend | Vanilla HTML/CSS/JavaScript, inline SVG, Canvas | Dashboard, Control, Monitor และประวัติการใช้งาน |
 | UI build | `ui_composer.py` | รวม template/partials เป็น `static/index.html`; ไม่มี Node/npm bundler |
+| Knowledge Hub build — Working tree | Python `documentation/`, `markdown-it-py==4.0.0`, Vanilla HTML/CSS/JS | สร้าง `docs/portal/index.html` จากเอกสาร allowlist; อ่านออฟไลน์ได้ ยังไม่ Deploy |
 | Database | SQLite WAL; ไม่มี ORM | Session/Timeline/Event, Raw BCG, Auth และ Pod occupancy |
 | Sidecar storage | JSON/JSONL และ durable filesystem outbox | Profile, Baseline, checkpoint, device state, audit และ retry |
 | Hardware I/O | USB Serial JSONL/Binary, MQTT, BCM GPIO, MPV IPC | Sensor Hub, BCG, Control Hub, relay/driver และเสียงออกลำโพง |
 | Acoustic DSP shadow | ESP32-S3 FFT/features + Pi contract/timeline | ส่งเฉพาะ provisional label/confidence/feature summary; ไม่ส่ง Raw audio |
-| QA | `unittest`, `quality_gate.py`, Ruff, JSON Schema, `ui_composer.py check` | Focused regression, style, contract/evidence และ generated UI |
+| QA | `unittest`, `quality_gate.py`, Ruff, JSON Schema, `ui_composer.py check`, `python -m documentation check` | Focused regression, style, contract/evidence และการตรงกันของ generated UI/คู่มือ |
 | Delivery/Ops | Git/GitHub `origin/develop`, GitHub Actions, SSH/Tailscale, `systemd` | Review, CI, deploy, remote operation และ recovery |
 
 Python 3.11+ เป็น source compatibility standard และ CI/Ruff ใช้ 3.11 แต่ service
@@ -95,6 +97,17 @@ MPV, ALSA และ `lgpio` เป็น OS/deployment dependency ที่ต�
   Node built-in tests ใช้บนเครื่องพัฒนา/CI ไม่ได้เพิ่ม Node runtime บน Pi
 - คำแนะนำหลังพักใช้ `sessions/post_rest_advice.py`; API ใช้
   `sessions/advice_response_models.py` ไม่สร้าง logic จากคะแนนซ้ำใน UI
+
+### Knowledge Hub สำหรับทีม
+
+- Source แยก `documentation/catalog.json`, `rendering.py`, `builder.py` และ `assets/`
+- ใช้ `python -m documentation build` แล้ว `python -m documentation check`
+- Runtime route `/handbook` ที่เตรียมไว้ใช้ Admin dependency ใน
+  `api/handbook_routes.py`; ไม่ใช่ FastAPI Swagger `/docs`
+- Bundle ไม่อยู่ใน `/static` และไม่อ่าน SQLite, Raw data หรือเรียก Sensor API
+- มี Search, สารบัญ Desktop/Mobile, ลิงก์ระหว่างบท และ Print stylesheet
+- `markdown-it-py` อยู่ใน `requirements-dev.txt` เพื่อ Build/CI เท่านั้น
+- ความคืบหน้า Source กับ Deployment แยกใน [Current Status](../current-status.md)
 
 ## Database และ Storage
 

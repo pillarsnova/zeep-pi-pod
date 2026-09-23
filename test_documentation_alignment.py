@@ -19,6 +19,7 @@ CURRENT_DOC_DIRS = (
     ROOT / "firmware",
     ROOT / "research" / "evidence-library",
     ROOT / "static" / "partials" / "app",
+    ROOT / "documentation",
 )
 RETIRED_DOCUMENTS = (
     "REMOTE-ACCESS.md",
@@ -108,7 +109,9 @@ class DocumentationAlignmentTests(unittest.TestCase):
             RESTORE_RECOMMENDATION_VERSION,
             SESSION_REPORT_VERSION,
             SLEEP_ESTIMATOR_VERSION,
+            SLEEP_EVIDENCE_VERSION,
             SLEEP_SCORE_FORMULA_VERSION,
+            ZEEP_SLEEP_BASELINE_VERSION,
         )
 
         content = (ROOT / "docs" / "current-status.md").read_text(encoding="utf-8")
@@ -118,10 +121,47 @@ class DocumentationAlignmentTests(unittest.TestCase):
             RESTORE_RECOMMENDATION_VERSION,
             SESSION_REPORT_VERSION,
             SLEEP_ESTIMATOR_VERSION,
+            SLEEP_EVIDENCE_VERSION,
             SLEEP_SCORE_FORMULA_VERSION,
+            ZEEP_SLEEP_BASELINE_VERSION,
         ):
             with self.subTest(version=version):
                 self.assertIn(version, content)
+
+    def test_refactored_boundaries_remain_in_the_architecture_map(self) -> None:
+        content = (ROOT / "docs/pi5-software-architecture.md").read_text()
+        for source in (
+            "acoustics/timeline_series.py",
+            "acoustics/timeline_view.py",
+            "adaptive/learning_quality.py",
+            "adaptive/learning_context.py",
+            "adaptive/learning_recommendations.py",
+            "sessions/sleep_n3_evidence.py",
+            "sessions/sleep_n3_policy.py",
+            "identity/baseline_context.py",
+            "api/handbook_routes.py",
+        ):
+            with self.subTest(source=source):
+                self.assertTrue((ROOT / source).is_file())
+                self.assertIn(Path(source).name, content)
+
+    def test_baseline_display_name_matches_the_source_version(self) -> None:
+        from sleep_system_policy import ZEEP_SLEEP_BASELINE_VERSION
+
+        version = re.search(r"-v(\d+\.\d+)-", ZEEP_SLEEP_BASELINE_VERSION).group(1)
+        for source in ("docs/README.md", "docs/zeep-sleep-system-current.md"):
+            with self.subTest(source=source):
+                content = (ROOT / source).read_text(encoding="utf-8")
+                self.assertIn(f"Sleep-State Baseline v{version}", content)
+
+    def test_handbook_build_is_in_stack_and_operations_guides(self) -> None:
+        stack = (ROOT / "docs/onboarding/technology-stack-and-tools.md").read_text()
+        self.assertIn("markdown-it-py", stack)
+        self.assertIn("Dev/Build", stack)
+        for source in ("README.md", "docs/pi5-operations-runbook.md"):
+            content = (ROOT / source).read_text()
+            self.assertIn("python -m documentation build", content)
+            self.assertIn("python -m documentation check", content)
 
     def test_schema_examples_match_models_and_advice_policy(self) -> None:
         from presentation.language import PRODUCT_LANGUAGE_VERSION

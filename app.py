@@ -4425,6 +4425,7 @@ def public_status():
 app.include_router(
     create_shell_router(
         static_dir=STATIC_DIR,
+        require_admin=require_admin,
         require_pod_operator=require_pod_operator,
         snapshot_for=snapshot_for,
         public_status=public_status,

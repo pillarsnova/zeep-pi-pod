@@ -5,7 +5,8 @@
 > **ขอบเขต:** ZEEP Wellness & Longevity · Pi 5 runtime · สองรูปแบบการพัก
 >
 > **วันที่ตรวจ:** 16 กันยายน 2569 (Asia/Bangkok)
-> **ทบทวนสถานะเอกสาร:** 19 กันยายน 2026; ผลตรวจเดิมเป็น snapshot ของรอบนั้น
+> **ทบทวนสถานะเอกสาร:** 22 กันยายน 2026 เฉพาะสถานะและลิงก์อ้างอิง;
+> ผลตรวจเดิมยังเป็น snapshot ของวันที่ตรวจ ไม่เปลี่ยนเป็นการรับรอง Source ใหม่
 > รุ่นติดตั้งและงานที่ทำเพิ่มยึด [Current Status](current-status.md)
 >
 > **ผู้อนุมัติ Freeze:** Product Owner ต้องตรวจผล Regression, Production smoke,
@@ -432,7 +433,7 @@ Ruff scope ไว้ที่นี่ งานเอกสารทั่ว�
 - [Team Onboarding — จุดเริ่มหลัก](onboarding/README.md)
 - [Pi 5 Software Architecture](pi5-software-architecture.md)
 - [Sleep System Current](zeep-sleep-system-current.md)
-- [Sleep-State Baseline v1.8](zeep-sleep-state-baseline-v1.8.md)
+- [Sleep-State Baseline v1.9 — คงชื่อไฟล์เดิม](zeep-sleep-state-baseline-v1.8.md)
 - [Session Result Presentation v1](zeep-session-result-presentation-v1.md)
 - [Product Language Guideline v1](zeep-product-language-guideline-v1.md)
 - [User Learning Profile v1](zeep-user-learning-profile-v1.md)

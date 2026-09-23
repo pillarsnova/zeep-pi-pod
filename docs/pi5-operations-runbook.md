@@ -1,8 +1,30 @@
 # ZEEP Pi 5 Operations Runbook
 
-สถานะ: **Current operations** · ทบทวน 19 กันยายน 2026
+สถานะ: **Current operations** · ทบทวน 22 กันยายน 2026
 
 ขอบเขต: Pod 1 · `/home/pod1/pi5` · `origin/develop`
+
+ผลตรวจแบบอ่านอย่างเดียว 22 ก.ย. เวลา 20:57 +07: Pod `78e90fc`, working tree
+สะอาด, service active/running และเริ่ม process ล่าสุด 21 ก.ย. 12:33:29 +07
+นี่ไม่ใช่การตรวจ occupancy, Sensor หรืออนุมัติ Restart ดู [Current Status](current-status.md)
+
+## การอัปเดตคู่มือ
+
+เอกสารต้นทางยังเป็น Markdown; หน้า Knowledge Hub เป็นฉบับอ่านที่สร้างจาก
+`documentation/catalog.json` ไม่มีข้อมูลผู้พักหรือการเรียกคำสั่งอุปกรณ์
+หลังแก้ต้นทางให้รันบนเครื่องพัฒนาที่ติดตั้ง `requirements-dev.txt` แล้ว:
+
+```bash
+python -m documentation build
+python -m documentation check
+python -m unittest -q test_documentation_alignment test_handbook
+```
+
+Commit ต้นทางและ `docs/portal/index.html` ไปด้วยกัน ห้ามแก้เฉพาะ HTML ที่สร้างแล้ว
+CI ตรวจความตรงกันอีกครั้ง Route `/handbook` ต้องใช้บัญชี Admin และยังไม่อยู่บน
+Pod ที่ตรวจในรอบนี้ การติดตั้ง Route ครั้งแรกต้อง Deploy/Restart ตามขั้นตอนปกติ
+เมื่อ Route มีอยู่แล้ว การแก้เฉพาะเนื้อหา Bundle ไม่เปลี่ยนสูตรหรือบังคับ Rerun
+ตรวจและ Refresh หน้าอ่านหลังนำไฟล์รุ่นใหม่ขึ้นเครื่อง
 
 ## กฎก่อนแก้และ Deploy
 

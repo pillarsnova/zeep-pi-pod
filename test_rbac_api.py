@@ -60,6 +60,7 @@ class RbacApiTests(unittest.TestCase):
         # and commands shown behind the Admin-only Control Debug overlay.
         self.assertEqual(client.get("/control-debug").status_code, 200)
         self.assertEqual(client.get("/api/state").status_code, 401)
+        self.assertEqual(client.get("/handbook").status_code, 401)
 
     def test_session_start_and_account_erasure_share_one_lock(self) -> None:
         self.assertIs(

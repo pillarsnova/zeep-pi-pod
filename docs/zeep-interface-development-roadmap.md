@@ -2,8 +2,8 @@
 
 สถานะ: **แผนพัฒนาที่ผ่านการทบทวน · ยังไม่ใช่การอนุมัติ Deploy**
 
-ปรับปรุง: 22 กันยายน 2026 · ฐาน review เดิม `9516413`; รวมงานถึง `fa7bd07`
-และรอบปรับภาษา โดยไม่ Deploy บน Pod ในรอบนี้
+ปรับปรุง: 22 กันยายน 2026 · ฐาน review เดิม `9516413`; ทบทวน Source ถึง
+`5de1b2e` และ Knowledge Hub ใน Working tree โดยไม่ Deploy บน Pod ในรอบนี้
 
 ผู้รับผิดชอบ: Product, Frontend, Pi Backend, Data, Design และ QA
 
@@ -36,6 +36,7 @@
 | Control | มีหกส่วน ลำดับปุ่มร่วม และ feedback ระหว่างส่งคำสั่ง; ข้อความแอร์ระบุว่าเป็นคำสั่งล่าสุด | ยังไม่มี physical feedback จากตัวแอร์ และต้องตรวจหน้าจอจริงหลัง Deploy |
 | โครงสร้าง UI | แยก source ตอน build ด้วย ordered classic-script fragments | ยังไม่ใช่การแยก runtime module อย่างสมบูรณ์ |
 | Tests | มี behavioral tests แบบ synthetic และ UI composer check | ไม่ทดแทน browser, keyboard, screen reader หรือ performance test |
+| Knowledge Hub — Working tree | อ่านฉบับเต็ม ค้นหา สารบัญมือถือ พิมพ์ และ Admin route แยกจากหน้าควบคุม | ยังไม่ Commit/Deploy; ผลตรวจหน้าคู่มือไม่แทน Visual QA ของหน้าพักหรือควบคุม |
 
 คำว่า “มีแล้ว” หมายถึงตรวจพบในฐานโค้ดที่ระบุ ไม่ใช่การรับรองทุกบทบาท ทุกจอ
 หรือทุกข้อมูลจริง ผลตรวจภาพของ release เก่าใช้แทนผลของ release ใหม่ไม่ได้

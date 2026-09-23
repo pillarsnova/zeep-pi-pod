@@ -2,8 +2,8 @@
 
 สถานะ: **Current implementation**
 
-ทบทวนเอกสาร: 19 กันยายน 2026 · [Current Status](current-status.md)
-ระบุรุ่นที่ติดตั้งและขอบเขตหลักฐานล่าสุด
+ทบทวนเอกสาร: 22 กันยายน 2026 · Source `5de1b2e` และงาน Knowledge Hub บน Mac
+[Current Status](current-status.md) แยกรุ่นใน Git, Working tree และ Pod ที่ยังเป็น `78e90fc`
 ขอบเขต: `/home/pod1/pi5` · branch `origin/develop`
 
 เอกสารนี้เป็นแผนที่กลางสำหรับพัฒนาและตรวจสอบ Pi5 runtime ของ ZEEP ทุกตู้
@@ -61,9 +61,12 @@ app, ต่อ lifecycle, ประกอบ dependency และเรียก
 | GPIO pulse controls | `hardware/pulse_control.py` | Service เป็นเจ้าของ lock/cooldown ของประตูและ Aroma/Steam แยกจาก HTTP |
 | Audio controls | `hardware/audio_library.py`, `audio_runtime.py`, `audio_process.py`, `audio_watchers.py`, `audio.py`, `audio_api.py` | Pure defaults/listing, runtime contract, subprocess/IPC adapter, watcher registry, player facade และ HTTP policy โดยไม่มี I/O ตอน import |
 | Shadow guidance | `smart_response.py` | ประเมินคำแนะนำสภาพแวดล้อมโดยไม่สั่งอุปกรณ์ |
-| Adaptive learning monitor | `adaptive/learning.py`, `adaptive/features.py` | เทียบ Live กับ Baseline และรวม version/device intent ใน Shadow mode |
+| Acoustic Timeline | `acoustics/timeline_projection.py`, `timeline_series.py`, `timeline_view.py` | Composer, สถิติ/การย่อกราฟแบบรักษาช่วงขาด และรายการเหตุการณ์/สถานะ; API และผลคำนวณเดิม |
+| Adaptive learning monitor | `adaptive/learning.py`, `features.py`, `learning_quality.py`, `learning_context.py`, `learning_recommendations.py` | Composer, features, คุณภาพ/Baseline readiness, Session/device intent และลำดับคำแนะนำใน Shadow mode |
 | Sleep evidence | `sleep_signal_features.py` | Movement, Bed Exit, Arousal, HR/RR และ waveform features |
 | Sleep scoring | `sleep_stage_scoring.py` | หลักฐานและ probability ของ W/N1/N2/N3/REM |
+| N3 evidence และ policy | `sessions/sleep_n3_evidence.py`, `sleep_n3_policy.py`, `sleep_baseline_support.py` | Paired HR/RR Fit, N3 compatibility และ metadata; เป็น Source candidate v1.30 ไม่ใช่การเปลี่ยนสูตรคะแนน |
+| Baseline demographic context | `identity/baseline_context.py` | จัดกลุ่มเพศ อายุ และ BMI จาก Profile; BMI ยังไม่ปรับ Stage/Score |
 | Sleep policy | `sleep_system_policy.py` | version, gate, confirmation, transition และ environment context |
 | Personal baseline | `personal.py`, `sessions/baseline_cache.py` | Adaptive baseline รายบุคคลแบบ versioned; derived cache โหลดใน lifespan |
 | Historical replay | `sessions/historical_replay_runtime.py`, `historical_replay_storage.py`, `historical_replay_audit.py`, `reclassify_sleep_history.py` | ใช้ policy/version เดียวกับ Live, อ่าน SQLite แบบ read-only และ audit โดยไม่ import FastAPI composition root |
@@ -82,6 +85,7 @@ app, ต่อ lifecycle, ประกอบ dependency และเรียก
 | Storage | `database.py`, `bcg_storage.py`, `backup.py` | SQLite writer, raw BCG และ Daily backup |
 | UI source | `static/index.template.html`, `static/partials/control/*`, `static/partials/app/*` | App shell, Control cards, Base CSS และ ordered JavaScript fragments |
 | UI bundle | `ui_composer.py`, `static/index.html` | ประกอบและตรวจ runtime HTML โดยไม่ fetch partial ตอนใช้งาน |
+| Knowledge Hub — Working tree | `documentation/`, `api/handbook_routes.py`, `docs/portal/index.html` | Build คู่มือจาก Markdown แบบ allowlist; Route Admin ส่งไฟล์ที่สร้างแล้ว ไม่มี Sensor polling หรือคำสั่งอุปกรณ์ ยังไม่ Deploy |
 | User History availability | `sessions/history.py` | นับ Session จาก SQLite ที่จบแล้วและมี Timeline ให้ตรงกับรายการที่เปิดดูได้ |
 | Wake lock-in QA | `audit_wake_lock_in.py`, `sessions/wake_lock_audit.py` | Shadow audit แบบ read-only; ไม่แก้ State, Score หรือ Raw data |
 
@@ -112,7 +116,7 @@ Dashboard, Session และ Safety ต้องอ่านค่าจาก *
 
 1. Raw Sensor/BCG ไม่ถูกแก้ย้อนหลังโดย calibration; เก็บ derived value แยกและมี provenance
 2. ค่า Offline, Stale, Invalid หรือไม่มีคนบนเตียง ห้ามแทนเป็นศูนย์แล้วนำไปตัดสินใจ
-3. ไม่มี HR/RR และไม่มีผู้ใช้งานบนเตียง ห้ามตอบ N1/N2/N3/REM
+3. ห้ามสร้าง Sleep State ใหม่จาก HR/RR ที่ใช้ไม่ได้หรือกรณียืนยันไม่มีผู้ใช้งานบนเตียง; occupied continuity ที่คง State เดิมต้องมี provenance ตาม Sleep System ไม่ใช่หลักฐานใหม่จาก Sensor
 4. Sleep Stage เป็น health telemetry ไม่ใช่คำสั่ง Aircon, Bed, Door, Light, Aroma หรือ Audio
 5. Shadow Response ไม่มีสิทธิ์เรียก GPIO/MQTT/device controller
 6. คำสั่งอุปกรณ์ทุกคำสั่งต้องผ่าน Auth/RBAC/CSRF, validation, timeout และ event audit
@@ -164,7 +168,8 @@ Dashboard, Session และ Safety ต้องอ่านค่าจาก *
 
 1. สกัด feature ใน `sleep_signal_features.py`
 2. ให้คะแนนหลักฐานใน `sleep_stage_scoring.py`
-3. gate/transition/confirmation อยู่ใน `sleep_system_policy.py` แห่งเดียว
+3. policy กลางเผยแพร่ผ่าน `sleep_system_policy.py`; N3 compatibility แยกใน
+   `sessions/sleep_n3_policy.py` และถูกใช้ร่วมกับ scorer ไม่คัดลอกเกณฑ์ซ้ำใน UI
 4. Live และ replay ต้องใช้ scorer/policy เดียวกัน
 5. เปลี่ยนเวอร์ชันทุกครั้งที่นิยาม derived result เปลี่ยน
 6. คะแนนเป็น Sleep Wellness estimate ไม่ใช่ AASM/PSG diagnosis
@@ -217,6 +222,16 @@ Onboarding ใช้เอกสารนี้เป็น Roadmap ทางเ
 | R8b | เสร็จแล้ว | Finalization orchestrator และ report assembly แยกจาก app; facade 3 บรรทัดคง lifecycle lock และลำดับ durable commit/cleanup เดิม |
 | R8c | เสร็จแล้ว | Bed motion deadline แยกเป็น service; แก้ precommit recovery, postcommit cleanup และ safety recheck ก่อนทุก AC publish พร้อม regression จำลอง |
 | R8d | เสร็จแล้ว | Login/start-session orchestration แยกเป็น service/ports/profile helpers; คง account binding, owner lock, response และ rollback เดิม |
+
+งานเพิ่มเติมใน Git วันที่ 22 กันยายน:
+
+- `7a85711`: แยก N3 evidence และ policy เป็นโมดูล หลัง paired-fit guard ใน
+  `27aaf35`; การย้ายโมดูลคงสูตรของ candidate ไม่ใช่การยกเลิก guard
+- `5de1b2e`: แยก Smart Ear Timeline และ Adaptive Learning ตามหน้าที่
+  โดยคง public entry points, API/schema และผลคำนวณ อ่าน
+  [แผนที่โมดูลและจุด Debug](onboarding/smart-senses.md#41-แผนที่โมดูลและจุด-debug)
+- Knowledge Hub อยู่ใน Working tree บน Mac ยังไม่อยู่ในรายการ Commit ข้างต้น
+  อ่าน [คู่มือ Build](../documentation/README.md); ไม่ใช่ dependency ของ Sensor/Session
 
 `app.py` คงอยู่ที่ไม่เกิน 5,932 บรรทัด และเป็น composition root ต่อไป ส่วน API,
 Sensor contract/calibration/normalization/environment/sound และ value helpers อยู่ใน

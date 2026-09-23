@@ -1,5 +1,10 @@
 # ZEEP v1 — Team Onboarding
 
+**เปิดอ่านแบบเว็บไซต์:** [ZEEP POD Knowledge Hub](../portal/index.html)
+รวมคู่มือทั้งหมดเป็นหมวด มีการค้นหาและสารบัญย่อย งานนี้ยังอยู่บน Mac
+หลัง Deploy จึงเข้า `/handbook` ด้วยบัญชี Admin ได้; ระหว่างนี้ใช้ HTML ออฟไลน์
+หรือ Local preview หน้าอ่านนี้ไม่เปลี่ยนลำดับอำนาจของเอกสารด้านล่าง
+
 สถานะ: **คู่มือเริ่มงานสำหรับ Internal Pilot**
 
 ขอบเขต: Pi 5 runtime, Web UI, Sensor/Control Hubs, Session results และงานปฏิบัติการ
@@ -17,6 +22,12 @@
 ## เริ่มอ่านจากตรงไหน
 
 **สรุปงานล่าสุด 22 กันยายน:**
+ทบทวนเอกสารกับ Git `5de1b2e` และงาน Knowledge Hub บน Mac แล้ว
+ตรวจ Pod เวลา 20:57 +07 ยังเป็น `78e90fc` และ service active/running
+จึงยังไม่ถือว่า N3 candidate, Refactor ล่าสุด หรือ Knowledge Hub ติดตั้งแล้ว
+ดู [สถานะรุ่น](../current-status.md) และ
+[รายละเอียดการทบทวน](../reviews/2026-09-22-documentation-refresh.md)
+
 รอบ Refactor แยก Smart Ear Timeline และ Adaptive Learning เป็นโมดูลย่อย
 ตามหน้าที่ อ่าน [แผนที่โมดูลและจุด Debug](smart-senses.md#41-แผนที่โมดูลและจุด-debug)
 และ [ผลตรวจ Refactor](../reviews/2026-09-22-smart-senses-refactor.md)
@@ -86,6 +97,7 @@ API และผลลัพธ์เดิมไม่เปลี่ยน; �
 | Pi runtime | Raspberry Pi 5, Linux, `systemd`, Python 3.11+; CI/Ruff target 3.11 |
 | Backend/API | FastAPI, Uvicorn, Pydantic models, REST/WebSocket, `httpx` |
 | Frontend | Vanilla HTML/CSS/JavaScript; template/partials ประกอบด้วย `ui_composer.py` |
+| Knowledge Hub — งานบน Mac | `documentation/` + `markdown-it-py` ฝั่ง Build; HTML ออฟไลน์และ Route Admin ที่เตรียมไว้ |
 | Storage | SQLite WAL (`sessions.db`, `bcg.db`, `auth.db`, `occupancy.db`) + JSON/JSONL/outbox |
 | Device I/O | USB Serial JSONL/Binary, MQTT, BCM GPIO และ MPV IPC |
 | QA/Ops | `unittest`, risk-based `quality_gate.py`, Ruff, JSON Schema, GitHub Actions, Git/Tailscale/SSH |

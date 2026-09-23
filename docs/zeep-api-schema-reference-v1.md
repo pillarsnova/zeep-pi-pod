@@ -4,8 +4,13 @@
 
 **สถานะ:** Integration contract v1 (read-only, raw-free)
 
-**ปรับปรุงล่าสุด:** 2026-09-19 · เทียบ source หลัง `c75edcd`
+**ปรับปรุงล่าสุด:** 2026-09-22 · เทียบ Source `5de1b2e` และตรวจตัวอย่างกับ Pydantic models
 **ฐานข้อมูล:** ผล Session ที่ Finalize แล้วเท่านั้น
+
+Refactor Smart Senses คง API/schema เดิม และงาน Knowledge Hub ไม่เพิ่มข้อมูล
+ใน Session response; `/handbook` เป็น HTML สำหรับ Admin ไม่ใช่ Usage API และไม่รวม
+ใน OpenAPI (`include_in_schema=false`) รุ่นบน Pod อาจเก่ากว่า Source นี้ ดู
+[Current Status](current-status.md)
 
 เอกสารนี้เป็นคู่มืออ้างอิงสำหรับทีม Backend, Mobile, Web และ QA ของ
 `Usage Session API` โดยระบุเส้นทาง, การยืนยันตัวตน, response envelope,

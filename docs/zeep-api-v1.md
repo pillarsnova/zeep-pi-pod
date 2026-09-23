@@ -2,7 +2,7 @@
 
 สถานะ: **Integration contract v1 · Internal Wellness API**
 
-ทบทวน: 19 กันยายน 2026 · รุ่นที่ตรวจและหลักฐานอยู่ใน [Current Status](current-status.md)
+ทบทวน: 22 กันยายน 2026 · Source `5de1b2e`; รุ่นบน Pod และงานที่ยังไม่ Deploy อยู่ใน [Current Status](current-status.md)
 
 เจ้าของข้อมูล: ZEEP Platform + Pi Team
 เส้นทางหลัก: `/api/v1/usage-sessions`

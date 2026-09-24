@@ -14,6 +14,7 @@ const TRACK_META = [
   {re:/Tibetan Sleep/i,         title:'Tibetan Sleep & Healing', desc:'ไฟล์เสียงในเครื่อง', badge:null, mode:'nap_recovery'},
   {re:/Velvet Strings/i,        title:'Velvet Strings Calm', desc:'ไฟล์เสียงในเครื่อง', badge:null, mode:'nap_recovery'},
   {re:/Zen Garden/i,            title:'Zen Garden Drizzle', desc:'ไฟล์เสียงในเครื่อง', badge:null, mode:'both'},
+  {re:/Rain at Night/i,         title:'Rain at Night', desc:'ไฟล์เสียงในเครื่อง', badge:null, mode:'both'},
   // Little Heartbeat ตั้งใจไม่ใส่: ไดนามิก 33 dB และยาว 3 นาที — ตกที่ fallback (mode:null)
 ];
 function trackMeta(name){
